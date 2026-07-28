@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 **Scope:** everything that must exist before the first Gameweek of the 2026/27 Season
-**Vocabulary:** [CONTEXT.md](../../CONTEXT.md) · **Decisions:** [ADR 0001–0014](../adr/)
+**Vocabulary:** [CONTEXT.md](../../CONTEXT.md) · **Decisions:** [ADR 0001–0015](../adr/)
 
 ---
 
@@ -61,9 +61,9 @@ human can intervene while there is still time.
    unchanged data do not accumulate duplicates.
 5. As an operator, I want the fetch to be idempotent, so that re-running it after a partial
    failure is always safe.
-6. As an operator, I want every upstream response validated against a schema on arrival, so
-   that a shape change upstream fails loudly at the boundary rather than silently corrupting
-   context weeks later.
+6. As an operator, I want every upstream response archived and then validated against a
+   schema on arrival, so that a shape change leaves evidence for re-parsing and fails loudly
+   at the boundary rather than silently corrupting context weeks later.
 7. As an operator, I want Fixture identity to be the Season plus the FPL id, so that next
    Season's Fixture 1 does not overwrite this Season's.
 8. As an operator, I want Gameweek deadlines stored as first-class rows, so that the Lock has
@@ -212,8 +212,9 @@ covers `fetch` and `predict`. `score` is built later from stored data (ADR-0005)
 
 ### Modules
 
-- **Source clients** — one per upstream (FPL, football-data.co.uk), each validating its
-  response against a schema before anything else touches it, and archiving the raw body.
+- **Source clients** — one per upstream (FPL, football-data.co.uk), each archiving the raw
+  body before validating the fields this pipeline consumes. A validation failure preserves
+  the evidence but writes no derived rows.
 - **Snapshot store** — content-addressed archive of raw upstream responses. Doubles as the
   fixture source for tests.
 - **Context builder** — pure function from database rows to the text handed to an Entrant.
@@ -263,27 +264,31 @@ Fixture identity is `(season, fpl_id)` throughout; FPL ids restart each Season.
 |---|---|---|
 | `models` | one row per Entrant: Base Model, pinned provider, pinned quantization, Prompt Version, role | adding an Entrant is a row |
 | `gameweeks` | Gameweek deadlines | the single source for the Lock |
-| `fixtures` | Fixture, its Gameweek, the Gameweek that locked it, kick-off, result, deferred flag | keyed `(season, fpl_id)` |
+| `fixtures` | Fixture, its scheduled Gameweek, canonical locked Gameweek, kick-off, result, deferred flag | keyed `(season, fpl_id)`; locked Gameweek is immutable once set |
 | `contexts` | the exact text handed to Entrants, plus its hash | one row per Gameweek per Fixture; reused by later runs |
 | `predictions` | successes only — probabilities, Predicted Score, context reference, Repairs used | insert-only, keyed `(model_id, season, fpl_id)` |
 | `attempts` | every call, successful or not — cause, resolved provider and model, latency, tokens, raw body, trigger | append-only; never read by scoring |
-| `raw_snapshots` | upstream responses as received | content-hashed |
+| `raw_snapshots` | upstream responses as received | content-hashed; first and latest observation retained |
 
-Full DDL is in [the spec](../../football-benchmark-spec.md) §4. Two properties carry
-integrity weight and are enforced by the database rather than by application code:
+Full DDL is in [the spec](../../football-benchmark-spec.md) §4. Integrity properties are
+enforced by the database rather than by application code:
 
 - `predictions` has no update path. The primary key is what makes a manual re-run unable to
   replace an existing Prediction (ADR-0011).
 - `predictions` has a foreign key to `contexts`, so a Prediction can never exist without the
   stored record of what produced it.
+- A Prediction insert is refused until its Fixture has a canonical locked Gameweek, so every
+  stored Prediction resolves to one authoritative deadline (ADR-0015).
+- Every Gameweek reference has a foreign key to `gameweeks`, and context identity is constrained
+  so Match contexts have a Fixture while FPL contexts do not.
 
 ### Interactions
 
 - The repair run and any manual run **load** the stored context by `(season, gw, track,
   fpl_id)` rather than rebuilding it. Rebuilding would hand late-filled Entrants fresher
   information (ADR-0006).
-- The Lock guard reads `gameweeks.deadline_at` and the injected clock. No other component
-  consults time.
+- The Lock guard follows the Fixture's canonical locked Gameweek to `gameweeks.deadline_at`
+  and compares it with the injected clock. No other component consults time (ADR-0015).
 - The orchestrator treats each `(Entrant, Fixture)` as independent. One failing Entrant does
   not abort the Gameweek; one failing Fixture does not abort the Entrant.
 - `predicted_at` is set when the successful response is written, which under synchronous

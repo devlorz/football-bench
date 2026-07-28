@@ -59,7 +59,7 @@ incoherent.
 
 **Lock**:
 The instant after which a Prediction for a Fixture is no longer eligible. A Prediction is
-only scored if it existed before its Lock.
+only scored if it existed before its Lock. Every Entrant for a Fixture shares the same Lock.
 
 **Gap**:
 A Fixture for which an Entrant produced no valid Prediction. Gaps are recorded, never

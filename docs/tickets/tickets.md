@@ -3,7 +3,7 @@
 Twelve tracer-bullet slices that build the recording half of the benchmark — everything that
 must be live before the first Gameweek of the 2026/27 Season. Source:
 [spec 0001](../specs/0001-match-track-write-path.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0001–0014](../adr/).
+[CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0001–0015](../adr/).
 
 Work the **frontier**: any ticket whose blockers are all done. After the first two, four
 tickets open at once.
@@ -22,14 +22,14 @@ later ticket is tested through.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] A local Postgres can be built from migrations covering every table in spec 0001: Entrant rows, Gameweeks, Fixtures, contexts, Predictions, attempts and raw snapshots
-- [ ] Fixture identity is the Season plus the FPL id, and two Seasons sharing an FPL id coexist without collision
-- [ ] A Prediction row cannot be updated — the attempt is refused by the database itself, not by application code
-- [ ] Running fetch stores every Fixture of a Gameweek with its kick-off time, and stores the Gameweek's deadline as its own record
-- [ ] The raw upstream response is archived byte-for-byte and addressed by a content hash
-- [ ] An upstream response with an unexpected shape fails validation at the boundary, names the offending field, and stores nothing
-- [ ] Outbound HTTP is injectable, and the test suite replays an archived response with no network access
-- [ ] Tests run against a real Postgres rather than a substitute, so the constraints above are what is being verified
+- [x] A local Postgres can be built from migrations covering every table in spec 0001: Entrant rows, Gameweeks, Fixtures, contexts, Predictions, attempts and raw snapshots
+- [x] Fixture identity is the Season plus the FPL id, and two Seasons sharing an FPL id coexist without collision
+- [x] A Prediction row cannot be updated — the attempt is refused by the database itself, not by application code
+- [x] Running fetch stores every Fixture of a Gameweek with its kick-off time, and stores the Gameweek's deadline as its own record
+- [x] The raw upstream response is archived byte-for-byte and addressed by a content hash
+- [x] An upstream response with an unexpected shape is archived, then fails validation at the boundary, names every offending field, and stores no derived rows
+- [x] Outbound HTTP is injectable, and the test suite replays an archived response with no network access
+- [x] Tests run against a real Postgres rather than a substitute, so the constraints above are what is being verified
 
 ---
 
@@ -47,6 +47,7 @@ the kick-off. This is the narrowest complete path through the system.
 - [ ] The context handed to the Entrant is stored and hashed, and a Prediction cannot exist without the stored context that produced it
 - [ ] Every call is logged whether it succeeded or not, with latency and token counts
 - [ ] With the clock before the deadline a Prediction is written; at or after it the write is refused and the attempt is still logged
+- [ ] The insert path sets the Fixture's canonical locked Gameweek before writing a Prediction, and the database refuses a Prediction with no Lock
 - [ ] The clock is injectable, so the deadline case is tested without waiting
 - [ ] Running predict twice over the same Gameweek produces no duplicate Predictions
 
@@ -162,6 +163,10 @@ late to be predicted in its own Gameweek attaches to the next one that can still
 rather than becoming a Gap for everybody.
 
 **Blocked by:** Tracer bullet: a Locked Prediction, end to end.
+
+**Known constraint:** The current fetch only upserts Fixtures whose upstream `event` equals
+the requested Gameweek. A Fixture moved out remains on its previous `gw` until the destination
+Gameweek is fetched; this ticket must make that reconciliation explicit.
 
 - [ ] A Fixture postponed after its Gameweek's deadline keeps its Predictions and is marked deferred
 - [ ] Its result is attributed to the Gameweek that locked the Prediction, not the Gameweek it was eventually played in

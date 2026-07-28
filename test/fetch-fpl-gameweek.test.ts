@@ -1,0 +1,280 @@
+import { gunzipSync } from "node:zlib";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import pg from "pg";
+import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import {
+  fetchFplGameweek,
+  FplSourceHttpError,
+  FplSourceValidationError
+} from "../src/fpl/fetch-gameweek.js";
+
+const { Client } = pg;
+const migrationUrl = new URL("../migrations/0001_initial.sql", import.meta.url);
+
+async function archivedBody(name: string): Promise<string> {
+  const url = new URL(`./fixtures/${name}`, import.meta.url);
+  return gunzipSync(await readFile(fileURLToPath(url))).toString("utf8");
+}
+
+describe("fetching an FPL Gameweek", () => {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+
+  beforeAll(async () => {
+    await client.connect();
+    await client.query("drop schema public cascade; create schema public");
+    await client.query(await readFile(fileURLToPath(migrationUrl), "utf8"));
+
+    return async () => {
+      await client.end();
+    };
+  });
+
+  beforeEach(async () => {
+    await client.query(
+      "truncate fixtures, gameweeks, raw_snapshots restart identity cascade"
+    );
+  });
+
+  test("stores the deadline, every Fixture, and byte-exact source snapshots", async () => {
+    const bootstrapBody = await archivedBody("fpl-bootstrap-2026-27.json.gz");
+    const fixturesBody = await archivedBody("fpl-fixtures-2026-27.json.gz");
+    const responses = new Map([
+      ["https://fantasy.premierleague.com/api/bootstrap-static/", bootstrapBody],
+      ["https://fantasy.premierleague.com/api/fixtures/", fixturesBody]
+    ]);
+    const requested: string[] = [];
+
+    await fetchFplGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      http: async (url) => {
+        requested.push(url);
+        const body = responses.get(url);
+        if (body === undefined) {
+          throw new Error(`Unexpected outbound request: ${url}`);
+        }
+        return { status: 200, body };
+      }
+    });
+
+    expect(requested).toEqual([...responses.keys()]);
+
+    const gameweek = await client.query(
+      "select season, gw, deadline_at from gameweeks"
+    );
+    expect(gameweek.rows).toEqual([{
+      season: "2026-27",
+      gw: 1,
+      deadline_at: new Date("2026-08-21T17:30:00.000Z")
+    }]);
+
+    const fixtures = await client.query(
+      `select season, fpl_id, gw, home_team, away_team, kickoff_at
+         from fixtures
+        order by fpl_id`
+    );
+    expect(fixtures.rowCount).toBe(10);
+    expect(fixtures.rows[0]).toEqual({
+      season: "2026-27",
+      fpl_id: 1,
+      gw: 1,
+      home_team: "Arsenal",
+      away_team: "Coventry City",
+      kickoff_at: new Date("2026-08-21T19:00:00.000Z")
+    });
+
+    const snapshots = await client.query(
+      "select source, sha256, body from raw_snapshots order by source"
+    );
+    expect(snapshots.rows).toEqual([
+      {
+        source: "fpl_bootstrap",
+        sha256: "7a585efb24ef7c1a349e21c3ed0ebef548f8e0fc986cfe97a016d0becdb81253",
+        body: bootstrapBody
+      },
+      {
+        source: "fpl_fixtures",
+        sha256: "9e7484118381f8202830906ba993c176475d8ca1796571f5dd78cbfc2d73bd3e",
+        body: fixturesBody
+      }
+    ]);
+  });
+
+  test("archives changed upstream bytes but stores no derived rows", async () => {
+    const bootstrap = JSON.parse(
+      await archivedBody("fpl-bootstrap-2026-27.json.gz")
+    );
+    bootstrap.events[0].deadline_time = 42;
+    const changedBootstrapBody = JSON.stringify(bootstrap);
+    const fixturesBody = await archivedBody("fpl-fixtures-2026-27.json.gz");
+    const responses = new Map([
+      [
+        "https://fantasy.premierleague.com/api/bootstrap-static/",
+        changedBootstrapBody
+      ],
+      [
+        "https://fantasy.premierleague.com/api/fixtures/",
+        fixturesBody
+      ]
+    ]);
+
+    await expect(fetchFplGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      http: async (url) => ({ status: 200, body: responses.get(url) ?? "" })
+    })).rejects.toThrow("fpl_bootstrap.events.0.deadline_time");
+
+    const stored = await client.query(
+      `select
+         (select count(*)::int from gameweeks) as gameweeks,
+         (select count(*)::int from fixtures) as fixtures,
+         (select count(*)::int from raw_snapshots) as snapshots`
+    );
+    expect(stored.rows[0]).toEqual({
+      gameweeks: 0,
+      fixtures: 0,
+      snapshots: 2
+    });
+    const evidence = await client.query(
+      "select source, body from raw_snapshots order by source"
+    );
+    expect(evidence.rows).toEqual([
+      { source: "fpl_bootstrap", body: changedBootstrapBody },
+      { source: "fpl_fixtures", body: fixturesBody }
+    ]);
+  });
+
+  test("reports every changed upstream field in one validation failure", async () => {
+    const bootstrap = JSON.parse(
+      await archivedBody("fpl-bootstrap-2026-27.json.gz")
+    );
+    bootstrap.events[0].deadline_time = 42;
+    bootstrap.teams[0].name = "";
+    const responses = new Map([
+      [
+        "https://fantasy.premierleague.com/api/bootstrap-static/",
+        JSON.stringify(bootstrap)
+      ],
+      [
+        "https://fantasy.premierleague.com/api/fixtures/",
+        await archivedBody("fpl-fixtures-2026-27.json.gz")
+      ]
+    ]);
+
+    await expect(fetchFplGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      http: async (url) => ({ status: 200, body: responses.get(url) ?? "" })
+    })).rejects.toMatchObject({
+      name: FplSourceValidationError.name,
+      issues: [
+        { field: "events.0.deadline_time" },
+        { field: "teams.0.name" }
+      ]
+    });
+  });
+
+  test("classifies a non-successful upstream response", async () => {
+    await expect(fetchFplGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      http: async (url) => ({
+        status: url.includes("bootstrap-static") ? 503 : 200,
+        body: ""
+      })
+    })).rejects.toMatchObject({
+      name: FplSourceHttpError.name,
+      source: "fpl_bootstrap",
+      status: 503
+    });
+  });
+
+  test("ignores upstream player fields until the fetch consumes them", async () => {
+    const bootstrap = JSON.parse(
+      await archivedBody("fpl-bootstrap-2026-27.json.gz")
+    );
+    bootstrap.elements = "shape deliberately outside this ticket";
+    const responses = new Map([
+      [
+        "https://fantasy.premierleague.com/api/bootstrap-static/",
+        JSON.stringify(bootstrap)
+      ],
+      [
+        "https://fantasy.premierleague.com/api/fixtures/",
+        await archivedBody("fpl-fixtures-2026-27.json.gz")
+      ]
+    ]);
+
+    await fetchFplGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      http: async (url) => ({ status: 200, body: responses.get(url) ?? "" })
+    });
+
+    const fixtures = await client.query(
+      "select count(*)::int as count from fixtures"
+    );
+    expect(fixtures.rows).toEqual([{ count: 10 }]);
+  });
+
+  test("does not duplicate an unchanged source snapshot", async () => {
+    const responses = new Map([
+      [
+        "https://fantasy.premierleague.com/api/bootstrap-static/",
+        await archivedBody("fpl-bootstrap-2026-27.json.gz")
+      ],
+      [
+        "https://fantasy.premierleague.com/api/fixtures/",
+        await archivedBody("fpl-fixtures-2026-27.json.gz")
+      ]
+    ]);
+    const options = {
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      http: async (url: string) => ({
+        status: 200,
+        body: responses.get(url) ?? ""
+      })
+    };
+
+    await fetchFplGameweek(options);
+    const firstObservation = await client.query(
+      `select first_seen_at, last_seen_at
+         from raw_snapshots
+        where source = 'fpl_bootstrap'`
+    );
+    await client.query("select pg_sleep(0.01)");
+    await fetchFplGameweek(options);
+
+    const stored = await client.query(
+      `select
+         (select count(*)::int from gameweeks) as gameweeks,
+         (select count(*)::int from fixtures) as fixtures,
+         (select count(*)::int from raw_snapshots) as snapshots`
+    );
+    expect(stored.rows[0]).toEqual({
+      gameweeks: 1,
+      fixtures: 10,
+      snapshots: 2
+    });
+
+    const latestObservation = await client.query(
+      `select first_seen_at, last_seen_at
+         from raw_snapshots
+        where source = 'fpl_bootstrap'`
+    );
+    expect(latestObservation.rows[0].first_seen_at).toEqual(
+      firstObservation.rows[0].first_seen_at
+    );
+    expect(latestObservation.rows[0].last_seen_at.getTime()).toBeGreaterThan(
+      firstObservation.rows[0].last_seen_at.getTime()
+    );
+  });
+});

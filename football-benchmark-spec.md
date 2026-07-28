@@ -159,7 +159,9 @@ create table fixtures (
   result       jsonb,                    -- { home_goals, away_goals, outcome, stats }
   deferred     boolean not null default false,
   updated_at   timestamptz default now(),
-  primary key (season, fpl_id)
+  primary key (season, fpl_id),
+  foreign key (season, gw) references gameweeks(season, gw),
+  foreign key (season, locked_in_gw) references gameweeks(season, gw)
 );
 
 create table contexts (
@@ -170,7 +172,12 @@ create table contexts (
   fpl_id     int,                        -- Fixture on the match track, null on the FPL track
   hash       text not null,
   body       text not null,              -- the exact text handed to the Entrant
-  built_at   timestamptz not null default now()
+  built_at   timestamptz not null default now(),
+  check (
+    (track = 'match' and fpl_id is not null)
+    or (track = 'fpl' and fpl_id is null)
+  ),
+  foreign key (season, gw) references gameweeks(season, gw)
 );
 create unique index on contexts (season, gw, track, coalesce(fpl_id, -1));
 
@@ -178,7 +185,6 @@ create table predictions (
   model_id      text not null references models(id),
   season        text not null,
   fpl_id        int  not null,
-  gw            int  not null,           -- Gameweek whose deadline locked this
   probs         jsonb not null,          -- { "H":..., "D":..., "A":... }, sums to 1 ± 0.001
   pred_home     int  not null,
   pred_away     int  not null,
@@ -203,7 +209,8 @@ create table manager_states (
   rolled_over    boolean not null default false,
   attempts_used  int  not null,
   predicted_at   timestamptz not null,
-  primary key (model_id, season, gw)
+  primary key (model_id, season, gw),
+  foreign key (season, gw) references gameweeks(season, gw)
 );
 
 create table attempts (
@@ -224,7 +231,8 @@ create table attempts (
   tokens_out        int,
   raw_response      text,
   trigger           text not null check (trigger in ('main','repair','manual')),
-  attempted_at      timestamptz not null default now()
+  attempted_at      timestamptz not null default now(),
+  foreign key (season, gw) references gameweeks(season, gw)
 );
 
 create table scores (
@@ -237,7 +245,8 @@ create table scores (
   n          int,                        -- Fixtures behind this value
   detail     jsonb,
   scored_at  timestamptz default now(),
-  primary key (model_id, season, gw, track, metric)
+  primary key (model_id, season, gw, track, metric),
+  foreign key (season, gw) references gameweeks(season, gw)
 );
 
 create table raw_snapshots (
@@ -245,13 +254,19 @@ create table raw_snapshots (
   source     text not null,              -- fpl_bootstrap | fpl_fixtures | football_data_e0 | ...
   sha256     text not null,
   body       text not null,
-  fetched_at timestamptz not null default now()
+  first_seen_at timestamptz not null default now(),
+  last_seen_at  timestamptz not null default now(),
+  unique (source, sha256)
 );
 ```
 
 Notes:
 
 - Identity is `(season, fpl_id)` everywhere. FPL ids restart each Season (ADR-0007).
+- A Fixture owns the Gameweek that locked it; Predictions derive that value through the
+  Fixture rather than storing a second copy (ADR-0015).
+- The database refuses a Prediction while its Fixture's locked Gameweek is null, so every
+  stored Prediction has a path to one authoritative deadline (ADR-0015).
 - `predictions` holds only successes. Every call, successful or not, is logged to `attempts`
   — that is where Gap rate, attempts-to-valid and vendor behaviour are read from (ADR-0007).
 - `contexts.body` is the exact text sent. The repair run and manual runs reuse it verbatim
@@ -266,9 +281,10 @@ Notes:
 1. **One Lock per Gameweek.** Every Prediction for a Gameweek locks at that Gameweek's FPL
    deadline, regardless of when the Fixture kicks off. A Monday Fixture is locked on Friday
    (ADR-0006).
-2. **The Lock is enforced in the insert path as well as in scoring.** A run after the
-   deadline cannot write a scorable Prediction, so no amount of manual re-triggering can
-   produce one (ADR-0011).
+2. **The Lock is enforced in the insert path as well as in scoring.** A Prediction cannot be
+   stored until its Fixture owns a locked Gameweek, and a run after that Gameweek's deadline
+   cannot write one, so no amount of manual re-triggering can produce a late Prediction
+   (ADR-0011, ADR-0015).
 3. **Insert-only.** `predictions` and `manager_states` rows are never updated or replaced.
    A re-run can fill an empty slot and nothing else. Re-rolling until an answer looks better
    is structurally impossible.
@@ -496,7 +512,7 @@ football-benchmark/
 | **One Entrant gaps heavily**, shrinking the complete-case intersection for everyone — a risk that grows with the roster | Publish n on every comparison; excluding an Entrant is a single recorded decision applied to the whole Season |
 | **Spurious separations** — 36 pairs at nine Entrants | Publish intervals against the leader only, eight comparisons declared in advance (ADR-0014) |
 | **Context builder emits wrong data all season** | Silent failure — comparisons survive but absolute results are worthless. Explicit no-data markers, stored contexts, hand-checked assertions for GW1 |
-| FPL API shape changes for the new season (not live until early August) | zod-validate every fetch; build against last season's shape with time reserved |
+| FPL API shape changes during the Season | archive every response before validating the fields currently consumed; fail before writing derived rows |
 | football-data.co.uk delayed | Scoring is idempotent and re-runs daily |
 | A vendor swaps a model snapshot mid-season | Version-pinned ids; `resolved_model` echoed into `attempts` for after-the-fact detection |
 | Late Predictions scored by accident | Lock enforced in both the insert path and scoring, tested explicitly |
