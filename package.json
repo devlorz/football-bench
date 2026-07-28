@@ -7,6 +7,7 @@
     "check": "tsc --noEmit",
     "db:migrate": "tsx src/cli/migrate.ts",
     "fetch": "tsx src/cli/fetch.ts",
+    "predict": "tsx src/cli/predict.ts",
     "test": "vitest run"
   },
   "dependencies": {

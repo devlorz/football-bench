@@ -4,6 +4,11 @@ export interface FetchJobConfig {
   gameweek: number;
 }
 
+export interface PredictJobConfig extends FetchJobConfig {
+  entrantId: string;
+  openRouterApiKey: string;
+}
+
 function required(environment: NodeJS.ProcessEnv, name: string): string {
   const value = environment[name];
   if (value === undefined || value.trim() === "") {
@@ -28,4 +33,14 @@ export function readFetchJobConfig(
   }
 
   return { databaseUrl, season, gameweek };
+}
+
+export function readPredictJobConfig(
+  environment: NodeJS.ProcessEnv
+): PredictJobConfig {
+  return {
+    ...readFetchJobConfig(environment),
+    entrantId: required(environment, "ENTRANT_ID"),
+    openRouterApiKey: required(environment, "OPENROUTER_API_KEY")
+  };
 }

@@ -42,14 +42,14 @@ the kick-off. This is the narrowest complete path through the system.
 
 **Blocked by:** Repository, schema and the FPL source.
 
-- [ ] A Prediction carries both a probability distribution over Home / Draw / Away and a Predicted Score
-- [ ] Probabilities summing to one within tolerance are renormalised; those outside it are rejected, as are negative or non-integer goals
-- [ ] The context handed to the Entrant is stored and hashed, and a Prediction cannot exist without the stored context that produced it
-- [ ] Every call is logged whether it succeeded or not, with latency and token counts
-- [ ] With the clock before the deadline a Prediction is written; at or after it the write is refused and the attempt is still logged
-- [ ] The insert path sets the Fixture's canonical locked Gameweek before writing a Prediction, and the database refuses a Prediction with no Lock
-- [ ] The clock is injectable, so the deadline case is tested without waiting
-- [ ] Running predict twice over the same Gameweek produces no duplicate Predictions
+- [x] A Prediction carries both a probability distribution over Home / Draw / Away and a Predicted Score
+- [x] Probabilities summing to one within tolerance are renormalised; those outside it are rejected, as are negative or non-integer goals
+- [x] The context handed to the Entrant is stored and hashed, and a Prediction cannot exist without the stored context that produced it
+- [x] Every call is logged whether it succeeded or not, with latency and token counts
+- [x] With the clock before the deadline a Prediction is written; at or after it the write is refused and the attempt is still logged
+- [x] The insert path sets the Fixture's canonical locked Gameweek before writing a Prediction, and the database refuses a Prediction with no Lock
+- [x] The clock is injectable, so the deadline case is tested without waiting
+- [x] Running predict twice over the same Gameweek produces no duplicate Predictions
 
 ---
 
@@ -65,6 +65,8 @@ cannot be recovered.
 - [ ] Calls all nine Base Models with the real prompt shape against a real Fixture
 - [ ] Reports for each: parseable output, refusal, or transport error — with the raw body when it fails
 - [ ] Reports the provider and model the gateway actually resolved for each
+- [ ] Fails if `resolved_provider` is null for any Base Model, so a broken OpenRouter metadata contract cannot silently disable the ADR-0009 substitution check
+- [ ] Archives at least one byte-exact successful OpenRouter response and replays it in tests, so response-shape contracts come from observed evidence rather than hand-written fakes
 - [ ] Runs as an operator script rather than as part of CI
 - [ ] Exits non-zero if any Base Model refuses or cannot produce parseable output
 

@@ -290,7 +290,11 @@ enforced by the database rather than by application code:
 - The Lock guard follows the Fixture's canonical locked Gameweek to `gameweeks.deadline_at`
   and compares it with the injected clock. No other component consults time (ADR-0015).
 - The orchestrator treats each `(Entrant, Fixture)` as independent. One failing Entrant does
-  not abort the Gameweek; one failing Fixture does not abort the Entrant.
+  not abort the Gameweek; one Fixture's transport, provider or validation failure does not
+  abort the Entrant.
+- A database persistence failure does abort the job. Once the attempt ledger cannot be
+  committed, continuing would issue unrecorded calls and violate the audit trail; the safe
+  recovery is to restore persistence and re-run the idempotent job.
 - `predicted_at` is set when the successful response is written, which under synchronous
   calls is seconds after the request (ADR-0002), so there is no ambiguity about whether the
   Lock applies to submission or completion.
@@ -310,6 +314,11 @@ properties are not.
 Test data comes from archived real responses rather than hand-written fixtures. The snapshot
 store this system already requires is the fixture source, so tests exercise shapes that
 actually occurred rather than shapes someone imagined.
+
+The first byte-exact OpenRouter response becomes available only during the real-call
+pre-flight. That ticket must archive a successful response and replace the hand-scripted
+gateway envelope in contract tests; until then, those tests follow the documented
+`openrouter_metadata` shape and are not treated as canonical response fixtures.
 
 ### Seams — two, agreed
 
