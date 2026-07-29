@@ -20,6 +20,52 @@ export interface DailyFetchResult {
   fpl: FetchFplDailyResult;
 }
 
+export class StaleFootballDataSeasonError extends Error {
+  constructor(
+    public readonly season: string,
+    public readonly footballDataSeason: string
+  ) {
+    const guidance = footballDataSeason === season
+      ? "the current feed yielded zero stored matches"
+      : `advance FOOTBALL_DATA_SEASON from ${footballDataSeason} to ${season}`;
+    super(
+      `Current Season ${season} has no stored football-data matches after `
+      + `its Gameweek 1 deadline; ${guidance}`
+    );
+    this.name = "StaleFootballDataSeasonError";
+  }
+}
+
+async function requireCurrentSeasonMatchesAfterFirstDeadline(
+  database: Database,
+  season: string,
+  footballDataSeason: string,
+  observedAt: Date
+): Promise<void> {
+  const currentSeasonState = await database.query(
+    `select
+       g.deadline_at,
+       exists (
+         select 1
+           from historical_matches h
+          where h.season = g.season
+       ) as has_matches
+       from gameweeks g
+      where g.season = $1 and g.gw = 1`,
+    [season]
+  );
+  const state = currentSeasonState.rows[0] as
+    | { deadline_at: Date; has_matches: boolean }
+    | undefined;
+  if (
+    state !== undefined
+    && observedAt.getTime() >= state.deadline_at.getTime()
+    && !state.has_matches
+  ) {
+    throw new StaleFootballDataSeasonError(season, footballDataSeason);
+  }
+}
+
 export async function runDailyFetch({
   database,
   season,
@@ -27,14 +73,16 @@ export async function runDailyFetch({
   http,
   now
 }: RunDailyFetchOptions): Promise<DailyFetchResult> {
+  const observedAt = now();
   const errors: unknown[] = [];
   let fpl: FetchFplDailyResult | undefined;
+  let footballDataSucceeded = false;
   try {
     fpl = await fetchFplDaily({
       database,
       season,
       http,
-      now
+      now: () => observedAt
     });
   } catch (error) {
     errors.push(error);
@@ -45,8 +93,21 @@ export async function runDailyFetch({
       season: footballDataSeason,
       http
     });
+    footballDataSucceeded = true;
   } catch (error) {
     errors.push(error);
+  }
+  if (footballDataSucceeded) {
+    try {
+      await requireCurrentSeasonMatchesAfterFirstDeadline(
+        database,
+        season,
+        footballDataSeason,
+        observedAt
+      );
+    } catch (error) {
+      errors.push(error);
+    }
   }
   if (errors.length === 1) {
     throw errors[0];

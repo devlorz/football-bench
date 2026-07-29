@@ -1,6 +1,9 @@
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
-import { runDailyFetch } from "../src/fetch/daily-fetch.js";
+import {
+  runDailyFetch,
+  StaleFootballDataSeasonError
+} from "../src/fetch/daily-fetch.js";
 import { archivedBody } from "./archived-fixture.js";
 import { resetSchema } from "./schema-fixture.js";
 
@@ -138,5 +141,48 @@ describe("the daily fetch", () => {
       matches: 932,
       players: 563
     }]);
+  });
+
+  test("fails after the Lock when football-data still targets the prior Season", async () => {
+    const responses = new Map([
+      [
+        "https://fantasy.premierleague.com/api/bootstrap-static/",
+        await archivedBody("fpl-bootstrap-2026-27.json.gz")
+      ],
+      [
+        "https://fantasy.premierleague.com/api/fixtures/",
+        await archivedBody("fpl-fixtures-2026-27.json.gz")
+      ],
+      [
+        "https://www.football-data.co.uk/mmz4281/2526/E0.csv",
+        await archivedBody("football-data-2526-E0.csv.gz")
+      ],
+      [
+        "https://www.football-data.co.uk/mmz4281/2526/E1.csv",
+        await archivedBody("football-data-2526-E1.csv.gz")
+      ]
+    ]);
+
+    await expect(runDailyFetch({
+      database: client,
+      season: "2026-27",
+      footballDataSeason: "2025-26",
+      now: () => new Date("2026-08-21T17:30:00.000Z"),
+      http: async (url) => ({
+        status: 200,
+        body: responses.get(url) ?? ""
+      })
+    })).rejects.toMatchObject({
+      name: StaleFootballDataSeasonError.name,
+      season: "2026-27",
+      footballDataSeason: "2025-26"
+    });
+
+    const matches = await client.query(
+      `select season, count(*)::int as count
+         from historical_matches
+        group by season`
+    );
+    expect(matches.rows).toEqual([{ season: "2025-26", count: 932 }]);
   });
 });

@@ -183,6 +183,14 @@ The daily FPL fetch assigns the bootstrap player snapshot to the unique event ma
 upstream deadline cannot reopen that player partition. With no next event, the year-round
 job still archives and validates both FPL responses but does not invent a Gameweek label.
 
+Deployment applies migrations deliberately before enabling the workflow. Repository
+variables `SEASON` and `FOOTBALL_DATA_SEASON` use `YYYY-YY` (for example `2026-27`, not
+football-data's `2627` URL form); `FOOTBALL_DATA_SEASON` advances to the current Season when
+that feed becomes available. Once the Season's Gameweek 1 deadline passes, zero stored
+matches for `SEASON` fails the job, so leaving the variable on the prior Season cannot
+silently starve context. Failed runs open or update a GitHub issue assigned to
+`FETCH_ALERT_ASSIGNEE` when that repository variable is configured.
+
 ---
 
 ## Rescheduled and deferred Fixtures

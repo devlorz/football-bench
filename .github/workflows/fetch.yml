@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: daily-fetch
@@ -19,6 +20,7 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       SEASON: ${{ vars.SEASON }}
+      # Use YYYY-YY, for example 2026-27, not football-data's URL form 2627.
       FOOTBALL_DATA_SEASON: ${{ vars.FOOTBALL_DATA_SEASON }}
     steps:
       - uses: actions/checkout@v4
@@ -27,4 +29,33 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Migrations are deployed deliberately before enabling this workflow.
       - run: npm run fetch
+      - name: Open or update the daily-fetch failure issue
+        if: ${{ failure() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FETCH_ALERT_ASSIGNEE: ${{ vars.FETCH_ALERT_ASSIGNEE }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Daily fetch is failing"
+          issue_number="$(
+            gh issue list \
+              --state open \
+              --search "\"${title}\" in:title" \
+              --json number,title \
+              --jq 'map(select(.title == "Daily fetch is failing")) | first | .number // empty'
+          )"
+          body="The scheduled source fetch failed: ${RUN_URL}
+
+          Check the archived upstream responses and deploy state before retrying."
+          if [ -n "${issue_number}" ]; then
+            gh issue comment "${issue_number}" --body "${body}"
+          elif [ -n "${FETCH_ALERT_ASSIGNEE}" ]; then
+            gh issue create \
+              --title "${title}" \
+              --body "${body}" \
+              --assignee "${FETCH_ALERT_ASSIGNEE}"
+          else
+            gh issue create --title "${title}" --body "${body}"
+          fi
