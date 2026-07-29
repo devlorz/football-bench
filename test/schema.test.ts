@@ -1,18 +1,15 @@
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { resetSchema } from "./schema-fixture.js";
 
 const { Client } = pg;
-const migrationUrl = new URL("../migrations/0001_initial.sql", import.meta.url);
 
 describe("the benchmark database", () => {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
 
   beforeAll(async () => {
     await client.connect();
-    await client.query("drop schema public cascade; create schema public");
-    await client.query(await readFile(fileURLToPath(migrationUrl), "utf8"));
+    await resetSchema(client);
 
     return async () => {
       await client.end();
@@ -45,6 +42,8 @@ describe("the benchmark database", () => {
       "models",
       "predictions",
       "raw_snapshots",
+      // Bookkeeping for the migration runner, not part of the write path.
+      "schema_migrations",
       "scores"
     ]);
   });

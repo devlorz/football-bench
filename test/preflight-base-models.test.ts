@@ -3,11 +3,11 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { resetSchema } from "./schema-fixture.js";
 import type { HttpRequest } from "../src/http.js";
 import { preflightBaseModels } from "../src/preflight/preflight-base-models.js";
 
 const { Client } = pg;
-const migrationUrl = new URL("../migrations/0001_initial.sql", import.meta.url);
 const openRouterResponseUrl = new URL(
   "./fixtures/openrouter-gpt-5.6-sol-pro-2026-07-29.base64",
   import.meta.url
@@ -18,8 +18,7 @@ describe("pre-flight for the Base Model roster", () => {
 
   beforeAll(async () => {
     await client.connect();
-    await client.query("drop schema public cascade; create schema public");
-    await client.query(await readFile(fileURLToPath(migrationUrl), "utf8"));
+    await resetSchema(client);
 
     return async () => {
       await client.end();

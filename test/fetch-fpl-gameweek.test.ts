@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { resetSchema } from "./schema-fixture.js";
 import {
   fetchFplGameweek,
   FplSourceHttpError,
@@ -10,7 +11,6 @@ import {
 } from "../src/fpl/fetch-gameweek.js";
 
 const { Client } = pg;
-const migrationUrl = new URL("../migrations/0001_initial.sql", import.meta.url);
 
 async function archivedBody(name: string): Promise<string> {
   const url = new URL(`./fixtures/${name}`, import.meta.url);
@@ -22,8 +22,7 @@ describe("fetching an FPL Gameweek", () => {
 
   beforeAll(async () => {
     await client.connect();
-    await client.query("drop schema public cascade; create schema public");
-    await client.query(await readFile(fileURLToPath(migrationUrl), "utf8"));
+    await resetSchema(client);
 
     return async () => {
       await client.end();

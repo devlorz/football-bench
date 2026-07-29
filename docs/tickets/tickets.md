@@ -108,6 +108,28 @@ Prediction — and the record says why, so a Gap can be explained rather than me
 
 ---
 
+## Migration runner and shared schema application
+
+**What to build:** The schema can change after it has been deployed. A new migration file is
+applied once, recorded, and never re-applied, and the same code that migrates the real
+database builds the one every test runs against — so adding a table reaches the tests without
+editing each test file.
+
+Until now the schema has been edited in place in a single file, which was correct while
+nothing was deployed. The next two tickets both need tables that do not exist yet, and the
+first deploy is imminent, so this is the last moment the change costs nothing.
+
+**Blocked by:** Repository, schema and the FPL source.
+
+- [x] A migration the database has already recorded is never applied a second time
+- [x] Migrations are applied in filename order, and the runner reports which ones it applied
+- [x] Each migration and the record of it share one transaction, so a crash between them cannot leave the schema changed but unrecorded
+- [x] A migration that fails part-way leaves no table and no record, so re-running retries exactly that file
+- [x] Two runners starting together apply each migration exactly once
+- [x] Tests and the migrate CLI build the schema through the same code path
+
+---
+
 ## Historical results and the rolling cross-season form window
 
 **What to build:** Entrants see each side's last five matches actually played, crossing Season
@@ -115,7 +137,7 @@ and division boundaries as needed, so Gameweek 1 is not information-free and pro
 are not blank rows. One definition of form that works from Gameweek 1 to Gameweek 38, with no
 special-case path that runs once a year and is never exercised.
 
-**Blocked by:** Tracer bullet: a Locked Prediction, end to end.
+**Blocked by:** Migration runner and shared schema application.
 
 - [ ] Premier League and Championship historical results are fetched and archived like any other source
 - [ ] The form window is always the last five matches played, whatever the Season or division
@@ -133,7 +155,7 @@ special-case path that runs once a year and is never exercised.
 summer's squad changes through a source that is reliable and already fetched, and every
 flagged absence is shown rather than only those belonging to expensive players.
 
-**Blocked by:** Tracer bullet: a Locked Prediction, end to end.
+**Blocked by:** Migration runner and shared schema application.
 
 - [ ] The five highest-priced players per team appear with position, price and status
 - [ ] Every player whose status is not fully available appears — with chance of playing, the news text and when that news was added — not only those in the top five

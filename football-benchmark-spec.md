@@ -490,15 +490,25 @@ football-benchmark/
 │   ├── reference/         home.ts, uniform.ts, elo.ts
 │   ├── score/             match-points.ts, rps.ts, brier.ts, bootstrap.ts,
 │   │                      fpl-replay.ts, fpl-points.ts, fpl-validator.ts
-│   ├── db/                client.ts, queries.ts
+│   ├── db/                client.ts, queries.ts, migrations.ts
 │   └── shared/            types.ts, zod-schemas.ts
-├── supabase/migrations/
+├── migrations/            numbered .sql, applied once and recorded
 ├── dashboard/
-├── tests/
-├── docs/adr/
+├── test/
+├── docs/
+│   ├── adr/
+│   ├── specs/
+│   └── tickets/
 ├── CONTEXT.md
 └── football-benchmark-spec.md
 ```
+
+Migrations are plain numbered SQL applied by `src/db/migrations.ts`, which records each file
+in a `schema_migrations` table and applies the file and its record in one transaction. Tests
+build their database through the same function, so a new migration reaches them without any
+test being edited. The Supabase CLI's own migration system is deliberately not used: tests run
+against an ephemeral Postgres rather than Supabase, and two paths to one schema is how a test
+comes to assert a shape that production never has.
 
 ---
 

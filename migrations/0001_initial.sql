@@ -1,4 +1,4 @@
-begin;
+-- The migration runner wraps each file in its own transaction.
 
 create table models (
   id             text primary key,
@@ -193,5 +193,3 @@ when (
   and new.locked_in_gw is distinct from old.locked_in_gw
 )
 execute function reject_locked_gameweek_change();
-
-commit;
