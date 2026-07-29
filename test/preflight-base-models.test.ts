@@ -79,6 +79,7 @@ describe("pre-flight for the Base Model roster", () => {
       database: client,
       season: "2026-27",
       fixtureId: 1,
+      expectedEntrantCount: 9,
       apiKey: "test-key",
       http: async (url, options) => {
         requests.push({ url, ...options! });
@@ -181,6 +182,7 @@ describe("pre-flight for the Base Model roster", () => {
       database: client,
       season: "2026-27",
       fixtureId: 1,
+      expectedEntrantCount: 9,
       apiKey: "test-key",
       http: async () => {
         calls += 1;
@@ -236,6 +238,7 @@ describe("pre-flight for the Base Model roster", () => {
       database: client,
       season: "2026-27",
       fixtureId: 1,
+      expectedEntrantCount: 9,
       apiKey: "test-key",
       http: async (_url, options) => {
         const request = JSON.parse(options?.body ?? "{}") as { model: string };
@@ -256,6 +259,50 @@ describe("pre-flight for the Base Model roster", () => {
         body
       }))
     );
+  });
+
+  test("fails when OpenRouter omits the selected resolved model", async () => {
+    const body = JSON.stringify({
+      model: "vendor/request-alias",
+      openrouter_metadata: {
+        endpoints: {
+          available: [{
+            provider: "Resolved Provider",
+            selected: true
+          }]
+        }
+      },
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            fixture_id: 1,
+            probs: { H: 0.6, D: 0.24, A: 0.16 },
+            score: { home: 2, away: 1 },
+            rationale: "Valid Prediction, unresolved model."
+          })
+        }
+      }]
+    });
+
+    const report = await preflightBaseModels({
+      database: client,
+      season: "2026-27",
+      fixtureId: 1,
+      expectedEntrantCount: 9,
+      apiKey: "test-key",
+      http: async () => ({ status: 200, body })
+    });
+
+    expect(report.ok).toBe(false);
+    expect(report.results[0]).toEqual({
+      entrantId: "entrant/1",
+      baseModel: "vendor/base-model-1",
+      status: "parseable",
+      detail: "OpenRouter did not identify a selected model.",
+      resolvedProvider: "Resolved Provider",
+      resolvedModel: null,
+      rawBody: body
+    });
   });
 
   test("fails on missing provider metadata, unparseable output, and transport errors", async () => {
@@ -289,6 +336,7 @@ describe("pre-flight for the Base Model roster", () => {
       database: client,
       season: "2026-27",
       fixtureId: 1,
+      expectedEntrantCount: 9,
       apiKey: "test-key",
       http: async () => {
         calls += 1;
@@ -338,7 +386,7 @@ describe("pre-flight for the Base Model roster", () => {
           entrantId: "entrant/1",
           baseModel: "vendor/base-model-1",
           status: "parseable",
-          detail: "OpenRouter did not identify a selected provider.",
+          detail: "OpenRouter did not identify a selected provider. OpenRouter did not identify a selected model.",
           resolvedProvider: null,
           resolvedModel: null,
           rawBody: missingProviderBody
@@ -347,7 +395,7 @@ describe("pre-flight for the Base Model roster", () => {
           entrantId: "entrant/2",
           baseModel: "vendor/base-model-2",
           status: "unparseable",
-          detail: "Response must be valid JSON.",
+          detail: "Response must be valid JSON. OpenRouter did not identify a selected model.",
           resolvedProvider: "Provider 2",
           resolvedModel: null,
           rawBody: unparseableBody
@@ -374,20 +422,20 @@ describe("pre-flight for the Base Model roster", () => {
     });
   });
 
-  test("refuses to run against an incomplete Base Model roster", async () => {
-    await client.query("delete from models where id = 'entrant/9'");
+  test("refuses to run when the roster does not match its configured size", async () => {
     let calls = 0;
 
     await expect(preflightBaseModels({
       database: client,
       season: "2026-27",
       fixtureId: 1,
+      expectedEntrantCount: 10,
       apiKey: "test-key",
       http: async () => {
         calls += 1;
         throw new Error("HTTP must not run");
       }
-    })).rejects.toThrow("Pre-flight requires exactly nine Entrants; found 8");
+    })).rejects.toThrow("Pre-flight requires exactly 10 Entrants; found 9");
     expect(calls).toBe(0);
   });
 
@@ -403,6 +451,7 @@ describe("pre-flight for the Base Model roster", () => {
       database: client,
       season: "2026-27",
       fixtureId: 1,
+      expectedEntrantCount: 9,
       apiKey: "test-key",
       http: async () => {
         calls += 1;
@@ -426,6 +475,7 @@ describe("pre-flight for the Base Model roster", () => {
       database: client,
       season: "2026-27",
       fixtureId: 1,
+      expectedEntrantCount: 9,
       apiKey: "test-key",
       http: async () => ({ status: 200, body: observedBody })
     });

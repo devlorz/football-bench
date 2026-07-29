@@ -13,6 +13,7 @@ export interface PreflightJobConfig {
   databaseUrl: string;
   season: string;
   fixtureId: number;
+  expectedEntrantCount: number;
   openRouterApiKey: string;
 }
 
@@ -63,11 +64,23 @@ export function readPreflightJobConfig(
   const databaseUrl = required(environment, "DATABASE_URL");
   const season = requiredSeason(environment);
   const fixtureId = Number(required(environment, "FIXTURE_ID"));
+  const expectedEntrantCount = Number(
+    required(environment, "EXPECTED_ENTRANT_COUNT")
+  );
   const openRouterApiKey = required(environment, "OPENROUTER_API_KEY");
 
   if (!Number.isInteger(fixtureId) || fixtureId < 1) {
     throw new Error("FIXTURE_ID must be a positive integer");
   }
+  if (!Number.isInteger(expectedEntrantCount) || expectedEntrantCount < 1) {
+    throw new Error("EXPECTED_ENTRANT_COUNT must be a positive integer");
+  }
 
-  return { databaseUrl, season, fixtureId, openRouterApiKey };
+  return {
+    databaseUrl,
+    season,
+    fixtureId,
+    expectedEntrantCount,
+    openRouterApiKey
+  };
 }

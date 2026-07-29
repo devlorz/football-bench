@@ -13,6 +13,7 @@ try {
     database,
     season: config.season,
     fixtureId: config.fixtureId,
+    expectedEntrantCount: config.expectedEntrantCount,
     apiKey: config.openRouterApiKey,
     http: nodeHttpFetcher
   });

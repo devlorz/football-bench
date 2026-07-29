@@ -57,6 +57,7 @@ export interface PreflightBaseModelsOptions {
   database: Database;
   season: string;
   fixtureId: number;
+  expectedEntrantCount: number;
   apiKey: string;
   http: HttpFetcher;
 }
@@ -67,6 +68,25 @@ function errorText(error: unknown): string {
 
 function sha256(body: string): string {
   return createHash("sha256").update(body, "utf8").digest("hex");
+}
+
+function joinDetails(...details: Array<string | null>): string | null {
+  const present = details.filter((detail): detail is string => detail !== null);
+  return present.length === 0 ? null : present.join(" ");
+}
+
+function metadataDetail(
+  resolvedProvider: string | null,
+  resolvedModel: string | null
+): string | null {
+  return joinDetails(
+    resolvedProvider === null
+      ? "OpenRouter did not identify a selected provider."
+      : null,
+    resolvedModel === null
+      ? "OpenRouter did not identify a selected model."
+      : null
+  );
 }
 
 async function archiveResponse(
@@ -149,12 +169,13 @@ async function callBaseModel(options: {
 
   const resolvedProvider = parsed.resolvedProvider;
   const resolvedModel = parsed.resolvedModel;
+  const routingDetail = metadataDetail(resolvedProvider, resolvedModel);
   if (parsed.refusal !== null) {
     return {
       entrantId: entrant.id,
       baseModel: entrant.base_model,
       status: "refusal",
-      detail: parsed.refusal,
+      detail: joinDetails(parsed.refusal, routingDetail),
       resolvedProvider,
       resolvedModel,
       rawBody: body
@@ -165,7 +186,10 @@ async function callBaseModel(options: {
       entrantId: entrant.id,
       baseModel: entrant.base_model,
       status: "unparseable",
-      detail: "OpenRouter returned no message content.",
+      detail: joinDetails(
+        "OpenRouter returned no message content.",
+        routingDetail
+      ),
       resolvedProvider,
       resolvedModel,
       rawBody: body
@@ -175,16 +199,13 @@ async function callBaseModel(options: {
     parsed.content,
     fixture.fpl_id
   );
-  const metadataDetail = resolvedProvider === null
-    ? "OpenRouter did not identify a selected provider."
-    : null;
 
   if (!validation.ok) {
     return {
       entrantId: entrant.id,
       baseModel: entrant.base_model,
       status: "unparseable",
-      detail: metadataDetail ?? validation.message,
+      detail: joinDetails(validation.message, routingDetail),
       resolvedProvider,
       resolvedModel,
       rawBody: body
@@ -195,10 +216,10 @@ async function callBaseModel(options: {
     entrantId: entrant.id,
     baseModel: entrant.base_model,
     status: "parseable",
-    detail: metadataDetail,
+    detail: routingDetail,
     resolvedProvider,
     resolvedModel,
-    rawBody: metadataDetail === null ? null : body
+    rawBody: routingDetail === null ? null : body
   };
 }
 
@@ -206,6 +227,7 @@ export async function preflightBaseModels({
   database,
   season,
   fixtureId,
+  expectedEntrantCount,
   apiKey,
   http
 }: PreflightBaseModelsOptions): Promise<PreflightReport> {
@@ -226,9 +248,10 @@ export async function preflightBaseModels({
       where role = 'entrant'
       order by id`
   );
-  if (entrants.rows.length !== 9) {
+  if (entrants.rows.length !== expectedEntrantCount) {
     throw new Error(
-      `Pre-flight requires exactly nine Entrants; found ${entrants.rows.length}`
+      `Pre-flight requires exactly ${expectedEntrantCount} Entrants; `
+      + `found ${entrants.rows.length}`
     );
   }
   const mismatchedPrompt = entrants.rows.find(
@@ -257,6 +280,7 @@ export async function preflightBaseModels({
     ok: results.every((result) =>
       result.status === "parseable"
       && result.resolvedProvider !== null
+      && result.resolvedModel !== null
     ),
     fixture: {
       season,

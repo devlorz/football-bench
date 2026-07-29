@@ -11,6 +11,10 @@ selected-provider metadata, or provider/model substitutions. The script exited z
 This successful run finalized the previously unpublished tracer prompt as Prompt Version
 `match/2026-27-v1`; all nine Entrant rows now name that version.
 
+The operator supplies `EXPECTED_ENTRANT_COUNT=9` for this roster. The pre-flight refuses to
+make an outbound call unless the database contains exactly that configured number of Entrants.
+Adding another Entrant changes the roster and this operator configuration, not the pipeline.
+
 | Entrant | Result | Resolved provider | Resolved model |
 |---|---|---|---|
 | Claude Opus 5 | parseable | Anthropic | `anthropic/claude-opus-5-20260723` |
@@ -40,6 +44,9 @@ The selected endpoint also provides the dated resolved model while the top-level
 field carries the undated request model. Resolved-model extraction therefore prefers
 `openrouter_metadata.endpoints.available[].model` from the selected entry. If that field is
 absent, the resolved model is unknown rather than being misreported from the top-level alias.
+Both the selected provider and selected resolved model are required for a green pre-flight;
+missing either field would silently disable an ADR-0009 substitution check. Routing metadata
+diagnostics are combined with validation diagnostics rather than replacing them.
 
 ## Pre-flight discovery
 
@@ -53,4 +60,15 @@ explicitly forbids Markdown/code fences. This is still prompt-only JSON: no cons
 decoding or `response_format` is sent. With that clarification, all nine Base Models produced
 parseable output on their pinned routes. The operator and predict paths refuse an Entrant whose
 stored Prompt Version differs from `match/2026-27-v1`, so the template cannot drift silently
-away from the version named by the roster.
+away from the version named by the roster. A canonical sample of the frozen template and
+context builder is pinned to SHA-256
+`177c01b88f4f4f1681ba5559c76c43ead8e6811c481335c97bfb14f26c3a3f18` next to the
+Prompt Version constant and verified by a contract test.
+
+## Reporting boundaries
+
+OpenRouter's structured `choices[0].message.refusal` is reported as a refusal. A refusal
+expressed only as ordinary prose has no reliable protocol discriminator, so it is reported as
+unparseable instead; it still fails the run and retains the raw successful response body.
+Non-2xx response bodies are included in the operator report but are not archived as successful
+contract evidence.

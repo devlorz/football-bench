@@ -66,6 +66,7 @@ cannot be recovered.
 - [x] Reports for each: parseable output, refusal, or transport error — with the raw body when it fails
 - [x] Reports the provider and model the gateway actually resolved for each
 - [x] Fails if `resolved_provider` is null for any Base Model, so a broken OpenRouter metadata contract cannot silently disable the ADR-0009 substitution check
+- [x] Fails if `resolved_model` is null for any Base Model, so missing endpoint model metadata cannot silently disable ADR-0009 snapshot-swap detection
 - [x] Archives at least one byte-exact successful OpenRouter response and replays it in tests, so response-shape contracts come from observed evidence rather than hand-written fakes
 - [x] Runs as an operator script rather than as part of CI
 - [x] Exits non-zero if any Base Model refuses or cannot produce parseable output

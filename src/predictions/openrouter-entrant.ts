@@ -2,6 +2,8 @@ import type { HttpRequest } from "../http.js";
 import { z } from "zod";
 
 export const MATCH_PROMPT_VERSION = "match/2026-27-v1";
+export const MATCH_PROMPT_SHA256 =
+  "177c01b88f4f4f1681ba5559c76c43ead8e6811c481335c97bfb14f26c3a3f18";
 
 export interface MatchPromptFixture {
   fpl_id: number;
