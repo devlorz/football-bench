@@ -146,6 +146,37 @@ describe("the benchmark database", () => {
     )).rejects.toMatchObject({ code: "23514" });
   });
 
+  test("names a scheduled Gap-closing run as a fill", async () => {
+    await client.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values (
+         'entrant/v1', 'Entrant', 'provider/base-model', 'provider',
+         'match/v1', 'entrant'
+       );
+       insert into gameweeks (season, gw, deadline_at)
+       values ('2026-27', 1, '2026-08-21T17:30:00Z')`
+    );
+
+    await client.query(
+      `insert into attempts (
+         model_id, season, gw, track, attempt_no, ok, trigger
+       ) values (
+         'entrant/v1', '2026-27', 1, 'match', 0, false, 'fill'
+       )`
+    );
+    await expect(client.query(
+      `insert into attempts (
+         model_id, season, gw, track, attempt_no, ok, trigger
+       ) values (
+         'entrant/v1', '2026-27', 1, 'match', 0, false, 'repair'
+       )`
+    )).rejects.toMatchObject({ code: "23514" });
+
+    const attempts = await client.query("select trigger from attempts");
+    expect(attempts.rows).toEqual([{ trigger: "fill" }]);
+  });
+
   test("keeps a Fixture's locked Gameweek when its schedule moves", async () => {
     await client.query(
       `insert into gameweeks (season, gw, deadline_at) values

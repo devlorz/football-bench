@@ -552,6 +552,62 @@ describe("predicting a Gameweek", () => {
     }]);
   });
 
+  test("stops Repairs when an invalid response arrives at the Lock", async () => {
+    let calls = 0;
+    const clock = [
+      new Date("2026-08-21T17:29:59.000Z"),
+      new Date("2026-08-21T17:30:00.000Z")
+    ];
+
+    await predictGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      concurrency: 1,
+      apiKey: "test-key",
+      now: () => {
+        const instant = clock.shift();
+        if (instant === undefined) {
+          throw new Error("Repair continued after the Lock");
+        }
+        return instant;
+      },
+      http: async () => {
+        calls += 1;
+        return {
+          status: 200,
+          body: JSON.stringify({
+            model: "openai/gpt-5.2",
+            choices: [{
+              message: {
+                role: "assistant",
+                content: JSON.stringify({
+                  fixture_id: 1,
+                  probs: { H: 0.6, D: 0.24, A: 0.15 },
+                  score: { home: 2, away: 1 },
+                  rationale: "Invalid and too late."
+                })
+              }
+            }],
+            usage: { prompt_tokens: 83, completion_tokens: 38 }
+          })
+        };
+      }
+    });
+
+    expect(calls).toBe(1);
+    const attempt = await client.query(
+      `select ok, error_kind, error_detail, attempt_no
+         from attempts`
+    );
+    expect(attempt.rows).toEqual([{
+      ok: false,
+      error_kind: "deadline",
+      error_detail: "The Lock passed at 2026-08-21T17:30:00.000Z.",
+      attempt_no: 0
+    }]);
+  });
+
   test("leaves a Gap after the third failed Repair and logs every attempt", async () => {
     await predictGameweek({
       database: client,

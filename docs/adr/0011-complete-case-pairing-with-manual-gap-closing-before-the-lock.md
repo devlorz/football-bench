@@ -24,5 +24,5 @@ Prediction, reusing the stored context verbatim.
   possible.
 - The Lock is enforced in the insert path as well as in scoring, so a manual run after the
   deadline simply cannot write a scorable Prediction.
-- The repair run must raise an alert when it finishes with Gaps outstanding. Without it,
+- The fill run must raise an alert when it finishes with Gaps outstanding. Without it,
   nobody knows there is anything to close until scoring runs on Monday.

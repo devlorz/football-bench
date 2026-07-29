@@ -284,7 +284,7 @@ enforced by the database rather than by application code:
 
 ### Interactions
 
-- The repair run and any manual run **load** the stored context by `(season, gw, track,
+- The fill run and any manual run **load** the stored context by `(season, gw, track,
   fpl_id)` rather than rebuilding it. Rebuilding would hand late-filled Entrants fresher
   information (ADR-0006).
 - The Lock guard follows the Fixture's canonical locked Gameweek to `gameweeks.deadline_at`

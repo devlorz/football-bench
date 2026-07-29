@@ -18,8 +18,8 @@ stale for every Entrant, and this benchmark only claims comparisons.
 - One `predicted_at` and one context hash per Entrant per Gameweek. Verifying the Lock held
   is a single query.
 - The Match and FPL tracks share one Lock, so one run can serve both.
-- The run schedule is a main run at deadline minus six hours and a repair run at deadline
+- The run schedule is a main run at deadline minus six hours and a fill run at deadline
   minus two hours which only fills Fixtures that have no Prediction yet — safe because
-  Predictions are insert-only and the repair run cannot overwrite.
-- The repair run must reuse the main run's stored context verbatim rather than rebuild it.
+  Predictions are insert-only and the fill run cannot overwrite.
+- The fill run must reuse the main run's stored context verbatim rather than rebuild it.
   Rebuilding would hand late-filled Entrants fresher information than their peers.

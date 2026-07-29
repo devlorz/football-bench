@@ -14,7 +14,7 @@ setup can resolve anything; that expectation is knowingly dropped here.
   distinguish "these Base Models are genuinely close" from "this setup resolves nothing."
   No result in this benchmark can rule out the second reading.
 - OpenRouter is a single point of failure for every Entrant at once. A vendor outage would
-  have cost one Entrant; an OpenRouter outage across both the main and repair runs costs the
+  have cost one Entrant; an OpenRouter outage across both the main and fill runs costs the
   whole Gameweek — ten Fixtures, permanently.
 - Every request pins its provider (`provider.order` with one slug, `allow_fallbacks: false`,
   an explicit `quantizations` filter). Without pinning, OpenRouter may serve an open-weight

@@ -103,7 +103,7 @@ create table attempts (
   tokens_in         integer,
   tokens_out        integer,
   raw_response      text,
-  trigger           text not null check (trigger in ('main', 'repair', 'manual')),
+  trigger           text not null check (trigger in ('main', 'fill', 'manual')),
   attempted_at      timestamptz not null default now(),
   foreign key (season, gw) references gameweeks(season, gw)
 );

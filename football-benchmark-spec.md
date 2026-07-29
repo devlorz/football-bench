@@ -113,7 +113,7 @@ football-data.co.uk┘         │                        │
 | Workflow | Schedule | Responsibility |
 |---|---|---|
 | `fetch.yml` | daily 06:00 UTC | FPL bootstrap-static, fixtures, Gameweek deadlines; `E0.csv` / `E1.csv`. Upsert and archive a raw snapshot every run. Idempotent. |
-| `predict.yml` | **GW deadline − 6h** (main), **deadline − 2h** (repair), plus `workflow_dispatch` | Build context per Fixture, call every Entrant, validate, insert. The repair run and any manual run fill only Fixtures with no Prediction, reusing the stored context verbatim. Alerts if Gaps remain (ADR-0006, ADR-0011). |
+| `predict.yml` | **GW deadline − 6h** (main), **deadline − 2h** (fill), plus `workflow_dispatch` | Build context per Fixture, call every Entrant, validate, insert. The fill run and any manual run fill only Fixtures with no Prediction, reusing the stored context verbatim. Alerts if Gaps remain (ADR-0006, ADR-0011). |
 | `score.yml` | daily **10:00 UTC** | Score Fixtures that have results. FPL finalises a Gameweek at 09:00 UK the day after its last match, so anything earlier reads bonus points and defensive contributions before they settle. Pure deterministic TypeScript. |
 
 **Supabase (Postgres)** is the system of record. **Cloudflare Worker** is a thin read-only
@@ -230,7 +230,7 @@ create table attempts (
   tokens_in         int,
   tokens_out        int,
   raw_response      text,
-  trigger           text not null check (trigger in ('main','repair','manual')),
+  trigger           text not null check (trigger in ('main','fill','manual')),
   attempted_at      timestamptz not null default now(),
   foreign key (season, gw) references gameweeks(season, gw)
 );
@@ -269,7 +269,7 @@ Notes:
   stored Prediction has a path to one authoritative deadline (ADR-0015).
 - `predictions` holds only successes. Every call, successful or not, is logged to `attempts`
   — that is where Gap rate, attempts-to-valid and vendor behaviour are read from (ADR-0007).
-- `contexts.body` is the exact text sent. The repair run and manual runs reuse it verbatim
+- `contexts.body` is the exact text sent. The fill run and manual runs reuse it verbatim
   rather than rebuilding it (ADR-0006).
 - `resolved_provider` and `resolved_model` are echoed from each response so a vendor swapping
   a snapshot beneath a stable model name is detectable afterwards.
@@ -507,7 +507,7 @@ football-benchmark/
 | Risk | Mitigation |
 |---|---|
 | **OpenRouter down through both runs** — every Entrant gaps at once, ten Fixtures lost permanently | Two scheduled runs plus manual dispatch; alert on outstanding Gaps. Accepted residual risk (ADR-0009) |
-| **A pinned provider is unavailable** | Request fails into a Gap rather than silently rerouting to a different quantization; the repair run retries |
+| **A pinned provider is unavailable** | Request fails into a Gap rather than silently rerouting to a different quantization; the fill run retries |
 | **A Base Model refuses the task** (probability forecasting sits near betting) | Pre-flight all nine before GW1 — task 1.8. Content policy varies more across nine Base Models than across three |
 | **One Entrant gaps heavily**, shrinking the complete-case intersection for everyone — a risk that grows with the roster | Publish n on every comparison; excluding an Entrant is a single recorded decision applied to the whole Season |
 | **Spurious separations** — 36 pairs at nine Entrants | Publish intervals against the leader only, eight comparisons declared in advance (ADR-0014) |

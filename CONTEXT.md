@@ -65,6 +65,14 @@ only scored if it existed before its Lock. Every Entrant for a Fixture shares th
 A Fixture for which an Entrant produced no valid Prediction. Gaps are recorded, never
 back-filled, and their rate is itself a reported result.
 
+**Repair**:
+A second chance given to an Entrant after a Prediction or Gameweek action fails validation,
+together with the reason it failed. Three are allowed, and the number used is recorded.
+
+**Fill**:
+The second scheduled prediction run, which attempts only Gaps before the Lock and reuses the
+stored context. A manually started equivalent is a manual fill.
+
 ### Fantasy
 
 **Squad**:
@@ -92,10 +100,6 @@ The -4 point penalty for a Transfer beyond the banked Free Transfers.
 **Chip**:
 A single-use modifier to one Gameweek — Wildcard, Free Hit, Triple Captain, or Bench Boost.
 Two sets per Season, one per half; the first-half set expires at the GW19 deadline unspent.
-
-**Repair**:
-A second chance at a Gameweek action that failed validation, given together with the reason
-it failed. Three are allowed. How many an Entrant needs is a recorded result.
 
 **Roll Over**:
 What happens when an Entrant's Gameweek action is still illegal after its third Repair —

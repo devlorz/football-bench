@@ -66,7 +66,7 @@ type ProviderFailureKind =
   | "rate_limit"
   | "timeout";
 
-type AttemptTrigger = "main" | "repair" | "manual";
+type AttemptTrigger = "main" | "fill" | "manual";
 
 const MAX_REPAIRS = 3;
 
@@ -213,7 +213,7 @@ async function recordPredictionResult(options: {
   trigger: AttemptTrigger;
   validation: PredictionValidation;
   telemetry: AttemptTelemetry;
-}): Promise<void> {
+}): Promise<boolean> {
   const {
     database,
     entrantId,
@@ -244,16 +244,16 @@ async function recordPredictionResult(options: {
     }
     const beforeLock = telemetry.attemptedAt.getTime() < deadline.getTime();
     const attemptOk = validation.ok && beforeLock;
-    const errorKind = !validation.ok
-      ? validation.kind
-      : beforeLock
+    const errorKind = !beforeLock
+      ? "deadline"
+      : validation.ok
         ? null
-        : "deadline";
-    const errorDetail = !validation.ok
-      ? validation.message
-      : beforeLock
+        : validation.kind;
+    const errorDetail = !beforeLock
+      ? `The Lock passed at ${deadline.toISOString()}.`
+      : validation.ok
         ? null
-        : `The Lock passed at ${deadline.toISOString()}.`;
+        : validation.message;
     await database.query(
       `insert into attempts (
          model_id, season, gw, track, fpl_id, attempt_no, ok,
@@ -305,6 +305,7 @@ async function recordPredictionResult(options: {
       );
     }
     await database.query("commit");
+    return beforeLock;
   } catch (error) {
     await database.query("rollback");
     throw error;
@@ -512,8 +513,9 @@ export async function predictGameweek({
         }
         const responseContent = parsedResponse.content;
         const validation = validatePrediction(responseContent, item.fpl_id);
+        let beforeLock = false;
         try {
-          await persist(() => recordPredictionResult({
+          beforeLock = await persist(() => recordPredictionResult({
             database,
             entrantId,
             season,
@@ -539,6 +541,7 @@ export async function predictGameweek({
         if (
           persistenceFailure !== undefined
           || validation.ok
+          || !beforeLock
           || attemptNo === MAX_REPAIRS
         ) {
           break;

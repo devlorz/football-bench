@@ -63,27 +63,40 @@ export function validatePrediction(
 
   const parsed = predictionSchema.safeParse(value);
   if (!parsed.success) {
-    const probabilitiesFailed = parsed.error.issues.every(
-      (issue) =>
-        issue.path[0] === "probs"
-        && (issue.code === "too_small" || issue.code === "too_big")
+    const probabilityIssues = parsed.error.issues.filter(
+      ({ path }) => path[0] === "probs"
     );
-    const scoreFailed = parsed.error.issues.every(
-      (issue) =>
-        issue.path[0] === "score"
-        && (
-          issue.code === "too_small"
-          || (issue.code === "invalid_type" && issue.expected === "int")
-        )
+    const scoreIssues = parsed.error.issues.filter(
+      ({ path }) => path[0] === "score"
     );
+    const probabilitiesFailed = probabilityIssues.length > 0
+      && probabilityIssues.every(
+        (issue) =>
+          issue.code === "too_small" || issue.code === "too_big"
+      );
+    const scoreFailed = scoreIssues.length > 0
+      && scoreIssues.every(
+        (issue) =>
+          (
+            issue.code === "too_small"
+            || (issue.code === "invalid_type" && issue.expected === "int")
+          )
+      );
+    const everyIssueNamed =
+      probabilityIssues.length + scoreIssues.length
+      === parsed.error.issues.length
+      && (probabilityIssues.length === 0 || probabilitiesFailed)
+      && (scoreIssues.length === 0 || scoreFailed);
+    const namedProblems = [
+      ...(probabilitiesFailed ? [validationMessages.probabilitiesRange] : []),
+      ...(scoreFailed ? [validationMessages.score] : [])
+    ];
     return {
       ok: false,
       kind: "schema",
-      message: probabilitiesFailed
-        ? validationMessages.probabilitiesRange
-        : scoreFailed
-          ? validationMessages.score
-          : validationMessages.schema(expectedFixtureId)
+      message: everyIssueNamed
+        ? namedProblems.join("\n")
+        : validationMessages.schema(expectedFixtureId)
     };
   }
   if (parsed.data.fixture_id !== expectedFixtureId) {

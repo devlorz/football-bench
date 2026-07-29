@@ -83,6 +83,22 @@ describe("Prediction validation", () => {
     });
   });
 
+  test("names every independently repairable schema problem", () => {
+    expect(validatePrediction(JSON.stringify({
+      fixture_id: 1,
+      probs: { H: 1.1, D: 0, A: -0.1 },
+      score: { home: -1, away: 1 },
+      rationale: ""
+    }), 1)).toEqual({
+      ok: false,
+      kind: "schema",
+      message: [
+        "Probabilities H, D and A must each be between 0 and 1.",
+        "Predicted Score goals must be non-negative integers."
+      ].join("\n")
+    });
+  });
+
   test.each([
     {
       label: "probabilities outside the sum tolerance",
