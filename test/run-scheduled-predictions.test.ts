@@ -194,6 +194,101 @@ describe("scheduled Prediction runs", () => {
     expect(repeatedCalls).toBe(0);
   });
 
+  test("reports a completed run's Gaps from stored attempts while time remains", async () => {
+    await client.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values (
+         'gap/v1', 'Unavailable Entrant', 'vendor/gap', 'pinned-gap',
+         'match/2026-27-v1', 'entrant'
+       )`
+    );
+
+    const clock = [
+      new Date("2026-08-21T11:30:00Z"),
+      new Date("2026-08-21T11:30:00Z"),
+      new Date("2026-08-21T11:30:00Z"),
+      new Date("2026-08-21T11:30:00Z"),
+      new Date("2026-08-21T11:30:00Z"),
+      new Date("2026-08-21T11:40:00Z"),
+      new Date("2026-08-21T11:40:00Z")
+    ];
+    const runs = await runScheduledPredictions({
+      database: client,
+      season: "2026-27",
+      concurrency: 2,
+      apiKey: "test-key",
+      now: () => {
+        const instant = clock.shift();
+        if (instant === undefined) {
+          throw new Error("Unexpected clock read");
+        }
+        return instant;
+      },
+      http: async (_url, options) => {
+        const request = JSON.parse(options?.body ?? "{}") as {
+          model: string;
+        };
+        return request.model === "vendor/gap"
+          ? { status: 503, body: "provider unavailable" }
+          : { status: 200, body: observedOpenRouterBody };
+      }
+    });
+
+    expect(runs).toEqual([{
+      gameweek: 1,
+      trigger: "main",
+      gapAlert: {
+        season: "2026-27",
+        gameweek: 1,
+        deadlineAt: new Date("2026-08-21T17:30:00Z"),
+        observedAt: new Date("2026-08-21T11:40:00Z"),
+        remainingMilliseconds: 5 * 60 * 60 * 1000 + 50 * 60 * 1000,
+        gaps: [{
+          entrantId: "gap/v1",
+          entrantName: "Unavailable Entrant",
+          fixtureId: 1,
+          fixture: "Arsenal v Coventry City",
+          cause: "provider"
+        }]
+      }
+    }]);
+  });
+
+  test("emits a completed run's Gap alert before a later due run fails", async () => {
+    await client.query(
+      `create function fail_fill_attempt()
+       returns trigger
+       language plpgsql
+       as $$
+       begin
+         if new.trigger = 'fill' then
+           raise exception 'fill attempt persistence unavailable';
+         end if;
+         return new;
+       end;
+       $$;
+       create trigger fill_attempt_fails
+       before insert on attempts
+       for each row execute function fail_fill_attempt()`
+    );
+    const emitted: Array<{ gameweek: number; trigger: string }> = [];
+
+    await expect(runScheduledPredictions({
+      database: client,
+      season: "2026-27",
+      concurrency: 1,
+      apiKey: "test-key",
+      now: () => new Date("2026-08-21T15:30:00Z"),
+      http: async () => ({ status: 503, body: "provider unavailable" }),
+      onCompletedRun: (run) => {
+        emitted.push({ gameweek: run.gameweek, trigger: run.trigger });
+      }
+    })).rejects.toThrow("fill attempt persistence unavailable");
+
+    expect(emitted).toEqual([{ gameweek: 1, trigger: "main" }]);
+  });
+
   test("retries an uncompleted scheduled run after persistence recovers", async () => {
     await client.query(
       `create function fail_scheduled_attempt()
@@ -239,9 +334,24 @@ describe("scheduled Prediction runs", () => {
        drop function fail_scheduled_attempt()`
     );
     observedAt = new Date("2026-08-21T17:30:00Z");
-    expect(await runScheduledPredictions(options)).toEqual([{
+    const recoveredRuns = await runScheduledPredictions(options);
+    expect(recoveredRuns).toEqual([{
       gameweek: 1,
-      trigger: "main"
+      trigger: "main",
+      gapAlert: {
+        season: "2026-27",
+        gameweek: 1,
+        deadlineAt: new Date("2026-08-21T17:30:00Z"),
+        observedAt: new Date("2026-08-21T17:30:00Z"),
+        remainingMilliseconds: 0,
+        gaps: [{
+          entrantId: "entrant/v1",
+          entrantName: "Tracer Entrant",
+          fixtureId: 1,
+          fixture: "Arsenal v Coventry City",
+          cause: "deadline"
+        }]
+      }
     }]);
     const recovered = await client.query(
       `select

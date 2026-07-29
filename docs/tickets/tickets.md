@@ -280,11 +280,27 @@ report. Neither signal should depend on noticing one red run in a noisy Actions 
 
 **Blocked by:** Scheduled runs, manual fill and context reuse.
 
-- [ ] A run finishing with Gaps raises an alert; a run finishing clean is silent
-- [ ] The alert names the Entrant, the Fixtures affected and the cause of each Gap
-- [ ] The alert states how long remains before the deadline, so the operator can judge whether intervening is worth it
-- [ ] A predict workflow failure opens or updates a distinct GitHub issue even when orchestration never completes
-- [ ] The workflow-failure issue links the failed run, uses the daily-fetch open-or-comment pattern, and assigns `PREDICT_ALERT_ASSIGNEE` when configured
+- [x] A run finishing with Gaps raises an alert; a run finishing clean is silent
+- [x] The alert names the Entrant, the Fixtures affected and the cause of each Gap
+- [x] The alert states how long remains before the deadline, so the operator can judge whether intervening is worth it
+- [x] A predict workflow failure opens or updates a distinct GitHub issue even when orchestration never completes
+- [x] The workflow-failure issue links the failed run, uses the daily-fetch open-or-comment pattern, and assigns `PREDICT_ALERT_ASSIGNEE` when configured
+
+After every successfully completed main, Fill or manual run, the Prediction path reads
+remaining Gaps back from stored Entrants, Fixtures, Predictions and attempts. The report uses
+the latest recorded failed attempt as each cause and includes the injected-clock interval to
+the Lock, read after the stored-data query completes. Each completed scheduled run is emitted
+before the scheduler starts later due work, so a later run failing cannot suppress an earlier
+alert. The report is printed for operators and emitted as a GitHub Actions warning annotation;
+when no Gaps remain, no alert is emitted. An unexplained Gap fails the job rather than silently
+omitting its cause.
+
+Failures outside that completed-run path are handled only by the workflow boundary. Either
+the scheduled or manual job failing opens the distinct `Prediction workflow is failing`
+issue, or comments on its existing open instance, with a link to the failed run.
+`PREDICT_ALERT_ASSIGNEE` is optional and is applied only when the issue is first opened.
+The workflow invokes a separately tested reporter script so issue creation and comment
+behaviour are exercised at the `gh` process boundary rather than asserted from YAML text.
 
 ---
 

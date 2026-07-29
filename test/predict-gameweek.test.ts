@@ -889,6 +889,7 @@ describe("predicting a Gameweek", () => {
     let calls = 0;
     const clock = [
       new Date("2026-08-21T17:29:59.000Z"),
+      new Date("2026-08-21T17:30:00.000Z"),
       new Date("2026-08-21T17:30:00.000Z")
     ];
 
@@ -901,7 +902,7 @@ describe("predicting a Gameweek", () => {
       now: () => {
         const instant = clock.shift();
         if (instant === undefined) {
-          throw new Error("Repair continued after the Lock");
+          throw new Error("Unexpected clock read");
         }
         return instant;
       },

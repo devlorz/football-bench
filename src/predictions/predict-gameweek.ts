@@ -19,6 +19,10 @@ import {
   type PredictionValidation
 } from "./validate-prediction.js";
 import type { AttemptTrigger } from "./prediction-trigger.js";
+import {
+  readGapAlert,
+  type GapAlert
+} from "./gap-alert.js";
 
 type Database = Pick<Client, "query">;
 
@@ -346,7 +350,7 @@ export async function predictGameweek({
   http,
   now,
   trigger = "main"
-}: PredictGameweekOptions): Promise<void> {
+}: PredictGameweekOptions): Promise<GapAlert | null> {
   if (!Number.isInteger(concurrency) || concurrency < 1) {
     throw new Error("Prediction concurrency must be a positive integer");
   }
@@ -610,4 +614,5 @@ export async function predictGameweek({
   if (persistenceFailure !== undefined) {
     throw persistenceFailure;
   }
+  return readGapAlert(database, season, gameweek, now);
 }

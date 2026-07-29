@@ -5,6 +5,7 @@ import { predictGameweek } from "./predict-gameweek.js";
 import type {
   ScheduledPredictionTrigger
 } from "./prediction-trigger.js";
+import type { GapAlert } from "./gap-alert.js";
 
 type Database = Pick<Client, "query">;
 
@@ -21,11 +22,13 @@ export interface RunScheduledPredictionsOptions {
   apiKey: string;
   http: HttpFetcher;
   now: () => Date;
+  onCompletedRun?: (run: CompletedPredictionRun) => void;
 }
 
 export interface CompletedPredictionRun {
   gameweek: number;
   trigger: ScheduledPredictionTrigger;
+  gapAlert?: GapAlert;
 }
 
 const SCHEDULER_LOCK_KEY = 8150528;
@@ -36,7 +39,8 @@ export async function runScheduledPredictions({
   concurrency,
   apiKey,
   http,
-  now
+  now,
+  onCompletedRun
 }: RunScheduledPredictionsOptions): Promise<CompletedPredictionRun[]> {
   const lock = await database.query<{ acquired: boolean }>(
     "select pg_try_advisory_lock($1) as acquired",
@@ -88,8 +92,9 @@ export async function runScheduledPredictions({
                last_error = null`,
         [season, run.gw, run.trigger, run.scheduled_for, observedAt]
       );
+      let completedRun: CompletedPredictionRun;
       try {
-        await predictGameweek({
+        const gapAlert = await predictGameweek({
           database,
           season,
           gameweek: run.gw,
@@ -106,7 +111,11 @@ export async function runScheduledPredictions({
             where season = $1 and gw = $2 and trigger = $3`,
           [season, run.gw, run.trigger, now()]
         );
-        completed.push({ gameweek: run.gw, trigger: run.trigger });
+        completedRun = {
+          gameweek: run.gw,
+          trigger: run.trigger,
+          ...(gapAlert === null ? {} : { gapAlert })
+        };
       } catch (error) {
         await database.query(
           `update prediction_runs
@@ -116,6 +125,8 @@ export async function runScheduledPredictions({
         );
         throw error;
       }
+      completed.push(completedRun);
+      onCompletedRun?.(completedRun);
     }
 
     return completed;

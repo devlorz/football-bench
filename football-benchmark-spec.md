@@ -123,7 +123,12 @@ metered Actions minutes while a private repository includes 2,000 minutes per mo
 schedules can be disabled after 60 days without repository activity, so re-enabling every
 scheduled workflow before the pre-Season rehearsal is an explicit recurring operator chore.
 Prediction workflow failures and completed runs with Gaps are separate alert signals; both
-belong to the Gap-alerting slice.
+belong to the Gap-alerting slice. A completed run derives its Gap report from stored
+Entrants, Fixtures, Predictions and latest failed attempts, states the time remaining to the
+Lock as observed after the report query, and emits a GitHub Actions warning annotation only
+when Gaps remain. Scheduled reports emit before any later due run begins. A workflow failure
+instead opens or comments on the distinct `Prediction workflow is failing` issue, links the
+failed run, and uses `PREDICT_ALERT_ASSIGNEE` when configured.
 
 **Supabase (Postgres)** is the system of record. **Cloudflare Worker** is a thin read-only
 API. **Cloudflare Pages** hosts the static dashboard.

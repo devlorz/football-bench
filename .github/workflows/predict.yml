@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: prediction-runs
@@ -61,3 +62,16 @@ jobs:
       - run: npm ci
       # Migrations are deployed deliberately before enabling this workflow.
       - run: npm run predict
+
+  report-failure:
+    needs: [scheduled, manual]
+    if: ${{ always() && (needs.scheduled.result == 'failure' || needs.manual.result == 'failure') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Open or update the Prediction workflow failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREDICT_ALERT_ASSIGNEE: ${{ vars.PREDICT_ALERT_ASSIGNEE }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash scripts/report-predict-failure.sh

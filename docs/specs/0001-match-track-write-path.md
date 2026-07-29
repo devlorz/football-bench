@@ -244,10 +244,16 @@ workflows before each pre-Season rehearsal.
   deadlines. A completion ledger and advisory lock make polling, delayed starts and retries
   safe.
 - **Predict orchestrator** — resolves the Gameweek, builds or loads context, fans out across
-  Entrants and Fixtures, writes results, emits the Gap alert.
+  Entrants and Fixtures, writes results, then reads any remaining Gaps and their latest
+  causes back from stored benchmark data. A completed run with Gaps emits a report naming
+  the Entrants and Fixtures and stating the injected-clock interval to the Lock, read after
+  the Gap query completes; a clean run is silent. Scheduled reports are emitted before later
+  due work starts. A Gap without a recorded cause fails rather than producing an incomplete
+  alert.
 - **Workflow failure reporter** — opens or updates a GitHub issue with the failed run URL
   when the predict job fails before, during or after orchestration. This is separate from the
-  Gap alert because a failed workflow may never produce a Gap report.
+  Gap alert because a failed workflow may never produce a Gap report. The reporter uses the
+  `Prediction workflow is failing` issue and assigns `PREDICT_ALERT_ASSIGNEE` when configured.
 
 ### Contracts
 
@@ -324,6 +330,11 @@ enforced by the database rather than by application code:
 - A database persistence failure does abort the job. Once the attempt ledger cannot be
   committed, continuing would issue unrecorded calls and violate the audit trail; the safe
   recovery is to restore persistence and re-run the idempotent job.
+- Gap reporting runs only after orchestration succeeds. It queries stored Entrants, Fixtures,
+  Predictions and the latest failed attempt for each missing Prediction; the CLI renders the
+  same report as operator text and a GitHub Actions warning annotation. Workflow failure
+  reporting remains an Actions concern and opens or comments on a distinct issue for either
+  the scheduled or manual job.
 - `predicted_at` captures when the successful synchronous response arrives, before the
   serialised database write. The Lock therefore applies to completion of the Entrant call,
   even when concurrent responses queue briefly for persistence (ADR-0002).
