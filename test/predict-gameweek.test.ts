@@ -60,6 +60,8 @@ describe("predicting a Gameweek", () => {
       "Kick-off: 2026-08-21T19:00:00.000Z",
       "",
       "Return only JSON with fixture_id, probs (H, D, A), score (home, away), and rationale.",
+      "The first character must be { and the last character must be }.",
+      "Do not use Markdown or wrap the JSON in code fences.",
       "Probabilities must each be between 0 and 1 and sum to 1. Goals must be non-negative integers."
     ].join("\n");
 
@@ -127,6 +129,10 @@ describe("predicting a Gameweek", () => {
       body: JSON.stringify({
         model: "openai/gpt-5.2",
         messages: [{ role: "user", content: context }],
+        provider: {
+          order: ["openai"],
+          allow_fallbacks: false
+        },
         stream: false
       })
     }]);
@@ -149,7 +155,7 @@ describe("predicting a Gameweek", () => {
       track: "match",
       fpl_id: 1,
       body: context,
-      hash: "56f537a359fafb5aa966b26be03b33f4897f4ab30f856925d529b7955df2cbdc",
+      hash: "177c01b88f4f4f1681ba5559c76c43ead8e6811c481335c97bfb14f26c3a3f18",
       model_id: "entrant/v1",
       probs: { H: 0.6003600360036003, D: 0.23982398239823982, A: 0.15981598159815982 },
       pred_home: 2,

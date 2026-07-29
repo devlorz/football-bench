@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 import type { Client } from "pg";
-import { z } from "zod";
 import type { HttpFetcher, HttpResponse } from "../http.js";
 import {
   matchContext,
   openRouterRequest,
+  parseOpenRouterResponse,
   type MatchPromptFixture
-} from "./openrouter-prediction.js";
+} from "./openrouter-entrant.js";
 import { validatePrediction } from "./validate-prediction.js";
 
 type Database = Pick<Client, "query">;
@@ -21,43 +21,12 @@ export interface PredictGameweekOptions {
   now: () => Date;
 }
 
-interface FixtureRow extends MatchPromptFixture {}
+type FixtureRow = MatchPromptFixture;
 
 interface EntrantRow {
   base_model: string;
-}
-
-const openRouterResponseSchema = z.looseObject({
-  choices: z.array(z.looseObject({
-    message: z.looseObject({
-      content: z.string()
-    })
-  })).min(1)
-});
-
-const openRouterMetadataSchema = z.looseObject({
-  endpoints: z.looseObject({
-    available: z.array(z.looseObject({
-      provider: z.string().min(1),
-      model: z.string().min(1).optional(),
-      selected: z.boolean()
-    }))
-  })
-});
-
-const usageSchema = z.looseObject({
-  prompt_tokens: z.number().int().nonnegative().optional(),
-  completion_tokens: z.number().int().nonnegative().optional()
-});
-
-function firstResponseContent(
-  envelope: z.infer<typeof openRouterResponseSchema>
-): string {
-  const [firstChoice] = envelope.choices;
-  if (firstChoice === undefined) {
-    throw new Error("OpenRouter response schema admitted an empty choices array");
-  }
-  return firstChoice.message.content;
+  provider: string;
+  quantization: string | null;
 }
 
 function sha256(value: string): string {
@@ -184,7 +153,7 @@ export async function predictGameweek({
   now
 }: PredictGameweekOptions): Promise<void> {
   const entrantResult = await database.query<EntrantRow>(
-    `select base_model
+    `select base_model, provider, quantization
        from models
       where id = $1
         and role = 'entrant'`,
@@ -216,7 +185,11 @@ export async function predictGameweek({
     const startedAt = now();
     const request = openRouterRequest(
       apiKey,
-      entrant.base_model,
+      {
+        baseModel: entrant.base_model,
+        provider: entrant.provider,
+        quantization: entrant.quantization
+      },
       context.body
     );
     const { url, ...requestOptions } = request;
@@ -262,14 +235,8 @@ export async function predictGameweek({
       continue;
     }
 
-    let responseValue: unknown;
-    try {
-      responseValue = JSON.parse(response.body);
-    } catch {
-      responseValue = undefined;
-    }
-    const parsedEnvelope = openRouterResponseSchema.safeParse(responseValue);
-    if (!parsedEnvelope.success) {
+    const parsedResponse = parseOpenRouterResponse(response.body);
+    if (parsedResponse === null || parsedResponse.content === null) {
       await recordProviderFailure({
         database,
         entrantId,
@@ -286,24 +253,10 @@ export async function predictGameweek({
       });
       continue;
     }
-    const envelope = parsedEnvelope.data;
-    const responseContent = firstResponseContent(envelope);
+    const responseContent = parsedResponse.content;
     const validation = validatePrediction(responseContent, fixture.fpl_id);
     const predictedAt = completedAt;
     const rawEntrantResponse = responseContent;
-    const metadata = openRouterMetadataSchema.safeParse(
-      envelope.openrouter_metadata
-    );
-    const usage = usageSchema.safeParse(envelope.usage);
-    const selectedEndpoint = metadata.success
-      ? metadata.data.endpoints.available.find(({ selected }) => selected)
-      : undefined;
-    const resolvedProvider = selectedEndpoint?.provider ?? null;
-    const resolvedModel = selectedEndpoint?.model
-      ?? (typeof envelope.model === "string"
-      && envelope.model.length > 0
-        ? envelope.model
-        : null);
     const latencyMs = Math.max(
       0,
       predictedAt.getTime() - startedAt.getTime()
@@ -359,11 +312,11 @@ export async function predictGameweek({
           attemptOk,
           errorKind,
           errorDetail,
-          resolvedProvider,
-          resolvedModel,
+          parsedResponse.resolvedProvider,
+          parsedResponse.resolvedModel,
           latencyMs,
-          usage.success ? usage.data.prompt_tokens ?? null : null,
-          usage.success ? usage.data.completion_tokens ?? null : null,
+          parsedResponse.tokensIn,
+          parsedResponse.tokensOut,
           rawEntrantResponse,
           predictedAt
         ]

@@ -24,17 +24,22 @@ function required(environment: NodeJS.ProcessEnv, name: string): string {
   return value;
 }
 
+function requiredSeason(environment: NodeJS.ProcessEnv): string {
+  const season = required(environment, "SEASON");
+  if (!/^\d{4}-\d{2}$/.test(season)) {
+    throw new Error("SEASON must use YYYY-YY format");
+  }
+  return season;
+}
+
 export function readFetchJobConfig(
   environment: NodeJS.ProcessEnv
 ): FetchJobConfig {
   const databaseUrl = required(environment, "DATABASE_URL");
-  const season = required(environment, "SEASON");
+  const season = requiredSeason(environment);
   const gameweekText = required(environment, "GAMEWEEK");
   const gameweek = Number(gameweekText);
 
-  if (!/^\d{4}-\d{2}$/.test(season)) {
-    throw new Error("SEASON must use YYYY-YY format");
-  }
   if (!Number.isInteger(gameweek) || gameweek < 1 || gameweek > 38) {
     throw new Error("GAMEWEEK must be an integer from 1 to 38");
   }
@@ -56,13 +61,10 @@ export function readPreflightJobConfig(
   environment: NodeJS.ProcessEnv
 ): PreflightJobConfig {
   const databaseUrl = required(environment, "DATABASE_URL");
-  const season = required(environment, "SEASON");
+  const season = requiredSeason(environment);
   const fixtureId = Number(required(environment, "FIXTURE_ID"));
   const openRouterApiKey = required(environment, "OPENROUTER_API_KEY");
 
-  if (!/^\d{4}-\d{2}$/.test(season)) {
-    throw new Error("SEASON must use YYYY-YY format");
-  }
   if (!Number.isInteger(fixtureId) || fixtureId < 1) {
     throw new Error("FIXTURE_ID must be a positive integer");
   }

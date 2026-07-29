@@ -46,13 +46,14 @@ describe("pre-flight for the Base Model roster", () => {
     for (let index = 1; index <= 9; index += 1) {
       await client.query(
         `insert into models (
-           id, name, base_model, provider, prompt_version, role
-         ) values ($1, $2, $3, $4, 'match/tracer-v1', 'entrant')`,
+           id, name, base_model, provider, quantization, prompt_version, role
+         ) values ($1, $2, $3, $4, $5, 'match/tracer-v1', 'entrant')`,
         [
           `entrant/${index}`,
           `Entrant ${index}`,
           `vendor/base-model-${index}`,
-          `provider-${index}`
+          `provider-${index}`,
+          index === 1 ? "fp8" : null
         ]
       );
     }
@@ -69,6 +70,8 @@ describe("pre-flight for the Base Model roster", () => {
       "Kick-off: 2026-08-21T19:00:00.000Z",
       "",
       "Return only JSON with fixture_id, probs (H, D, A), score (home, away), and rationale.",
+      "The first character must be { and the last character must be }.",
+      "Do not use Markdown or wrap the JSON in code fences.",
       "Probabilities must each be between 0 and 1 and sum to 1. Goals must be non-negative integers."
     ].join("\n");
 
@@ -120,6 +123,11 @@ describe("pre-flight for the Base Model roster", () => {
       body: JSON.stringify({
         model: "vendor/base-model-1",
         messages: [{ role: "user", content: context }],
+        provider: {
+          order: ["provider-1"],
+          allow_fallbacks: false,
+          quantizations: ["fp8"]
+        },
         stream: false
       })
     });
@@ -332,7 +340,7 @@ describe("pre-flight for the Base Model roster", () => {
           status: "parseable",
           detail: "OpenRouter did not identify a selected provider.",
           resolvedProvider: null,
-          resolvedModel: "vendor/base-model-1",
+          resolvedModel: null,
           rawBody: missingProviderBody
         },
         {
@@ -341,7 +349,7 @@ describe("pre-flight for the Base Model roster", () => {
           status: "unparseable",
           detail: "Response must be valid JSON.",
           resolvedProvider: "Provider 2",
-          resolvedModel: "vendor/base-model-2",
+          resolvedModel: null,
           rawBody: unparseableBody
         },
         {

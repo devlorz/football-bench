@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 import type { Client } from "pg";
-import { z } from "zod";
 import type { HttpFetcher } from "../http.js";
 import {
   matchContext,
   openRouterRequest,
+  parseOpenRouterResponse,
   type MatchPromptFixture
-} from "../predictions/openrouter-prediction.js";
+} from "../predictions/openrouter-entrant.js";
 import { validatePrediction } from "../predictions/validate-prediction.js";
 
 type Database = Pick<Client, "query">;
@@ -18,26 +18,9 @@ interface FixtureRow extends MatchPromptFixture {
 interface EntrantRow {
   id: string;
   base_model: string;
+  provider: string;
+  quantization: string | null;
 }
-
-const envelopeSchema = z.looseObject({
-  model: z.string().min(1).optional(),
-  choices: z.array(z.looseObject({
-    message: z.looseObject({
-      content: z.string().nullable(),
-      refusal: z.string().min(1).nullable().optional()
-    })
-  })).min(1),
-  openrouter_metadata: z.looseObject({
-    endpoints: z.looseObject({
-      available: z.array(z.looseObject({
-        provider: z.string().min(1),
-        model: z.string().min(1).optional(),
-        selected: z.boolean()
-      }))
-    })
-  }).optional()
-});
 
 export type PreflightStatus =
   | "parseable"
@@ -108,7 +91,11 @@ async function callBaseModel(options: {
   const { database, entrant, fixture, apiKey, http } = options;
   const request = openRouterRequest(
     apiKey,
-    entrant.base_model,
+    {
+      baseModel: entrant.base_model,
+      provider: entrant.provider,
+      quantization: entrant.quantization
+    },
     matchContext(fixture)
   );
   const { url, ...requestOptions } = request;
@@ -145,14 +132,8 @@ async function callBaseModel(options: {
 
   await archiveResponse(database, entrant.base_model, body);
 
-  let value: unknown;
-  try {
-    value = JSON.parse(body);
-  } catch {
-    value = undefined;
-  }
-  const parsed = envelopeSchema.safeParse(value);
-  if (!parsed.success) {
+  const parsed = parseOpenRouterResponse(body);
+  if (parsed === null) {
     return {
       entrantId: entrant.id,
       baseModel: entrant.base_model,
@@ -164,26 +145,20 @@ async function callBaseModel(options: {
     };
   }
 
-  const [choice] = parsed.data.choices;
-  if (choice === undefined) {
-    throw new Error("OpenRouter response schema admitted an empty choices array");
-  }
-  const selectedEndpoint = parsed.data.openrouter_metadata
-    ?.endpoints.available.find(({ selected }) => selected);
-  const resolvedProvider = selectedEndpoint?.provider ?? null;
-  const resolvedModel = selectedEndpoint?.model ?? parsed.data.model ?? null;
-  if (typeof choice.message.refusal === "string") {
+  const resolvedProvider = parsed.resolvedProvider;
+  const resolvedModel = parsed.resolvedModel;
+  if (parsed.refusal !== null) {
     return {
       entrantId: entrant.id,
       baseModel: entrant.base_model,
       status: "refusal",
-      detail: choice.message.refusal,
+      detail: parsed.refusal,
       resolvedProvider,
       resolvedModel,
       rawBody: body
     };
   }
-  if (choice.message.content === null) {
+  if (parsed.content === null) {
     return {
       entrantId: entrant.id,
       baseModel: entrant.base_model,
@@ -195,7 +170,7 @@ async function callBaseModel(options: {
     };
   }
   const validation = validatePrediction(
-    choice.message.content,
+    parsed.content,
     fixture.fpl_id
   );
   const metadataDetail = resolvedProvider === null
@@ -244,7 +219,7 @@ export async function preflightBaseModels({
   }
 
   const entrants = await database.query<EntrantRow>(
-    `select id, base_model
+    `select id, base_model, provider, quantization
        from models
       where role = 'entrant'
       order by id`
