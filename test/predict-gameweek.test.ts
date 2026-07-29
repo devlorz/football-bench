@@ -80,16 +80,16 @@ describe("predicting a Gameweek", () => {
     await client.query(
       `insert into fpl_players (
          season, gw, fpl_id, team_name, web_name, position, price_tenths,
-         status, chance_of_playing_next_round, news, news_added
+         status, chance_of_playing_next_round, news, news_added, observed_at
        ) values
          (
            '2026-27', 1, 12, 'Arsenal', 'Saka', 'MID', 95,
-           'a', null, '', null
+           'a', null, '', null, '2026-08-21T17:00:00Z'
          ),
          (
            '2026-27', 1, 5, 'Arsenal', 'J.Timber', 'DEF', 65,
            'i', 0, 'Groin injury - Expected back 21 Aug',
-           '2026-07-23T12:01:23.272Z'
+           '2026-07-23T12:01:23.272Z', '2026-08-21T17:00:00Z'
          )`
     );
     let prompt = "";
@@ -180,12 +180,14 @@ describe("predicting a Gameweek", () => {
       "FPL-derived player context",
       "",
       "Arsenal",
-      "Five highest-priced players: no FPL player data for this team.",
-      "Players not fully available: no FPL player data for this team.",
+      "FPL player data status: no player snapshot loaded for this Gameweek.",
+      "Five highest-priced players: unavailable because no snapshot was loaded.",
+      "Players not fully available: unavailable because no snapshot was loaded.",
       "",
       "Coventry City",
-      "Five highest-priced players: no FPL player data for this team.",
-      "Players not fully available: no FPL player data for this team.",
+      "FPL player data status: no player snapshot loaded for this Gameweek.",
+      "Five highest-priced players: unavailable because no snapshot was loaded.",
+      "Players not fully available: unavailable because no snapshot was loaded.",
       "",
       "Return only JSON with fixture_id, probs (H, D, A), score (home, away), and rationale.",
       "The first character must be { and the last character must be }.",
@@ -283,7 +285,7 @@ describe("predicting a Gameweek", () => {
       track: "match",
       fpl_id: 1,
       body: context,
-      hash: "ea6a0ac9b73ea24635815dac37d77819c954da213fa0e33e0fb3297ebc4ee463",
+      hash: "383d397f81c3c86061aa7bb929efa28d5f9b8eb7ff81fe938270dc71f520afa0",
       model_id: "entrant/v1",
       probs: { H: 0.6003600360036003, D: 0.23982398239823982, A: 0.15981598159815982 },
       pred_home: 2,

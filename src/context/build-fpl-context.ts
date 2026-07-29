@@ -50,6 +50,14 @@ function absenceSummary(player: FplPlayer): string {
 }
 
 function teamSection(team: string, players: FplPlayer[]): string[] {
+  if (players.length === 0) {
+    return [
+      team,
+      "FPL player data status: no player snapshot loaded for this Gameweek.",
+      "Five highest-priced players: unavailable because no snapshot was loaded.",
+      "Players not fully available: unavailable because no snapshot was loaded."
+    ];
+  }
   const teamPlayers = players
     .filter(({ team_name: teamName }) => teamName === team)
     .sort((left, right) =>
@@ -58,8 +66,9 @@ function teamSection(team: string, players: FplPlayer[]): string[] {
   if (teamPlayers.length === 0) {
     return [
       team,
-      "Five highest-priced players: no FPL player data for this team.",
-      "Players not fully available: no FPL player data for this team."
+      "FPL player data status: team name did not resolve against the loaded snapshot.",
+      "Five highest-priced players: unavailable because the team did not resolve.",
+      "Players not fully available: unavailable because the team did not resolve."
     ];
   }
 

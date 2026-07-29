@@ -71,6 +71,47 @@ describe("the benchmark database", () => {
     ]);
   });
 
+  test("rejects an FPL player snapshot at or after its Gameweek deadline", async () => {
+    await client.query(
+      `insert into gameweeks (season, gw, deadline_at)
+       values ('2026-27', 1, '2026-08-21T17:30:00Z')`
+    );
+
+    await expect(client.query(
+      `insert into fpl_players (
+         season, gw, fpl_id, team_name, web_name, position, price_tenths,
+         status, chance_of_playing_next_round, news, news_added, observed_at
+       ) values (
+         '2026-27', 1, 1, 'Arsenal', 'Raya', 'GKP', 60,
+         'a', null, '', null, '2026-08-21T17:30:00Z'
+       )`
+    )).rejects.toMatchObject({
+      constraint: "fpl_player_snapshot_precedes_deadline"
+    });
+  });
+
+  test("rejects moving a deadline across an existing FPL player snapshot", async () => {
+    await client.query(
+      `insert into gameweeks (season, gw, deadline_at)
+       values ('2026-27', 1, '2026-08-21T17:30:00Z');
+       insert into fpl_players (
+         season, gw, fpl_id, team_name, web_name, position, price_tenths,
+         status, chance_of_playing_next_round, news, news_added, observed_at
+       ) values (
+         '2026-27', 1, 1, 'Arsenal', 'Raya', 'GKP', 60,
+         'a', null, '', null, '2026-08-21T17:00:00Z'
+       )`
+    );
+
+    await expect(client.query(
+      `update gameweeks
+          set deadline_at = '2026-08-21T17:00:00Z'
+        where season = '2026-27' and gw = 1`
+    )).rejects.toMatchObject({
+      constraint: "gameweek_deadline_preserves_fpl_snapshot_lock"
+    });
+  });
+
   test("rejects rows that refer to a Gameweek that does not exist", async () => {
     await client.query(
       `insert into models (

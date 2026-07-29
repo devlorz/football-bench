@@ -13,7 +13,8 @@ try {
     database,
     season: config.season,
     gameweek: config.gameweek,
-    http: nodeHttpFetcher
+    http: nodeHttpFetcher,
+    now: () => new Date()
   });
 } finally {
   await database.end();

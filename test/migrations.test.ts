@@ -124,7 +124,7 @@ describe("applying migrations", () => {
     expect(unprotected.rows).toEqual([]);
   });
 
-  test("applies the Gameweek correction over the deployed 0005 schema", async () => {
+  test("locks player snapshots over the deployed 0006 schema", async () => {
     await client.query(
       `create table schema_migrations (
          filename   text primary key,
@@ -136,7 +136,8 @@ describe("applying migrations", () => {
       "0002_rename_attempt_trigger_to_fill.sql",
       "0003_restrict_public_role_access.sql",
       "0004_historical_matches.sql",
-      "0005_fpl_players.sql"
+      "0005_fpl_players.sql",
+      "0006_gameweek_scoped_fpl_players.sql"
     ];
     for (const filename of deployedFilenames) {
       await client.query(await readFile(new URL(filename, realMigrationsUrl), "utf8"));
@@ -145,10 +146,33 @@ describe("applying migrations", () => {
         [filename]
       );
     }
+    await client.query(
+      `insert into gameweeks (season, gw, deadline_at)
+       values ('2099-00', 1, '2099-08-21T17:30:00Z');
+       insert into fpl_players (
+         season, gw, fpl_id, team_name, web_name, position, price_tenths,
+         status, chance_of_playing_next_round, news, news_added
+       ) values (
+         '2099-00', 1, 1, 'Arsenal', 'Raya', 'GKP', 60,
+         'a', null, '', null
+       )`
+    );
 
     const applied = await applyMigrations(client);
 
-    expect(applied).toEqual(["0006_gameweek_scoped_fpl_players.sql"]);
+    expect(applied).toEqual(["0007_lock_fpl_player_snapshots.sql"]);
+    const backfill = await client.query<{
+      observed_at: Date;
+      precedes_deadline: boolean;
+    }>(
+      `select
+         p.observed_at,
+         p.observed_at < g.deadline_at as precedes_deadline
+         from fpl_players p
+         join gameweeks g using (season, gw)`
+    );
+    expect(backfill.rows[0]?.observed_at).toBeInstanceOf(Date);
+    expect(backfill.rows[0]?.precedes_deadline).toBe(true);
     const protection = await client.query<{
       table_name: string;
       row_level_security: boolean;

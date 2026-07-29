@@ -50,7 +50,19 @@ whose status was not fully available. Review then caught that a Season-only iden
 overwrite the evidence needed to rebuild an earlier Gameweek. Forward migration
 `0006_gameweek_scoped_fpl_players.sql` corrected the identity to
 `(Season, Gameweek, FPL id)` and assigned all 563 observed rows to Gameweek 1; subsequent
-fetches replace only their own Gameweek partition.
+fetches replace only their own Gameweek partition. A later review found that the Gameweek
+label alone did not prove those rows were observed before its Lock. Forward migration
+`0007_lock_fpl_player_snapshots.sql` records `observed_at` and adds a database trigger that
+rejects a player row observed at or after its Gameweek deadline. The fetch path archives
+late upstream bytes and still refreshes Fixtures, but leaves the pre-Lock player partition
+unchanged. For the 563 rows predating `observed_at`, the migration timestamp is stored as a
+conservative upper bound and the migration fails unless that bound is still pre-Lock. A
+second trigger prevents a later deadline correction from moving the Lock across an existing
+player snapshot.
+
+Migration `0007` was deployed and a live Gameweek 1 fetch completed at 15:42 UTC. The current
+bootstrap contained 564 players; all 564 rows carry the same observed time before the
+2026-08-21 17:30 UTC Lock, and both database triggers are active.
 
 The operator checked the generated inputs for Fixture 1 against that snapshot. Arsenal's
 section showed Saka, Gabriel, Rice, Gyökeres and Havertz as its five highest-priced players,

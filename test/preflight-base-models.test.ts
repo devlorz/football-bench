@@ -57,20 +57,20 @@ describe("pre-flight for the Base Model roster", () => {
     await client.query(
       `insert into fpl_players (
          season, gw, fpl_id, team_name, web_name, position, price_tenths,
-         status, chance_of_playing_next_round, news, news_added
+         status, chance_of_playing_next_round, news, news_added, observed_at
        ) values
          (
            '2026-27', 1, 12, 'Arsenal', 'Saka', 'MID', 95,
-           'a', null, '', null
+           'a', null, '', null, '2026-08-21T17:00:00Z'
          ),
          (
            '2026-27', 1, 5, 'Arsenal', 'J.Timber', 'DEF', 65,
            'i', 0, 'Groin injury - Expected back 21 Aug',
-           '2026-07-23T12:01:23.272Z'
+           '2026-07-23T12:01:23.272Z', '2026-08-21T17:00:00Z'
          ),
          (
            '2026-27', 1, 200, 'Coventry City', 'Coventry Player', 'FWD', 60,
-           'a', null, '', null
+           'a', null, '', null, '2026-08-21T17:00:00Z'
          )`
     );
     for (let index = 1; index <= 9; index += 1) {

@@ -15,6 +15,7 @@ import {
 } from "../src/context/build-fpl-context.js";
 
 const { Client } = pg;
+const beforeFirstDeadline = () => new Date("2026-08-21T17:00:00.000Z");
 
 async function archivedBody(name: string): Promise<string> {
   const url = new URL(`./fixtures/${name}`, import.meta.url);
@@ -54,6 +55,7 @@ describe("fetching an FPL Gameweek", () => {
       database: client,
       season: "2026-27",
       gameweek: 1,
+      now: beforeFirstDeadline,
       http: async (url) => {
         requested.push(url);
         const body = responses.get(url);
@@ -93,7 +95,7 @@ describe("fetching an FPL Gameweek", () => {
     const players = await client.query(
       `select
          season, gw, fpl_id, team_name, web_name, position, price_tenths,
-         status, chance_of_playing_next_round, news, news_added
+         status, chance_of_playing_next_round, news, news_added, observed_at
          from fpl_players
         where fpl_id in (1, 5)
         order by fpl_id`
@@ -111,7 +113,8 @@ describe("fetching an FPL Gameweek", () => {
         status: "a",
         chance_of_playing_next_round: null,
         news: "",
-        news_added: null
+        news_added: null,
+        observed_at: new Date("2026-08-21T17:00:00.000Z")
       },
       {
         season: "2026-27",
@@ -124,7 +127,8 @@ describe("fetching an FPL Gameweek", () => {
         status: "i",
         chance_of_playing_next_round: 0,
         news: "Groin injury - Expected back 21 Aug",
-        news_added: new Date("2026-07-23T12:01:23.272Z")
+        news_added: new Date("2026-07-23T12:01:23.272Z"),
+        observed_at: new Date("2026-08-21T17:00:00.000Z")
       }
     ]);
     const playerCount = await client.query(
@@ -194,6 +198,7 @@ describe("fetching an FPL Gameweek", () => {
       database: client,
       season: "2026-27",
       gameweek: 1,
+      now: beforeFirstDeadline,
       http: async (url) => ({ status: 200, body: responses.get(url) ?? "" })
     })).rejects.toThrow("fpl_bootstrap.events.0.deadline_time");
 
@@ -240,6 +245,7 @@ describe("fetching an FPL Gameweek", () => {
       database: client,
       season: "2026-27",
       gameweek: 1,
+      now: beforeFirstDeadline,
       http: async (url) => ({ status: 200, body: responses.get(url) ?? "" })
     })).rejects.toMatchObject({
       name: FplSourceValidationError.name,
@@ -255,6 +261,7 @@ describe("fetching an FPL Gameweek", () => {
       database: client,
       season: "2026-27",
       gameweek: 1,
+      now: beforeFirstDeadline,
       http: async (url) => ({
         status: url.includes("bootstrap-static") ? 503 : 200,
         body: ""
@@ -286,6 +293,7 @@ describe("fetching an FPL Gameweek", () => {
       database: client,
       season: "2026-27",
       gameweek: 1,
+      now: beforeFirstDeadline,
       http: async (url) => ({ status: 200, body: responses.get(url) ?? "" })
     })).rejects.toThrow("fpl_bootstrap.elements.0.now_cost");
 
@@ -312,6 +320,7 @@ describe("fetching an FPL Gameweek", () => {
       database: client,
       season: "2026-27",
       gameweek: 1,
+      now: beforeFirstDeadline,
       http: async (url: string) => ({
         status: 200,
         body: responses.get(url) ?? ""
@@ -363,6 +372,7 @@ describe("fetching an FPL Gameweek", () => {
       database: client,
       season: "2026-27",
       gameweek: 1,
+      now: beforeFirstDeadline,
       http: async (url) => ({
         status: 200,
         body: firstResponses.get(url) ?? ""
@@ -382,6 +392,7 @@ describe("fetching an FPL Gameweek", () => {
       database: client,
       season: "2026-27",
       gameweek: 2,
+      now: beforeFirstDeadline,
       http: async (url) => ({
         status: 200,
         body: secondResponses.get(url) ?? ""
@@ -398,5 +409,69 @@ describe("fetching an FPL Gameweek", () => {
       { gw: 1, price_tenths: 60 },
       { gw: 2, price_tenths: 61 }
     ]);
+  });
+
+  test("does not replace player context at or after the Gameweek deadline", async () => {
+    const bootstrapBody = await archivedBody("fpl-bootstrap-2026-27.json.gz");
+    const fixturesBody = await archivedBody("fpl-fixtures-2026-27.json.gz");
+    const firstResponses = new Map([
+      ["https://fantasy.premierleague.com/api/bootstrap-static/", bootstrapBody],
+      ["https://fantasy.premierleague.com/api/fixtures/", fixturesBody]
+    ]);
+    await fetchFplGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      now: () => new Date("2026-08-21T17:29:59.999Z"),
+      http: async (url) => ({
+        status: 200,
+        body: firstResponses.get(url) ?? ""
+      })
+    });
+
+    const changedBootstrap = JSON.parse(bootstrapBody);
+    changedBootstrap.elements[0].now_cost = 61;
+    const changedBootstrapBody = JSON.stringify(changedBootstrap);
+    const changedFixtures = JSON.parse(fixturesBody);
+    changedFixtures[0].kickoff_time = "2026-08-21T20:00:00Z";
+    const changedFixturesBody = JSON.stringify(changedFixtures);
+    const secondResponses = new Map([
+      [
+        "https://fantasy.premierleague.com/api/bootstrap-static/",
+        changedBootstrapBody
+      ],
+      ["https://fantasy.premierleague.com/api/fixtures/", changedFixturesBody]
+    ]);
+    await fetchFplGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      now: () => new Date("2026-08-21T17:30:00.000Z"),
+      http: async (url) => ({
+        status: 200,
+        body: secondResponses.get(url) ?? ""
+      })
+    });
+
+    const stored = await client.query(
+      `select
+         (select price_tenths
+            from fpl_players
+           where season = '2026-27' and gw = 1 and fpl_id = 1) as price,
+         (select kickoff_at
+            from fixtures
+           where season = '2026-27' and fpl_id = 1) as kickoff_at,
+         (select body
+            from raw_snapshots
+           where source = 'fpl_bootstrap'
+           order by first_seen_at desc
+           limit 1) = $1 as latest_snapshot_archived`,
+      [changedBootstrapBody]
+    );
+    expect(stored.rows).toEqual([{
+      price: 60,
+      kickoff_at: new Date("2026-08-21T20:00:00.000Z"),
+      latest_snapshot_archived: true
+    }]);
   });
 });

@@ -59,6 +59,7 @@ export interface FetchFplGameweekOptions {
   season: string;
   gameweek: number;
   http: HttpFetcher;
+  now: () => Date;
 }
 
 export interface FplSourceIssue {
@@ -137,12 +138,14 @@ export async function fetchFplGameweek({
   database,
   season,
   gameweek,
-  http
+  http,
+  now
 }: FetchFplGameweekOptions): Promise<void> {
   const [bootstrapBody, fixturesBody] = await Promise.all([
     getBody(http, "fpl_bootstrap", FPL_BOOTSTRAP_URL),
     getBody(http, "fpl_fixtures", FPL_FIXTURES_URL)
   ]);
+  const observedAt = now();
 
   await storeRawSnapshots(database, [
     { source: "fpl_bootstrap", body: bootstrapBody },
@@ -162,6 +165,8 @@ export async function fetchFplGameweek({
       detail: `Gameweek ${gameweek} is missing`
     }]);
   }
+  const beforeDeadline =
+    observedAt.getTime() < new Date(event.deadline_time).getTime();
 
   const teamNames = new Map(bootstrap.teams.map(({ id, name }) => [id, name]));
   const positions = new Map(
@@ -227,31 +232,36 @@ export async function fetchFplGameweek({
       [season, gameweek, event.deadline_time]
     );
 
-    await database.query(
-      "delete from fpl_players where season = $1 and gw = $2",
-      [season, gameweek]
-    );
-    for (const player of players) {
+    if (beforeDeadline) {
       await database.query(
-        `insert into fpl_players (
-           season, gw, fpl_id, team_name, web_name, position, price_tenths,
-           status, chance_of_playing_next_round, news, news_added
-         )
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-        [
-          season,
-          gameweek,
-          player.id,
-          player.teamName,
-          player.web_name,
-          player.position,
-          player.now_cost,
-          player.status,
-          player.chance_of_playing_next_round,
-          player.news,
-          player.news_added
-        ]
+        "delete from fpl_players where season = $1 and gw = $2",
+        [season, gameweek]
       );
+      for (const player of players) {
+        await database.query(
+          `insert into fpl_players (
+             season, gw, fpl_id, team_name, web_name, position, price_tenths,
+             status, chance_of_playing_next_round, news, news_added, observed_at
+           )
+           values (
+             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+           )`,
+          [
+            season,
+            gameweek,
+            player.id,
+            player.teamName,
+            player.web_name,
+            player.position,
+            player.now_cost,
+            player.status,
+            player.chance_of_playing_next_round,
+            player.news,
+            player.news_added,
+            observedAt
+          ]
+        );
+      }
     }
 
     for (const fixture of rows) {

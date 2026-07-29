@@ -65,8 +65,9 @@ describe("building FPL-derived Match context", () => {
       "- Unlisted | MID | £4.0m | status: doubtful | chance of playing next round: not provided | news: not provided | news added: not provided",
       "",
       "Coventry City",
-      "Five highest-priced players: no FPL player data for this team.",
-      "Players not fully available: no FPL player data for this team."
+      "FPL player data status: team name did not resolve against the loaded snapshot.",
+      "Five highest-priced players: unavailable because the team did not resolve.",
+      "Players not fully available: unavailable because the team did not resolve."
     ].join("\n"));
   });
 
@@ -82,5 +83,25 @@ describe("building FPL-derived Match context", () => {
       awayTeam: "Coventry City",
       players
     })).toContain("Players not fully available: none; all listed players are available.");
+  });
+
+  test("distinguishes a missing snapshot from an unresolved team", () => {
+    expect(buildFplContext({
+      homeTeam: "Arsenal",
+      awayTeam: "Coventry City",
+      players: []
+    })).toBe([
+      "FPL-derived player context",
+      "",
+      "Arsenal",
+      "FPL player data status: no player snapshot loaded for this Gameweek.",
+      "Five highest-priced players: unavailable because no snapshot was loaded.",
+      "Players not fully available: unavailable because no snapshot was loaded.",
+      "",
+      "Coventry City",
+      "FPL player data status: no player snapshot loaded for this Gameweek.",
+      "Five highest-priced players: unavailable because no snapshot was loaded.",
+      "Players not fully available: unavailable because no snapshot was loaded."
+    ].join("\n"));
   });
 });
