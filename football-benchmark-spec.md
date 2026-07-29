@@ -222,7 +222,7 @@ create table attempts (
   fpl_id            int,
   attempt_no        int  not null,       -- 0 = first call, 1-3 = Repairs
   ok                boolean not null,
-  error_kind        text,                -- schema | probs_sum | refusal | provider | timeout | rate_limit | rule
+  error_kind        text,                -- schema | probs_sum | refusal | provider | timeout | rate_limit | deadline | rule
   error_detail      text,
   resolved_provider text,                -- what OpenRouter actually routed to
   resolved_model    text,
@@ -417,8 +417,8 @@ and never on the points leaderboard.
    within tolerance, reject outside), non-negative integer goals. On failure, return the
    reason and allow up to **three Repairs**. After the third, record a Gap.
 
-5. **Insert** with `predicted_at = now()`, rejecting anything at or after the Gameweek
-   deadline. Log every attempt.
+5. **Insert** with `predicted_at` captured when the synchronous response arrives, rejecting
+   anything at or after the Gameweek deadline. Log every attempt.
 
 ### Rescheduled Fixtures
 

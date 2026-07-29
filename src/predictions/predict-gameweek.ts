@@ -8,7 +8,10 @@ import {
   parseOpenRouterResponse,
   type MatchPromptFixture
 } from "./openrouter-entrant.js";
-import { validatePrediction } from "./validate-prediction.js";
+import {
+  validatePrediction,
+  type PredictionValidation
+} from "./validate-prediction.js";
 
 type Database = Pick<Client, "query">;
 
@@ -16,7 +19,7 @@ export interface PredictGameweekOptions {
   database: Database;
   season: string;
   gameweek: number;
-  entrantId: string;
+  concurrency: number;
   apiKey: string;
   http: HttpFetcher;
   now: () => Date;
@@ -25,11 +28,40 @@ export interface PredictGameweekOptions {
 type FixtureRow = MatchPromptFixture;
 
 interface EntrantRow {
+  id: string;
   base_model: string;
   provider: string;
   prompt_version: string;
   quantization: string | null;
 }
+
+interface WorkItemRow extends FixtureRow {
+  entrant_id: string;
+  base_model: string;
+  provider: string;
+  quantization: string | null;
+}
+
+interface StoredContext {
+  id: number;
+  body: string;
+}
+
+interface AttemptTelemetry {
+  latencyMs: number;
+  rawResponse: string | null;
+  resolvedProvider: string | null;
+  resolvedModel: string | null;
+  tokensIn: number | null;
+  tokensOut: number | null;
+  attemptedAt: Date;
+}
+
+type ProviderFailureKind =
+  | "provider"
+  | "refusal"
+  | "rate_limit"
+  | "timeout";
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -40,7 +72,7 @@ async function storeContext(
   season: string,
   gameweek: number,
   fixture: FixtureRow
-): Promise<{ id: number; body: string }> {
+): Promise<StoredContext> {
   const body = matchContext(fixture);
   const inserted = await database.query<{ id: number }>(
     `insert into contexts (season, gw, track, fpl_id, hash, body)
@@ -74,6 +106,15 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function isTimeoutError(error: unknown): boolean {
+  return error instanceof Error
+    && (error.name === "TimeoutError" || error.name === "AbortError");
+}
+
+function elapsedMilliseconds(startedAt: Date, completedAt: Date): number {
+  return Math.max(0, completedAt.getTime() - startedAt.getTime());
+}
+
 async function assignCanonicalLock(
   database: Database,
   season: string,
@@ -94,10 +135,9 @@ async function recordProviderFailure(options: {
   season: string;
   gameweek: number;
   fixtureId: number;
+  kind: ProviderFailureKind;
   detail: string;
-  latencyMs: number;
-  rawResponse: string | null;
-  attemptedAt: Date;
+  telemetry: AttemptTelemetry;
 }): Promise<void> {
   const {
     database,
@@ -105,10 +145,9 @@ async function recordProviderFailure(options: {
     season,
     gameweek,
     fixtureId,
+    kind,
     detail,
-    latencyMs,
-    rawResponse,
-    attemptedAt
+    telemetry
   } = options;
   await database.query("begin");
   try {
@@ -121,23 +160,130 @@ async function recordProviderFailure(options: {
     await database.query(
       `insert into attempts (
          model_id, season, gw, track, fpl_id, attempt_no, ok,
-         error_kind, error_detail, latency_ms, raw_response, trigger,
-         attempted_at
+         error_kind, error_detail, resolved_provider, resolved_model,
+         latency_ms, tokens_in, tokens_out, raw_response, trigger, attempted_at
        ) values (
-         $1, $2, $3, 'match', $4, 0, false, 'provider', $5, $6, $7,
-         'main', $8
+         $1, $2, $3, 'match', $4, 0, false, $5, $6, $7, $8,
+         $9, $10, $11, $12, 'main', $13
        )`,
       [
         entrantId,
         season,
         gameweek,
         fixtureId,
+        kind,
         detail,
-        latencyMs,
-        rawResponse,
-        attemptedAt
+        telemetry.resolvedProvider,
+        telemetry.resolvedModel,
+        telemetry.latencyMs,
+        telemetry.tokensIn,
+        telemetry.tokensOut,
+        telemetry.rawResponse,
+        telemetry.attemptedAt
       ]
     );
+    await database.query("commit");
+  } catch (error) {
+    await database.query("rollback");
+    throw error;
+  }
+}
+
+async function recordPredictionResult(options: {
+  database: Database;
+  entrantId: string;
+  season: string;
+  gameweek: number;
+  fixtureId: number;
+  contextId: number;
+  validation: PredictionValidation;
+  telemetry: AttemptTelemetry;
+}): Promise<void> {
+  const {
+    database,
+    entrantId,
+    season,
+    gameweek,
+    fixtureId,
+    contextId,
+    validation,
+    telemetry
+  } = options;
+  await database.query("begin");
+  try {
+    await assignCanonicalLock(database, season, fixtureId, gameweek);
+    const lockResult = await database.query<{ deadline_at: Date }>(
+      `select g.deadline_at
+         from fixtures f
+         join gameweeks g
+           on g.season = f.season
+          and g.gw = f.locked_in_gw
+        where f.season = $1 and f.fpl_id = $2`,
+      [season, fixtureId]
+    );
+    const deadline = lockResult.rows[0]?.deadline_at;
+    if (deadline === undefined) {
+      throw new Error(`Fixture ${fixtureId} has no Lock`);
+    }
+    const beforeLock = telemetry.attemptedAt.getTime() < deadline.getTime();
+    const attemptOk = validation.ok && beforeLock;
+    const errorKind = !validation.ok
+      ? validation.kind
+      : beforeLock
+        ? null
+        : "deadline";
+    const errorDetail = !validation.ok
+      ? validation.message
+      : beforeLock
+        ? null
+        : `The Lock passed at ${deadline.toISOString()}.`;
+    await database.query(
+      `insert into attempts (
+         model_id, season, gw, track, fpl_id, attempt_no, ok,
+         error_kind, error_detail, resolved_provider, resolved_model,
+         latency_ms, tokens_in, tokens_out, raw_response, trigger,
+         attempted_at
+       ) values (
+         $1, $2, $3, 'match', $4, 0, $5, $6, $7, $8, $9, $10, $11,
+         $12, $13, 'main', $14
+       )`,
+      [
+        entrantId,
+        season,
+        gameweek,
+        fixtureId,
+        attemptOk,
+        errorKind,
+        errorDetail,
+        telemetry.resolvedProvider,
+        telemetry.resolvedModel,
+        telemetry.latencyMs,
+        telemetry.tokensIn,
+        telemetry.tokensOut,
+        telemetry.rawResponse,
+        telemetry.attemptedAt
+      ]
+    );
+    if (attemptOk) {
+      await database.query(
+        `insert into predictions (
+           model_id, season, fpl_id, probs, pred_home, pred_away,
+           context_id, rationale, attempts_used, predicted_at
+         ) values ($1, $2, $3, $4, $5, $6, $7, $8, 0, $9)
+         on conflict (model_id, season, fpl_id) do nothing`,
+        [
+          entrantId,
+          season,
+          fixtureId,
+          validation.prediction.probs,
+          validation.prediction.score.home,
+          validation.prediction.score.away,
+          contextId,
+          validation.prediction.rationale,
+          telemetry.attemptedAt
+        ]
+      );
+    }
     await database.query("commit");
   } catch (error) {
     await database.query("rollback");
@@ -149,212 +295,221 @@ export async function predictGameweek({
   database,
   season,
   gameweek,
-  entrantId,
+  concurrency,
   apiKey,
   http,
   now
 }: PredictGameweekOptions): Promise<void> {
-  const entrantResult = await database.query<EntrantRow>(
-    `select base_model, provider, quantization, prompt_version
-       from models
-      where id = $1
-        and role = 'entrant'`,
-    [entrantId]
-  );
-  const entrant = entrantResult.rows[0];
-  if (entrant === undefined) {
-    throw new Error(`Entrant ${entrantId} does not exist`);
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new Error("Prediction concurrency must be a positive integer");
   }
-  if (entrant.prompt_version !== MATCH_PROMPT_VERSION) {
+
+  const entrantResult = await database.query<EntrantRow>(
+    `select id, base_model, provider, quantization, prompt_version
+       from models
+      where role = 'entrant'
+      order by id`
+  );
+  if (entrantResult.rows.length === 0) {
+    throw new Error("No Entrants are configured");
+  }
+  const mismatchedPrompt = entrantResult.rows.find(
+    ({ prompt_version: promptVersion }) =>
+      promptVersion !== MATCH_PROMPT_VERSION
+  );
+  if (mismatchedPrompt !== undefined) {
     throw new Error(
-      `Entrant ${entrantId} uses Prompt Version ${entrant.prompt_version}; `
+      `Entrant ${mismatchedPrompt.id} uses Prompt Version `
+      + `${mismatchedPrompt.prompt_version}; `
       + `expected ${MATCH_PROMPT_VERSION}`
     );
   }
 
-  const fixtures = await database.query<FixtureRow>(
-    `select fpl_id, home_team, away_team, kickoff_at
+  const work = await database.query<WorkItemRow>(
+    `select
+       f.fpl_id, f.home_team, f.away_team, f.kickoff_at,
+       m.id as entrant_id, m.base_model, m.provider, m.quantization
        from fixtures f
-      where season = $1
-        and gw = $2
+       cross join models m
+      where f.season = $1
+        and f.gw = $2
+        and m.role = 'entrant'
         and not exists (
           select 1
             from predictions p
-           where p.model_id = $3
+           where p.model_id = m.id
              and p.season = f.season
              and p.fpl_id = f.fpl_id
         )
-      order by fpl_id`,
-    [season, gameweek, entrantId]
+      order by f.fpl_id, m.id`,
+    [season, gameweek]
   );
 
-  for (const fixture of fixtures.rows) {
-    const context = await storeContext(database, season, gameweek, fixture);
-    const startedAt = now();
-    const request = openRouterRequest(
-      apiKey,
-      {
-        baseModel: entrant.base_model,
-        provider: entrant.provider,
-        quantization: entrant.quantization
-      },
-      context.body
-    );
-    const { url, ...requestOptions } = request;
-    let response: HttpResponse;
-    let completedAt: Date;
-    try {
-      response = await http(url, requestOptions);
-      completedAt = now();
-    } catch (error) {
-      completedAt = now();
-      await recordProviderFailure({
-        database,
-        entrantId,
-        season,
-        gameweek,
-        fixtureId: fixture.fpl_id,
-        detail: `OpenRouter call failed: ${errorText(error)}.`,
-        latencyMs: Math.max(
-          0,
-          completedAt.getTime() - startedAt.getTime()
-        ),
-        rawResponse: null,
-        attemptedAt: completedAt
-      });
-      continue;
-    }
-    if (response.status < 200 || response.status >= 300) {
-      const latencyMs = Math.max(
-        0,
-        completedAt.getTime() - startedAt.getTime()
+  const contexts = new Map<number, StoredContext>();
+  for (const item of work.rows) {
+    if (!contexts.has(item.fpl_id)) {
+      contexts.set(
+        item.fpl_id,
+        await storeContext(database, season, gameweek, item)
       );
-      await recordProviderFailure({
-        database,
-        entrantId,
-        season,
-        gameweek,
-        fixtureId: fixture.fpl_id,
-        detail: `OpenRouter returned HTTP ${response.status}.`,
-        latencyMs,
-        rawResponse: response.body,
-        attemptedAt: completedAt
-      });
-      continue;
     }
+  }
 
-    const parsedResponse = parseOpenRouterResponse(response.body);
-    if (parsedResponse === null || parsedResponse.content === null) {
-      await recordProviderFailure({
+  let persistenceTail: Promise<void> = Promise.resolve();
+  function persist<T>(operation: () => Promise<T>): Promise<T> {
+    const result = persistenceTail.then(operation);
+    persistenceTail = result.then(
+      () => undefined,
+      () => undefined
+    );
+    return result;
+  }
+
+  let nextItem = 0;
+  let persistenceFailure: unknown;
+  async function persistProviderFailure(options: {
+    item: WorkItemRow;
+    kind: ProviderFailureKind;
+    detail: string;
+    telemetry: AttemptTelemetry;
+  }): Promise<void> {
+    const { item, kind, detail, telemetry } = options;
+    try {
+      await persist(() => recordProviderFailure({
         database,
-        entrantId,
+        entrantId: item.entrant_id,
         season,
         gameweek,
-        fixtureId: fixture.fpl_id,
-        detail: "OpenRouter returned an unexpected response shape.",
-        latencyMs: Math.max(
-          0,
-          completedAt.getTime() - startedAt.getTime()
-        ),
-        rawResponse: response.body,
-        attemptedAt: completedAt
-      });
-      continue;
+        fixtureId: item.fpl_id,
+        kind,
+        detail,
+        telemetry
+      }));
+    } catch (error) {
+      persistenceFailure ??= error;
     }
-    const responseContent = parsedResponse.content;
-    const validation = validatePrediction(responseContent, fixture.fpl_id);
-    const predictedAt = completedAt;
-    const rawEntrantResponse = responseContent;
-    const latencyMs = Math.max(
-      0,
-      predictedAt.getTime() - startedAt.getTime()
-    );
-    await database.query("begin");
-    try {
-      await assignCanonicalLock(
-        database,
-        season,
-        fixture.fpl_id,
-        gameweek
-      );
-      const lockResult = await database.query<{ deadline_at: Date }>(
-        `select g.deadline_at
-           from fixtures f
-           join gameweeks g
-             on g.season = f.season
-            and g.gw = f.locked_in_gw
-          where f.season = $1 and f.fpl_id = $2`,
-        [season, fixture.fpl_id]
-      );
-      const deadline = lockResult.rows[0]?.deadline_at;
-      if (deadline === undefined) {
-        throw new Error(`Fixture ${fixture.fpl_id} has no Lock`);
+  }
+
+  async function worker(): Promise<void> {
+    while (persistenceFailure === undefined) {
+      const item = work.rows[nextItem];
+      nextItem += 1;
+      if (item === undefined) {
+        return;
       }
-      const beforeLock = predictedAt.getTime() < deadline.getTime();
-      const attemptOk = validation.ok && beforeLock;
-      const errorKind = !validation.ok
-        ? validation.kind
-        : beforeLock
-          ? null
-          : "deadline";
-      const errorDetail = !validation.ok
-        ? validation.message
-        : beforeLock
-          ? null
-          : `The Lock passed at ${deadline.toISOString()}.`;
-      await database.query(
-        `insert into attempts (
-           model_id, season, gw, track, fpl_id, attempt_no, ok,
-           error_kind, error_detail, resolved_provider, resolved_model,
-           latency_ms, tokens_in, tokens_out, raw_response, trigger,
-           attempted_at
-         ) values (
-           $1, $2, $3, 'match', $4, 0, $5, $6, $7, $8, $9, $10, $11,
-           $12, $13, 'main', $14
-         )`,
-        [
+      const context = contexts.get(item.fpl_id);
+      if (context === undefined) {
+        throw new Error(
+          `Match context for Fixture ${item.fpl_id} was not prepared`
+        );
+      }
+      const entrantId = item.entrant_id;
+      const startedAt = now();
+      const request = openRouterRequest(
+        apiKey,
+        {
+          baseModel: item.base_model,
+          provider: item.provider,
+          quantization: item.quantization
+        },
+        context.body
+      );
+      const { url, ...requestOptions } = request;
+      let response: HttpResponse;
+      let completedAt: Date;
+      try {
+        response = await http(url, requestOptions);
+        completedAt = now();
+      } catch (error) {
+        completedAt = now();
+        await persistProviderFailure({
+          item,
+          kind: isTimeoutError(error) ? "timeout" : "provider",
+          detail: `OpenRouter call failed: ${errorText(error)}.`,
+          telemetry: {
+            latencyMs: elapsedMilliseconds(startedAt, completedAt),
+            rawResponse: null,
+            resolvedProvider: null,
+            resolvedModel: null,
+            tokensIn: null,
+            tokensOut: null,
+            attemptedAt: completedAt
+          }
+        });
+        continue;
+      }
+      if (response.status < 200 || response.status >= 300) {
+        await persistProviderFailure({
+          item,
+          kind: response.status === 429 ? "rate_limit" : "provider",
+          detail: `OpenRouter returned HTTP ${response.status}.`,
+          telemetry: {
+            latencyMs: elapsedMilliseconds(startedAt, completedAt),
+            rawResponse: response.body,
+            resolvedProvider: null,
+            resolvedModel: null,
+            tokensIn: null,
+            tokensOut: null,
+            attemptedAt: completedAt
+          }
+        });
+        continue;
+      }
+
+      const parsedResponse = parseOpenRouterResponse(response.body);
+      if (parsedResponse === null || parsedResponse.content === null) {
+        await persistProviderFailure({
+          item,
+          kind: parsedResponse?.refusal === null
+            || parsedResponse?.refusal === undefined
+            ? "provider"
+            : "refusal",
+          detail: parsedResponse?.refusal
+            ?? "OpenRouter returned an unexpected response shape.",
+          telemetry: {
+            latencyMs: elapsedMilliseconds(startedAt, completedAt),
+            rawResponse: response.body,
+            resolvedProvider: parsedResponse?.resolvedProvider ?? null,
+            resolvedModel: parsedResponse?.resolvedModel ?? null,
+            tokensIn: parsedResponse?.tokensIn ?? null,
+            tokensOut: parsedResponse?.tokensOut ?? null,
+            attemptedAt: completedAt
+          }
+        });
+        continue;
+      }
+      const responseContent = parsedResponse.content;
+      const validation = validatePrediction(responseContent, item.fpl_id);
+      try {
+        await persist(() => recordPredictionResult({
+          database,
           entrantId,
           season,
           gameweek,
-          fixture.fpl_id,
-          attemptOk,
-          errorKind,
-          errorDetail,
-          parsedResponse.resolvedProvider,
-          parsedResponse.resolvedModel,
-          latencyMs,
-          parsedResponse.tokensIn,
-          parsedResponse.tokensOut,
-          rawEntrantResponse,
-          predictedAt
-        ]
-      );
-      if (!attemptOk) {
-        await database.query("commit");
-        continue;
+          fixtureId: item.fpl_id,
+          contextId: context.id,
+          validation,
+          telemetry: {
+            latencyMs: elapsedMilliseconds(startedAt, completedAt),
+            rawResponse: responseContent,
+            resolvedProvider: parsedResponse.resolvedProvider,
+            resolvedModel: parsedResponse.resolvedModel,
+            tokensIn: parsedResponse.tokensIn,
+            tokensOut: parsedResponse.tokensOut,
+            attemptedAt: completedAt
+          }
+        }));
+      } catch (error) {
+        persistenceFailure ??= error;
       }
-      await database.query(
-        `insert into predictions (
-           model_id, season, fpl_id, probs, pred_home, pred_away,
-           context_id, rationale, attempts_used, predicted_at
-         ) values ($1, $2, $3, $4, $5, $6, $7, $8, 0, $9)
-         on conflict (model_id, season, fpl_id) do nothing`,
-        [
-          entrantId,
-          season,
-          fixture.fpl_id,
-          validation.prediction.probs,
-          validation.prediction.score.home,
-          validation.prediction.score.away,
-          context.id,
-          validation.prediction.rationale,
-          predictedAt
-        ]
-      );
-      await database.query("commit");
-    } catch (error) {
-      await database.query("rollback");
-      throw error;
     }
+  }
+
+  const workerCount = Math.min(concurrency, work.rows.length);
+  await Promise.all(
+    Array.from({ length: workerCount }, () => worker())
+  );
+  if (persistenceFailure !== undefined) {
+    throw persistenceFailure;
   }
 }

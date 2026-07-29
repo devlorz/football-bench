@@ -245,8 +245,8 @@ Entrant output, requested in the prompt with no `response_format` (ADR-0010):
 }
 ```
 
-Validation failure kinds, which are also the values recorded against a Gap:
-`schema`, `probs_sum`, `refusal`, `provider`, `timeout`, `rate_limit`.
+Attempt failure kinds, which are also the values recorded against a Gap:
+`schema`, `probs_sum`, `refusal`, `provider`, `timeout`, `rate_limit`, `deadline`.
 
 Provider pinning, applied to every call (ADR-0009):
 
@@ -292,12 +292,15 @@ enforced by the database rather than by application code:
 - The orchestrator treats each `(Entrant, Fixture)` as independent. One failing Entrant does
   not abort the Gameweek; one Fixture's transport, provider or validation failure does not
   abort the Entrant.
+- Outbound HTTP requests time out after 120 seconds by default. The resulting `TimeoutError`
+  is logged as `timeout`, freeing the worker rather than waiting for the HTTP client's
+  longer internal timeout.
 - A database persistence failure does abort the job. Once the attempt ledger cannot be
   committed, continuing would issue unrecorded calls and violate the audit trail; the safe
   recovery is to restore persistence and re-run the idempotent job.
-- `predicted_at` is set when the successful response is written, which under synchronous
-  calls is seconds after the request (ADR-0002), so there is no ambiguity about whether the
-  Lock applies to submission or completion.
+- `predicted_at` captures when the successful synchronous response arrives, before the
+  serialised database write. The Lock therefore applies to completion of the Entrant call,
+  even when concurrent responses queue briefly for persistence (ADR-0002).
 
 ---
 

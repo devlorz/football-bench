@@ -13,7 +13,7 @@ try {
     database,
     season: config.season,
     gameweek: config.gameweek,
-    entrantId: config.entrantId,
+    concurrency: config.concurrency,
     apiKey: config.openRouterApiKey,
     http: nodeHttpFetcher,
     now: () => new Date()

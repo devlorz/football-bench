@@ -8,6 +8,18 @@ import { predictGameweek } from "../src/predictions/predict-gameweek.js";
 const { Client } = pg;
 const migrationUrl = new URL("../migrations/0001_initial.sql", import.meta.url);
 
+function requestedFixtureId(body: {
+  messages: Array<{ content: string }>;
+}): number {
+  const fixtureId = body.messages[0]?.content.match(
+    /Fixture ID: (\d+)/
+  )?.[1];
+  if (fixtureId === undefined) {
+    throw new Error("Request did not contain a Fixture ID");
+  }
+  return Number(fixtureId);
+}
+
 describe("predicting a Gameweek", () => {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
 
@@ -69,7 +81,7 @@ describe("predicting a Gameweek", () => {
       database: client,
       season: "2026-27",
       gameweek: 1,
-      entrantId: "entrant/v1",
+      concurrency: 1,
       apiKey: "test-key",
       now: () => {
         const instant = clock.shift();
@@ -198,12 +210,183 @@ describe("predicting a Gameweek", () => {
     }]);
   });
 
+  test("refuses an invalid concurrency before issuing a call", async () => {
+    let calls = 0;
+
+    await expect(predictGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      concurrency: 0,
+      apiKey: "test-key",
+      now: () => new Date("2026-08-21T17:29:00Z"),
+      http: async () => {
+        calls += 1;
+        return { status: 200, body: "{}" };
+      }
+    })).rejects.toThrow(
+      "Prediction concurrency must be a positive integer"
+    );
+
+    expect(calls).toBe(0);
+  });
+
+  test("runs every Entrant concurrently while isolating a failed Entrant", async () => {
+    await client.query(
+      `insert into fixtures (
+         season, fpl_id, gw, home_team, away_team, kickoff_at
+       ) values (
+         '2026-27', 2, 1, 'Leeds United', 'Everton',
+         '2026-08-22T14:00:00Z'
+       );
+       insert into models (
+         id, name, base_model, provider, quantization, prompt_version, role
+       ) values
+         (
+           'open-weight/v1', 'Open Weight Entrant', 'vendor/open-weight-v1',
+           'pinned-open-weight', 'fp8', 'match/2026-27-v1', 'entrant'
+         ),
+         (
+           'unavailable/v1', 'Unavailable Entrant', 'vendor/unavailable-v1',
+           'pinned-unavailable', null, 'match/2026-27-v1', 'entrant'
+         );
+       insert into models (
+         id, name, base_model, provider, prompt_version, role
+       )
+       select
+         'entrant/' || n, 'Entrant ' || n, 'vendor/base-model-' || n,
+         'provider-' || n, 'match/2026-27-v1', 'entrant'
+       from generate_series(2, 7) as n`
+    );
+    const requestBodies: unknown[] = [];
+    let activeCalls = 0;
+    let maximumActiveCalls = 0;
+    let releaseFirstBatch: () => void = () => undefined;
+    const firstBatchStarted = new Promise<void>((resolve) => {
+      releaseFirstBatch = resolve;
+    });
+    let batchReleased = false;
+
+    await predictGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      concurrency: 4,
+      apiKey: "test-key",
+      now: () => new Date("2026-08-21T17:29:00Z"),
+      http: async (_url, options) => {
+        const body = JSON.parse(options?.body ?? "{}") as {
+          model: string;
+          messages: Array<{ content: string }>;
+        };
+        requestBodies.push(body);
+        activeCalls += 1;
+        maximumActiveCalls = Math.max(maximumActiveCalls, activeCalls);
+        if (activeCalls === 4 && !batchReleased) {
+          batchReleased = true;
+          releaseFirstBatch();
+        }
+        await firstBatchStarted;
+        activeCalls -= 1;
+
+        if (body.model === "vendor/unavailable-v1") {
+          return {
+            status: 503,
+            body: "{\"error\":\"provider unavailable\"}"
+          };
+        }
+        const fixtureId = requestedFixtureId(body);
+        return {
+          status: 200,
+          body: JSON.stringify({
+            openrouter_metadata: {
+              endpoints: {
+                available: [{
+                  provider: `resolved:${body.model}`,
+                  model: body.model,
+                  selected: true
+                }]
+              }
+            },
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  fixture_id: fixtureId,
+                  probs: { H: 0.5, D: 0.3, A: 0.2 },
+                  score: { home: 1, away: 0 },
+                  rationale: `Prediction from ${body.model}.`
+                })
+              }
+            }]
+          })
+        };
+      }
+    });
+
+    expect(maximumActiveCalls).toBe(4);
+    expect(requestBodies).toHaveLength(18);
+    expect(requestBodies).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        model: "openai/gpt-5.2",
+        provider: {
+          order: ["openai"],
+          allow_fallbacks: false
+        }
+      }),
+      expect.objectContaining({
+        model: "vendor/open-weight-v1",
+        provider: {
+          order: ["pinned-open-weight"],
+          allow_fallbacks: false,
+          quantizations: ["fp8"]
+        }
+      })
+    ]));
+
+    const predictions = await client.query(
+      `select
+         p.fpl_id, count(*)::int as prediction_count,
+         count(distinct p.context_id)::int as context_count
+         from predictions p
+        group by p.fpl_id
+        order by p.fpl_id`
+    );
+    expect(predictions.rows).toEqual([
+      { fpl_id: 1, prediction_count: 8, context_count: 1 },
+      { fpl_id: 2, prediction_count: 8, context_count: 1 }
+    ]);
+
+    const attempts = await client.query(
+      `select
+         count(*)::int as attempt_count,
+         count(*) filter (where ok)::int as successful_count,
+         count(*) filter (
+           where model_id = 'unavailable/v1'
+             and not ok
+             and error_kind = 'provider'
+         )::int as isolated_failure_count,
+         count(*) filter (
+           where ok
+             and resolved_provider is not null
+             and resolved_model is not null
+         )::int as routed_count
+       from attempts
+       `
+    );
+    expect(attempts.rows).toEqual([{
+      attempt_count: 18,
+      successful_count: 16,
+      isolated_failure_count: 2,
+      routed_count: 16
+    }]);
+  });
+
   test("stores a valid Prediction when telemetry is absent", async () => {
     await predictGameweek({
       database: client,
       season: "2026-27",
       gameweek: 1,
-      entrantId: "entrant/v1",
+      concurrency: 1,
       apiKey: "test-key",
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async () => ({
@@ -244,12 +427,60 @@ describe("predicting a Gameweek", () => {
     }]);
   });
 
+  test("records a structured refusal with its routing telemetry", async () => {
+    await predictGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      concurrency: 1,
+      apiKey: "test-key",
+      now: () => new Date("2026-08-21T17:29:00Z"),
+      http: async () => ({
+        status: 200,
+        body: JSON.stringify({
+          openrouter_metadata: {
+            endpoints: {
+              available: [{
+                provider: "OpenAI",
+                model: "openai/gpt-5.2",
+                selected: true
+              }]
+            }
+          },
+          choices: [{
+            message: {
+              content: null,
+              refusal: "I cannot provide betting predictions."
+            }
+          }],
+          usage: { prompt_tokens: 83, completion_tokens: 0 }
+        })
+      })
+    });
+
+    const attempt = await client.query(
+      `select
+         ok, error_kind, error_detail, resolved_provider, resolved_model,
+         tokens_in, tokens_out
+       from attempts`
+    );
+    expect(attempt.rows).toEqual([{
+      ok: false,
+      error_kind: "refusal",
+      error_detail: "I cannot provide betting predictions.",
+      resolved_provider: "OpenAI",
+      resolved_model: "openai/gpt-5.2",
+      tokens_in: 83,
+      tokens_out: 0
+    }]);
+  });
+
   test("refuses a Prediction at the exact deadline and logs the attempt", async () => {
     await predictGameweek({
       database: client,
       season: "2026-27",
       gameweek: 1,
-      entrantId: "entrant/v1",
+      concurrency: 1,
       apiKey: "test-key",
       now: () => new Date("2026-08-21T17:30:00Z"),
       http: async () => ({
@@ -300,7 +531,7 @@ describe("predicting a Gameweek", () => {
       database: client,
       season: "2026-27",
       gameweek: 1,
-      entrantId: "entrant/v1",
+      concurrency: 1,
       apiKey: "test-key",
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async () => ({
@@ -349,7 +580,7 @@ describe("predicting a Gameweek", () => {
       database: client,
       season: "2026-27",
       gameweek: 1,
-      entrantId: "entrant/v1",
+      concurrency: 1,
       apiKey: "test-key",
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async () => {
@@ -399,7 +630,7 @@ describe("predicting a Gameweek", () => {
       database: client,
       season: "2026-27",
       gameweek: 1,
-      entrantId: "entrant/v1",
+      concurrency: 1,
       apiKey: "test-key",
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async () => ({
@@ -431,12 +662,61 @@ describe("predicting a Gameweek", () => {
     }]);
   });
 
+  test("records an OpenRouter 429 as a rate limit", async () => {
+    await predictGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      concurrency: 1,
+      apiKey: "test-key",
+      now: () => new Date("2026-08-21T17:29:00Z"),
+      http: async () => ({
+        status: 429,
+        body: "{\"error\":{\"message\":\"Rate limit exceeded\"}}"
+      })
+    });
+
+    const attempt = await client.query(
+      "select ok, error_kind, error_detail from attempts"
+    );
+    expect(attempt.rows).toEqual([{
+      ok: false,
+      error_kind: "rate_limit",
+      error_detail: "OpenRouter returned HTTP 429."
+    }]);
+  });
+
+  test("records a signalled HTTP timeout separately", async () => {
+    await predictGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      concurrency: 1,
+      apiKey: "test-key",
+      now: () => new Date("2026-08-21T17:29:00Z"),
+      http: async () => {
+        const error = new Error("request timed out");
+        error.name = "TimeoutError";
+        throw error;
+      }
+    });
+
+    const attempt = await client.query(
+      "select ok, error_kind, error_detail from attempts"
+    );
+    expect(attempt.rows).toEqual([{
+      ok: false,
+      error_kind: "timeout",
+      error_detail: "OpenRouter call failed: request timed out."
+    }]);
+  });
+
   test("logs an unexpected OpenRouter envelope instead of aborting", async () => {
     await predictGameweek({
       database: client,
       season: "2026-27",
       gameweek: 1,
-      entrantId: "entrant/v1",
+      concurrency: 1,
       apiKey: "test-key",
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async () => ({
@@ -472,7 +752,7 @@ describe("predicting a Gameweek", () => {
       database: client,
       season: "2026-27",
       gameweek: 1,
-      entrantId: "entrant/v1",
+      concurrency: 1,
       apiKey: "test-key",
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async () => {
@@ -575,7 +855,7 @@ describe("predicting a Gameweek", () => {
     const common = {
       season: "2026-27",
       gameweek: 1,
-      entrantId: "entrant/v1",
+      concurrency: 1,
       apiKey: "test-key",
       now: () => new Date("2026-08-21T17:29:00Z"),
       http
@@ -634,7 +914,7 @@ describe("predicting a Gameweek", () => {
         database: client,
         season: "2026-27",
         gameweek: 1,
-        entrantId: "entrant/v1",
+        concurrency: 1,
         apiKey: "test-key",
         now: () => new Date("2026-08-21T17:29:00Z"),
         http: async () => {

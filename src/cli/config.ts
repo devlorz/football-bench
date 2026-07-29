@@ -5,7 +5,7 @@ export interface FetchJobConfig {
 }
 
 export interface PredictJobConfig extends FetchJobConfig {
-  entrantId: string;
+  concurrency: number;
   openRouterApiKey: string;
 }
 
@@ -51,9 +51,14 @@ export function readFetchJobConfig(
 export function readPredictJobConfig(
   environment: NodeJS.ProcessEnv
 ): PredictJobConfig {
+  const concurrency = Number(environment.PREDICT_CONCURRENCY ?? "9");
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new Error("PREDICT_CONCURRENCY must be a positive integer");
+  }
+
   return {
     ...readFetchJobConfig(environment),
-    entrantId: required(environment, "ENTRANT_ID"),
+    concurrency,
     openRouterApiKey: required(environment, "OPENROUTER_API_KEY")
   };
 }

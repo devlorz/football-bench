@@ -82,12 +82,12 @@ the next.
 
 **Blocked by:** Tracer bullet: a Locked Prediction, end to end.
 
-- [ ] Each Entrant is a row carrying its Base Model, pinned provider, pinned quantization and Prompt Version, so adding a tenth needs no code change
-- [ ] Every request pins its provider with fallbacks disabled, and pins quantization for open-weight Base Models
-- [ ] The provider and model the gateway resolved are recorded against every call, so a silent substitution is detectable afterwards
-- [ ] Calls fan out concurrently within a rate limit and a full Gameweek completes in minutes
-- [ ] One Entrant failing every call still leaves the other eight with complete Predictions
-- [ ] All nine Entrants for a given Fixture reference the same stored context
+- [x] Each Entrant is a row carrying its Base Model, pinned provider, pinned quantization and Prompt Version, so adding a tenth needs no code change
+- [x] Every request pins its provider with fallbacks disabled, and pins quantization for open-weight Base Models
+- [x] The provider and model the gateway resolved are recorded against every call, so a silent substitution is detectable afterwards
+- [x] Calls fan out concurrently within a rate limit and a full Gameweek completes in minutes
+- [x] One Entrant failing every call still leaves the other eight with complete Predictions
+- [x] All nine Entrants for a given Fixture reference the same stored context
 
 ---
 
