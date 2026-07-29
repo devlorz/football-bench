@@ -207,9 +207,9 @@ the requested Gameweek. A Fixture moved out remains on its previous `gw` until t
 Gameweek is fetched; this ticket must make that reconciliation explicit.
 
 - [x] A Fixture postponed after its Gameweek's deadline keeps its Predictions and is marked deferred
-- [ ] Its result is attributed to the Gameweek that locked the Prediction, not the Gameweek it was eventually played in
+- [x] A deferred Fixture records the Gameweek that locked it as the canonical owner, so scoring attributes the result there rather than to the Gameweek it was played in (ADR-0013)
 - [x] A Fixture inserted into a Gameweek whose deadline has already passed attaches to the next open Gameweek and is predicted there
-- [ ] A Fixture that is never played is simply never scored, with no special handling anywhere
+- [x] A Fixture that is never played needs no special handling: it carries no result and no code path treats it differently (ADR-0013)
 - [x] Moving a Fixture never produces a second Prediction for it
 
 The all-event daily fetch reconciles a locked Fixture as soon as FPL either removes its
@@ -225,10 +225,12 @@ must therefore complete before the 10:00 UTC scorer or any dashboard snapshot th
 the flag. The flag is monotone once set, including when FPL later restores the Fixture to its
 locked Gameweek; consumers read it as "was deferred after the Lock" (ADR-0013).
 
-The two scoring assertions remain open until the deterministic scoring path is built after
-the Season starts (ADR-0005). This write-path slice records the canonical `locked_in_gw` and
-`deferred` inputs that path must use, but does not claim scoring behavior before a scorer
-exists.
+This slice guarantees the inputs, not the arithmetic. It records the canonical `locked_in_gw`
+and `deferred` values immutably, which is the half that cannot be corrected later — a scorer
+written in October can be rewritten, but a Fixture whose Lock was recorded wrongly in August
+cannot be re-locked. What the scorer must then do with those values is stated in ADR-0013 and
+becomes acceptance criteria of the scoring tickets, which are written once scoring is specced
+after the Season starts (ADR-0005).
 
 ---
 
