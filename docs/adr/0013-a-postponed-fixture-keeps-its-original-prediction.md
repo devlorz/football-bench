@@ -23,3 +23,13 @@ that makes manual re-runs safe.
   Gameweek still open, rather than becoming a Gap for everyone.
 - A Fixture never played is simply never scored and drops out for every Entrant equally. No
   special handling.
+- `deferred` is materialised by the FPL fetch rather than derived when it is read. A schedule
+  move observed before the locked Gameweek's deadline remains `false`; the first successful
+  fetch at or after that deadline changes it to `true`. Scoring and dashboard reads therefore
+  depend on a successful post-Lock fetch. The current 06:00 UTC fetch before the 10:00 UTC
+  score run provides that ordering and future workflow changes must preserve it.
+- Once `deferred` becomes `true`, it never clears. This preserves the fact that a post-Lock
+  deferral was observed even if FPL later restores the Fixture to its locked Gameweek. A
+  dashboard must interpret the flag as "was deferred after the Lock", not as a live
+  comparison with the current schedule; the accepted trade-off is a rare cosmetic annotation
+  on a restored Fixture.

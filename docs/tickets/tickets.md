@@ -219,6 +219,12 @@ A newly seen Fixture assigned to a closed Gameweek keeps that scheduled `gw` but
 the earliest still-open Gameweek as its canonical Lock; a Gameweek-specific manual fetch
 stores that Lock's deadline before inserting the Fixture.
 
+`deferred` is eventually consistent across the Lock: a move fetched before the deadline is
+not deferred until the first successful fetch at or after the deadline. The 06:00 UTC fetch
+must therefore complete before the 10:00 UTC scorer or any dashboard snapshot that relies on
+the flag. The flag is monotone once set, including when FPL later restores the Fixture to its
+locked Gameweek; consumers read it as "was deferred after the Lock" (ADR-0013).
+
 The two scoring assertions remain open until the deterministic scoring path is built after
 the Season starts (ADR-0005). This write-path slice records the canonical `locked_in_gw` and
 `deferred` inputs that path must use, but does not claim scoring behavior before a scorer
