@@ -9,6 +9,12 @@ export interface HistoricalFetchJobConfig {
   season: string;
 }
 
+export interface DailyFetchJobConfig {
+  databaseUrl: string;
+  season: string;
+  footballDataSeason: string;
+}
+
 export interface PredictJobConfig extends FetchJobConfig {
   concurrency: number;
   openRouterApiKey: string;
@@ -47,6 +53,18 @@ export function readHistoricalFetchJobConfig(
     throw new Error("HISTORICAL_SEASON must use YYYY-YY format");
   }
   return { databaseUrl, season };
+}
+
+export function readDailyFetchJobConfig(
+  environment: NodeJS.ProcessEnv
+): DailyFetchJobConfig {
+  const databaseUrl = required(environment, "DATABASE_URL");
+  const season = requiredSeason(environment);
+  const footballDataSeason = required(environment, "FOOTBALL_DATA_SEASON");
+  if (!/^\d{4}-\d{2}$/.test(footballDataSeason)) {
+    throw new Error("FOOTBALL_DATA_SEASON must use YYYY-YY format");
+  }
+  return { databaseUrl, season, footballDataSeason };
 }
 
 export function readFetchJobConfig(

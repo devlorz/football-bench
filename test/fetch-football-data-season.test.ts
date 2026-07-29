@@ -1,6 +1,3 @@
-import { gunzipSync } from "node:zlib";
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
@@ -9,13 +6,9 @@ import {
   FootballDataSourceValidationError
 } from "../src/football-data/fetch-season.js";
 import { resolveFootballDataTeamName } from "../src/football-data/team-identity.js";
+import { archivedBody } from "./archived-fixture.js";
 
 const { Client } = pg;
-
-async function archivedBody(name: string): Promise<string> {
-  const url = new URL(`./fixtures/${name}`, import.meta.url);
-  return gunzipSync(await readFile(fileURLToPath(url))).toString("utf8");
-}
 
 describe("fetching football-data.co.uk results", () => {
   const client = new Client({ connectionString: process.env.DATABASE_URL });

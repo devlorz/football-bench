@@ -1,18 +1,18 @@
 import pg from "pg";
-import { fetchFplGameweek } from "../fpl/fetch-gameweek.js";
+import { runDailyFetch } from "../fetch/daily-fetch.js";
 import { nodeHttpFetcher } from "../http.js";
-import { readFetchJobConfig } from "./config.js";
+import { readDailyFetchJobConfig } from "./config.js";
 
 const { Client } = pg;
-const config = readFetchJobConfig(process.env);
+const config = readDailyFetchJobConfig(process.env);
 const database = new Client({ connectionString: config.databaseUrl });
 
 await database.connect();
 try {
-  await fetchFplGameweek({
+  await runDailyFetch({
     database,
     season: config.season,
-    gameweek: config.gameweek,
+    footballDataSeason: config.footballDataSeason,
     http: nodeHttpFetcher,
     now: () => new Date()
   });

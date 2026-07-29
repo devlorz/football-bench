@@ -173,10 +173,15 @@ surfacing weeks later as strange context.
 
 **Blocked by:** Historical results and the rolling cross-season form window.
 
-- [ ] Fetch runs daily on a schedule and can also be triggered by hand
-- [ ] Re-running over unchanged data creates no duplicate rows and no duplicate snapshot
-- [ ] A partially failed run is recovered by simply running it again
-- [ ] Both sources validate their response shape and fail loudly rather than storing partial data
+- [x] Fetch runs daily on a schedule and can also be triggered by hand
+- [x] Re-running over unchanged data creates no duplicate rows and no duplicate snapshot
+- [x] A partially failed run is recovered by simply running it again
+- [x] Both sources validate their response shape and fail loudly rather than storing partial data
+
+The daily FPL fetch assigns the bootstrap player snapshot to the unique event marked
+`is_next`. An existing stored deadline remains authoritative once it has passed: a later
+upstream deadline cannot reopen that player partition. With no next event, the year-round
+job still archives and validates both FPL responses but does not invent a Gameweek label.
 
 ---
 

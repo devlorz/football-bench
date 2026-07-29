@@ -1,10 +1,8 @@
-import { gunzipSync } from "node:zlib";
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
 import {
+  fetchFplDaily,
   fetchFplGameweek,
   FplSourceHttpError,
   FplSourceValidationError
@@ -13,14 +11,10 @@ import {
   buildFplContext,
   type FplPlayer
 } from "../src/context/build-fpl-context.js";
+import { archivedBody } from "./archived-fixture.js";
 
 const { Client } = pg;
 const beforeFirstDeadline = () => new Date("2026-08-21T17:00:00.000Z");
-
-async function archivedBody(name: string): Promise<string> {
-  const url = new URL(`./fixtures/${name}`, import.meta.url);
-  return gunzipSync(await readFile(fileURLToPath(url))).toString("utf8");
-}
 
 describe("fetching an FPL Gameweek", () => {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
@@ -176,6 +170,156 @@ describe("fetching an FPL Gameweek", () => {
     ]);
   });
 
+  test("labels a daily player snapshot with FPL's next Gameweek", async () => {
+    const bootstrapBody = await archivedBody("fpl-bootstrap-2026-27.json.gz");
+    const fixturesBody = await archivedBody("fpl-fixtures-2026-27.json.gz");
+    const responses = new Map([
+      ["https://fantasy.premierleague.com/api/bootstrap-static/", bootstrapBody],
+      ["https://fantasy.premierleague.com/api/fixtures/", fixturesBody]
+    ]);
+
+    const result = await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: beforeFirstDeadline,
+      http: async (url) => ({
+        status: 200,
+        body: responses.get(url) ?? ""
+      })
+    });
+
+    expect(result).toEqual({
+      gameweek: 1,
+      playerSnapshotStored: true
+    });
+    const stored = await client.query(
+      `select
+         (select array_agg(distinct gw order by gw) from fpl_players) as player_gws,
+         (select count(*)::int from gameweeks) as gameweeks,
+         (select count(*)::int from fixtures) as fixtures`
+    );
+    expect(stored.rows).toEqual([{
+      player_gws: [1],
+      gameweeks: 38,
+      fixtures: 380
+    }]);
+  });
+
+  test("refreshes locked Fixtures while snapshotting players for the next Gameweek", async () => {
+    const bootstrapBody = await archivedBody("fpl-bootstrap-2026-27.json.gz");
+    const fixturesBody = await archivedBody("fpl-fixtures-2026-27.json.gz");
+    const responses = new Map([
+      ["https://fantasy.premierleague.com/api/bootstrap-static/", bootstrapBody],
+      ["https://fantasy.premierleague.com/api/fixtures/", fixturesBody]
+    ]);
+    const http = async (url: string) => ({
+      status: 200,
+      body: responses.get(url) ?? ""
+    });
+
+    await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: () => new Date("2026-08-21T17:29:59.999Z"),
+      http
+    });
+
+    const changedBootstrap = JSON.parse(bootstrapBody);
+    changedBootstrap.events[0].deadline_time = "2026-08-22T17:30:00Z";
+    changedBootstrap.events[0].is_next = false;
+    changedBootstrap.events[1].is_next = true;
+    changedBootstrap.elements[0].now_cost = 61;
+    responses.set(
+      "https://fantasy.premierleague.com/api/bootstrap-static/",
+      JSON.stringify(changedBootstrap)
+    );
+    const changedFixtures = JSON.parse(fixturesBody);
+    changedFixtures[0].kickoff_time = "2026-08-21T20:00:00Z";
+    responses.set(
+      "https://fantasy.premierleague.com/api/fixtures/",
+      JSON.stringify(changedFixtures)
+    );
+
+    const result = await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: () => new Date("2026-08-21T17:30:00.000Z"),
+      http
+    });
+
+    expect(result).toEqual({
+      gameweek: 2,
+      playerSnapshotStored: true
+    });
+    const stored = await client.query(
+      `select
+         (select deadline_at from gameweeks where season = '2026-27' and gw = 1)
+           as deadline_at,
+         (select price_tenths from fpl_players
+           where season = '2026-27' and gw = 1 and fpl_id = 1) as gw1_price,
+         (select price_tenths from fpl_players
+           where season = '2026-27' and gw = 2 and fpl_id = 1) as gw2_price,
+         (select kickoff_at from fixtures
+           where season = '2026-27' and fpl_id = 1) as kickoff_at`
+    );
+    expect(stored.rows).toEqual([{
+      deadline_at: new Date("2026-08-21T17:30:00.000Z"),
+      gw1_price: 60,
+      gw2_price: 61,
+      kickoff_at: new Date("2026-08-21T20:00:00.000Z")
+    }]);
+  });
+
+  test("does not reopen a player partition when FPL leaves a locked event next", async () => {
+    const bootstrapBody = await archivedBody("fpl-bootstrap-2026-27.json.gz");
+    const fixturesBody = await archivedBody("fpl-fixtures-2026-27.json.gz");
+    const responses = new Map([
+      ["https://fantasy.premierleague.com/api/bootstrap-static/", bootstrapBody],
+      ["https://fantasy.premierleague.com/api/fixtures/", fixturesBody]
+    ]);
+    const http = async (url: string) => ({
+      status: 200,
+      body: responses.get(url) ?? ""
+    });
+    await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: () => new Date("2026-08-21T17:29:59.999Z"),
+      http
+    });
+
+    const changedBootstrap = JSON.parse(bootstrapBody);
+    changedBootstrap.events[0].deadline_time = "2026-08-22T17:30:00Z";
+    changedBootstrap.elements[0].now_cost = 61;
+    responses.set(
+      "https://fantasy.premierleague.com/api/bootstrap-static/",
+      JSON.stringify(changedBootstrap)
+    );
+
+    const result = await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: () => new Date("2026-08-21T17:30:00.000Z"),
+      http
+    });
+
+    expect(result).toEqual({
+      gameweek: 1,
+      playerSnapshotStored: false
+    });
+    const locked = await client.query(
+      `select
+         (select deadline_at from gameweeks where season = '2026-27' and gw = 1)
+           as deadline_at,
+         (select price_tenths from fpl_players
+           where season = '2026-27' and gw = 1 and fpl_id = 1) as price`
+    );
+    expect(locked.rows).toEqual([{
+      deadline_at: new Date("2026-08-21T17:30:00.000Z"),
+      price: 60
+    }]);
+  });
+
   test("archives changed upstream bytes but stores no derived rows", async () => {
     const bootstrap = JSON.parse(
       await archivedBody("fpl-bootstrap-2026-27.json.gz")
@@ -271,6 +415,14 @@ describe("fetching an FPL Gameweek", () => {
       source: "fpl_bootstrap",
       status: 503
     });
+
+    const snapshots = await client.query(
+      "select source, body from raw_snapshots order by source"
+    );
+    expect(snapshots.rows).toEqual([
+      { source: "fpl_bootstrap", body: "" },
+      { source: "fpl_fixtures", body: "" }
+    ]);
   });
 
   test("rejects a changed player shape before storing derived rows", async () => {

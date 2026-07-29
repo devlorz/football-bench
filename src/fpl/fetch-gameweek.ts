@@ -10,7 +10,8 @@ const FPL_FIXTURES_URL =
 
 const eventSchema = z.looseObject({
   id: z.number().int().positive(),
-  deadline_time: z.iso.datetime()
+  deadline_time: z.iso.datetime(),
+  is_next: z.boolean()
 });
 
 const teamSchema = z.looseObject({
@@ -60,6 +61,13 @@ export interface FetchFplGameweekOptions {
   gameweek: number;
   http: HttpFetcher;
   now: () => Date;
+}
+
+export type FetchFplDailyOptions = Omit<FetchFplGameweekOptions, "gameweek">;
+
+export interface FetchFplDailyResult {
+  gameweek: number | null;
+  playerSnapshotStored: boolean;
 }
 
 export interface FplSourceIssue {
@@ -122,35 +130,61 @@ function parseSource<T>(
   return result.data;
 }
 
-async function getBody(
-  http: HttpFetcher,
-  source: FplSourceValidationError["source"],
-  url: string
-): Promise<string> {
-  const response = await http(url);
-  if (response.status < 200 || response.status >= 300) {
-    throw new FplSourceHttpError(source, response.status, url);
-  }
-  return response.body;
-}
-
-export async function fetchFplGameweek({
+async function fetchFpl({
   database,
   season,
-  gameweek,
   http,
   now
-}: FetchFplGameweekOptions): Promise<void> {
-  const [bootstrapBody, fixturesBody] = await Promise.all([
-    getBody(http, "fpl_bootstrap", FPL_BOOTSTRAP_URL),
-    getBody(http, "fpl_fixtures", FPL_FIXTURES_URL)
-  ]);
+}: FetchFplDailyOptions, requestedGameweek?: number): Promise<FetchFplDailyResult> {
+  const requests = [
+    {
+      source: "fpl_bootstrap" as const,
+      url: FPL_BOOTSTRAP_URL
+    },
+    {
+      source: "fpl_fixtures" as const,
+      url: FPL_FIXTURES_URL
+    }
+  ];
+  const outcomes = await Promise.allSettled(requests.map(async (request) => ({
+    ...request,
+    ...await http(request.url)
+  })));
+  const responses = outcomes.flatMap((outcome) =>
+    outcome.status === "fulfilled" ? [outcome.value] : []
+  );
   const observedAt = now();
 
-  await storeRawSnapshots(database, [
-    { source: "fpl_bootstrap", body: bootstrapBody },
-    { source: "fpl_fixtures", body: fixturesBody }
-  ]);
+  await storeRawSnapshots(
+    database,
+    responses.map(({ source, body }) => ({ source, body }))
+  );
+
+  const transportFailure = outcomes.find((outcome) =>
+    outcome.status === "rejected"
+  );
+  if (transportFailure?.status === "rejected") {
+    throw transportFailure.reason;
+  }
+  const httpFailure = responses.find(({ status }) =>
+    status < 200 || status >= 300
+  );
+  if (httpFailure !== undefined) {
+    throw new FplSourceHttpError(
+      httpFailure.source,
+      httpFailure.status,
+      httpFailure.url
+    );
+  }
+  const bootstrapBody = responses.find(
+    ({ source }) => source === "fpl_bootstrap"
+  )?.body;
+  const fixturesBody = responses.find(
+    ({ source }) => source === "fpl_fixtures"
+  )?.body;
+  if (bootstrapBody === undefined || fixturesBody === undefined) {
+    throw new Error("FPL fetch completed without both source responses");
+  }
 
   const bootstrap = parseSource(
     "fpl_bootstrap",
@@ -158,17 +192,26 @@ export async function fetchFplGameweek({
     bootstrapBody
   );
   const fixtures = parseSource("fpl_fixtures", fixturesSchema, fixturesBody);
-  const event = bootstrap.events.find(({ id }) => id === gameweek);
-  if (event === undefined) {
+  const nextEvents = bootstrap.events.filter(({ is_next: isNext }) => isNext);
+  if (requestedGameweek === undefined && nextEvents.length > 1) {
+    throw new FplSourceValidationError("fpl_bootstrap", [{
+      field: "events",
+      detail: "expected at most one next Gameweek"
+    }]);
+  }
+  const gameweek = requestedGameweek ?? nextEvents[0]?.id;
+  const playerSnapshotEvent = bootstrap.events.find(
+    ({ id }) => id === gameweek
+  );
+  if (gameweek !== undefined && playerSnapshotEvent === undefined) {
     throw new FplSourceValidationError("fpl_bootstrap", [{
       field: "events",
       detail: `Gameweek ${gameweek} is missing`
     }]);
   }
-  const beforeDeadline =
-    observedAt.getTime() < new Date(event.deadline_time).getTime();
 
   const teamNames = new Map(bootstrap.teams.map(({ id, name }) => [id, name]));
+  const eventIds = new Set(bootstrap.events.map(({ id }) => id));
   const positions = new Map(
     bootstrap.element_types.map(({ id, singular_name_short: position }) => [
       id,
@@ -192,8 +235,16 @@ export async function fetchFplGameweek({
     }
     return { ...player, teamName, position };
   });
-  const gameweekFixtures = fixtures.filter(({ event: gw }) => gw === gameweek);
-  const rows = gameweekFixtures.map((fixture, index) => {
+  const rows = fixtures.flatMap((fixture, index) => {
+    if (fixture.event === null) {
+      return [];
+    }
+    if (!eventIds.has(fixture.event)) {
+      throw new FplSourceValidationError("fpl_fixtures", [{
+        field: `${index}.event`,
+        detail: `unknown Gameweek ${fixture.event}`
+      }]);
+    }
     if (fixture.kickoff_time === null) {
       throw new FplSourceValidationError("fpl_fixtures", [{
         field: `${index}.kickoff_time`,
@@ -214,25 +265,61 @@ export async function fetchFplGameweek({
         detail: `unknown team id ${fixture.team_a}`
       }]);
     }
-    return {
+    return [{
       ...fixture,
+      event: fixture.event,
       kickoff_time: fixture.kickoff_time,
       homeTeam,
       awayTeam
-    };
+    }];
   });
+  const eventsToStore = requestedGameweek === undefined
+    ? bootstrap.events
+    : bootstrap.events.filter(({ id }) => id === requestedGameweek);
+  const fixturesToStore = requestedGameweek === undefined
+    ? rows
+    : rows.filter(({ event }) => event === requestedGameweek);
+  const storedGameweeks = await database.query(
+    `select gw, deadline_at
+       from gameweeks
+      where season = $1 and gw = any($2::integer[])`,
+    [season, eventsToStore.map(({ id }) => id)]
+  );
+  const storedDeadlines = new Map<number, Date>(
+    storedGameweeks.rows.map(({ gw, deadline_at: deadlineAt }) => [
+      gw as number,
+      deadlineAt as Date
+    ])
+  );
+  const lockedGameweeks = new Set(eventsToStore.flatMap(({ id }) => {
+    const storedDeadline = storedDeadlines.get(id);
+    return storedDeadline !== undefined
+      && observedAt.getTime() >= storedDeadline.getTime()
+      ? [id]
+      : [];
+  }));
+  const playerSnapshotStored =
+    gameweek !== undefined
+    && playerSnapshotEvent !== undefined
+    && !lockedGameweeks.has(gameweek)
+    && observedAt.getTime()
+      < new Date(playerSnapshotEvent.deadline_time).getTime();
 
   await database.query("begin");
   try {
-    await database.query(
-      `insert into gameweeks (season, gw, deadline_at)
-       values ($1, $2, $3)
-       on conflict (season, gw)
-       do update set deadline_at = excluded.deadline_at`,
-      [season, gameweek, event.deadline_time]
-    );
+    for (const event of eventsToStore) {
+      if (!lockedGameweeks.has(event.id)) {
+        await database.query(
+          `insert into gameweeks (season, gw, deadline_at)
+           values ($1, $2, $3)
+           on conflict (season, gw)
+           do update set deadline_at = excluded.deadline_at`,
+          [season, event.id, event.deadline_time]
+        );
+      }
+    }
 
-    if (beforeDeadline) {
+    if (playerSnapshotStored && gameweek !== undefined) {
       await database.query(
         "delete from fpl_players where season = $1 and gw = $2",
         [season, gameweek]
@@ -264,7 +351,7 @@ export async function fetchFplGameweek({
       }
     }
 
-    for (const fixture of rows) {
+    for (const fixture of fixturesToStore) {
       await database.query(
         `insert into fixtures (
            season, fpl_id, gw, home_team, away_team, kickoff_at
@@ -280,7 +367,7 @@ export async function fetchFplGameweek({
         [
           season,
           fixture.id,
-          gameweek,
+          fixture.event,
           fixture.homeTeam,
           fixture.awayTeam,
           fixture.kickoff_time
@@ -288,8 +375,24 @@ export async function fetchFplGameweek({
       );
     }
     await database.query("commit");
+    return {
+      gameweek: gameweek ?? null,
+      playerSnapshotStored
+    };
   } catch (error) {
     await database.query("rollback");
     throw error;
   }
+}
+
+export async function fetchFplGameweek(
+  options: FetchFplGameweekOptions
+): Promise<void> {
+  await fetchFpl(options, options.gameweek);
+}
+
+export async function fetchFplDaily(
+  options: FetchFplDailyOptions
+): Promise<FetchFplDailyResult> {
+  return fetchFpl(options);
 }

@@ -1,10 +1,29 @@
 import { describe, expect, test } from "vitest";
 import {
+  readDailyFetchJobConfig,
   readFetchJobConfig,
   readHistoricalFetchJobConfig
 } from "../src/cli/config.js";
 
 describe("the fetch job configuration", () => {
+  test("requires both Seasons for the daily fetch", () => {
+    expect(readDailyFetchJobConfig({
+      DATABASE_URL: "postgresql://localhost/benchmark",
+      SEASON: "2026-27",
+      FOOTBALL_DATA_SEASON: "2025-26"
+    })).toEqual({
+      databaseUrl: "postgresql://localhost/benchmark",
+      season: "2026-27",
+      footballDataSeason: "2025-26"
+    });
+
+    expect(() => readDailyFetchJobConfig({
+      DATABASE_URL: "postgresql://localhost/benchmark",
+      SEASON: "2026-27",
+      FOOTBALL_DATA_SEASON: "2526"
+    })).toThrow("FOOTBALL_DATA_SEASON must use YYYY-YY format");
+  });
+
   test("requires an explicit Season and Gameweek", () => {
     expect(readFetchJobConfig({
       DATABASE_URL: "postgresql://localhost/benchmark",
