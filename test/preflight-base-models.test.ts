@@ -1,0 +1,412 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import pg from "pg";
+import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import type { HttpRequest } from "../src/http.js";
+import { preflightBaseModels } from "../src/preflight/preflight-base-models.js";
+
+const { Client } = pg;
+const migrationUrl = new URL("../migrations/0001_initial.sql", import.meta.url);
+const openRouterResponseUrl = new URL(
+  "./fixtures/openrouter-gpt-5.6-sol-pro-2026-07-29.base64",
+  import.meta.url
+);
+
+describe("pre-flight for the Base Model roster", () => {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+
+  beforeAll(async () => {
+    await client.connect();
+    await client.query("drop schema public cascade; create schema public");
+    await client.query(await readFile(fileURLToPath(migrationUrl), "utf8"));
+
+    return async () => {
+      await client.end();
+    };
+  });
+
+  beforeEach(async () => {
+    await client.query(
+      `truncate
+         predictions, contexts, fixtures, attempts, models, gameweeks,
+         raw_snapshots
+       restart identity cascade`
+    );
+    await client.query(
+      `insert into gameweeks (season, gw, deadline_at)
+       values ('2026-27', 1, '2026-08-21T17:30:00Z');
+       insert into fixtures (
+         season, fpl_id, gw, home_team, away_team, kickoff_at
+       ) values (
+         '2026-27', 1, 1, 'Arsenal', 'Coventry City',
+         '2026-08-21T19:00:00Z'
+       )`
+    );
+    for (let index = 1; index <= 9; index += 1) {
+      await client.query(
+        `insert into models (
+           id, name, base_model, provider, prompt_version, role
+         ) values ($1, $2, $3, $4, 'match/tracer-v1', 'entrant')`,
+        [
+          `entrant/${index}`,
+          `Entrant ${index}`,
+          `vendor/base-model-${index}`,
+          `provider-${index}`
+        ]
+      );
+    }
+  });
+
+  test("calls all nine Base Models with one real Fixture prompt", async () => {
+    const requests: HttpRequest[] = [];
+    const context = [
+      "Predict this Premier League Fixture.",
+      "",
+      "Fixture ID: 1",
+      "Home: Arsenal",
+      "Away: Coventry City",
+      "Kick-off: 2026-08-21T19:00:00.000Z",
+      "",
+      "Return only JSON with fixture_id, probs (H, D, A), score (home, away), and rationale.",
+      "Probabilities must each be between 0 and 1 and sum to 1. Goals must be non-negative integers."
+    ].join("\n");
+
+    const report = await preflightBaseModels({
+      database: client,
+      season: "2026-27",
+      fixtureId: 1,
+      apiKey: "test-key",
+      http: async (url, options) => {
+        requests.push({ url, ...options! });
+        const request = JSON.parse(options?.body ?? "{}") as { model?: string };
+        return {
+          status: 200,
+          body: JSON.stringify({
+            model: request.model,
+            openrouter_metadata: {
+              endpoints: {
+                available: [{
+                  provider: `Resolved ${request.model}`,
+                  model: request.model,
+                  selected: true
+                }]
+              }
+            },
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  fixture_id: 1,
+                  probs: { H: 0.6, D: 0.24, A: 0.16 },
+                  score: { home: 2, away: 1 },
+                  rationale: "Pre-flight answer."
+                })
+              }
+            }]
+          })
+        };
+      }
+    });
+
+    expect(requests).toHaveLength(9);
+    expect(requests[0]).toEqual({
+      url: "https://openrouter.ai/api/v1/chat/completions",
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-key",
+        "Content-Type": "application/json",
+        "X-OpenRouter-Metadata": "enabled"
+      },
+      body: JSON.stringify({
+        model: "vendor/base-model-1",
+        messages: [{ role: "user", content: context }],
+        stream: false
+      })
+    });
+    expect(report).toEqual({
+      ok: true,
+      fixture: {
+        season: "2026-27",
+        fplId: 1,
+        gameweek: 1,
+        homeTeam: "Arsenal",
+        awayTeam: "Coventry City",
+        kickoffAt: "2026-08-21T19:00:00.000Z"
+      },
+      results: Array.from({ length: 9 }, (_, offset) => {
+        const index = offset + 1;
+        return {
+          entrantId: `entrant/${index}`,
+          baseModel: `vendor/base-model-${index}`,
+          status: "parseable",
+          detail: null,
+          resolvedProvider: `Resolved vendor/base-model-${index}`,
+          resolvedModel: `vendor/base-model-${index}`,
+          rawBody: null
+        };
+      })
+    });
+  });
+
+  test("reports a refusal with its raw OpenRouter body and checks the remaining roster", async () => {
+    let calls = 0;
+    const refusalBody = JSON.stringify({
+      model: "vendor/base-model-1",
+      openrouter_metadata: {
+        endpoints: {
+          available: [{
+            provider: "Policy Provider",
+            model: "vendor/base-model-1",
+            selected: true
+          }]
+        }
+      },
+      choices: [{
+        message: {
+          content: null,
+          refusal: "I cannot provide betting predictions."
+        }
+      }]
+    });
+
+    const report = await preflightBaseModels({
+      database: client,
+      season: "2026-27",
+      fixtureId: 1,
+      apiKey: "test-key",
+      http: async () => {
+        calls += 1;
+        if (calls === 1) {
+          return { status: 200, body: refusalBody };
+        }
+        return {
+          status: 200,
+          body: JSON.stringify({
+            model: `vendor/base-model-${calls}`,
+            openrouter_metadata: {
+              endpoints: {
+                available: [{
+                  provider: `Provider ${calls}`,
+                  selected: true
+                }]
+              }
+            },
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  fixture_id: 1,
+                  probs: { H: 0.6, D: 0.24, A: 0.16 },
+                  score: { home: 2, away: 1 },
+                  rationale: "Answer."
+                })
+              }
+            }]
+          })
+        };
+      }
+    });
+
+    expect({ calls, ok: report.ok, first: report.results[0] }).toEqual({
+      calls: 9,
+      ok: false,
+      first: {
+        entrantId: "entrant/1",
+        baseModel: "vendor/base-model-1",
+        status: "refusal",
+        detail: "I cannot provide betting predictions.",
+        resolvedProvider: "Policy Provider",
+        resolvedModel: "vendor/base-model-1",
+        rawBody: refusalBody
+      }
+    });
+  });
+
+  test("archives successful OpenRouter responses byte-for-byte", async () => {
+    const bodies: string[] = [];
+
+    await preflightBaseModels({
+      database: client,
+      season: "2026-27",
+      fixtureId: 1,
+      apiKey: "test-key",
+      http: async (_url, options) => {
+        const request = JSON.parse(options?.body ?? "{}") as { model: string };
+        const body = `{"model":${JSON.stringify(request.model)},"choices":[{"message":{"content":"{\\"fixture_id\\":1,\\"probs\\":{\\"H\\":0.6,\\"D\\":0.24,\\"A\\":0.16},\\"score\\":{\\"home\\":2,\\"away\\":1},\\"rationale\\":\\"Observed spacing is load-bearing.\\"}"}}],"openrouter_metadata":{"endpoints":{"available":[{"provider":"Observed Provider","selected":true}]}}}`;
+        bodies.push(body);
+        return { status: 200, body };
+      }
+    });
+
+    const archived = await client.query(
+      `select source, body
+         from raw_snapshots
+        order by source`
+    );
+    expect(archived.rows).toEqual(
+      bodies.map((body, offset) => ({
+        source: `openrouter-preflight:vendor/base-model-${offset + 1}`,
+        body
+      }))
+    );
+  });
+
+  test("fails on missing provider metadata, unparseable output, and transport errors", async () => {
+    let calls = 0;
+    const missingProviderBody = JSON.stringify({
+      model: "vendor/base-model-1",
+      provider: "Wrong Top-Level Provider",
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            fixture_id: 1,
+            probs: { H: 0.6, D: 0.24, A: 0.16 },
+            score: { home: 2, away: 1 },
+            rationale: "Valid Prediction, absent metadata."
+          })
+        }
+      }]
+    });
+    const unparseableBody = JSON.stringify({
+      model: "vendor/base-model-2",
+      openrouter_metadata: {
+        endpoints: {
+          available: [{ provider: "Provider 2", selected: true }]
+        }
+      },
+      choices: [{ message: { content: "not json" } }]
+    });
+    const httpErrorBody = "{\"error\":\"provider unavailable\"}";
+
+    const report = await preflightBaseModels({
+      database: client,
+      season: "2026-27",
+      fixtureId: 1,
+      apiKey: "test-key",
+      http: async () => {
+        calls += 1;
+        if (calls === 1) {
+          return { status: 200, body: missingProviderBody };
+        }
+        if (calls === 2) {
+          return { status: 200, body: unparseableBody };
+        }
+        if (calls === 3) {
+          return { status: 503, body: httpErrorBody };
+        }
+        if (calls === 4) {
+          throw new Error("connection reset");
+        }
+        return {
+          status: 200,
+          body: JSON.stringify({
+            model: `vendor/base-model-${calls}`,
+            openrouter_metadata: {
+              endpoints: {
+                available: [{
+                  provider: `Provider ${calls}`,
+                  selected: true
+                }]
+              }
+            },
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  fixture_id: 1,
+                  probs: { H: 0.6, D: 0.24, A: 0.16 },
+                  score: { home: 2, away: 1 },
+                  rationale: "Answer."
+                })
+              }
+            }]
+          })
+        };
+      }
+    });
+
+    expect({ ok: report.ok, results: report.results.slice(0, 4) }).toEqual({
+      ok: false,
+      results: [
+        {
+          entrantId: "entrant/1",
+          baseModel: "vendor/base-model-1",
+          status: "parseable",
+          detail: "OpenRouter did not identify a selected provider.",
+          resolvedProvider: null,
+          resolvedModel: "vendor/base-model-1",
+          rawBody: missingProviderBody
+        },
+        {
+          entrantId: "entrant/2",
+          baseModel: "vendor/base-model-2",
+          status: "unparseable",
+          detail: "Response must be valid JSON.",
+          resolvedProvider: "Provider 2",
+          resolvedModel: "vendor/base-model-2",
+          rawBody: unparseableBody
+        },
+        {
+          entrantId: "entrant/3",
+          baseModel: "vendor/base-model-3",
+          status: "transport_error",
+          detail: "OpenRouter returned HTTP 503.",
+          resolvedProvider: null,
+          resolvedModel: null,
+          rawBody: httpErrorBody
+        },
+        {
+          entrantId: "entrant/4",
+          baseModel: "vendor/base-model-4",
+          status: "transport_error",
+          detail: "OpenRouter call failed: connection reset.",
+          resolvedProvider: null,
+          resolvedModel: null,
+          rawBody: null
+        }
+      ]
+    });
+  });
+
+  test("refuses to run against an incomplete Base Model roster", async () => {
+    await client.query("delete from models where id = 'entrant/9'");
+    let calls = 0;
+
+    await expect(preflightBaseModels({
+      database: client,
+      season: "2026-27",
+      fixtureId: 1,
+      apiKey: "test-key",
+      http: async () => {
+        calls += 1;
+        throw new Error("HTTP must not run");
+      }
+    })).rejects.toThrow("Pre-flight requires exactly nine Entrants; found 8");
+    expect(calls).toBe(0);
+  });
+
+  test("replays a byte-exact successful OpenRouter response observed in pre-flight", async () => {
+    const encoded = await readFile(openRouterResponseUrl, "utf8");
+    const observedBody = Buffer.from(encoded, "base64").toString("utf8");
+
+    expect(
+      createHash("sha256").update(observedBody, "utf8").digest("hex")
+    ).toBe("eabefabef0e95b2d23e79887c8f17c89374a48f36b6edf67d27884b1f29861af");
+
+    const report = await preflightBaseModels({
+      database: client,
+      season: "2026-27",
+      fixtureId: 1,
+      apiKey: "test-key",
+      http: async () => ({ status: 200, body: observedBody })
+    });
+
+    expect(report.results[0]).toEqual({
+      entrantId: "entrant/1",
+      baseModel: "vendor/base-model-1",
+      status: "parseable",
+      detail: null,
+      resolvedProvider: "OpenAI",
+      resolvedModel: "openai/gpt-5.6-sol-pro-20260709",
+      rawBody: null
+    });
+  });
+});

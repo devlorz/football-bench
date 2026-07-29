@@ -9,6 +9,13 @@ export interface PredictJobConfig extends FetchJobConfig {
   openRouterApiKey: string;
 }
 
+export interface PreflightJobConfig {
+  databaseUrl: string;
+  season: string;
+  fixtureId: number;
+  openRouterApiKey: string;
+}
+
 function required(environment: NodeJS.ProcessEnv, name: string): string {
   const value = environment[name];
   if (value === undefined || value.trim() === "") {
@@ -43,4 +50,22 @@ export function readPredictJobConfig(
     entrantId: required(environment, "ENTRANT_ID"),
     openRouterApiKey: required(environment, "OPENROUTER_API_KEY")
   };
+}
+
+export function readPreflightJobConfig(
+  environment: NodeJS.ProcessEnv
+): PreflightJobConfig {
+  const databaseUrl = required(environment, "DATABASE_URL");
+  const season = required(environment, "SEASON");
+  const fixtureId = Number(required(environment, "FIXTURE_ID"));
+  const openRouterApiKey = required(environment, "OPENROUTER_API_KEY");
+
+  if (!/^\d{4}-\d{2}$/.test(season)) {
+    throw new Error("SEASON must use YYYY-YY format");
+  }
+  if (!Number.isInteger(fixtureId) || fixtureId < 1) {
+    throw new Error("FIXTURE_ID must be a positive integer");
+  }
+
+  return { databaseUrl, season, fixtureId, openRouterApiKey };
 }

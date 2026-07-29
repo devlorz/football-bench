@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 import type { Client } from "pg";
 import { z } from "zod";
-import type { HttpFetcher, HttpRequest, HttpResponse } from "../http.js";
+import type { HttpFetcher, HttpResponse } from "../http.js";
+import {
+  matchContext,
+  openRouterRequest,
+  type MatchPromptFixture
+} from "./openrouter-prediction.js";
 import { validatePrediction } from "./validate-prediction.js";
 
 type Database = Pick<Client, "query">;
@@ -16,12 +21,7 @@ export interface PredictGameweekOptions {
   now: () => Date;
 }
 
-interface FixtureRow {
-  fpl_id: number;
-  home_team: string;
-  away_team: string;
-  kickoff_at: Date;
-}
+interface FixtureRow extends MatchPromptFixture {}
 
 interface EntrantRow {
   base_model: string;
@@ -39,6 +39,7 @@ const openRouterMetadataSchema = z.looseObject({
   endpoints: z.looseObject({
     available: z.array(z.looseObject({
       provider: z.string().min(1),
+      model: z.string().min(1).optional(),
       selected: z.boolean()
     }))
   })
@@ -57,20 +58,6 @@ function firstResponseContent(
     throw new Error("OpenRouter response schema admitted an empty choices array");
   }
   return firstChoice.message.content;
-}
-
-function matchContext(fixture: FixtureRow): string {
-  return [
-    "Predict this Premier League Fixture.",
-    "",
-    `Fixture ID: ${fixture.fpl_id}`,
-    `Home: ${fixture.home_team}`,
-    `Away: ${fixture.away_team}`,
-    `Kick-off: ${fixture.kickoff_at.toISOString()}`,
-    "",
-    "Return only JSON with fixture_id, probs (H, D, A), score (home, away), and rationale.",
-    "Probabilities must each be between 0 and 1 and sum to 1. Goals must be non-negative integers."
-  ].join("\n");
 }
 
 function sha256(value: string): string {
@@ -110,27 +97,6 @@ async function storeContext(
     throw new Error(`Match context for Fixture ${fixture.fpl_id} was not stored`);
   }
   return context;
-}
-
-function openRouterRequest(
-  apiKey: string,
-  baseModel: string,
-  context: string
-): HttpRequest {
-  return {
-    url: "https://openrouter.ai/api/v1/chat/completions",
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "X-OpenRouter-Metadata": "enabled"
-    },
-    body: JSON.stringify({
-      model: baseModel,
-      messages: [{ role: "user", content: context }],
-      stream: false
-    })
-  };
 }
 
 function errorText(error: unknown): string {
@@ -329,15 +295,15 @@ export async function predictGameweek({
       envelope.openrouter_metadata
     );
     const usage = usageSchema.safeParse(envelope.usage);
-    const resolvedProvider = metadata.success
-      ? (metadata.data.endpoints.available.find(
-          ({ selected }) => selected
-        )?.provider ?? null)
-      : null;
-    const resolvedModel = typeof envelope.model === "string"
+    const selectedEndpoint = metadata.success
+      ? metadata.data.endpoints.available.find(({ selected }) => selected)
+      : undefined;
+    const resolvedProvider = selectedEndpoint?.provider ?? null;
+    const resolvedModel = selectedEndpoint?.model
+      ?? (typeof envelope.model === "string"
       && envelope.model.length > 0
-      ? envelope.model
-      : null;
+        ? envelope.model
+        : null);
     const latencyMs = Math.max(
       0,
       predictedAt.getTime() - startedAt.getTime()

@@ -62,13 +62,13 @@ cannot be recovered.
 
 **Blocked by:** Tracer bullet: a Locked Prediction, end to end.
 
-- [ ] Calls all nine Base Models with the real prompt shape against a real Fixture
-- [ ] Reports for each: parseable output, refusal, or transport error — with the raw body when it fails
-- [ ] Reports the provider and model the gateway actually resolved for each
-- [ ] Fails if `resolved_provider` is null for any Base Model, so a broken OpenRouter metadata contract cannot silently disable the ADR-0009 substitution check
-- [ ] Archives at least one byte-exact successful OpenRouter response and replays it in tests, so response-shape contracts come from observed evidence rather than hand-written fakes
-- [ ] Runs as an operator script rather than as part of CI
-- [ ] Exits non-zero if any Base Model refuses or cannot produce parseable output
+- [x] Calls all nine Base Models with the real prompt shape against a real Fixture
+- [x] Reports for each: parseable output, refusal, or transport error — with the raw body when it fails
+- [x] Reports the provider and model the gateway actually resolved for each
+- [x] Fails if `resolved_provider` is null for any Base Model, so a broken OpenRouter metadata contract cannot silently disable the ADR-0009 substitution check
+- [x] Archives at least one byte-exact successful OpenRouter response and replays it in tests, so response-shape contracts come from observed evidence rather than hand-written fakes
+- [x] Runs as an operator script rather than as part of CI
+- [x] Exits non-zero if any Base Model refuses or cannot produce parseable output
 
 ---
 
