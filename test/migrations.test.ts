@@ -110,5 +110,15 @@ describe("applying migrations", () => {
     );
     expect(attemptTrigger.rows[0]?.definition).toContain("'fill'");
     expect(attemptTrigger.rows[0]?.definition).not.toContain("'repair'");
+
+    const unprotected = await client.query<{ relname: string }>(
+      `select c.relname
+         from pg_class c
+         join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public'
+          and c.relkind = 'r'
+          and not c.relrowsecurity`
+    );
+    expect(unprotected.rows).toEqual([]);
   });
 });
