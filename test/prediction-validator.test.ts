@@ -44,6 +44,45 @@ describe("Prediction validation", () => {
     }
   });
 
+  test("names an invalid Predicted Score with a fixed message", () => {
+    expect(validatePrediction(JSON.stringify({
+      fixture_id: 1,
+      probs: { H: 0.6, D: 0.24, A: 0.16 },
+      score: { home: -1, away: 1 },
+      rationale: ""
+    }), 1)).toEqual({
+      ok: false,
+      kind: "schema",
+      message: "Predicted Score goals must be non-negative integers."
+    });
+  });
+
+  test("names an out-of-range probability with a fixed schema message", () => {
+    expect(validatePrediction(JSON.stringify({
+      fixture_id: 1,
+      probs: { H: 1.1, D: 0, A: -0.1 },
+      score: { home: 2, away: 1 },
+      rationale: ""
+    }), 1)).toEqual({
+      ok: false,
+      kind: "schema",
+      message: "Probabilities H, D and A must each be between 0 and 1."
+    });
+  });
+
+  test("does not misname a wrong-type field as a range failure", () => {
+    expect(validatePrediction(JSON.stringify({
+      fixture_id: 1,
+      probs: { H: "likely", D: 0.24, A: 0.16 },
+      score: { home: "two", away: 1 },
+      rationale: ""
+    }), 1)).toEqual({
+      ok: false,
+      kind: "schema",
+      message: "Response must match the Prediction schema for Fixture 1."
+    });
+  });
+
   test.each([
     {
       label: "probabilities outside the sum tolerance",

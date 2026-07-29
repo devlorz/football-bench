@@ -99,12 +99,12 @@ Prediction — and the record says why, so a Gap can be explained rather than me
 
 **Blocked by:** Nine Entrants, pinned, concurrent, independently failing.
 
-- [ ] A validation failure produces a fixed message naming the problem, which is sent back to the Entrant
-- [ ] Up to three Repairs are attempted, and the number used is recorded alongside the resulting Prediction
-- [ ] A failure after the third Repair produces no Prediction, and the log explains every attempt
-- [ ] Failure causes are distinguished from one another: schema, probability sum, refusal, provider, timeout, rate limit
-- [ ] The Gap count and each Gap's cause for a Gameweek can be read from stored data alone
-- [ ] Validator messages live in one place, so changing them is a deliberate and visible edit rather than a drift
+- [x] A validation failure produces a fixed message naming the problem, which is sent back to the Entrant
+- [x] Up to three Repairs are attempted, and the number used is recorded alongside the resulting Prediction
+- [x] A failure after the third Repair produces no Prediction, and the log explains every attempt
+- [x] Failure causes are distinguished from one another: schema, probability sum, refusal, provider, timeout, rate limit
+- [x] The Gap count and each Gap's cause for a Gameweek can be read from stored data alone
+- [x] Validator messages live in one place, so changing them is a deliberate and visible edit rather than a drift
 
 ---
 

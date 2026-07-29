@@ -6,9 +6,11 @@ import {
   matchContext,
   openRouterRequest,
   parseOpenRouterResponse,
-  type MatchPromptFixture
+  type MatchPromptFixture,
+  type OpenRouterMessage
 } from "./openrouter-entrant.js";
 import {
+  predictionRepairMessage,
   validatePrediction,
   type PredictionValidation
 } from "./validate-prediction.js";
@@ -23,6 +25,7 @@ export interface PredictGameweekOptions {
   apiKey: string;
   http: HttpFetcher;
   now: () => Date;
+  trigger?: AttemptTrigger;
 }
 
 type FixtureRow = MatchPromptFixture;
@@ -62,6 +65,10 @@ type ProviderFailureKind =
   | "refusal"
   | "rate_limit"
   | "timeout";
+
+type AttemptTrigger = "main" | "repair" | "manual";
+
+const MAX_REPAIRS = 3;
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -135,6 +142,8 @@ async function recordProviderFailure(options: {
   season: string;
   gameweek: number;
   fixtureId: number;
+  attemptNo: number;
+  trigger: AttemptTrigger;
   kind: ProviderFailureKind;
   detail: string;
   telemetry: AttemptTelemetry;
@@ -145,6 +154,8 @@ async function recordProviderFailure(options: {
     season,
     gameweek,
     fixtureId,
+    attemptNo,
+    trigger,
     kind,
     detail,
     telemetry
@@ -163,14 +174,15 @@ async function recordProviderFailure(options: {
          error_kind, error_detail, resolved_provider, resolved_model,
          latency_ms, tokens_in, tokens_out, raw_response, trigger, attempted_at
        ) values (
-         $1, $2, $3, 'match', $4, 0, false, $5, $6, $7, $8,
-         $9, $10, $11, $12, 'main', $13
+         $1, $2, $3, 'match', $4, $5, false, $6, $7, $8, $9,
+         $10, $11, $12, $13, $14, $15
        )`,
       [
         entrantId,
         season,
         gameweek,
         fixtureId,
+        attemptNo,
         kind,
         detail,
         telemetry.resolvedProvider,
@@ -179,6 +191,7 @@ async function recordProviderFailure(options: {
         telemetry.tokensIn,
         telemetry.tokensOut,
         telemetry.rawResponse,
+        trigger,
         telemetry.attemptedAt
       ]
     );
@@ -196,6 +209,8 @@ async function recordPredictionResult(options: {
   gameweek: number;
   fixtureId: number;
   contextId: number;
+  attemptNo: number;
+  trigger: AttemptTrigger;
   validation: PredictionValidation;
   telemetry: AttemptTelemetry;
 }): Promise<void> {
@@ -206,6 +221,8 @@ async function recordPredictionResult(options: {
     gameweek,
     fixtureId,
     contextId,
+    attemptNo,
+    trigger,
     validation,
     telemetry
   } = options;
@@ -244,14 +261,15 @@ async function recordPredictionResult(options: {
          latency_ms, tokens_in, tokens_out, raw_response, trigger,
          attempted_at
        ) values (
-         $1, $2, $3, 'match', $4, 0, $5, $6, $7, $8, $9, $10, $11,
-         $12, $13, 'main', $14
+         $1, $2, $3, 'match', $4, $5, $6, $7, $8, $9, $10, $11, $12,
+         $13, $14, $15, $16
        )`,
       [
         entrantId,
         season,
         gameweek,
         fixtureId,
+        attemptNo,
         attemptOk,
         errorKind,
         errorDetail,
@@ -261,6 +279,7 @@ async function recordPredictionResult(options: {
         telemetry.tokensIn,
         telemetry.tokensOut,
         telemetry.rawResponse,
+        trigger,
         telemetry.attemptedAt
       ]
     );
@@ -269,7 +288,7 @@ async function recordPredictionResult(options: {
         `insert into predictions (
            model_id, season, fpl_id, probs, pred_home, pred_away,
            context_id, rationale, attempts_used, predicted_at
-         ) values ($1, $2, $3, $4, $5, $6, $7, $8, 0, $9)
+         ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          on conflict (model_id, season, fpl_id) do nothing`,
         [
           entrantId,
@@ -280,6 +299,7 @@ async function recordPredictionResult(options: {
           validation.prediction.score.away,
           contextId,
           validation.prediction.rationale,
+          attemptNo,
           telemetry.attemptedAt
         ]
       );
@@ -298,7 +318,8 @@ export async function predictGameweek({
   concurrency,
   apiKey,
   http,
-  now
+  now,
+  trigger = "main"
 }: PredictGameweekOptions): Promise<void> {
   if (!Number.isInteger(concurrency) || concurrency < 1) {
     throw new Error("Prediction concurrency must be a positive integer");
@@ -369,11 +390,12 @@ export async function predictGameweek({
   let persistenceFailure: unknown;
   async function persistProviderFailure(options: {
     item: WorkItemRow;
+    attemptNo: number;
     kind: ProviderFailureKind;
     detail: string;
     telemetry: AttemptTelemetry;
   }): Promise<void> {
-    const { item, kind, detail, telemetry } = options;
+    const { item, attemptNo, kind, detail, telemetry } = options;
     try {
       await persist(() => recordProviderFailure({
         database,
@@ -381,6 +403,8 @@ export async function predictGameweek({
         season,
         gameweek,
         fixtureId: item.fpl_id,
+        attemptNo,
+        trigger,
         kind,
         detail,
         telemetry
@@ -404,103 +428,131 @@ export async function predictGameweek({
         );
       }
       const entrantId = item.entrant_id;
-      const startedAt = now();
-      const request = openRouterRequest(
-        apiKey,
-        {
-          baseModel: item.base_model,
-          provider: item.provider,
-          quantization: item.quantization
-        },
-        context.body
-      );
-      const { url, ...requestOptions } = request;
-      let response: HttpResponse;
-      let completedAt: Date;
-      try {
-        response = await http(url, requestOptions);
-        completedAt = now();
-      } catch (error) {
-        completedAt = now();
-        await persistProviderFailure({
-          item,
-          kind: isTimeoutError(error) ? "timeout" : "provider",
-          detail: `OpenRouter call failed: ${errorText(error)}.`,
-          telemetry: {
-            latencyMs: elapsedMilliseconds(startedAt, completedAt),
-            rawResponse: null,
-            resolvedProvider: null,
-            resolvedModel: null,
-            tokensIn: null,
-            tokensOut: null,
-            attemptedAt: completedAt
-          }
-        });
-        continue;
-      }
-      if (response.status < 200 || response.status >= 300) {
-        await persistProviderFailure({
-          item,
-          kind: response.status === 429 ? "rate_limit" : "provider",
-          detail: `OpenRouter returned HTTP ${response.status}.`,
-          telemetry: {
-            latencyMs: elapsedMilliseconds(startedAt, completedAt),
-            rawResponse: response.body,
-            resolvedProvider: null,
-            resolvedModel: null,
-            tokensIn: null,
-            tokensOut: null,
-            attemptedAt: completedAt
-          }
-        });
-        continue;
-      }
+      const messages: OpenRouterMessage[] = [{
+        role: "user",
+        content: context.body
+      }];
+      for (let attemptNo = 0; attemptNo <= MAX_REPAIRS; attemptNo += 1) {
+        const startedAt = now();
+        const request = openRouterRequest(
+          apiKey,
+          {
+            baseModel: item.base_model,
+            provider: item.provider,
+            quantization: item.quantization
+          },
+          messages
+        );
+        const { url, ...requestOptions } = request;
+        let response: HttpResponse;
+        let completedAt: Date;
+        try {
+          response = await http(url, requestOptions);
+          completedAt = now();
+        } catch (error) {
+          completedAt = now();
+          await persistProviderFailure({
+            item,
+            attemptNo,
+            kind: isTimeoutError(error) ? "timeout" : "provider",
+            detail: `OpenRouter call failed: ${errorText(error)}.`,
+            telemetry: {
+              latencyMs: elapsedMilliseconds(startedAt, completedAt),
+              rawResponse: null,
+              resolvedProvider: null,
+              resolvedModel: null,
+              tokensIn: null,
+              tokensOut: null,
+              attemptedAt: completedAt
+            }
+          });
+          break;
+        }
+        if (response.status < 200 || response.status >= 300) {
+          await persistProviderFailure({
+            item,
+            attemptNo,
+            kind: response.status === 429 ? "rate_limit" : "provider",
+            detail: `OpenRouter returned HTTP ${response.status}.`,
+            telemetry: {
+              latencyMs: elapsedMilliseconds(startedAt, completedAt),
+              rawResponse: response.body,
+              resolvedProvider: null,
+              resolvedModel: null,
+              tokensIn: null,
+              tokensOut: null,
+              attemptedAt: completedAt
+            }
+          });
+          break;
+        }
 
-      const parsedResponse = parseOpenRouterResponse(response.body);
-      if (parsedResponse === null || parsedResponse.content === null) {
-        await persistProviderFailure({
-          item,
-          kind: parsedResponse?.refusal === null
-            || parsedResponse?.refusal === undefined
-            ? "provider"
-            : "refusal",
-          detail: parsedResponse?.refusal
-            ?? "OpenRouter returned an unexpected response shape.",
-          telemetry: {
-            latencyMs: elapsedMilliseconds(startedAt, completedAt),
-            rawResponse: response.body,
-            resolvedProvider: parsedResponse?.resolvedProvider ?? null,
-            resolvedModel: parsedResponse?.resolvedModel ?? null,
-            tokensIn: parsedResponse?.tokensIn ?? null,
-            tokensOut: parsedResponse?.tokensOut ?? null,
-            attemptedAt: completedAt
+        const parsedResponse = parseOpenRouterResponse(response.body);
+        if (parsedResponse === null || parsedResponse.content === null) {
+          await persistProviderFailure({
+            item,
+            attemptNo,
+            kind: parsedResponse?.refusal === null
+              || parsedResponse?.refusal === undefined
+              ? "provider"
+              : "refusal",
+            detail: parsedResponse?.refusal
+              ?? "OpenRouter returned an unexpected response shape.",
+            telemetry: {
+              latencyMs: elapsedMilliseconds(startedAt, completedAt),
+              rawResponse: response.body,
+              resolvedProvider: parsedResponse?.resolvedProvider ?? null,
+              resolvedModel: parsedResponse?.resolvedModel ?? null,
+              tokensIn: parsedResponse?.tokensIn ?? null,
+              tokensOut: parsedResponse?.tokensOut ?? null,
+              attemptedAt: completedAt
+            }
+          });
+          break;
+        }
+        const responseContent = parsedResponse.content;
+        const validation = validatePrediction(responseContent, item.fpl_id);
+        try {
+          await persist(() => recordPredictionResult({
+            database,
+            entrantId,
+            season,
+            gameweek,
+            fixtureId: item.fpl_id,
+            contextId: context.id,
+            attemptNo,
+            trigger,
+            validation,
+            telemetry: {
+              latencyMs: elapsedMilliseconds(startedAt, completedAt),
+              rawResponse: response.body,
+              resolvedProvider: parsedResponse.resolvedProvider,
+              resolvedModel: parsedResponse.resolvedModel,
+              tokensIn: parsedResponse.tokensIn,
+              tokensOut: parsedResponse.tokensOut,
+              attemptedAt: completedAt
+            }
+          }));
+        } catch (error) {
+          persistenceFailure ??= error;
+        }
+        if (
+          persistenceFailure !== undefined
+          || validation.ok
+          || attemptNo === MAX_REPAIRS
+        ) {
+          break;
+        }
+        messages.push(
+          { role: "assistant", content: responseContent },
+          {
+            role: "user",
+            content: predictionRepairMessage(
+              validation.message,
+              item.fpl_id
+            )
           }
-        });
-        continue;
-      }
-      const responseContent = parsedResponse.content;
-      const validation = validatePrediction(responseContent, item.fpl_id);
-      try {
-        await persist(() => recordPredictionResult({
-          database,
-          entrantId,
-          season,
-          gameweek,
-          fixtureId: item.fpl_id,
-          contextId: context.id,
-          validation,
-          telemetry: {
-            latencyMs: elapsedMilliseconds(startedAt, completedAt),
-            rawResponse: responseContent,
-            resolvedProvider: parsedResponse.resolvedProvider,
-            resolvedModel: parsedResponse.resolvedModel,
-            tokensIn: parsedResponse.tokensIn,
-            tokensOut: parsedResponse.tokensOut,
-            attemptedAt: completedAt
-          }
-        }));
-      } catch (error) {
-        persistenceFailure ??= error;
+        );
       }
     }
   }

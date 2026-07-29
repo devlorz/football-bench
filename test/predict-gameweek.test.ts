@@ -200,10 +200,36 @@ describe("predicting a Gameweek", () => {
       tokens_in: 83,
       tokens_out: 41,
       raw_response: JSON.stringify({
-        fixture_id: 1,
-        probs: { H: 0.6003, D: 0.2398, A: 0.1598 },
-        score: { home: 2, away: 1 },
-        rationale: "Home advantage."
+        id: "gen-1",
+        model: "openai/gpt-5.2",
+        openrouter_metadata: {
+          endpoints: {
+            available: [
+              {
+                provider: "Other Provider",
+                model: "openai/gpt-5.2",
+                selected: false
+              },
+              {
+                provider: "OpenAI",
+                model: "openai/gpt-5.2",
+                selected: true
+              }
+            ]
+          }
+        },
+        choices: [{
+          message: {
+            role: "assistant",
+            content: JSON.stringify({
+              fixture_id: 1,
+              probs: { H: 0.6003, D: 0.2398, A: 0.1598 },
+              score: { home: 2, away: 1 },
+              rationale: "Home advantage."
+            })
+          }
+        }],
+        usage: { prompt_tokens: 83, completion_tokens: 41 }
       }),
       trigger: "main",
       attempted_at: new Date("2026-08-21T17:29:00Z")
@@ -526,7 +552,7 @@ describe("predicting a Gameweek", () => {
     }]);
   });
 
-  test("logs a rejected Entrant response without storing a Prediction", async () => {
+  test("leaves a Gap after the third failed Repair and logs every attempt", async () => {
     await predictGameweek({
       database: client,
       season: "2026-27",
@@ -562,16 +588,160 @@ describe("predicting a Gameweek", () => {
     expect(stored.rows).toEqual([{ predictions: 0, locked_in_gw: 1 }]);
 
     const attempts = await client.query(
-      `select ok, error_kind, error_detail, tokens_in, tokens_out
-         from attempts`
+      `select attempt_no, ok, error_kind, error_detail, tokens_in, tokens_out,
+              trigger
+         from attempts
+        order by attempt_no`
     );
-    expect(attempts.rows).toEqual([{
-      ok: false,
-      error_kind: "probs_sum",
-      error_detail: "Probabilities H, D and A must sum to 1 within ±0.001.",
-      tokens_in: 83,
-      tokens_out: 39
+    expect(attempts.rows).toEqual(
+      [0, 1, 2, 3].map((attemptNo) => ({
+        attempt_no: attemptNo,
+        ok: false,
+        error_kind: "probs_sum",
+        error_detail: "Probabilities H, D and A must sum to 1 within ±0.001.",
+        tokens_in: 83,
+        tokens_out: 39,
+        trigger: "main"
+      }))
+    );
+  });
+
+  test("repairs a validation failure with the fixed validator message", async () => {
+    const requests: Array<{
+      messages: Array<{ role: string; content: string }>;
+    }> = [];
+    const responses = [
+      {
+        content: JSON.stringify({
+          fixture_id: 1,
+          probs: { H: 0.6, D: 0.24, A: 0.15 },
+          score: { home: 2, away: 1 },
+          rationale: "Does not sum to one."
+        }),
+        promptTokens: 83,
+        completionTokens: 39
+      },
+      {
+        content: JSON.stringify({
+          fixture_id: 1,
+          probs: { H: 0.6, D: 0.24, A: 0.16 },
+          score: { home: 2, away: 1 },
+          rationale: "Corrected distribution."
+        }),
+        promptTokens: 139,
+        completionTokens: 40
+      }
+    ];
+    const clock = [
+      new Date("2026-08-21T17:28:59.000Z"),
+      new Date("2026-08-21T17:28:59.250Z"),
+      new Date("2026-08-21T17:28:59.250Z"),
+      new Date("2026-08-21T17:28:59.600Z")
+    ];
+
+    await predictGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      concurrency: 1,
+      apiKey: "test-key",
+      now: () => {
+        const instant = clock.shift();
+        if (instant === undefined) {
+          throw new Error("Unexpected clock read");
+        }
+        return instant;
+      },
+      http: async (_url, options) => {
+        const request = JSON.parse(options?.body ?? "{}") as {
+          messages: Array<{ role: string; content: string }>;
+        };
+        requests.push(request);
+        const response = responses.shift();
+        if (response === undefined) {
+          throw new Error("Unexpected OpenRouter call");
+        }
+        return {
+          status: 200,
+          body: JSON.stringify({
+            model: "openai/gpt-5.2",
+            choices: [{
+              message: {
+                role: "assistant",
+                content: response.content
+              }
+            }],
+            usage: {
+              prompt_tokens: response.promptTokens,
+              completion_tokens: response.completionTokens
+            }
+          })
+        };
+      }
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(requests[1]?.messages).toEqual([
+      requests[0]?.messages[0],
+      {
+        role: "assistant",
+        content: JSON.stringify({
+          fixture_id: 1,
+          probs: { H: 0.6, D: 0.24, A: 0.15 },
+          score: { home: 2, away: 1 },
+          rationale: "Does not sum to one."
+        })
+      },
+      {
+        role: "user",
+        content: [
+          "Your previous response was invalid:",
+          "Probabilities H, D and A must sum to 1 within ±0.001.",
+          "Return only corrected JSON for Fixture 1."
+        ].join("\n")
+      }
+    ]);
+
+    const prediction = await client.query(
+      `select attempts_used, rationale, predicted_at
+         from predictions`
+    );
+    expect(prediction.rows).toEqual([{
+      attempts_used: 1,
+      rationale: "Corrected distribution.",
+      predicted_at: new Date("2026-08-21T17:28:59.600Z")
     }]);
+
+    const attempts = await client.query(
+      `select attempt_no, ok, error_kind, error_detail, latency_ms,
+              tokens_in, tokens_out, trigger, attempted_at
+         from attempts
+        order by attempt_no`
+    );
+    expect(attempts.rows).toEqual([
+      {
+        attempt_no: 0,
+        ok: false,
+        error_kind: "probs_sum",
+        error_detail: "Probabilities H, D and A must sum to 1 within ±0.001.",
+        latency_ms: 250,
+        tokens_in: 83,
+        tokens_out: 39,
+        trigger: "main",
+        attempted_at: new Date("2026-08-21T17:28:59.250Z")
+      },
+      {
+        attempt_no: 1,
+        ok: true,
+        error_kind: null,
+        error_detail: null,
+        latency_ms: 350,
+        tokens_in: 139,
+        tokens_out: 40,
+        trigger: "main",
+        attempted_at: new Date("2026-08-21T17:28:59.600Z")
+      }
+    ]);
   });
 
   test("does not duplicate or replace a Prediction when the job is run twice", async () => {

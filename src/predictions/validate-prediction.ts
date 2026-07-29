@@ -14,6 +14,16 @@ const predictionSchema = z.strictObject({
   rationale: z.string()
 });
 
+const validationMessages = {
+  invalidJson: "Response must be valid JSON.",
+  schema: (expectedFixtureId: number) =>
+    `Response must match the Prediction schema for Fixture ${expectedFixtureId}.`,
+  probabilitiesRange:
+    "Probabilities H, D and A must each be between 0 and 1.",
+  score: "Predicted Score goals must be non-negative integers.",
+  probabilitiesSum: "Probabilities H, D and A must sum to 1 within ±0.001."
+};
+
 export interface ValidPrediction {
   fixtureId: number;
   probs: { H: number; D: number; A: number };
@@ -25,6 +35,17 @@ export type PredictionValidation =
   | { ok: true; prediction: ValidPrediction }
   | { ok: false; kind: "schema" | "probs_sum"; message: string };
 
+export function predictionRepairMessage(
+  validationMessage: string,
+  expectedFixtureId: number
+): string {
+  return [
+    "Your previous response was invalid:",
+    validationMessage,
+    `Return only corrected JSON for Fixture ${expectedFixtureId}.`
+  ].join("\n");
+}
+
 export function validatePrediction(
   raw: string,
   expectedFixtureId: number
@@ -33,15 +54,43 @@ export function validatePrediction(
   try {
     value = JSON.parse(raw);
   } catch {
-    return { ok: false, kind: "schema", message: "Response must be valid JSON." };
-  }
-
-  const parsed = predictionSchema.safeParse(value);
-  if (!parsed.success || parsed.data.fixture_id !== expectedFixtureId) {
     return {
       ok: false,
       kind: "schema",
-      message: `Response must match the Prediction schema for Fixture ${expectedFixtureId}.`
+      message: validationMessages.invalidJson
+    };
+  }
+
+  const parsed = predictionSchema.safeParse(value);
+  if (!parsed.success) {
+    const probabilitiesFailed = parsed.error.issues.every(
+      (issue) =>
+        issue.path[0] === "probs"
+        && (issue.code === "too_small" || issue.code === "too_big")
+    );
+    const scoreFailed = parsed.error.issues.every(
+      (issue) =>
+        issue.path[0] === "score"
+        && (
+          issue.code === "too_small"
+          || (issue.code === "invalid_type" && issue.expected === "int")
+        )
+    );
+    return {
+      ok: false,
+      kind: "schema",
+      message: probabilitiesFailed
+        ? validationMessages.probabilitiesRange
+        : scoreFailed
+          ? validationMessages.score
+          : validationMessages.schema(expectedFixtureId)
+    };
+  }
+  if (parsed.data.fixture_id !== expectedFixtureId) {
+    return {
+      ok: false,
+      kind: "schema",
+      message: validationMessages.schema(expectedFixtureId)
     };
   }
 
@@ -50,7 +99,7 @@ export function validatePrediction(
     return {
       ok: false,
       kind: "probs_sum",
-      message: "Probabilities H, D and A must sum to 1 within ±0.001."
+      message: validationMessages.probabilitiesSum
     };
   }
 

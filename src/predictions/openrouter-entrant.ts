@@ -34,10 +34,15 @@ export interface OpenRouterEntrant {
   quantization: string | null;
 }
 
+export interface OpenRouterMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export function openRouterRequest(
   apiKey: string,
   entrant: OpenRouterEntrant,
-  context: string
+  messagesOrInitialPrompt: string | OpenRouterMessage[]
 ): HttpRequest {
   const provider = {
     order: [entrant.provider],
@@ -56,7 +61,9 @@ export function openRouterRequest(
     },
     body: JSON.stringify({
       model: entrant.baseModel,
-      messages: [{ role: "user", content: context }],
+      messages: typeof messagesOrInitialPrompt === "string"
+        ? [{ role: "user", content: messagesOrInitialPrompt }]
+        : messagesOrInitialPrompt,
       provider,
       stream: false
     })
