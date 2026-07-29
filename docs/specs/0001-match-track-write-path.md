@@ -166,34 +166,37 @@ human can intervene while there is still time.
     about them while I can still act rather than when scoring runs on Monday.
 43. As an operator, I want the alert to name the Entrant, the Fixtures and the cause, so that I
     know whether intervening is worth attempting.
-44. As an operator, I want calls to the nine Entrants issued concurrently with sane rate
+44. As an operator, I want a workflow failure to raise a distinct alert even when the job
+    never completes a Gap report, so that a failed main or Fill run is not hidden in the
+    Actions history.
+45. As an operator, I want calls to the nine Entrants issued concurrently with sane rate
     limiting, so that a full Gameweek completes in minutes.
-45. As an operator, I want one Entrant's failure not to abort the run, so that eight working
+46. As an operator, I want one Entrant's failure not to abort the run, so that eight working
     Entrants still get recorded.
 
 ### Handling schedule changes
 
-46. As an operator, I want a Fixture postponed after its Predictions were locked to keep them,
+47. As an operator, I want a Fixture postponed after its Predictions were locked to keep them,
     so that work already committed is not discarded for a reason that has nothing to do with
     forecasting.
-47. As an operator, I want a deferred Fixture attributed to the Gameweek its Prediction was
+48. As an operator, I want a deferred Fixture attributed to the Gameweek its Prediction was
     locked in and flagged as deferred, so that the record reflects what each Entrant knew when
     it committed.
-48. As an operator, I want a Fixture inserted into a Gameweek whose deadline has already passed
+49. As an operator, I want a Fixture inserted into a Gameweek whose deadline has already passed
     to attach to the next open Gameweek, so that it gets predicted rather than becoming a Gap
     for everyone.
-49. As an operator, I want a Fixture that is never played to simply never be scored, so that
+50. As an operator, I want a Fixture that is never played to simply never be scored, so that
     cancellations need no special handling.
 
 ### Before going live
 
-50. As an operator, I want every Base Model called with a real prompt before the first
+51. As an operator, I want every Base Model called with a real prompt before the first
     Gameweek, so that a Base Model that refuses probability forecasting is discovered in
     July rather than on a Friday night in August.
-51. As an operator, I want the built context for a handful of Fixtures readable by eye and
+52. As an operator, I want the built context for a handful of Fixtures readable by eye and
     checkable against the real league table, so that a context builder feeding garbage all
     Season is caught once rather than never.
-52. As an operator, I want the pipeline runnable against a past Gameweek's archived snapshots,
+53. As an operator, I want the pipeline runnable against a past Gameweek's archived snapshots,
     so that I can exercise the whole path before any real deadline exists.
 
 ---
@@ -210,6 +213,13 @@ covers `fetch` and `predict`. `score` is built later from stored data (ADR-0005)
 | `fetch` | daily 06:00 UTC | yes |
 | `predict` | poll every 15m; run at deadline −6h and deadline −2h; manual dispatch | yes |
 | `score` | daily 10:00 UTC | no — see Out of Scope |
+
+The fifteen-minute schedule assumes a public GitHub repository. At the plan limits reviewed
+on 2026-07-30, standard public-repository runners consume no metered Actions minutes while a
+private repository includes 2,000 minutes per month. Roughly 2,920 monthly polls would
+plausibly exhaust that private allowance. GitHub can disable public-repository schedules
+after 60 days without repository activity; the operator must re-enable all scheduled
+workflows before each pre-Season rehearsal.
 
 ### Modules
 
@@ -235,6 +245,9 @@ covers `fetch` and `predict`. `score` is built later from stored data (ADR-0005)
   safe.
 - **Predict orchestrator** — resolves the Gameweek, builds or loads context, fans out across
   Entrants and Fixtures, writes results, emits the Gap alert.
+- **Workflow failure reporter** — opens or updates a GitHub issue with the failed run URL
+  when the predict job fails before, during or after orchestration. This is separate from the
+  Gap alert because a failed workflow may never produce a Gap report.
 
 ### Contracts
 

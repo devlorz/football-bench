@@ -4,6 +4,8 @@ on:
   schedule:
     # Postgres deadlines decide when work is due. Frequent polling avoids
     # encoding a changing FPL deadline in a static GitHub Actions cron.
+    # This cadence assumes a public repository; see spec 0001. Re-enable the
+    # schedule before each Season if off-season inactivity disabled it.
     - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:

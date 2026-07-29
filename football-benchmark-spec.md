@@ -116,6 +116,15 @@ football-data.co.uk┘         │                        │
 | `predict.yml` | poll every 15m for **GW deadline − 6h** (main) and **deadline − 2h** (fill), plus `workflow_dispatch` | Derive due work from stored deadlines, build context per Fixture, call every Entrant, validate, insert. The fill run and any manual run fill only Fixtures with no Prediction, reusing the stored context verbatim. Alerts if Gaps remain (ADR-0006, ADR-0011). |
 | `score.yml` | daily **10:00 UTC** | Score Fixtures that have results. FPL finalises a Gameweek at 09:00 UK the day after its last match, so anything earlier reads bonus points and defensive contributions before they settle. Pure deterministic TypeScript. |
 
+The fifteen-minute Prediction poll is deployed from a **public GitHub repository**. At the
+GitHub plan limits reviewed on 2026-07-30, standard public-repository runners consume no
+metered Actions minutes while a private repository includes 2,000 minutes per month. Roughly
+2,920 monthly polls would plausibly exhaust that private allowance. Public-repository
+schedules can be disabled after 60 days without repository activity, so re-enabling every
+scheduled workflow before the pre-Season rehearsal is an explicit recurring operator chore.
+Prediction workflow failures and completed runs with Gaps are separate alert signals; both
+belong to the Gap-alerting slice.
+
 **Supabase (Postgres)** is the system of record. **Cloudflare Worker** is a thin read-only
 API. **Cloudflare Pages** hosts the static dashboard.
 

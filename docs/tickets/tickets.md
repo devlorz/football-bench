@@ -258,6 +258,14 @@ claimed before the Lock is retried after the Lock if necessary, producing record
 `deadline` attempts instead of an abandoned operational row. The workflow and a Postgres
 advisory lock serialise scheduler invocations.
 
+The deployment assumes a public GitHub repository while fifteen-minute polling is enabled.
+At the GitHub plan limits reviewed on 2026-07-30, standard runners for a public repository
+consume no metered Actions minutes while a private repository includes 2,000 minutes per
+month. Roughly 2,920 monthly polls would plausibly exhaust that private allowance. Public
+scheduled workflows can be disabled after 60 days without repository activity, so
+re-enabling every scheduled workflow before the pre-Season rehearsal is a recurring operator
+chore.
+
 A Fill, including a manual fill, requires the context stored by the main run and fails before
 calling an Entrant if that context is absent. Both paths select only missing Predictions.
 The Prediction primary key remains the final protection against replacement.
@@ -266,14 +274,17 @@ The Prediction primary key remains the final protection against replacement.
 
 ## Gap alerting
 
-**What to build:** When a run finishes with Fixtures still unpredicted, the operator finds out
-while there is still time to act — not when scoring runs on Monday.
+**What to build:** The operator receives two distinct signals: a Gap alert when a completed
+run leaves Fixtures unpredicted, and a workflow-failure alert when the job never reaches a Gap
+report. Neither signal should depend on noticing one red run in a noisy Actions history.
 
 **Blocked by:** Scheduled runs, manual fill and context reuse.
 
 - [ ] A run finishing with Gaps raises an alert; a run finishing clean is silent
 - [ ] The alert names the Entrant, the Fixtures affected and the cause of each Gap
 - [ ] The alert states how long remains before the deadline, so the operator can judge whether intervening is worth it
+- [ ] A predict workflow failure opens or updates a distinct GitHub issue even when orchestration never completes
+- [ ] The workflow-failure issue links the failed run, uses the daily-fetch open-or-comment pattern, and assigns `PREDICT_ALERT_ASSIGNEE` when configured
 
 ---
 
