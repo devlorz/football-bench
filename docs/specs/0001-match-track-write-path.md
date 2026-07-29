@@ -159,8 +159,9 @@ human can intervene while there is still time.
     react when something breaks.
 40. As an operator, I want a second run two hours before the deadline that fills only Fixtures
     with no Prediction, so that a transient outage does not cost a Gameweek.
-41. As an operator, I want to trigger that fill manually at any point before the deadline, so
-    that I can close Gaps I notice myself.
+41. As an operator, I want to trigger that fill manually after the main context exists and at
+    any point before the deadline, so that I can close Gaps I notice myself without changing
+    the information shown to an Entrant.
 42. As an operator, I want an alert when a run finishes with Gaps outstanding, so that I learn
     about them while I can still act rather than when scoring runs on Monday.
 43. As an operator, I want the alert to name the Entrant, the Fixtures and the cause, so that I
@@ -207,7 +208,7 @@ covers `fetch` and `predict`. `score` is built later from stored data (ADR-0005)
 | Workflow | Schedule | In scope here |
 |---|---|---|
 | `fetch` | daily 06:00 UTC | yes |
-| `predict` | deadline −6h, deadline −2h, manual dispatch | yes |
+| `predict` | poll every 15m; run at deadline −6h and deadline −2h; manual dispatch | yes |
 | `score` | daily 10:00 UTC | no — see Out of Scope |
 
 ### Modules
@@ -229,6 +230,9 @@ covers `fetch` and `predict`. `score` is built later from stored data (ADR-0005)
   every attempt.
 - **Lock guard** — sits in the write path. Rejects any Prediction whose Gameweek deadline has
   passed, using the injected clock.
+- **Prediction scheduler** — derives the main and Fill due times from stored Gameweek
+  deadlines. A completion ledger and advisory lock make polling, delayed starts and retries
+  safe.
 - **Predict orchestrator** — resolves the Gameweek, builds or loads context, fans out across
   Entrants and Fixtures, writes results, emits the Gap alert.
 
@@ -268,6 +272,7 @@ Fixture identity is `(season, fpl_id)` throughout; FPL ids restart each Season.
 | `contexts` | the exact text handed to Entrants, plus its hash | one row per Gameweek per Fixture; reused by later runs |
 | `predictions` | successes only — probabilities, Predicted Score, context reference, Repairs used | insert-only, keyed `(model_id, season, fpl_id)` |
 | `attempts` | every call, successful or not — cause, resolved provider and model, latency, tokens, raw body, trigger | append-only; never read by scoring |
+| `prediction_runs` | operational state for the main and Fill schedules | one completion record per Gameweek and scheduled trigger; incomplete runs retry |
 | `raw_snapshots` | upstream responses as received | content-hashed; first and latest observation retained |
 
 Full DDL is in [the spec](../../football-benchmark-spec.md) §4. Integrity properties are
@@ -286,9 +291,17 @@ enforced by the database rather than by application code:
 
 - The fill run and any manual run **load** the stored context by `(season, gw, track,
   fpl_id)` rather than rebuilding it. Rebuilding would hand late-filled Entrants fresher
-  information (ADR-0006).
-- The Lock guard follows the Fixture's canonical locked Gameweek to `gameweeks.deadline_at`
-  and compares it with the injected clock. No other component consults time (ADR-0015).
+  information (ADR-0006). If the main run did not store a context, a Fill fails before making
+  an outbound call.
+- GitHub Actions polls every fifteen minutes. The scheduler derives due work from
+  `gameweeks.deadline_at`, records only completed main and Fill runs as done, and retries an
+  incomplete run after persistence recovers. A run claimed before the Lock is retried even if
+  recovery is later, so the late attempt is recorded and refused rather than left
+  operationally incomplete. A Postgres advisory lock prevents concurrent schedulers from
+  claiming the same work.
+- The scheduler uses the injected clock only to select due runs. Within a Prediction run, the
+  Lock guard alone follows the Fixture's canonical locked Gameweek to
+  `gameweeks.deadline_at` and compares it with that clock (ADR-0015).
 - The orchestrator treats each `(Entrant, Fixture)` as independent. One failing Entrant does
   not abort the Gameweek; one Fixture's transport, provider or validation failure does not
   abort the Entrant.

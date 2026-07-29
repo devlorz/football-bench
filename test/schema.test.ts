@@ -42,6 +42,7 @@ describe("the benchmark database", () => {
       "historical_matches",
       "manager_states",
       "models",
+      "prediction_runs",
       "predictions",
       "raw_snapshots",
       // Bookkeeping for the migration runner, not part of the write path.

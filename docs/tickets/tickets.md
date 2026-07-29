@@ -243,12 +243,24 @@ fresher information than its peers received.
 
 **Blocked by:** Repairs, Gaps and failure causes.
 
-- [ ] Predict runs automatically six hours and again two hours before the Gameweek deadline
-- [ ] An operator can trigger a fill manually at any point before the deadline
-- [ ] Later runs write only for Fixtures that have no Prediction
-- [ ] Later runs load the stored context rather than rebuilding it, so a late-filled Entrant references the same context as everyone else
-- [ ] Repeated runs cannot replace an existing Prediction, however many times they are triggered
-- [ ] A manual run after the deadline writes nothing and is still logged
+- [x] Predict runs automatically six hours and again two hours before the Gameweek deadline
+- [x] After the main context exists, an operator can trigger a fill manually at any point before the deadline
+- [x] Later runs write only for Fixtures that have no Prediction
+- [x] Later runs load the stored context rather than rebuilding it, so a late-filled Entrant references the same context as everyone else
+- [x] Repeated runs cannot replace an existing Prediction, however many times they are triggered
+- [x] A manual run after the deadline writes nothing and is still logged
+
+GitHub Actions polls every fifteen minutes because its static cron cannot follow deadlines
+stored in Postgres. The scheduler derives the main and Fill times from
+`gameweeks.deadline_at`; `prediction_runs` records completion so delayed polls catch up,
+completed runs do not repeat, and a run aborted by persistence failure is retried. A run
+claimed before the Lock is retried after the Lock if necessary, producing recorded
+`deadline` attempts instead of an abandoned operational row. The workflow and a Postgres
+advisory lock serialise scheduler invocations.
+
+A Fill, including a manual fill, requires the context stored by the main run and fails before
+calling an Entrant if that context is absent. Both paths select only missing Predictions.
+The Prediction primary key remains the final protection against replacement.
 
 ---
 

@@ -1,0 +1,61 @@
+name: Deadline-relative Predictions
+
+on:
+  schedule:
+    # Postgres deadlines decide when work is due. Frequent polling avoids
+    # encoding a changing FPL deadline in a static GitHub Actions cron.
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      gameweek:
+        description: Gameweek whose remaining Gaps should be filled
+        required: true
+        type: number
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prediction-runs
+  cancel-in-progress: false
+
+jobs:
+  scheduled:
+    if: ${{ github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SEASON: ${{ vars.SEASON }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      PREDICT_CONCURRENCY: ${{ vars.PREDICT_CONCURRENCY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Migrations are deployed deliberately before enabling this workflow.
+      - run: npm run predict:scheduled
+
+  manual:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SEASON: ${{ vars.SEASON }}
+      GAMEWEEK: ${{ inputs.gameweek }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      PREDICT_CONCURRENCY: ${{ vars.PREDICT_CONCURRENCY }}
+      PREDICTION_TRIGGER: manual
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Migrations are deployed deliberately before enabling this workflow.
+      - run: npm run predict

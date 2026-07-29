@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Client } from "pg";
+import { errorText } from "../error-text.js";
 import type { HttpFetcher } from "../http.js";
 import {
   MATCH_PROMPT_VERSION,
@@ -64,10 +65,6 @@ export interface PreflightBaseModelsOptions {
   expectedEntrantCount: number;
   apiKey: string;
   http: HttpFetcher;
-}
-
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function sha256(body: string): string {

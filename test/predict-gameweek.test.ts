@@ -470,6 +470,95 @@ describe("predicting a Gameweek", () => {
     });
   });
 
+  test("a Fill refuses to rebuild a missing stored context", async () => {
+    let calls = 0;
+
+    await expect(predictGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      concurrency: 1,
+      apiKey: "test-key",
+      trigger: "fill",
+      now: () => new Date("2026-08-21T15:30:00Z"),
+      http: async () => {
+        calls += 1;
+        return { status: 200, body: "{}" };
+      }
+    })).rejects.toThrow(
+      "Fill requires a stored Match context for Fixture 1"
+    );
+
+    expect(calls).toBe(0);
+    const stored = await client.query(
+      `select
+         (select count(*)::int from contexts) as contexts,
+         (select count(*)::int from attempts) as attempts`
+    );
+    expect(stored.rows).toEqual([{ contexts: 0, attempts: 0 }]);
+  });
+
+  test("a Manual fill closes a Gap with the stored Match context", async () => {
+    await client.query(
+      `insert into contexts (season, gw, track, fpl_id, hash, body)
+       values (
+         '2026-27', 1, 'match', 1, 'stored-context-hash',
+         'Stored main-run context.'
+       )`
+    );
+    let prompt = "";
+
+    await predictGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      concurrency: 1,
+      apiKey: "test-key",
+      trigger: "manual",
+      now: () => new Date("2026-08-21T16:00:00Z"),
+      http: async (_url, options) => {
+        const request = JSON.parse(options?.body ?? "{}") as {
+          messages: Array<{ content: string }>;
+        };
+        prompt = request.messages[0]?.content ?? "";
+        return {
+          status: 200,
+          body: JSON.stringify({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  fixture_id: 1,
+                  probs: { H: 0.6, D: 0.25, A: 0.15 },
+                  score: { home: 2, away: 1 },
+                  rationale: "Manual Gap fill."
+                })
+              }
+            }]
+          })
+        };
+      }
+    });
+
+    expect(prompt).toBe("Stored main-run context.");
+    const stored = await client.query(
+      `select
+         p.rationale,
+         c.body,
+         a.trigger
+         from predictions p
+         join contexts c on c.id = p.context_id
+         join attempts a
+           on a.model_id = p.model_id
+          and a.season = p.season
+          and a.fpl_id = p.fpl_id`
+    );
+    expect(stored.rows).toEqual([{
+      rationale: "Manual Gap fill.",
+      body: "Stored main-run context.",
+      trigger: "manual"
+    }]);
+  });
+
   test("refuses an invalid concurrency before issuing a call", async () => {
     let calls = 0;
 
@@ -735,13 +824,22 @@ describe("predicting a Gameweek", () => {
     }]);
   });
 
-  test("refuses a Prediction at the exact deadline and logs the attempt", async () => {
+  test("a Manual fill at the exact deadline writes nothing and is logged", async () => {
+    await client.query(
+      `insert into contexts (season, gw, track, fpl_id, hash, body)
+       values (
+         '2026-27', 1, 'match', 1, 'stored-context-hash',
+         'Stored before the Lock.'
+       )`
+    );
+
     await predictGameweek({
       database: client,
       season: "2026-27",
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      trigger: "manual",
       now: () => new Date("2026-08-21T17:30:00Z"),
       http: async () => ({
         status: 200,
@@ -772,7 +870,7 @@ describe("predicting a Gameweek", () => {
 
     const attempts = await client.query(
       `select ok, error_kind, error_detail, latency_ms, tokens_in, tokens_out,
-              attempted_at
+              trigger, attempted_at
          from attempts`
     );
     expect(attempts.rows).toEqual([{
@@ -782,6 +880,7 @@ describe("predicting a Gameweek", () => {
       latency_ms: 0,
       tokens_in: 83,
       tokens_out: 38,
+      trigger: "manual",
       attempted_at: new Date("2026-08-21T17:30:00Z")
     }]);
   });

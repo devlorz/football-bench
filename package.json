@@ -10,6 +10,7 @@
     "fetch:history": "tsx src/cli/fetch-history.ts",
     "preflight": "tsx src/cli/preflight.ts",
     "predict": "tsx src/cli/predict.ts",
+    "predict:scheduled": "tsx src/cli/predict-scheduled.ts",
     "test": "vitest run"
   },
   "dependencies": {

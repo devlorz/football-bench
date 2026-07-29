@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { readPredictJobConfig } from "../src/cli/config.js";
+import {
+  readPredictJobConfig,
+  readScheduledPredictJobConfig
+} from "../src/cli/config.js";
 
 describe("the predict job configuration", () => {
   test("runs every stored Entrant with a bounded concurrency", () => {
@@ -8,12 +11,14 @@ describe("the predict job configuration", () => {
       SEASON: "2026-27",
       GAMEWEEK: "1",
       PREDICT_CONCURRENCY: "4",
+      PREDICTION_TRIGGER: "manual",
       OPENROUTER_API_KEY: "secret-from-environment"
     })).toEqual({
       databaseUrl: "postgresql://localhost/benchmark",
       season: "2026-27",
       gameweek: 1,
       concurrency: 4,
+      trigger: "manual",
       openRouterApiKey: "secret-from-environment"
     });
 
@@ -22,7 +27,10 @@ describe("the predict job configuration", () => {
       SEASON: "2026-27",
       GAMEWEEK: "1",
       OPENROUTER_API_KEY: "secret-from-environment"
-    }).concurrency).toBe(9);
+    })).toMatchObject({
+      concurrency: 9,
+      trigger: "main"
+    });
 
     expect(() => readPredictJobConfig({
       DATABASE_URL: "postgresql://localhost/benchmark",
@@ -36,5 +44,26 @@ describe("the predict job configuration", () => {
       SEASON: "2026-27",
       GAMEWEEK: "1"
     })).toThrow("OPENROUTER_API_KEY is required");
+    expect(() => readPredictJobConfig({
+      DATABASE_URL: "postgresql://localhost/benchmark",
+      SEASON: "2026-27",
+      GAMEWEEK: "1",
+      PREDICTION_TRIGGER: "repair",
+      OPENROUTER_API_KEY: "secret-from-environment"
+    })).toThrow("PREDICTION_TRIGGER must be main, fill, or manual");
+  });
+
+  test("the scheduled job resolves its Gameweek from stored deadlines", () => {
+    expect(readScheduledPredictJobConfig({
+      DATABASE_URL: "postgresql://localhost/benchmark",
+      SEASON: "2026-27",
+      PREDICT_CONCURRENCY: "",
+      OPENROUTER_API_KEY: "secret-from-environment"
+    })).toEqual({
+      databaseUrl: "postgresql://localhost/benchmark",
+      season: "2026-27",
+      concurrency: 9,
+      openRouterApiKey: "secret-from-environment"
+    });
   });
 });

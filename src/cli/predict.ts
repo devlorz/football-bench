@@ -16,7 +16,8 @@ try {
     concurrency: config.concurrency,
     apiKey: config.openRouterApiKey,
     http: nodeHttpFetcher,
-    now: () => new Date()
+    now: () => new Date(),
+    trigger: config.trigger
   });
 } finally {
   await database.end();

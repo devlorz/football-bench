@@ -113,7 +113,7 @@ football-data.co.uk┘         │                        │
 | Workflow | Schedule | Responsibility |
 |---|---|---|
 | `fetch.yml` | daily 06:00 UTC | FPL bootstrap-static, fixtures, Gameweek deadlines; `E0.csv` / `E1.csv`. Upsert and archive a raw snapshot every run. Idempotent. |
-| `predict.yml` | **GW deadline − 6h** (main), **deadline − 2h** (fill), plus `workflow_dispatch` | Build context per Fixture, call every Entrant, validate, insert. The fill run and any manual run fill only Fixtures with no Prediction, reusing the stored context verbatim. Alerts if Gaps remain (ADR-0006, ADR-0011). |
+| `predict.yml` | poll every 15m for **GW deadline − 6h** (main) and **deadline − 2h** (fill), plus `workflow_dispatch` | Derive due work from stored deadlines, build context per Fixture, call every Entrant, validate, insert. The fill run and any manual run fill only Fixtures with no Prediction, reusing the stored context verbatim. Alerts if Gaps remain (ADR-0006, ADR-0011). |
 | `score.yml` | daily **10:00 UTC** | Score Fixtures that have results. FPL finalises a Gameweek at 09:00 UK the day after its last match, so anything earlier reads bonus points and defensive contributions before they settle. Pure deterministic TypeScript. |
 
 **Supabase (Postgres)** is the system of record. **Cloudflare Worker** is a thin read-only
@@ -235,6 +235,19 @@ create table attempts (
   foreign key (season, gw) references gameweeks(season, gw)
 );
 
+create table prediction_runs (
+  season        text not null,
+  gw            int  not null,
+  trigger       text not null check (trigger in ('main','fill')),
+  scheduled_for timestamptz not null,
+  started_at    timestamptz not null,
+  completed_at  timestamptz,
+  attempt_count int not null default 1,
+  last_error    text,
+  primary key (season, gw, trigger),
+  foreign key (season, gw) references gameweeks(season, gw)
+);
+
 create table scores (
   model_id   text not null references models(id),
   season     text not null,
@@ -271,6 +284,10 @@ Notes:
   — that is where Gap rate, attempts-to-valid and vendor behaviour are read from (ADR-0007).
 - `contexts.body` is the exact text sent. The fill run and manual runs reuse it verbatim
   rather than rebuilding it (ADR-0006).
+- `prediction_runs` is operational scheduler state, not benchmark evidence. A run is complete
+  only after its Prediction orchestration finishes; persistence failures remain incomplete
+  and are retried by a later poll. A run claimed before the Lock remains retryable after it,
+  when the write path records and refuses the late attempts.
 - `resolved_provider` and `resolved_model` are echoed from each response so a vendor swapping
   a snapshot beneath a stable model name is detectable afterwards.
 

@@ -1,3 +1,8 @@
+import {
+  parseAttemptTrigger,
+  type AttemptTrigger
+} from "../predictions/prediction-trigger.js";
+
 export interface FetchJobConfig {
   databaseUrl: string;
   season: string;
@@ -15,9 +20,16 @@ export interface DailyFetchJobConfig {
   footballDataSeason: string;
 }
 
-export interface PredictJobConfig extends FetchJobConfig {
+export interface ScheduledPredictJobConfig {
+  databaseUrl: string;
+  season: string;
   concurrency: number;
   openRouterApiKey: string;
+}
+
+export interface PredictJobConfig extends ScheduledPredictJobConfig {
+  gameweek: number;
+  trigger: AttemptTrigger;
 }
 
 export interface PreflightJobConfig {
@@ -85,13 +97,28 @@ export function readFetchJobConfig(
 export function readPredictJobConfig(
   environment: NodeJS.ProcessEnv
 ): PredictJobConfig {
-  const concurrency = Number(environment.PREDICT_CONCURRENCY ?? "9");
+  const trigger = parseAttemptTrigger(environment.PREDICTION_TRIGGER);
+
+  return {
+    ...readScheduledPredictJobConfig(environment),
+    gameweek: readFetchJobConfig(environment).gameweek,
+    trigger
+  };
+}
+
+export function readScheduledPredictJobConfig(
+  environment: NodeJS.ProcessEnv
+): ScheduledPredictJobConfig {
+  const concurrency = Number(
+    environment.PREDICT_CONCURRENCY?.trim() || "9"
+  );
   if (!Number.isInteger(concurrency) || concurrency < 1) {
     throw new Error("PREDICT_CONCURRENCY must be a positive integer");
   }
 
   return {
-    ...readFetchJobConfig(environment),
+    databaseUrl: required(environment, "DATABASE_URL"),
+    season: requiredSeason(environment),
     concurrency,
     openRouterApiKey: required(environment, "OPENROUTER_API_KEY")
   };

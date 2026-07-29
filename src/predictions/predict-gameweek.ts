@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Client } from "pg";
+import { errorText } from "../error-text.js";
 import type { HttpFetcher, HttpResponse } from "../http.js";
 import {
   buildMatchContext,
@@ -17,6 +18,7 @@ import {
   validatePrediction,
   type PredictionValidation
 } from "./validate-prediction.js";
+import type { AttemptTrigger } from "./prediction-trigger.js";
 
 type Database = Pick<Client, "query">;
 
@@ -69,8 +71,6 @@ type ProviderFailureKind =
   | "rate_limit"
   | "timeout";
 
-type AttemptTrigger = "main" | "fill" | "manual";
-
 const MAX_REPAIRS = 3;
 
 function sha256(value: string): string {
@@ -112,8 +112,30 @@ async function storeContext(
   return context;
 }
 
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+async function loadStoredContext(
+  database: Database,
+  season: string,
+  gameweek: number,
+  fixtureId: number,
+  trigger: Exclude<AttemptTrigger, "main">
+): Promise<StoredContext> {
+  const stored = await database.query<{ id: number; body: string }>(
+    `select id, body
+       from contexts
+      where season = $1
+        and gw = $2
+        and track = 'match'
+        and fpl_id = $3`,
+    [season, gameweek, fixtureId]
+  );
+  const context = stored.rows[0];
+  if (context === undefined) {
+    const runName = trigger === "fill" ? "Fill" : "Manual fill";
+    throw new Error(
+      `${runName} requires a stored Match context for Fixture ${fixtureId}`
+    );
+  }
+  return context;
 }
 
 function isTimeoutError(error: unknown): boolean {
@@ -370,25 +392,30 @@ export async function predictGameweek({
     [season, gameweek]
   );
 
-  const contextData = await loadMatchContextData(
-    database,
-    season,
-    gameweek
-  );
+  const contextData = trigger === "main"
+    ? await loadMatchContextData(database, season, gameweek)
+    : null;
 
   const contexts = new Map<number, StoredContext>();
   for (const item of work.rows) {
     if (!contexts.has(item.fpl_id)) {
-      const body = buildMatchContext(item, contextData);
       contexts.set(
         item.fpl_id,
-        await storeContext(
-          database,
-          season,
-          gameweek,
-          item,
-          body
-        )
+        trigger === "main"
+          ? await storeContext(
+            database,
+            season,
+            gameweek,
+            item,
+            buildMatchContext(item, contextData!)
+          )
+          : await loadStoredContext(
+            database,
+            season,
+            gameweek,
+            item.fpl_id,
+            trigger
+          )
       );
     }
   }
