@@ -26,3 +26,6 @@ Prediction, reusing the stored context verbatim.
   deadline simply cannot write a scorable Prediction.
 - The fill run must raise an alert when it finishes with Gaps outstanding. Without it,
   nobody knows there is anything to close until scoring runs on Monday.
+  Operationally, main-run Gaps remain an informational Actions annotation because the Fill
+  retries them automatically. A scheduled Fill with Gaps opens or updates a persistent GitHub
+  issue, links the run and points the operator to manual dispatch while the Lock is still open.

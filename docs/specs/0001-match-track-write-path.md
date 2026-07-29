@@ -162,10 +162,11 @@ human can intervene while there is still time.
 41. As an operator, I want to trigger that fill manually after the main context exists and at
     any point before the deadline, so that I can close Gaps I notice myself without changing
     the information shown to an Entrant.
-42. As an operator, I want an alert when a run finishes with Gaps outstanding, so that I learn
-    about them while I can still act rather than when scoring runs on Monday.
-43. As an operator, I want the alert to name the Entrant, the Fixtures and the cause, so that I
-    know whether intervening is worth attempting.
+42. As an operator, I want every completed run to report outstanding Gaps and a Fill with
+    Gaps to notify me through a persistent issue, so that expected main-run misses do not
+    create noise but I learn about actionable misses while manual intervention remains.
+43. As an operator, I want the report to name the Entrant, the Fixtures and the cause and
+    state time to the Lock, so that I know whether intervening is worth attempting.
 44. As an operator, I want a workflow failure to raise a distinct alert even when the job
     never completes a Gap report, so that a failed main or Fill run is not hidden in the
     Actions history.
@@ -250,6 +251,10 @@ workflows before each pre-Season rehearsal.
   the Gap query completes; a clean run is silent. Scheduled reports are emitted before later
   due work starts. A Gap without a recorded cause fails rather than producing an incomplete
   alert.
+- **Fill Gap reporter** — keeps main-run Gaps at warning-annotation weight, but hands a
+  scheduled Fill's remaining-Gap report to the Actions boundary. That boundary opens or
+  comments on `Prediction Fill has Gaps`, links the run, points to manual dispatch and uses
+  `PREDICT_ALERT_ASSIGNEE` when configured.
 - **Workflow failure reporter** — opens or updates a GitHub issue with the failed run URL
   when the predict job fails before, during or after orchestration. This is separate from the
   Gap alert because a failed workflow may never produce a Gap report. The reporter uses the
@@ -332,9 +337,11 @@ enforced by the database rather than by application code:
   recovery is to restore persistence and re-run the idempotent job.
 - Gap reporting runs only after orchestration succeeds. It queries stored Entrants, Fixtures,
   Predictions and the latest failed attempt for each missing Prediction; the CLI renders the
-  same report as operator text and a GitHub Actions warning annotation. Workflow failure
-  reporting remains an Actions concern and opens or comments on a distinct issue for either
-  the scheduled or manual job.
+  same report as operator text and a GitHub Actions warning annotation. A scheduled Fill also
+  appends the report to a per-workflow handoff consumed by the open-or-comment issue reporter;
+  main and manual runs do not. Reports over twenty Gaps group by cause while naming each
+  affected Entrant and Fixture once. Workflow failure reporting remains a separate Actions
+  concern and opens or comments on a distinct issue for either the scheduled or manual job.
 - `predicted_at` captures when the successful synchronous response arrives, before the
   serialised database write. The Lock therefore applies to completion of the Entrant call,
   even when concurrent responses queue briefly for persistence (ADR-0002).

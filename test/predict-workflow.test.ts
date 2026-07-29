@@ -1,5 +1,6 @@
 import {
   chmodSync,
+  existsSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -73,6 +74,64 @@ describe("the Prediction workflow failure reporter", () => {
     expect(commented).toMatchObject({ status: 0, stderr: "" });
     const commentCalls = readFileSync(callLog, "utf8");
     expect(commentCalls).toContain("CALL\tissue\tcomment\t42");
+    expect(commentCalls).not.toContain("CALL\tissue\tcreate");
+  });
+
+  test("opens or comments on an assigned issue for a completed Fill with Gaps", () => {
+    const reportPath = join(directory, "fill-gaps.md");
+    const environment = {
+      ...process.env,
+      PATH: `${directory}${delimiter}${process.env.PATH ?? ""}`,
+      GH_CALL_LOG: callLog,
+      RUN_URL: "https://github.test/owner/repository/actions/runs/456",
+      PREDICT_ALERT_ASSIGNEE: "operator",
+      FILL_GAP_REPORT_PATH: reportPath
+    };
+
+    const silent = spawnSync(
+      "bash",
+      ["scripts/report-prediction-fill-gaps.sh"],
+      { cwd: process.cwd(), env: environment, encoding: "utf8" }
+    );
+    expect(silent).toMatchObject({ status: 0, stderr: "" });
+    expect(existsSync(callLog)).toBe(false);
+
+    writeFileSync(reportPath, [
+      "Prediction Gaps remain for 2026-27 Gameweek 1.",
+      "2h 0m remain before the Lock.",
+      "- Unavailable Entrant: Fixture 1, Arsenal v Coventry City — provider"
+    ].join("\n"));
+    const opened = spawnSync(
+      "bash",
+      ["scripts/report-prediction-fill-gaps.sh"],
+      { cwd: process.cwd(), env: environment, encoding: "utf8" }
+    );
+    expect(opened).toMatchObject({ status: 0, stderr: "" });
+    const createCalls = readFileSync(callLog, "utf8");
+    expect(createCalls).toContain("CALL\tissue\tlist");
+    expect(createCalls).toContain("CALL\tissue\tcreate");
+    expect(createCalls).toContain("--title\tPrediction Fill has Gaps");
+    expect(createCalls).toContain(
+      "Unavailable Entrant: Fixture 1, Arsenal v Coventry City — provider"
+    );
+    expect(createCalls).toContain(
+      "Run: https://github.test/owner/repository/actions/runs/456"
+    );
+    expect(createCalls).toContain("--assignee\toperator");
+
+    writeFileSync(callLog, "");
+    const commented = spawnSync(
+      "bash",
+      ["scripts/report-prediction-fill-gaps.sh"],
+      {
+        cwd: process.cwd(),
+        env: { ...environment, FAKE_ISSUE_NUMBER: "84" },
+        encoding: "utf8"
+      }
+    );
+    expect(commented).toMatchObject({ status: 0, stderr: "" });
+    const commentCalls = readFileSync(callLog, "utf8");
+    expect(commentCalls).toContain("CALL\tissue\tcomment\t84");
     expect(commentCalls).not.toContain("CALL\tissue\tcreate");
   });
 });

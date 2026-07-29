@@ -113,7 +113,7 @@ football-data.co.uk┘         │                        │
 | Workflow | Schedule | Responsibility |
 |---|---|---|
 | `fetch.yml` | daily 06:00 UTC | FPL bootstrap-static, fixtures, Gameweek deadlines; `E0.csv` / `E1.csv`. Upsert and archive a raw snapshot every run. Idempotent. |
-| `predict.yml` | poll every 15m for **GW deadline − 6h** (main) and **deadline − 2h** (fill), plus `workflow_dispatch` | Derive due work from stored deadlines, build context per Fixture, call every Entrant, validate, insert. The fill run and any manual run fill only Fixtures with no Prediction, reusing the stored context verbatim. Alerts if Gaps remain (ADR-0006, ADR-0011). |
+| `predict.yml` | poll every 15m for **GW deadline − 6h** (main) and **deadline − 2h** (fill), plus `workflow_dispatch` | Derive due work from stored deadlines, build context per Fixture, call every Entrant, validate, insert. The fill run and any manual run fill only Fixtures with no Prediction, reusing the stored context verbatim. All completed runs report Gaps; a scheduled Fill with Gaps opens or updates an actionable issue (ADR-0006, ADR-0011). |
 | `score.yml` | daily **10:00 UTC** | Score Fixtures that have results. FPL finalises a Gameweek at 09:00 UK the day after its last match, so anything earlier reads bonus points and defensive contributions before they settle. Pure deterministic TypeScript. |
 
 The fifteen-minute Prediction poll is deployed from a **public GitHub repository**. At the
@@ -126,9 +126,12 @@ Prediction workflow failures and completed runs with Gaps are separate alert sig
 belong to the Gap-alerting slice. A completed run derives its Gap report from stored
 Entrants, Fixtures, Predictions and latest failed attempts, states the time remaining to the
 Lock as observed after the report query, and emits a GitHub Actions warning annotation only
-when Gaps remain. Scheduled reports emit before any later due run begins. A workflow failure
-instead opens or comments on the distinct `Prediction workflow is failing` issue, links the
-failed run, and uses `PREDICT_ALERT_ASSIGNEE` when configured.
+when Gaps remain. Reports over twenty Gaps group by cause and deduplicate the named Entrants
+and Fixtures. Scheduled reports emit before any later due run begins. Main-run Gaps remain
+informational because the Fill retries them; a scheduled Fill with Gaps opens or comments on
+`Prediction Fill has Gaps`, links the run, points to manual dispatch and uses
+`PREDICT_ALERT_ASSIGNEE` when configured. A workflow failure instead opens or comments on the
+distinct `Prediction workflow is failing` issue with the same optional assignee.
 
 **Supabase (Postgres)** is the system of record. **Cloudflare Worker** is a thin read-only
 API. **Cloudflare Pages** hosts the static dashboard.

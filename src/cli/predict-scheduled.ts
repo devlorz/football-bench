@@ -2,7 +2,7 @@ import pg from "pg";
 import { nodeHttpFetcher } from "../http.js";
 import { runScheduledPredictions } from "../predictions/run-scheduled-predictions.js";
 import { readScheduledPredictJobConfig } from "./config.js";
-import { writeGapAlert } from "./write-gap-alert.js";
+import { writeCompletedRunAlert } from "./write-gap-alert.js";
 
 const { Client } = pg;
 const config = readScheduledPredictJobConfig(process.env);
@@ -21,9 +21,7 @@ try {
       console.log(
         `Completed ${run.trigger} Prediction run for Gameweek ${run.gameweek}`
       );
-      if (run.gapAlert !== undefined) {
-        writeGapAlert(run.gapAlert);
-      }
+      writeCompletedRunAlert(run);
     }
   });
 } finally {

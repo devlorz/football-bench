@@ -35,15 +35,55 @@ function formatRemaining(milliseconds: number): string {
   return `${hours}h ${minutes}m`;
 }
 
+function formatLockStatus(alert: GapAlert): string {
+  if (alert.observedAt.getTime() >= alert.deadlineAt.getTime()) {
+    return `The Lock has passed (${alert.deadlineAt.toISOString()}).`;
+  }
+  return `${formatRemaining(alert.remainingMilliseconds)} remain before the Lock at `
+    + `${alert.deadlineAt.toISOString()}.`;
+}
+
+const DETAILED_GAP_LIMIT = 20;
+
+function formatGapDetails(gaps: PredictionGap[]): string[] {
+  if (gaps.length <= DETAILED_GAP_LIMIT) {
+    return gaps.map((gap) =>
+      `- ${gap.entrantName}: Fixture ${gap.fixtureId}, ${gap.fixture} — `
+      + gap.cause
+    );
+  }
+
+  const byCause = new Map<GapCause, PredictionGap[]>();
+  for (const gap of gaps) {
+    const grouped = byCause.get(gap.cause) ?? [];
+    grouped.push(gap);
+    byCause.set(gap.cause, grouped);
+  }
+
+  const lines = [`${gaps.length} Gaps grouped by cause:`];
+  for (const [cause, causeGaps] of byCause) {
+    const entrants = new Map<string, string>();
+    const fixtures = new Map<number, string>();
+    for (const gap of causeGaps) {
+      entrants.set(gap.entrantId, gap.entrantName);
+      fixtures.set(gap.fixtureId, gap.fixture);
+    }
+    lines.push(
+      `- ${cause}: ${causeGaps.length} Gaps`,
+      `  Entrants (${entrants.size}): ${[...entrants.values()].join("; ")}`,
+      `  Fixtures (${fixtures.size}): ${[...fixtures].map(
+        ([fixtureId, fixture]) => `Fixture ${fixtureId}, ${fixture}`
+      ).join("; ")}`
+    );
+  }
+  return lines;
+}
+
 export function formatGapAlert(alert: GapAlert): string {
   return [
     `Prediction Gaps remain for ${alert.season} Gameweek ${alert.gameweek}.`,
-    `${formatRemaining(alert.remainingMilliseconds)} remain before the Lock at `
-      + `${alert.deadlineAt.toISOString()}.`,
-    ...alert.gaps.map((gap) =>
-      `- ${gap.entrantName}: Fixture ${gap.fixtureId}, ${gap.fixture} — `
-      + gap.cause
-    )
+    formatLockStatus(alert),
+    ...formatGapDetails(alert.gaps)
   ].join("\n");
 }
 

@@ -274,15 +274,17 @@ The Prediction primary key remains the final protection against replacement.
 
 ## Gap alerting
 
-**What to build:** The operator receives two distinct signals: a Gap alert when a completed
-run leaves Fixtures unpredicted, and a workflow-failure alert when the job never reaches a Gap
-report. Neither signal should depend on noticing one red run in a noisy Actions history.
+**What to build:** Every completed run reports remaining Gaps, and the actionable Fill report
+notifies the operator while manual intervention is still possible. A workflow-failure alert
+separately covers jobs that never reach a Gap report. Neither actionable signal should depend
+on noticing one run in a noisy Actions history.
 
 **Blocked by:** Scheduled runs, manual fill and context reuse.
 
-- [x] A run finishing with Gaps raises an alert; a run finishing clean is silent
+- [x] A run finishing with Gaps emits a report; a run finishing clean is silent
 - [x] The alert names the Entrant, the Fixtures affected and the cause of each Gap
 - [x] The alert states how long remains before the deadline, so the operator can judge whether intervening is worth it
+- [x] A scheduled Fill finishing with Gaps opens or updates a GitHub issue assigned to `PREDICT_ALERT_ASSIGNEE` when configured; main-run Gaps remain informational
 - [x] A predict workflow failure opens or updates a distinct GitHub issue even when orchestration never completes
 - [x] The workflow-failure issue links the failed run, uses the daily-fetch open-or-comment pattern, and assigns `PREDICT_ALERT_ASSIGNEE` when configured
 
@@ -291,9 +293,18 @@ remaining Gaps back from stored Entrants, Fixtures, Predictions and attempts. Th
 the latest recorded failed attempt as each cause and includes the injected-clock interval to
 the Lock, read after the stored-data query completes. Each completed scheduled run is emitted
 before the scheduler starts later due work, so a later run failing cannot suppress an earlier
-alert. The report is printed for operators and emitted as a GitHub Actions warning annotation;
-when no Gaps remain, no alert is emitted. An unexplained Gap fails the job rather than silently
-omitting its cause.
+report. Main, Fill and manual reports are printed for operators and emitted as GitHub Actions
+warning annotations; when no Gaps remain, no report is emitted. If the Lock has passed, the
+report says so rather than claiming zero time remains. Reports above twenty Gaps group by
+cause and deduplicate the affected Entrants and Fixtures, keeping a total-outage report within
+the annotation boundary without dropping names. An unexplained Gap fails the job rather than
+silently omitting its cause.
+
+A scheduled Fill with Gaps also hands its stored-data report to the workflow boundary. That
+boundary opens the `Prediction Fill has Gaps` issue or comments on its existing open instance,
+links the run, points to manual dispatch, and assigns `PREDICT_ALERT_ASSIGNEE` when configured.
+Main-run Gaps do not open an issue because the Fill is expected to retry them automatically.
+Multiple overdue Fill reports in one poll are retained in the same issue body.
 
 Failures outside that completed-run path are handled only by the workflow boundary. Either
 the scheduled or manual job failing opens the distinct `Prediction workflow is failing`

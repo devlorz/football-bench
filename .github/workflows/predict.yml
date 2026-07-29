@@ -40,7 +40,18 @@ jobs:
           cache: npm
       - run: npm ci
       # Migrations are deployed deliberately before enabling this workflow.
-      - run: npm run predict:scheduled
+      - name: Run due Prediction collections
+        env:
+          FILL_GAP_REPORT_PATH: ${{ runner.temp }}/prediction-fill-gaps.md
+        run: npm run predict:scheduled
+      - name: Open or update the Fill Gap issue
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREDICT_ALERT_ASSIGNEE: ${{ vars.PREDICT_ALERT_ASSIGNEE }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          FILL_GAP_REPORT_PATH: ${{ runner.temp }}/prediction-fill-gaps.md
+        run: bash scripts/report-prediction-fill-gaps.sh
 
   manual:
     if: ${{ github.event_name == 'workflow_dispatch' }}
