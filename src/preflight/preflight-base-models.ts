@@ -3,11 +3,15 @@ import type { Client } from "pg";
 import type { HttpFetcher } from "../http.js";
 import {
   MATCH_PROMPT_VERSION,
-  matchContext,
   openRouterRequest,
   parseOpenRouterResponse,
   type MatchPromptFixture
 } from "../predictions/openrouter-entrant.js";
+import {
+  buildMatchContext,
+  loadMatchContextData,
+  type MatchContextData
+} from "../predictions/build-match-context.js";
 import { validatePrediction } from "../predictions/validate-prediction.js";
 
 type Database = Pick<Client, "query">;
@@ -107,10 +111,11 @@ async function callBaseModel(options: {
   database: Database;
   entrant: EntrantRow;
   fixture: FixtureRow;
+  contextData: MatchContextData;
   apiKey: string;
   http: HttpFetcher;
 }): Promise<PreflightResult> {
-  const { database, entrant, fixture, apiKey, http } = options;
+  const { database, entrant, fixture, contextData, apiKey, http } = options;
   const request = openRouterRequest(
     apiKey,
     {
@@ -118,7 +123,7 @@ async function callBaseModel(options: {
       provider: entrant.provider,
       quantization: entrant.quantization
     },
-    matchContext(fixture)
+    buildMatchContext(fixture, contextData)
   );
   const { url, ...requestOptions } = request;
 
@@ -265,12 +270,18 @@ export async function preflightBaseModels({
     );
   }
 
+  const contextData = await loadMatchContextData(
+    database,
+    season,
+    fixture.gw
+  );
   const results: PreflightResult[] = [];
   for (const entrant of entrants.rows) {
     results.push(await callBaseModel({
       database,
       entrant,
       fixture,
+      contextData,
       apiKey,
       http
     }));

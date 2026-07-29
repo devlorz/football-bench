@@ -14,7 +14,7 @@ export interface MatchPromptFixture {
 
 export function matchContext(
   fixture: MatchPromptFixture,
-  historicalContext = "Historical context: not supplied during pre-flight."
+  historicalContext: string
 ): string {
   return [
     "Predict this Premier League Fixture.",

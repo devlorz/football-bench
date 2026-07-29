@@ -1,3 +1,8 @@
+import {
+  footballDataTeamName,
+  resolveFootballDataTeamName
+} from "../football-data/team-identity.js";
+
 export interface HistoricalMatch {
   season: string;
   division: "Premier League" | "Championship";
@@ -197,7 +202,12 @@ function teamSection(
   team: string,
   eligibleMatches: HistoricalMatch[]
 ): string[] {
-  const canonical = footballDataTeamName(team);
+  const exactStoredIdentity = eligibleMatches.some((match) =>
+    match.home_team === team || match.away_team === team
+  );
+  const resolvedTeam = resolveFootballDataTeamName(team)
+    ?? (exactStoredIdentity ? team : undefined);
+  const canonical = resolvedTeam ?? team;
   const currentMatches = eligibleMatches.filter((match) =>
     match.season === options.season
     && match.division === "Premier League"
@@ -229,6 +239,9 @@ function teamSection(
 
   const lines = [
     team,
+    ...(resolvedTeam === undefined
+      ? ["Historical data status: team name did not resolve against stored results."]
+      : []),
     currentPosition === undefined
       ? "Current-Season league position: no current-Season table yet."
       : `Current-Season league position: ${ordinal(currentPosition)} in Premier League.`,
@@ -293,4 +306,3 @@ export function buildHistoricalContext(
       : headToHead.map((match) => matchLine(match)))
   ].join("\n");
 }
-import { footballDataTeamName } from "../football-data/team-identity.js";

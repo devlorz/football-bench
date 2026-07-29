@@ -81,7 +81,7 @@ describe("building historical Match context", () => {
     ].join("\n"));
   });
 
-  test("states every historical absence instead of rendering an empty field", () => {
+  test("makes an unresolved Fixture team name visible", () => {
     expect(buildHistoricalContext({
       season: "2026-27",
       asOf: new Date("2026-08-21T17:30:00.000Z"),
@@ -90,6 +90,7 @@ describe("building historical Match context", () => {
       matches: []
     })).toContain([
       "New Club",
+      "Historical data status: team name did not resolve against stored results.",
       "Current-Season league position: no current-Season table yet.",
       "Prior-Season final position: no 2025-26 league data.",
       "Premier League history: none in stored data.",
@@ -100,5 +101,47 @@ describe("building historical Match context", () => {
       "",
       "Another Club"
     ].join("\n"));
+  });
+
+  test("states genuine absence for known teams without calling it unresolved", () => {
+    const context = buildHistoricalContext({
+      season: "2026-27",
+      asOf: new Date("2026-08-21T17:30:00.000Z"),
+      homeTeam: "Arsenal",
+      awayTeam: "Everton",
+      matches: []
+    });
+
+    expect(context).toContain("Last five matches played: no stored matches.");
+    expect(context).not.toContain(
+      "Historical data status: team name did not resolve against stored results."
+    );
+  });
+
+  test("accepts an unreviewed team name that exactly matches stored results", () => {
+    const context = buildHistoricalContext({
+      season: "2026-27",
+      asOf: new Date("2026-08-21T17:30:00.000Z"),
+      homeTeam: "Future Town",
+      awayTeam: "Arsenal",
+      matches: [
+        match(
+          "2025-26",
+          "Championship",
+          "2026-05-02",
+          "Future Town",
+          "Hull",
+          2,
+          0
+        )
+      ]
+    });
+
+    expect(context).toContain(
+      "- 2025-26 Championship | 2026-05-02 | Future Town 2-0 Hull | W"
+    );
+    expect(context).not.toContain(
+      "Historical data status: team name did not resolve against stored results."
+    );
   });
 });

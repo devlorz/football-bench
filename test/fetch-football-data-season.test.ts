@@ -8,7 +8,7 @@ import {
   fetchFootballDataSeason,
   FootballDataSourceValidationError
 } from "../src/football-data/fetch-season.js";
-import { footballDataTeamName } from "../src/football-data/team-identity.js";
+import { resolveFootballDataTeamName } from "../src/football-data/team-identity.js";
 
 const { Client } = pg;
 
@@ -107,7 +107,10 @@ describe("fetching football-data.co.uk results", () => {
     expect(
       fplBootstrap.teams
         .map(({ name }) => name)
-        .filter((name) => !availableHistory.has(footballDataTeamName(name)))
+        .filter((name) => {
+          const resolved = resolveFootballDataTeamName(name);
+          return resolved === undefined || !availableHistory.has(resolved);
+        })
     ).toEqual([]);
 
     const snapshots = await client.query(

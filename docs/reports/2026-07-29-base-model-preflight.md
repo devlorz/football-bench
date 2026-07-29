@@ -2,14 +2,28 @@
 
 Ticket: **Pre-flight: confirm all nine Base Models answer**
 
-The operator script called all nine Base Models through OpenRouter with the Match prompt for
-Fixture 1, Arsenal v Coventry City, 2026-08-21 19:00 UTC. Each call pinned its stored provider,
-disabled fallbacks, and pinned quantization for open-weight Base Models.
+The operator script has been run twice against Fixture 1, Arsenal v Coventry City,
+2026-08-21 19:00 UTC. Each call pinned its stored provider, disabled fallbacks, and pinned
+quantization for open-weight Base Models.
 
-All nine returned a parseable Prediction. There were no refusals, transport errors, missing
-selected-provider metadata, or provider/model substitutions. The script exited zero.
-This successful run finalized the previously unpublished tracer prompt as Prompt Version
-`match/2026-27-v1`; all nine Entrant rows now name that version.
+The first run used the tracer Match prompt that existed before historical context was built.
+All nine returned a parseable Prediction. That run finalized the previously unpublished
+tracer prompt as Prompt Version `match/2026-27-v1`; all nine Entrant rows now name that
+version.
+
+## Rich-context revalidation — 2026-07-29 11:07 UTC
+
+Adding the rolling historical dossier materially enlarged the shipping prompt, so the first
+run no longer established that all nine Base Models answered the prompt that would run on the
+first real Friday. Pre-flight and prediction now share one `buildMatchContext` construction
+path, and `matchContext` requires its context argument rather than supplying a placeholder.
+
+The operator reran all nine Base Models against the live 2025/26 Premier League and
+Championship data. All nine returned a parseable Prediction. There were no refusals,
+transport errors, missing selected-provider metadata, or provider/model substitutions. The
+script exited zero. OpenRouter reported 585–4,208 prompt tokens across the nine routes; the
+large spread is recorded as gateway telemetry, not interpreted as directly comparable token
+counts across Base Models.
 
 The operator supplies `EXPECTED_ENTRANT_COUNT=9` for this roster. The pre-flight refuses to
 make an outbound call unless the database contains exactly that configured number of Entrants.
@@ -29,9 +43,9 @@ Adding another Entrant changes the roster and this operator configuration, not t
 
 ## Contract evidence
 
-Every HTTP-successful response was archived byte-for-byte in `raw_snapshots` under an
-`openrouter-preflight:<base-model>` source. The repository contract fixture is a lossless
-base64 encoding of the observed GPT-5.6 Sol Pro response:
+Every HTTP-successful response from both runs was archived byte-for-byte in `raw_snapshots`
+under an `openrouter-preflight:<base-model>` source. The repository contract fixture remains
+a lossless base64 encoding of the first observed GPT-5.6 Sol Pro response:
 
 - fixture: `test/fixtures/openrouter-gpt-5.6-sol-pro-2026-07-29.base64`
 - decoded SHA-256: `eabefabef0e95b2d23e79887c8f17c89374a48f36b6edf67d27884b1f29861af`
@@ -60,10 +74,10 @@ explicitly forbids Markdown/code fences. This is still prompt-only JSON: no cons
 decoding or `response_format` is sent. With that clarification, all nine Base Models produced
 parseable output on their pinned routes. The operator and predict paths refuse an Entrant whose
 stored Prompt Version differs from `match/2026-27-v1`, so the template cannot drift silently
-away from the version named by the roster. A canonical sample of the frozen template and
-context builder is pinned to SHA-256
-`177c01b88f4f4f1681ba5559c76c43ead8e6811c481335c97bfb14f26c3a3f18` next to the
-Prompt Version constant and verified by a contract test.
+away from the version named by the roster. A representative populated, cross-Season sample
+of the frozen template and context builder is pinned to SHA-256
+`ab0a176dbd99ea948c0fd3d9ab643aeae306769f4eab2544b1fe7846feb90181` next to the Prompt
+Version constant and verified by a contract test.
 
 ## Reporting boundaries
 

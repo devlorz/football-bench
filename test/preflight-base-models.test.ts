@@ -29,7 +29,7 @@ describe("pre-flight for the Base Model roster", () => {
     await client.query(
       `truncate
          predictions, contexts, fixtures, attempts, models, gameweeks,
-         raw_snapshots
+         raw_snapshots, historical_matches
        restart identity cascade`
     );
     await client.query(
@@ -40,7 +40,19 @@ describe("pre-flight for the Base Model roster", () => {
        ) values (
          '2026-27', 1, 1, 'Arsenal', 'Coventry City',
          '2026-08-21T19:00:00Z'
-       )`
+       );
+       insert into historical_matches (
+         season, division, played_on, home_team, away_team,
+         home_goals, away_goals
+       ) values
+         (
+           '2025-26', 'Premier League', '2026-05-01T00:00:00Z',
+           'Arsenal', 'Everton', 3, 1
+         ),
+         (
+           '2025-26', 'Championship', '2026-05-02T00:00:00Z',
+           'Coventry', 'Hull', 2, 0
+         )`
     );
     for (let index = 1; index <= 9; index += 1) {
       await client.query(
@@ -68,7 +80,29 @@ describe("pre-flight for the Base Model roster", () => {
       "Away: Coventry City",
       "Kick-off: 2026-08-21T19:00:00.000Z",
       "",
-      "Historical context: not supplied during pre-flight.",
+      "Historical context as of 2026-08-21T17:30:00.000Z",
+      "",
+      "Arsenal",
+      "Current-Season league position: no current-Season table yet.",
+      "Prior-Season final position: 1st in 2025-26 Premier League; promoted: no.",
+      "Current-Season overall: no matches played.",
+      "Current-Season home split: no home matches played.",
+      "Current-Season away split: no away matches played.",
+      "Last five matches played:",
+      "- 2025-26 Premier League | 2026-05-01 | Arsenal 3-1 Everton | W",
+      "",
+      "Coventry City",
+      "Current-Season league position: no current-Season table yet.",
+      "Prior-Season final position: 1st in 2025-26 Championship; promoted: yes.",
+      "Premier League history: none in stored data; promoted from the Championship.",
+      "Current-Season overall: no matches played.",
+      "Current-Season home split: no home matches played.",
+      "Current-Season away split: no away matches played.",
+      "Last five matches played:",
+      "- 2025-26 Championship | 2026-05-02 | Coventry 2-0 Hull | W",
+      "",
+      "Head-to-head history:",
+      "No prior meeting in stored data.",
       "",
       "Return only JSON with fixture_id, probs (H, D, A), score (home, away), and rationale.",
       "The first character must be { and the last character must be }.",

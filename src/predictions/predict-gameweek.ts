@@ -2,12 +2,11 @@ import { createHash } from "node:crypto";
 import type { Client } from "pg";
 import type { HttpFetcher, HttpResponse } from "../http.js";
 import {
-  buildHistoricalContext,
-  type HistoricalMatch
-} from "../context/build-historical-context.js";
+  buildMatchContext,
+  loadMatchContextData
+} from "./build-match-context.js";
 import {
   MATCH_PROMPT_VERSION,
-  matchContext,
   openRouterRequest,
   parseOpenRouterResponse,
   type MatchPromptFixture,
@@ -83,9 +82,8 @@ async function storeContext(
   season: string,
   gameweek: number,
   fixture: FixtureRow,
-  historicalContext: string
+  body: string
 ): Promise<StoredContext> {
-  const body = matchContext(fixture, historicalContext);
   const inserted = await database.query<{ id: number }>(
     `insert into contexts (season, gw, track, fpl_id, hash, body)
      values ($1, $2, 'match', $3, $4, $5)
@@ -372,36 +370,16 @@ export async function predictGameweek({
     [season, gameweek]
   );
 
-  const deadlineResult = await database.query<{ deadline_at: Date }>(
-    `select deadline_at
-       from gameweeks
-      where season = $1 and gw = $2`,
-    [season, gameweek]
-  );
-  const deadline = deadlineResult.rows[0]?.deadline_at;
-  if (deadline === undefined) {
-    throw new Error(`Gameweek ${season} ${gameweek} does not exist`);
-  }
-  const historicalMatches = await database.query<HistoricalMatch>(
-    `select
-       season, division, played_on, home_team, away_team,
-       home_goals, away_goals
-       from historical_matches
-      where played_on < $1
-      order by played_on`,
-    [deadline]
+  const contextData = await loadMatchContextData(
+    database,
+    season,
+    gameweek
   );
 
   const contexts = new Map<number, StoredContext>();
   for (const item of work.rows) {
     if (!contexts.has(item.fpl_id)) {
-      const historicalContext = buildHistoricalContext({
-        season,
-        asOf: deadline,
-        homeTeam: item.home_team,
-        awayTeam: item.away_team,
-        matches: historicalMatches.rows
-      });
+      const body = buildMatchContext(item, contextData);
       contexts.set(
         item.fpl_id,
         await storeContext(
@@ -409,7 +387,7 @@ export async function predictGameweek({
           season,
           gameweek,
           item,
-          historicalContext
+          body
         )
       );
     }
