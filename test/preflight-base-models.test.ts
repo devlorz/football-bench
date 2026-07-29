@@ -68,6 +68,8 @@ describe("pre-flight for the Base Model roster", () => {
       "Away: Coventry City",
       "Kick-off: 2026-08-21T19:00:00.000Z",
       "",
+      "Historical context: not supplied during pre-flight.",
+      "",
       "Return only JSON with fixture_id, probs (H, D, A), score (home, away), and rationale.",
       "The first character must be { and the last character must be }.",
       "Do not use Markdown or wrap the JSON in code fences.",

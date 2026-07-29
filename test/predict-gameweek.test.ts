@@ -33,7 +33,8 @@ describe("predicting a Gameweek", () => {
   beforeEach(async () => {
     await client.query(
       `truncate
-         predictions, contexts, fixtures, attempts, models, gameweeks
+         predictions, contexts, fixtures, attempts, models, gameweeks,
+         historical_matches
        restart identity cascade`
     );
     await client.query(
@@ -54,6 +55,72 @@ describe("predicting a Gameweek", () => {
     );
   });
 
+  test("builds the stored context from historical rows available at the Gameweek deadline", async () => {
+    await client.query(
+      `insert into historical_matches (
+         season, division, played_on, home_team, away_team,
+         home_goals, away_goals
+       ) values
+         (
+           '2025-26', 'Premier League', '2026-05-01T00:00:00Z',
+           'Arsenal', 'Everton',
+           3, 1
+         ),
+         (
+           '2025-26', 'Championship', '2026-05-02T00:00:00Z',
+           'Coventry', 'Hull',
+           2, 0
+         ),
+         (
+           '2026-27', 'Premier League', '2026-08-22T00:00:00Z',
+           'Coventry', 'Arsenal',
+           9, 9
+         )`
+    );
+    let prompt = "";
+
+    await predictGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      concurrency: 1,
+      apiKey: "test-key",
+      now: () => new Date("2026-08-21T17:29:00Z"),
+      http: async (_url, options) => {
+        const request = JSON.parse(options?.body ?? "{}") as {
+          messages: Array<{ content: string }>;
+        };
+        prompt = request.messages[0]?.content ?? "";
+        return {
+          status: 200,
+          body: JSON.stringify({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  fixture_id: 1,
+                  probs: { H: 0.6, D: 0.24, A: 0.16 },
+                  score: { home: 2, away: 1 },
+                  rationale: "Uses historical context."
+                })
+              }
+            }]
+          })
+        };
+      }
+    });
+
+    expect(prompt).toContain(
+      "- 2025-26 Premier League | 2026-05-01 | Arsenal 3-1 Everton | W"
+    );
+    expect(prompt).toContain(
+      "Prior-Season final position: 1st in 2025-26 Championship; promoted: yes."
+    );
+    expect(prompt).not.toContain("9-9");
+
+    const stored = await client.query("select body from contexts");
+    expect(stored.rows).toEqual([{ body: prompt }]);
+  });
+
   test("stores the Match context and its Prediction before the Lock", async () => {
     const requests: HttpRequest[] = [];
     const clock = [
@@ -67,6 +134,29 @@ describe("predicting a Gameweek", () => {
       "Home: Arsenal",
       "Away: Coventry City",
       "Kick-off: 2026-08-21T19:00:00.000Z",
+      "",
+      "Historical context as of 2026-08-21T17:30:00.000Z",
+      "",
+      "Arsenal",
+      "Current-Season league position: no current-Season table yet.",
+      "Prior-Season final position: no 2025-26 league data.",
+      "Premier League history: none in stored data.",
+      "Current-Season overall: no matches played.",
+      "Current-Season home split: no home matches played.",
+      "Current-Season away split: no away matches played.",
+      "Last five matches played: no stored matches.",
+      "",
+      "Coventry City",
+      "Current-Season league position: no current-Season table yet.",
+      "Prior-Season final position: no 2025-26 league data.",
+      "Premier League history: none in stored data.",
+      "Current-Season overall: no matches played.",
+      "Current-Season home split: no home matches played.",
+      "Current-Season away split: no away matches played.",
+      "Last five matches played: no stored matches.",
+      "",
+      "Head-to-head history:",
+      "No prior meeting in stored data.",
       "",
       "Return only JSON with fixture_id, probs (H, D, A), score (home, away), and rationale.",
       "The first character must be { and the last character must be }.",
@@ -164,7 +254,7 @@ describe("predicting a Gameweek", () => {
       track: "match",
       fpl_id: 1,
       body: context,
-      hash: "177c01b88f4f4f1681ba5559c76c43ead8e6811c481335c97bfb14f26c3a3f18",
+      hash: "2b1ea24ed2d6e46895b734d48408ddb65afe09769d257ec2a6aa4fb31bcb416c",
       model_id: "entrant/v1",
       probs: { H: 0.6003600360036003, D: 0.23982398239823982, A: 0.15981598159815982 },
       pred_home: 2,

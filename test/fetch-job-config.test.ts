@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { readFetchJobConfig } from "../src/cli/config.js";
+import {
+  readFetchJobConfig,
+  readHistoricalFetchJobConfig
+} from "../src/cli/config.js";
 
 describe("the fetch job configuration", () => {
   test("requires an explicit Season and Gameweek", () => {
@@ -18,5 +21,20 @@ describe("the fetch job configuration", () => {
       SEASON: "2026-27",
       GAMEWEEK: "39"
     })).toThrow("GAMEWEEK must be an integer from 1 to 38");
+  });
+
+  test("requires the historical Season explicitly", () => {
+    expect(readHistoricalFetchJobConfig({
+      DATABASE_URL: "postgresql://localhost/benchmark",
+      HISTORICAL_SEASON: "2025-26"
+    })).toEqual({
+      databaseUrl: "postgresql://localhost/benchmark",
+      season: "2025-26"
+    });
+
+    expect(() => readHistoricalFetchJobConfig({
+      DATABASE_URL: "postgresql://localhost/benchmark",
+      HISTORICAL_SEASON: "25-26"
+    })).toThrow("HISTORICAL_SEASON must use YYYY-YY format");
   });
 });

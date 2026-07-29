@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { applyMigrations } from "../src/db/migrations.js";
@@ -5,6 +6,7 @@ import { applyMigrations } from "../src/db/migrations.js";
 const { Client } = pg;
 const pairUrl = new URL("./fixtures/migrations-pair/", import.meta.url);
 const brokenUrl = new URL("./fixtures/migrations-broken/", import.meta.url);
+const realMigrationsUrl = new URL("../migrations/", import.meta.url);
 
 async function tableNames(database: Pick<pg.Client, "query">) {
   const result = await database.query<{ table_name: string }>(
@@ -120,5 +122,44 @@ describe("applying migrations", () => {
           and not c.relrowsecurity`
     );
     expect(unprotected.rows).toEqual([]);
+  });
+
+  test("applies forward migrations over the deployed pre-0004 schema", async () => {
+    await client.query(
+      `create table schema_migrations (
+         filename   text primary key,
+         applied_at timestamptz not null default now()
+       )`
+    );
+    const deployedFilenames = [
+      "0001_initial.sql",
+      "0002_rename_attempt_trigger_to_fill.sql",
+      "0003_restrict_public_role_access.sql"
+    ];
+    for (const filename of deployedFilenames) {
+      await client.query(await readFile(new URL(filename, realMigrationsUrl), "utf8"));
+      await client.query(
+        "insert into schema_migrations (filename) values ($1)",
+        [filename]
+      );
+    }
+
+    const applied = await applyMigrations(client);
+
+    expect(applied).toContain("0004_historical_matches.sql");
+    const protection = await client.query<{
+      table_name: string;
+      row_level_security: boolean;
+    }>(
+      `select c.relname as table_name, c.relrowsecurity as row_level_security
+         from pg_class c
+         join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public'
+          and c.relname = 'historical_matches'`
+    );
+    expect(protection.rows).toEqual([{
+      table_name: "historical_matches",
+      row_level_security: true
+    }]);
   });
 });

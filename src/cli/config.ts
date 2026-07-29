@@ -4,6 +4,11 @@ export interface FetchJobConfig {
   gameweek: number;
 }
 
+export interface HistoricalFetchJobConfig {
+  databaseUrl: string;
+  season: string;
+}
+
 export interface PredictJobConfig extends FetchJobConfig {
   concurrency: number;
   openRouterApiKey: string;
@@ -31,6 +36,17 @@ function requiredSeason(environment: NodeJS.ProcessEnv): string {
     throw new Error("SEASON must use YYYY-YY format");
   }
   return season;
+}
+
+export function readHistoricalFetchJobConfig(
+  environment: NodeJS.ProcessEnv
+): HistoricalFetchJobConfig {
+  const databaseUrl = required(environment, "DATABASE_URL");
+  const season = required(environment, "HISTORICAL_SEASON");
+  if (!/^\d{4}-\d{2}$/.test(season)) {
+    throw new Error("HISTORICAL_SEASON must use YYYY-YY format");
+  }
+  return { databaseUrl, season };
 }
 
 export function readFetchJobConfig(

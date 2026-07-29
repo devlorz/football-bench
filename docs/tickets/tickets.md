@@ -139,13 +139,13 @@ special-case path that runs once a year and is never exercised.
 
 **Blocked by:** Migration runner and shared schema application.
 
-- [ ] Premier League and Championship historical results are fetched and archived like any other source
-- [ ] The form window is always the last five matches played, whatever the Season or division
-- [ ] Every match in the window is labelled with its Season and division, so a lower-division result can be discounted rather than mistaken
-- [ ] Prior-Season final position is included, and promoted sides carry their Championship position with a promoted flag
-- [ ] Goals for and against, home and away splits, and head-to-head history appear in the context
-- [ ] A Gameweek 1 context contains a full window produced by the same code path as a Gameweek 38 context
-- [ ] Where no data exists — no prior meeting, no top-flight history — the context says so in words
+- [x] Premier League and Championship historical results are fetched and archived like any other source
+- [x] The form window is always the last five matches played, whatever the Season or division
+- [x] Every match in the window is labelled with its Season and division, so a lower-division result can be discounted rather than mistaken
+- [x] Prior-Season final position is included, and promoted sides carry their Championship position with a promoted flag
+- [x] Goals for and against, home and away splits, and head-to-head history appear in the context
+- [x] A Gameweek 1 context contains a full window produced by the same code path as a Gameweek 38 context
+- [x] Where no data exists — no prior meeting, no top-flight history — the context says so in words
 
 ---
 

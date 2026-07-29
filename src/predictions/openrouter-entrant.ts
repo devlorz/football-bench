@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const MATCH_PROMPT_VERSION = "match/2026-27-v1";
 export const MATCH_PROMPT_SHA256 =
-  "177c01b88f4f4f1681ba5559c76c43ead8e6811c481335c97bfb14f26c3a3f18";
+  "ab0a176dbd99ea948c0fd3d9ab643aeae306769f4eab2544b1fe7846feb90181";
 
 export interface MatchPromptFixture {
   fpl_id: number;
@@ -12,7 +12,10 @@ export interface MatchPromptFixture {
   kickoff_at: Date;
 }
 
-export function matchContext(fixture: MatchPromptFixture): string {
+export function matchContext(
+  fixture: MatchPromptFixture,
+  historicalContext = "Historical context: not supplied during pre-flight."
+): string {
   return [
     "Predict this Premier League Fixture.",
     "",
@@ -20,6 +23,8 @@ export function matchContext(fixture: MatchPromptFixture): string {
     `Home: ${fixture.home_team}`,
     `Away: ${fixture.away_team}`,
     `Kick-off: ${fixture.kickoff_at.toISOString()}`,
+    "",
+    historicalContext,
     "",
     "Return only JSON with fixture_id, probs (H, D, A), score (home, away), and rationale.",
     "The first character must be { and the last character must be }.",

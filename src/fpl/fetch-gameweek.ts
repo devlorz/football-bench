@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import type { Client } from "pg";
 import { z } from "zod";
 import type { HttpFetcher } from "../http.js";
+import { storeRawSnapshots } from "../snapshots/store-raw-snapshots.js";
 
 const FPL_BOOTSTRAP_URL =
   "https://fantasy.premierleague.com/api/bootstrap-static/";
@@ -102,10 +102,6 @@ function parseSource<T>(
   return result.data;
 }
 
-function sha256(body: string): string {
-  return createHash("sha256").update(body, "utf8").digest("hex");
-}
-
 async function getBody(
   http: HttpFetcher,
   source: FplSourceValidationError["source"],
@@ -129,27 +125,10 @@ export async function fetchFplGameweek({
     getBody(http, "fpl_fixtures", FPL_FIXTURES_URL)
   ]);
 
-  await database.query("begin");
-  try {
-    await database.query(
-      `insert into raw_snapshots (source, sha256, body)
-       values ($1, $2, $3), ($4, $5, $6)
-       on conflict (source, sha256)
-       do update set last_seen_at = now()`,
-      [
-        "fpl_bootstrap",
-        sha256(bootstrapBody),
-        bootstrapBody,
-        "fpl_fixtures",
-        sha256(fixturesBody),
-        fixturesBody
-      ]
-    );
-    await database.query("commit");
-  } catch (error) {
-    await database.query("rollback");
-    throw error;
-  }
+  await storeRawSnapshots(database, [
+    { source: "fpl_bootstrap", body: bootstrapBody },
+    { source: "fpl_fixtures", body: fixturesBody }
+  ]);
 
   const bootstrap = parseSource(
     "fpl_bootstrap",

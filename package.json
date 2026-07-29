@@ -7,6 +7,7 @@
     "check": "tsc --noEmit",
     "db:migrate": "tsx src/cli/migrate.ts",
     "fetch": "tsx src/cli/fetch.ts",
+    "fetch:history": "tsx src/cli/fetch-history.ts",
     "preflight": "tsx src/cli/preflight.ts",
     "predict": "tsx src/cli/predict.ts",
     "test": "vitest run"

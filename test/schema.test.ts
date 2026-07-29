@@ -20,7 +20,7 @@ describe("the benchmark database", () => {
     await client.query(
       `truncate
          predictions, contexts, fixtures, manager_states, attempts, scores,
-         models, gameweeks, raw_snapshots
+         models, gameweeks, raw_snapshots, historical_matches
        restart identity cascade`
     );
   });
@@ -38,6 +38,7 @@ describe("the benchmark database", () => {
       "contexts",
       "fixtures",
       "gameweeks",
+      "historical_matches",
       "manager_states",
       "models",
       "predictions",
