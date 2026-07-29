@@ -354,6 +354,122 @@ describe("predicting a Gameweek", () => {
     }]);
   });
 
+  test("predicts a late new Fixture in its next open Gameweek", async () => {
+    await client.query(
+      `insert into gameweeks (season, gw, deadline_at)
+       values ('2026-27', 2, '2026-08-28T17:30:00Z');
+       update fixtures
+          set locked_in_gw = 2
+        where season = '2026-27' and fpl_id = 1`
+    );
+    let calls = 0;
+
+    await predictGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 2,
+      concurrency: 1,
+      apiKey: "test-key",
+      now: () => new Date("2026-08-28T17:29:00Z"),
+      http: async () => {
+        calls += 1;
+        return {
+          status: 200,
+          body: JSON.stringify({
+            model: "openai/gpt-5.2",
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  fixture_id: 1,
+                  probs: { H: 0.6, D: 0.25, A: 0.15 },
+                  score: { home: 2, away: 1 },
+                  rationale: "Predicted at the next open Lock."
+                })
+              }
+            }]
+          })
+        };
+      }
+    });
+
+    const stored = await client.query(
+      `select
+         p.fpl_id,
+         c.gw as context_gw,
+         a.gw as attempt_gw,
+         f.gw as scheduled_gw,
+         f.locked_in_gw
+       from predictions p
+       join contexts c on c.id = p.context_id
+       join attempts a
+         on a.model_id = p.model_id
+        and a.season = p.season
+        and a.fpl_id = p.fpl_id
+       join fixtures f
+         on f.season = p.season
+        and f.fpl_id = p.fpl_id`
+    );
+    expect({ calls, rows: stored.rows }).toEqual({
+      calls: 1,
+      rows: [{
+        fpl_id: 1,
+        context_gw: 2,
+        attempt_gw: 2,
+        scheduled_gw: 1,
+        locked_in_gw: 2
+      }]
+    });
+  });
+
+  test("does not predict a locked Fixture again in its rescheduled Gameweek", async () => {
+    await client.query(
+      `insert into gameweeks (season, gw, deadline_at)
+       values ('2026-27', 2, '2026-08-28T17:30:00Z');
+       update fixtures
+          set gw = 2,
+              locked_in_gw = 1,
+              deferred = true,
+              kickoff_at = '2026-08-29T14:00:00Z'
+        where season = '2026-27' and fpl_id = 1;
+       insert into contexts (
+         season, gw, track, fpl_id, hash, body
+       ) values (
+         '2026-27', 1, 'match', 1, 'context-hash', 'context'
+       );
+       insert into predictions (
+         model_id, season, fpl_id, probs, pred_home, pred_away,
+         context_id, attempts_used, predicted_at
+       )
+       select
+         'entrant/v1', '2026-27', 1, '{"H":0.6,"D":0.25,"A":0.15}',
+         2, 1, id, 0, '2026-08-21T17:29:00Z'
+       from contexts
+       where season = '2026-27' and gw = 1 and fpl_id = 1`
+    );
+    let calls = 0;
+
+    await predictGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 2,
+      concurrency: 1,
+      apiKey: "test-key",
+      now: () => new Date("2026-08-28T17:29:00Z"),
+      http: async () => {
+        calls += 1;
+        return { status: 200, body: "{}" };
+      }
+    });
+
+    const predictions = await client.query(
+      "select count(*)::int as count from predictions where fpl_id = 1"
+    );
+    expect({ calls, predictions: predictions.rows[0]?.count }).toEqual({
+      calls: 0,
+      predictions: 1
+    });
+  });
+
   test("refuses an invalid concurrency before issuing a call", async () => {
     let calls = 0;
 

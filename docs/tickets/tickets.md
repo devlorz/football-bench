@@ -206,11 +206,23 @@ rather than becoming a Gap for everybody.
 the requested Gameweek. A Fixture moved out remains on its previous `gw` until the destination
 Gameweek is fetched; this ticket must make that reconciliation explicit.
 
-- [ ] A Fixture postponed after its Gameweek's deadline keeps its Predictions and is marked deferred
+- [x] A Fixture postponed after its Gameweek's deadline keeps its Predictions and is marked deferred
 - [ ] Its result is attributed to the Gameweek that locked the Prediction, not the Gameweek it was eventually played in
-- [ ] A Fixture inserted into a Gameweek whose deadline has already passed attaches to the next open Gameweek and is predicted there
+- [x] A Fixture inserted into a Gameweek whose deadline has already passed attaches to the next open Gameweek and is predicted there
 - [ ] A Fixture that is never played is simply never scored, with no special handling anywhere
-- [ ] Moving a Fixture never produces a second Prediction for it
+- [x] Moving a Fixture never produces a second Prediction for it
+
+The all-event daily fetch reconciles a locked Fixture as soon as FPL either removes its
+Gameweek or assigns a different one. Its scheduled `gw` and kick-off follow FPL once known,
+while `locked_in_gw` remains the immutable owner used by prediction and eventual scoring.
+A newly seen Fixture assigned to a closed Gameweek keeps that scheduled `gw` but receives
+the earliest still-open Gameweek as its canonical Lock; a Gameweek-specific manual fetch
+stores that Lock's deadline before inserting the Fixture.
+
+The two scoring assertions remain open until the deterministic scoring path is built after
+the Season starts (ADR-0005). This write-path slice records the canonical `locked_in_gw` and
+`deferred` inputs that path must use, but does not claim scoring behavior before a scorer
+exists.
 
 ---
 

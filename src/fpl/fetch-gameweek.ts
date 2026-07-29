@@ -235,6 +235,9 @@ async function fetchFpl({
     }
     return { ...player, teamName, position };
   });
+  const unscheduledFixtureIds = fixtures.flatMap(({ id, event }) =>
+    event === null ? [id] : []
+  );
   const rows = fixtures.flatMap((fixture, index) => {
     if (fixture.event === null) {
       return [];
@@ -273,7 +276,7 @@ async function fetchFpl({
       awayTeam
     }];
   });
-  const eventsToStore = requestedGameweek === undefined
+  const requestedEvents = requestedGameweek === undefined
     ? bootstrap.events
     : bootstrap.events.filter(({ id }) => id === requestedGameweek);
   const fixturesToStore = requestedGameweek === undefined
@@ -283,7 +286,7 @@ async function fetchFpl({
     `select gw, deadline_at
        from gameweeks
       where season = $1 and gw = any($2::integer[])`,
-    [season, eventsToStore.map(({ id }) => id)]
+    [season, bootstrap.events.map(({ id }) => id)]
   );
   const storedDeadlines = new Map<number, Date>(
     storedGameweeks.rows.map(({ gw, deadline_at: deadlineAt }) => [
@@ -291,13 +294,32 @@ async function fetchFpl({
       deadlineAt as Date
     ])
   );
-  const lockedGameweeks = new Set(eventsToStore.flatMap(({ id }) => {
+  const lockedGameweeks = new Set(requestedEvents.flatMap(({ id }) => {
     const storedDeadline = storedDeadlines.get(id);
     return storedDeadline !== undefined
       && observedAt.getTime() >= storedDeadline.getTime()
       ? [id]
       : [];
   }));
+  const effectiveDeadline = (event: typeof bootstrap.events[number]): Date => {
+    const storedDeadline = storedDeadlines.get(event.id);
+    return storedDeadline !== undefined
+      && observedAt.getTime() >= storedDeadline.getTime()
+      ? storedDeadline
+      : new Date(event.deadline_time);
+  };
+  const nextOpenGameweek = bootstrap.events
+    .map((event) => ({ id: event.id, deadline: effectiveDeadline(event) }))
+    .filter(({ deadline }) => observedAt.getTime() < deadline.getTime())
+    .sort((left, right) =>
+      left.deadline.getTime() - right.deadline.getTime()
+      || left.id - right.id
+    )[0]?.id;
+  const eventsToStore = requestedGameweek === undefined
+    ? bootstrap.events
+    : bootstrap.events.filter(({ id }) =>
+      id === requestedGameweek || id === nextOpenGameweek
+    );
   const playerSnapshotStored =
     gameweek !== undefined
     && playerSnapshotEvent !== undefined
@@ -351,26 +373,61 @@ async function fetchFpl({
       }
     }
 
+    if (unscheduledFixtureIds.length > 0) {
+      await database.query(
+        `update fixtures f
+            set deferred = true,
+                updated_at = now()
+           from gameweeks locked_gameweek
+          where f.season = $1
+            and f.fpl_id = any($2::integer[])
+            and f.locked_in_gw = locked_gameweek.gw
+            and f.season = locked_gameweek.season
+            and locked_gameweek.deadline_at <= $3`,
+        [season, unscheduledFixtureIds, observedAt]
+      );
+    }
+
     for (const fixture of fixturesToStore) {
+      const scheduledEvent = bootstrap.events.find(
+        ({ id }) => id === fixture.event
+      );
+      const lockedInGameweek = scheduledEvent !== undefined
+        && observedAt.getTime() >= effectiveDeadline(scheduledEvent).getTime()
+        ? nextOpenGameweek ?? null
+        : null;
       await database.query(
         `insert into fixtures (
-           season, fpl_id, gw, home_team, away_team, kickoff_at
+           season, fpl_id, gw, locked_in_gw, home_team, away_team, kickoff_at
          )
-         values ($1, $2, $3, $4, $5, $6)
+         values ($1, $2, $3, $4, $5, $6, $7)
          on conflict (season, fpl_id)
          do update set
            gw = excluded.gw,
            home_team = excluded.home_team,
            away_team = excluded.away_team,
            kickoff_at = excluded.kickoff_at,
+           deferred = fixtures.deferred or (
+             fixtures.locked_in_gw is not null
+             and fixtures.locked_in_gw <> excluded.gw
+             and exists (
+               select 1
+                 from gameweeks locked_gameweek
+                where locked_gameweek.season = fixtures.season
+                  and locked_gameweek.gw = fixtures.locked_in_gw
+                  and locked_gameweek.deadline_at <= $8
+             )
+           ),
            updated_at = now()`,
         [
           season,
           fixture.id,
           fixture.event,
+          lockedInGameweek,
           fixture.homeTeam,
           fixture.awayTeam,
-          fixture.kickoff_time
+          fixture.kickoff_time,
+          observedAt
         ]
       );
     }

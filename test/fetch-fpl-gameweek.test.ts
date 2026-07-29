@@ -16,6 +16,23 @@ import { archivedBody } from "./archived-fixture.js";
 const { Client } = pg;
 const beforeFirstDeadline = () => new Date("2026-08-21T17:00:00.000Z");
 
+async function archivedFplSources() {
+  const bootstrapBody = await archivedBody("fpl-bootstrap-2026-27.json.gz");
+  const fixturesBody = await archivedBody("fpl-fixtures-2026-27.json.gz");
+  const responses = new Map([
+    ["https://fantasy.premierleague.com/api/bootstrap-static/", bootstrapBody],
+    ["https://fantasy.premierleague.com/api/fixtures/", fixturesBody]
+  ]);
+  return {
+    fixturesBody,
+    responses,
+    http: async (url: string) => ({
+      status: 200,
+      body: responses.get(url) ?? ""
+    })
+  };
+}
+
 describe("fetching an FPL Gameweek", () => {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
 
@@ -267,6 +284,207 @@ describe("fetching an FPL Gameweek", () => {
       gw1_price: 60,
       gw2_price: 61,
       kickoff_at: new Date("2026-08-21T20:00:00.000Z")
+    }]);
+  });
+
+  test("keeps a locked Prediction when its Fixture is deferred", async () => {
+    const {
+      fixturesBody,
+      responses,
+      http
+    } = await archivedFplSources();
+    await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: () => new Date("2026-08-21T17:29:00.000Z"),
+      http
+    });
+    await client.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values (
+         'entrant/v1', 'Entrant', 'provider/model', 'provider',
+         'match/2026-27-v1', 'entrant'
+       );
+       insert into contexts (
+         season, gw, track, fpl_id, hash, body
+       ) values (
+         '2026-27', 1, 'match', 1, 'context-hash', 'context'
+       );
+       update fixtures
+          set locked_in_gw = 1
+        where season = '2026-27' and fpl_id = 1;
+       insert into predictions (
+         model_id, season, fpl_id, probs, pred_home, pred_away,
+         context_id, attempts_used, predicted_at
+       )
+       select
+         'entrant/v1', '2026-27', 1, '{"H":0.6,"D":0.25,"A":0.15}',
+         2, 1, id, 0, '2026-08-21T17:29:00Z'
+       from contexts
+       where season = '2026-27' and gw = 1 and fpl_id = 1`
+    );
+
+    const movedFixtures = JSON.parse(fixturesBody);
+    movedFixtures[0].event = 2;
+    movedFixtures[0].kickoff_time = "2026-08-29T14:00:00Z";
+    responses.set(
+      "https://fantasy.premierleague.com/api/fixtures/",
+      JSON.stringify(movedFixtures)
+    );
+
+    await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: () => new Date("2026-08-21T17:30:00.000Z"),
+      http
+    });
+
+    const stored = await client.query(
+      `select
+         f.gw, f.locked_in_gw, f.kickoff_at, f.deferred,
+         count(p.*)::int as predictions
+       from fixtures f
+       left join predictions p
+         on p.season = f.season
+        and p.fpl_id = f.fpl_id
+      where f.season = '2026-27' and f.fpl_id = 1
+      group by f.season, f.fpl_id`
+    );
+    expect(stored.rows).toEqual([{
+      gw: 2,
+      locked_in_gw: 1,
+      kickoff_at: new Date("2026-08-29T14:00:00.000Z"),
+      deferred: true,
+      predictions: 1
+    }]);
+  });
+
+  test("marks a locked Fixture deferred while FPL leaves it unscheduled", async () => {
+    const {
+      fixturesBody,
+      responses,
+      http
+    } = await archivedFplSources();
+    await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: () => new Date("2026-08-21T17:29:00.000Z"),
+      http
+    });
+    await client.query(
+      `update fixtures
+          set locked_in_gw = 1
+        where season = '2026-27' and fpl_id = 1`
+    );
+
+    const unscheduledFixtures = JSON.parse(fixturesBody);
+    unscheduledFixtures[0].event = null;
+    unscheduledFixtures[0].kickoff_time = null;
+    responses.set(
+      "https://fantasy.premierleague.com/api/fixtures/",
+      JSON.stringify(unscheduledFixtures)
+    );
+
+    await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: () => new Date("2026-08-21T17:30:00.000Z"),
+      http
+    });
+
+    const stored = await client.query(
+      `select gw, locked_in_gw, kickoff_at, deferred
+         from fixtures
+        where season = '2026-27' and fpl_id = 1`
+    );
+    expect(stored.rows).toEqual([{
+      gw: 1,
+      locked_in_gw: 1,
+      kickoff_at: new Date("2026-08-21T19:00:00.000Z"),
+      deferred: true
+    }]);
+  });
+
+  test("attaches a late new Fixture to the next open Gameweek", async () => {
+    const {
+      fixturesBody,
+      responses,
+      http
+    } = await archivedFplSources();
+    await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: () => new Date("2026-08-21T17:29:00.000Z"),
+      http
+    });
+
+    const fixturesWithLateAddition = JSON.parse(fixturesBody);
+    fixturesWithLateAddition.push({
+      ...fixturesWithLateAddition[0],
+      id: 999,
+      event: 1,
+      kickoff_time: "2026-08-23T14:00:00Z"
+    });
+    responses.set(
+      "https://fantasy.premierleague.com/api/fixtures/",
+      JSON.stringify(fixturesWithLateAddition)
+    );
+
+    await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: () => new Date("2026-08-21T17:30:00.000Z"),
+      http
+    });
+
+    const stored = await client.query(
+      `select gw, locked_in_gw, deferred
+         from fixtures
+        where season = '2026-27' and fpl_id = 999`
+    );
+    expect(stored.rows).toEqual([{
+      gw: 1,
+      locked_in_gw: 2,
+      deferred: false
+    }]);
+  });
+
+  test("stores the next Lock when a manual fetch finds a late Fixture", async () => {
+    const {
+      fixturesBody,
+      responses,
+      http
+    } = await archivedFplSources();
+    const fixtures = JSON.parse(fixturesBody);
+    fixtures.push({
+      ...fixtures[0],
+      id: 999,
+      event: 1,
+      kickoff_time: "2026-08-23T14:00:00Z"
+    });
+    responses.set(
+      "https://fantasy.premierleague.com/api/fixtures/",
+      JSON.stringify(fixtures)
+    );
+
+    await fetchFplGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      now: () => new Date("2026-08-21T17:30:00.000Z"),
+      http
+    });
+
+    const stored = await client.query(
+      `select
+         (select array_agg(gw order by gw) from gameweeks) as gameweeks,
+         (select locked_in_gw from fixtures where fpl_id = 999)
+           as locked_in_gw`
+    );
+    expect(stored.rows).toEqual([{
+      gameweeks: [1, 2],
+      locked_in_gw: 2
     }]);
   });
 

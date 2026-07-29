@@ -354,10 +354,10 @@ export async function predictGameweek({
     `select
        f.fpl_id, f.home_team, f.away_team, f.kickoff_at,
        m.id as entrant_id, m.base_model, m.provider, m.quantization
-       from fixtures f
-       cross join models m
+      from fixtures f
+      cross join models m
       where f.season = $1
-        and f.gw = $2
+        and coalesce(f.locked_in_gw, f.gw) = $2
         and m.role = 'entrant'
         and not exists (
           select 1
