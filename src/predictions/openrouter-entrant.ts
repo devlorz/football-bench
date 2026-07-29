@@ -1,6 +1,8 @@
 import type { HttpRequest } from "../http.js";
 import { z } from "zod";
 
+export const MATCH_PROMPT_VERSION = "match/2026-27-v1";
+
 export interface MatchPromptFixture {
   fpl_id: number;
   home_team: string;

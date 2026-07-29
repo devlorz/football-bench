@@ -47,7 +47,7 @@ describe("pre-flight for the Base Model roster", () => {
       await client.query(
         `insert into models (
            id, name, base_model, provider, quantization, prompt_version, role
-         ) values ($1, $2, $3, $4, $5, 'match/tracer-v1', 'entrant')`,
+         ) values ($1, $2, $3, $4, $5, 'match/2026-27-v1', 'entrant')`,
         [
           `entrant/${index}`,
           `Entrant ${index}`,
@@ -388,6 +388,29 @@ describe("pre-flight for the Base Model roster", () => {
         throw new Error("HTTP must not run");
       }
     })).rejects.toThrow("Pre-flight requires exactly nine Entrants; found 8");
+    expect(calls).toBe(0);
+  });
+
+  test("refuses to run when an Entrant names a different Prompt Version", async () => {
+    await client.query(
+      `update models
+          set prompt_version = 'match/draft'
+        where id = 'entrant/9'`
+    );
+    let calls = 0;
+
+    await expect(preflightBaseModels({
+      database: client,
+      season: "2026-27",
+      fixtureId: 1,
+      apiKey: "test-key",
+      http: async () => {
+        calls += 1;
+        throw new Error("HTTP must not run");
+      }
+    })).rejects.toThrow(
+      "Pre-flight requires Prompt Version match/2026-27-v1; entrant/9 uses match/draft"
+    );
     expect(calls).toBe(0);
   });
 

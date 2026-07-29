@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { Client } from "pg";
 import type { HttpFetcher } from "../http.js";
 import {
+  MATCH_PROMPT_VERSION,
   matchContext,
   openRouterRequest,
   parseOpenRouterResponse,
@@ -19,6 +20,7 @@ interface EntrantRow {
   id: string;
   base_model: string;
   provider: string;
+  prompt_version: string;
   quantization: string | null;
 }
 
@@ -219,7 +221,7 @@ export async function preflightBaseModels({
   }
 
   const entrants = await database.query<EntrantRow>(
-    `select id, base_model, provider, quantization
+    `select id, base_model, provider, quantization, prompt_version
        from models
       where role = 'entrant'
       order by id`
@@ -227,6 +229,16 @@ export async function preflightBaseModels({
   if (entrants.rows.length !== 9) {
     throw new Error(
       `Pre-flight requires exactly nine Entrants; found ${entrants.rows.length}`
+    );
+  }
+  const mismatchedPrompt = entrants.rows.find(
+    ({ prompt_version: promptVersion }) =>
+      promptVersion !== MATCH_PROMPT_VERSION
+  );
+  if (mismatchedPrompt !== undefined) {
+    throw new Error(
+      `Pre-flight requires Prompt Version ${MATCH_PROMPT_VERSION}; `
+      + `${mismatchedPrompt.id} uses ${mismatchedPrompt.prompt_version}`
     );
   }
 

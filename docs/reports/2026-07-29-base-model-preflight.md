@@ -8,6 +8,8 @@ disabled fallbacks, and pinned quantization for open-weight Base Models.
 
 All nine returned a parseable Prediction. There were no refusals, transport errors, missing
 selected-provider metadata, or provider/model substitutions. The script exited zero.
+This successful run finalized the previously unpublished tracer prompt as Prompt Version
+`match/2026-27-v1`; all nine Entrant rows now name that version.
 
 | Entrant | Result | Resolved provider | Resolved model |
 |---|---|---|---|
@@ -49,4 +51,6 @@ The first observed responses established two contracts before the successful pin
 The frozen Match prompt now states that the first and last characters must be `{` and `}` and
 explicitly forbids Markdown/code fences. This is still prompt-only JSON: no constrained
 decoding or `response_format` is sent. With that clarification, all nine Base Models produced
-parseable output on their pinned routes.
+parseable output on their pinned routes. The operator and predict paths refuse an Entrant whose
+stored Prompt Version differs from `match/2026-27-v1`, so the template cannot drift silently
+away from the version named by the roster.

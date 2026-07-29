@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { Client } from "pg";
 import type { HttpFetcher, HttpResponse } from "../http.js";
 import {
+  MATCH_PROMPT_VERSION,
   matchContext,
   openRouterRequest,
   parseOpenRouterResponse,
@@ -26,6 +27,7 @@ type FixtureRow = MatchPromptFixture;
 interface EntrantRow {
   base_model: string;
   provider: string;
+  prompt_version: string;
   quantization: string | null;
 }
 
@@ -153,7 +155,7 @@ export async function predictGameweek({
   now
 }: PredictGameweekOptions): Promise<void> {
   const entrantResult = await database.query<EntrantRow>(
-    `select base_model, provider, quantization
+    `select base_model, provider, quantization, prompt_version
        from models
       where id = $1
         and role = 'entrant'`,
@@ -162,6 +164,12 @@ export async function predictGameweek({
   const entrant = entrantResult.rows[0];
   if (entrant === undefined) {
     throw new Error(`Entrant ${entrantId} does not exist`);
+  }
+  if (entrant.prompt_version !== MATCH_PROMPT_VERSION) {
+    throw new Error(
+      `Entrant ${entrantId} uses Prompt Version ${entrant.prompt_version}; `
+      + `expected ${MATCH_PROMPT_VERSION}`
+    );
   }
 
   const fixtures = await database.query<FixtureRow>(

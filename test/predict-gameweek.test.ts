@@ -40,7 +40,7 @@ describe("predicting a Gameweek", () => {
          id, name, base_model, provider, prompt_version, role
        ) values (
          'entrant/v1', 'Tracer Entrant', 'openai/gpt-5.2', 'openai',
-         'match/tracer-v1', 'entrant'
+         'match/2026-27-v1', 'entrant'
        )`
     );
   });
