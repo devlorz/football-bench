@@ -124,7 +124,7 @@ describe("applying migrations", () => {
     expect(unprotected.rows).toEqual([]);
   });
 
-  test("applies forward migrations over the deployed pre-0004 schema", async () => {
+  test("applies the Gameweek correction over the deployed 0005 schema", async () => {
     await client.query(
       `create table schema_migrations (
          filename   text primary key,
@@ -134,7 +134,9 @@ describe("applying migrations", () => {
     const deployedFilenames = [
       "0001_initial.sql",
       "0002_rename_attempt_trigger_to_fill.sql",
-      "0003_restrict_public_role_access.sql"
+      "0003_restrict_public_role_access.sql",
+      "0004_historical_matches.sql",
+      "0005_fpl_players.sql"
     ];
     for (const filename of deployedFilenames) {
       await client.query(await readFile(new URL(filename, realMigrationsUrl), "utf8"));
@@ -146,7 +148,7 @@ describe("applying migrations", () => {
 
     const applied = await applyMigrations(client);
 
-    expect(applied).toContain("0004_historical_matches.sql");
+    expect(applied).toEqual(["0006_gameweek_scoped_fpl_players.sql"]);
     const protection = await client.query<{
       table_name: string;
       row_level_security: boolean;
@@ -155,10 +157,10 @@ describe("applying migrations", () => {
          from pg_class c
          join pg_namespace n on n.oid = c.relnamespace
         where n.nspname = 'public'
-          and c.relname = 'historical_matches'`
+          and c.relname = 'fpl_players'`
     );
     expect(protection.rows).toEqual([{
-      table_name: "historical_matches",
+      table_name: "fpl_players",
       row_level_security: true
     }]);
   });

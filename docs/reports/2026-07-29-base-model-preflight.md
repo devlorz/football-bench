@@ -41,6 +41,36 @@ Adding another Entrant changes the roster and this operator configuration, not t
 | MiniMax M3 | parseable | Minimax | `minimax/minimax-m3-20260531` |
 | Qwen3.7 Max | parseable | Alibaba | `qwen/qwen3.7-max-20260520` |
 
+## FPL-context revalidation — 2026-07-29 11:23–11:27 UTC
+
+Adding prices, availability and absence markers enlarged the shipping prompt again. Migration
+`0005_fpl_players.sql` was applied over the deployed `0004` state, then the live FPL bootstrap
+was fetched and archived. It produced 563 Season-scoped player rows, including 49 players
+whose status was not fully available. Review then caught that a Season-only identity would
+overwrite the evidence needed to rebuild an earlier Gameweek. Forward migration
+`0006_gameweek_scoped_fpl_players.sql` corrected the identity to
+`(Season, Gameweek, FPL id)` and assigned all 563 observed rows to Gameweek 1; subsequent
+fetches replace only their own Gameweek partition.
+
+The operator checked the generated inputs for Fixture 1 against that snapshot. Arsenal's
+section showed Saka, Gabriel, Rice, Gyökeres and Havertz as its five highest-priced players,
+plus all three flagged absences: J.Timber, Saliba and White. Coventry City's section showed
+Mason-Clark, Torp, Tchaouna, Wright and Onyeka as its five highest-priced players, plus both
+flagged absences: Rudoni and Bassette. Fully available players rendered as `available`;
+every absence carried chance of playing, news and news-added fields.
+
+The first nine-Entrant run at 11:23–11:25 UTC returned eight parseable Predictions. Gemini
+3.1 Pro Preview returned the requested JSON envelope but encoded `score` as an array rather
+than the required `{home, away}` object, so the pre-flight correctly exited non-zero with a
+schema failure. There were no refusals, transport errors, missing routing metadata or
+provider/model substitutions. The raw response was archived rather than discarded.
+
+One confirmation run at 11:25–11:27 UTC passed 9/9 and exited zero. All selected providers
+and dated resolved models matched the table above. OpenRouter reported 1,082–6,273 prompt
+tokens across the nine routes. Both runs remain part of the evidence: the second establishes
+that every Base Model can answer the expanded prompt, while the first records a real
+stochastic schema miss that the production Repair loop is designed to handle.
+
 ## Contract evidence
 
 Every HTTP-successful response from both runs was archived byte-for-byte in `raw_snapshots`
@@ -76,8 +106,9 @@ parseable output on their pinned routes. The operator and predict paths refuse a
 stored Prompt Version differs from `match/2026-27-v1`, so the template cannot drift silently
 away from the version named by the roster. A representative populated, cross-Season sample
 of the frozen template and context builder is pinned to SHA-256
-`ab0a176dbd99ea948c0fd3d9ab643aeae306769f4eab2544b1fe7846feb90181` next to the Prompt
-Version constant and verified by a contract test.
+`ff41fc472cb840ccbe126fdd81444dc3ce4c89a38a6461e3232511c508a2fe47` next to the Prompt
+Version constant and verified by a contract test. The pinned construction now includes both
+the historical dossier and the FPL-derived player context.
 
 ## Reporting boundaries
 

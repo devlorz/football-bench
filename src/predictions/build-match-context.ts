@@ -4,6 +4,10 @@ import {
   type HistoricalMatch
 } from "../context/build-historical-context.js";
 import {
+  buildFplContext,
+  type FplPlayer
+} from "../context/build-fpl-context.js";
+import {
   matchContext,
   type MatchPromptFixture
 } from "./openrouter-entrant.js";
@@ -14,6 +18,7 @@ export interface MatchContextData {
   season: string;
   deadline: Date;
   historicalMatches: HistoricalMatch[];
+  fplPlayers: FplPlayer[];
 }
 
 export async function loadMatchContextData(
@@ -40,7 +45,21 @@ export async function loadMatchContextData(
       order by played_on`,
     [deadline]
   );
-  return { season, deadline, historicalMatches: historicalMatches.rows };
+  const fplPlayers = await database.query<FplPlayer>(
+    `select
+       fpl_id, team_name, web_name, position, price_tenths, status,
+       chance_of_playing_next_round, news, news_added
+       from fpl_players
+      where season = $1 and gw = $2
+      order by team_name, price_tenths desc, fpl_id`,
+    [season, gameweek]
+  );
+  return {
+    season,
+    deadline,
+    historicalMatches: historicalMatches.rows,
+    fplPlayers: fplPlayers.rows
+  };
 }
 
 /**
@@ -53,12 +72,19 @@ export function buildMatchContext(
 ): string {
   return matchContext(
     fixture,
-    buildHistoricalContext({
-      season: data.season,
-      asOf: data.deadline,
-      homeTeam: fixture.home_team,
-      awayTeam: fixture.away_team,
-      matches: data.historicalMatches
-    })
+    [
+      buildHistoricalContext({
+        season: data.season,
+        asOf: data.deadline,
+        homeTeam: fixture.home_team,
+        awayTeam: fixture.away_team,
+        matches: data.historicalMatches
+      }),
+      buildFplContext({
+        homeTeam: fixture.home_team,
+        awayTeam: fixture.away_team,
+        players: data.fplPlayers
+      })
+    ].join("\n\n")
   );
 }

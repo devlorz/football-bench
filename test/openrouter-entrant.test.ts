@@ -4,10 +4,7 @@ import {
   MATCH_PROMPT_SHA256,
   matchContext
 } from "../src/predictions/openrouter-entrant.js";
-import {
-  buildHistoricalContext,
-  type HistoricalMatch
-} from "../src/context/build-historical-context.js";
+import { buildMatchContext } from "../src/predictions/build-match-context.js";
 
 describe("the Match Prompt Version", () => {
   test("pins the frozen template and context builder to a reviewed checksum", () => {
@@ -17,14 +14,12 @@ describe("the Match Prompt Version", () => {
       away_team: "Coventry City",
       kickoff_at: new Date("2026-08-21T19:00:00Z")
     };
-    const context = matchContext(
+    const context = buildMatchContext(
       fixture,
-      buildHistoricalContext({
+      {
         season: "2026-27",
-        asOf: new Date("2026-08-21T17:30:00Z"),
-        homeTeam: fixture.home_team,
-        awayTeam: fixture.away_team,
-        matches: [
+        deadline: new Date("2026-08-21T17:30:00Z"),
+        historicalMatches: [
           {
             season: "2025-26",
             division: "Premier League",
@@ -61,8 +56,43 @@ describe("the Match Prompt Version", () => {
             home_goals: 2,
             away_goals: 0
           }
-        ] satisfies HistoricalMatch[]
-      })
+        ],
+        fplPlayers: [
+          {
+            fpl_id: 12,
+            team_name: "Arsenal",
+            web_name: "Saka",
+            position: "MID",
+            price_tenths: 95,
+            status: "a",
+            chance_of_playing_next_round: null,
+            news: "",
+            news_added: null
+          },
+          {
+            fpl_id: 5,
+            team_name: "Arsenal",
+            web_name: "J.Timber",
+            position: "DEF",
+            price_tenths: 65,
+            status: "i",
+            chance_of_playing_next_round: 0,
+            news: "Groin injury - Expected back 21 Aug",
+            news_added: new Date("2026-07-23T12:01:23.272Z")
+          },
+          {
+            fpl_id: 200,
+            team_name: "Coventry City",
+            web_name: "Coventry Player",
+            position: "FWD",
+            price_tenths: 60,
+            status: "a",
+            chance_of_playing_next_round: null,
+            news: "",
+            news_added: null
+          }
+        ]
+      }
     );
 
     expect(

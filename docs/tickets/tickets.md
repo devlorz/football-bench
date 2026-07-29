@@ -157,11 +157,11 @@ flagged absence is shown rather than only those belonging to expensive players.
 
 **Blocked by:** Migration runner and shared schema application.
 
-- [ ] The five highest-priced players per team appear with position, price and status
-- [ ] Every player whose status is not fully available appears — with chance of playing, the news text and when that news was added — not only those in the top five
-- [ ] A fully fit player's absent chance-of-playing value renders as available, never as unknown
-- [ ] No field is ever silently empty; absent data is written out explicitly
-- [ ] The built context for a Fixture is readable by a person and can be checked by eye against the real league table
+- [x] The five highest-priced players per team appear with position, price and status
+- [x] Every player whose status is not fully available appears — with chance of playing, the news text and when that news was added — not only those in the top five
+- [x] A fully fit player's absent chance-of-playing value renders as available, never as unknown
+- [x] No field is ever silently empty; absent data is written out explicitly
+- [x] The built context for a Fixture is readable by a person and can be checked by eye against the real league table
 
 ---
 

@@ -9,6 +9,10 @@ import {
   FplSourceHttpError,
   FplSourceValidationError
 } from "../src/fpl/fetch-gameweek.js";
+import {
+  buildFplContext,
+  type FplPlayer
+} from "../src/context/build-fpl-context.js";
 
 const { Client } = pg;
 
@@ -31,7 +35,9 @@ describe("fetching an FPL Gameweek", () => {
 
   beforeEach(async () => {
     await client.query(
-      "truncate fixtures, gameweeks, raw_snapshots restart identity cascade"
+      `truncate
+         fpl_players, fixtures, gameweeks, raw_snapshots
+       restart identity cascade`
     );
   });
 
@@ -84,6 +90,71 @@ describe("fetching an FPL Gameweek", () => {
       kickoff_at: new Date("2026-08-21T19:00:00.000Z")
     });
 
+    const players = await client.query(
+      `select
+         season, gw, fpl_id, team_name, web_name, position, price_tenths,
+         status, chance_of_playing_next_round, news, news_added
+         from fpl_players
+        where fpl_id in (1, 5)
+        order by fpl_id`
+    );
+    expect(players.rowCount).toBe(2);
+    expect(players.rows).toEqual([
+      {
+        season: "2026-27",
+        gw: 1,
+        fpl_id: 1,
+        team_name: "Arsenal",
+        web_name: "Raya",
+        position: "GKP",
+        price_tenths: 60,
+        status: "a",
+        chance_of_playing_next_round: null,
+        news: "",
+        news_added: null
+      },
+      {
+        season: "2026-27",
+        gw: 1,
+        fpl_id: 5,
+        team_name: "Arsenal",
+        web_name: "J.Timber",
+        position: "DEF",
+        price_tenths: 65,
+        status: "i",
+        chance_of_playing_next_round: 0,
+        news: "Groin injury - Expected back 21 Aug",
+        news_added: new Date("2026-07-23T12:01:23.272Z")
+      }
+    ]);
+    const playerCount = await client.query(
+      "select count(*)::int as count from fpl_players"
+    );
+    expect(playerCount.rows).toEqual([{ count: 563 }]);
+    const fixturePlayers = await client.query<FplPlayer>(
+      `select
+         fpl_id, team_name, web_name, position, price_tenths, status,
+         chance_of_playing_next_round, news, news_added
+         from fpl_players
+        where season = '2026-27'
+          and gw = 1
+          and team_name in ('Arsenal', 'Coventry City')`
+    );
+    const context = buildFplContext({
+      homeTeam: "Arsenal",
+      awayTeam: "Coventry City",
+      players: fixturePlayers.rows
+    });
+    expect(context).toContain(
+      "- Saka | MID | £9.5m | status: available"
+    );
+    expect(context).toContain(
+      "- J.Timber | DEF | £6.5m | status: injured | chance of playing next round: 0% | news: Groin injury - Expected back 21 Aug | news added: 2026-07-23T12:01:23.272Z"
+    );
+    expect(context).toContain(
+      "- Rudoni | MID | £5.0m | status: doubtful | chance of playing next round: 75% | news: Shoulder injury - 75% chance of playing | news added: 2026-07-23T12:01:23.481Z"
+    );
+
     const snapshots = await client.query(
       "select source, sha256, body from raw_snapshots order by source"
     );
@@ -130,11 +201,13 @@ describe("fetching an FPL Gameweek", () => {
       `select
          (select count(*)::int from gameweeks) as gameweeks,
          (select count(*)::int from fixtures) as fixtures,
+         (select count(*)::int from fpl_players) as players,
          (select count(*)::int from raw_snapshots) as snapshots`
     );
     expect(stored.rows[0]).toEqual({
       gameweeks: 0,
       fixtures: 0,
+      players: 0,
       snapshots: 2
     });
     const evidence = await client.query(
@@ -193,11 +266,11 @@ describe("fetching an FPL Gameweek", () => {
     });
   });
 
-  test("ignores upstream player fields until the fetch consumes them", async () => {
+  test("rejects a changed player shape before storing derived rows", async () => {
     const bootstrap = JSON.parse(
       await archivedBody("fpl-bootstrap-2026-27.json.gz")
     );
-    bootstrap.elements = "shape deliberately outside this ticket";
+    bootstrap.elements[0].now_cost = "6.0";
     const responses = new Map([
       [
         "https://fantasy.premierleague.com/api/bootstrap-static/",
@@ -209,17 +282,19 @@ describe("fetching an FPL Gameweek", () => {
       ]
     ]);
 
-    await fetchFplGameweek({
+    await expect(fetchFplGameweek({
       database: client,
       season: "2026-27",
       gameweek: 1,
       http: async (url) => ({ status: 200, body: responses.get(url) ?? "" })
-    });
+    })).rejects.toThrow("fpl_bootstrap.elements.0.now_cost");
 
-    const fixtures = await client.query(
-      "select count(*)::int as count from fixtures"
+    const derived = await client.query(
+      `select
+         (select count(*)::int from fixtures) as fixtures,
+         (select count(*)::int from fpl_players) as players`
     );
-    expect(fixtures.rows).toEqual([{ count: 10 }]);
+    expect(derived.rows).toEqual([{ fixtures: 0, players: 0 }]);
   });
 
   test("does not duplicate an unchanged source snapshot", async () => {
@@ -275,5 +350,53 @@ describe("fetching an FPL Gameweek", () => {
     expect(latestObservation.rows[0].last_seen_at.getTime()).toBeGreaterThan(
       firstObservation.rows[0].last_seen_at.getTime()
     );
+  });
+
+  test("keeps player context from earlier Gameweeks", async () => {
+    const bootstrapBody = await archivedBody("fpl-bootstrap-2026-27.json.gz");
+    const fixturesBody = await archivedBody("fpl-fixtures-2026-27.json.gz");
+    const firstResponses = new Map([
+      ["https://fantasy.premierleague.com/api/bootstrap-static/", bootstrapBody],
+      ["https://fantasy.premierleague.com/api/fixtures/", fixturesBody]
+    ]);
+    await fetchFplGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      http: async (url) => ({
+        status: 200,
+        body: firstResponses.get(url) ?? ""
+      })
+    });
+
+    const changedBootstrap = JSON.parse(bootstrapBody);
+    changedBootstrap.elements[0].now_cost = 61;
+    const secondResponses = new Map([
+      [
+        "https://fantasy.premierleague.com/api/bootstrap-static/",
+        JSON.stringify(changedBootstrap)
+      ],
+      ["https://fantasy.premierleague.com/api/fixtures/", fixturesBody]
+    ]);
+    await fetchFplGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 2,
+      http: async (url) => ({
+        status: 200,
+        body: secondResponses.get(url) ?? ""
+      })
+    });
+
+    const rayaPrices = await client.query(
+      `select gw, price_tenths
+         from fpl_players
+        where season = '2026-27' and fpl_id = 1
+        order by gw`
+    );
+    expect(rayaPrices.rows).toEqual([
+      { gw: 1, price_tenths: 60 },
+      { gw: 2, price_tenths: 61 }
+    ]);
   });
 });

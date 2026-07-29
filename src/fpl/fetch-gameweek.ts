@@ -18,9 +18,28 @@ const teamSchema = z.looseObject({
   name: z.string().min(1)
 });
 
+const elementTypeSchema = z.looseObject({
+  id: z.number().int().positive(),
+  singular_name_short: z.string().min(1)
+});
+
+const playerSchema = z.looseObject({
+  id: z.number().int().positive(),
+  team: z.number().int().positive(),
+  web_name: z.string().min(1),
+  element_type: z.number().int().positive(),
+  now_cost: z.number().int().nonnegative(),
+  status: z.string().min(1),
+  chance_of_playing_next_round: z.number().int().min(0).max(100).nullable(),
+  news: z.string(),
+  news_added: z.iso.datetime().nullable()
+});
+
 const bootstrapSchema = z.looseObject({
   events: z.array(eventSchema),
-  teams: z.array(teamSchema)
+  teams: z.array(teamSchema),
+  element_types: z.array(elementTypeSchema),
+  elements: z.array(playerSchema)
 });
 
 const fixtureSchema = z.looseObject({
@@ -145,6 +164,29 @@ export async function fetchFplGameweek({
   }
 
   const teamNames = new Map(bootstrap.teams.map(({ id, name }) => [id, name]));
+  const positions = new Map(
+    bootstrap.element_types.map(({ id, singular_name_short: position }) => [
+      id,
+      position
+    ])
+  );
+  const players = bootstrap.elements.map((player, index) => {
+    const teamName = teamNames.get(player.team);
+    if (teamName === undefined) {
+      throw new FplSourceValidationError("fpl_bootstrap", [{
+        field: `elements.${index}.team`,
+        detail: `unknown team id ${player.team}`
+      }]);
+    }
+    const position = positions.get(player.element_type);
+    if (position === undefined) {
+      throw new FplSourceValidationError("fpl_bootstrap", [{
+        field: `elements.${index}.element_type`,
+        detail: `unknown element type id ${player.element_type}`
+      }]);
+    }
+    return { ...player, teamName, position };
+  });
   const gameweekFixtures = fixtures.filter(({ event: gw }) => gw === gameweek);
   const rows = gameweekFixtures.map((fixture, index) => {
     if (fixture.kickoff_time === null) {
@@ -184,6 +226,33 @@ export async function fetchFplGameweek({
        do update set deadline_at = excluded.deadline_at`,
       [season, gameweek, event.deadline_time]
     );
+
+    await database.query(
+      "delete from fpl_players where season = $1 and gw = $2",
+      [season, gameweek]
+    );
+    for (const player of players) {
+      await database.query(
+        `insert into fpl_players (
+           season, gw, fpl_id, team_name, web_name, position, price_tenths,
+           status, chance_of_playing_next_round, news, news_added
+         )
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [
+          season,
+          gameweek,
+          player.id,
+          player.teamName,
+          player.web_name,
+          player.position,
+          player.now_cost,
+          player.status,
+          player.chance_of_playing_next_round,
+          player.news,
+          player.news_added
+        ]
+      );
+    }
 
     for (const fixture of rows) {
       await database.query(

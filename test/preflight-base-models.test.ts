@@ -29,7 +29,7 @@ describe("pre-flight for the Base Model roster", () => {
     await client.query(
       `truncate
          predictions, contexts, fixtures, attempts, models, gameweeks,
-         raw_snapshots, historical_matches
+         raw_snapshots, historical_matches, fpl_players
        restart identity cascade`
     );
     await client.query(
@@ -52,6 +52,25 @@ describe("pre-flight for the Base Model roster", () => {
          (
            '2025-26', 'Championship', '2026-05-02T00:00:00Z',
            'Coventry', 'Hull', 2, 0
+         )`
+    );
+    await client.query(
+      `insert into fpl_players (
+         season, gw, fpl_id, team_name, web_name, position, price_tenths,
+         status, chance_of_playing_next_round, news, news_added
+       ) values
+         (
+           '2026-27', 1, 12, 'Arsenal', 'Saka', 'MID', 95,
+           'a', null, '', null
+         ),
+         (
+           '2026-27', 1, 5, 'Arsenal', 'J.Timber', 'DEF', 65,
+           'i', 0, 'Groin injury - Expected back 21 Aug',
+           '2026-07-23T12:01:23.272Z'
+         ),
+         (
+           '2026-27', 1, 200, 'Coventry City', 'Coventry Player', 'FWD', 60,
+           'a', null, '', null
          )`
     );
     for (let index = 1; index <= 9; index += 1) {
@@ -103,6 +122,20 @@ describe("pre-flight for the Base Model roster", () => {
       "",
       "Head-to-head history:",
       "No prior meeting in stored data.",
+      "",
+      "FPL-derived player context",
+      "",
+      "Arsenal",
+      "Five highest-priced players:",
+      "- Saka | MID | £9.5m | status: available",
+      "- J.Timber | DEF | £6.5m | status: injured",
+      "Players not fully available:",
+      "- J.Timber | DEF | £6.5m | status: injured | chance of playing next round: 0% | news: Groin injury - Expected back 21 Aug | news added: 2026-07-23T12:01:23.272Z",
+      "",
+      "Coventry City",
+      "Five highest-priced players:",
+      "- Coventry Player | FWD | £6.0m | status: available",
+      "Players not fully available: none; all listed players are available.",
       "",
       "Return only JSON with fixture_id, probs (H, D, A), score (home, away), and rationale.",
       "The first character must be { and the last character must be }.",

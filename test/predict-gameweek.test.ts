@@ -34,7 +34,7 @@ describe("predicting a Gameweek", () => {
     await client.query(
       `truncate
          predictions, contexts, fixtures, attempts, models, gameweeks,
-         historical_matches
+         historical_matches, fpl_players
        restart identity cascade`
     );
     await client.query(
@@ -77,6 +77,21 @@ describe("predicting a Gameweek", () => {
            9, 9
          )`
     );
+    await client.query(
+      `insert into fpl_players (
+         season, gw, fpl_id, team_name, web_name, position, price_tenths,
+         status, chance_of_playing_next_round, news, news_added
+       ) values
+         (
+           '2026-27', 1, 12, 'Arsenal', 'Saka', 'MID', 95,
+           'a', null, '', null
+         ),
+         (
+           '2026-27', 1, 5, 'Arsenal', 'J.Timber', 'DEF', 65,
+           'i', 0, 'Groin injury - Expected back 21 Aug',
+           '2026-07-23T12:01:23.272Z'
+         )`
+    );
     let prompt = "";
 
     await predictGameweek({
@@ -116,6 +131,10 @@ describe("predicting a Gameweek", () => {
       "Prior-Season final position: 1st in 2025-26 Championship; promoted: yes."
     );
     expect(prompt).not.toContain("9-9");
+    expect(prompt).toContain("- Saka | MID | £9.5m | status: available");
+    expect(prompt).toContain(
+      "- J.Timber | DEF | £6.5m | status: injured | chance of playing next round: 0%"
+    );
 
     const stored = await client.query("select body from contexts");
     expect(stored.rows).toEqual([{ body: prompt }]);
@@ -157,6 +176,16 @@ describe("predicting a Gameweek", () => {
       "",
       "Head-to-head history:",
       "No prior meeting in stored data.",
+      "",
+      "FPL-derived player context",
+      "",
+      "Arsenal",
+      "Five highest-priced players: no FPL player data for this team.",
+      "Players not fully available: no FPL player data for this team.",
+      "",
+      "Coventry City",
+      "Five highest-priced players: no FPL player data for this team.",
+      "Players not fully available: no FPL player data for this team.",
       "",
       "Return only JSON with fixture_id, probs (H, D, A), score (home, away), and rationale.",
       "The first character must be { and the last character must be }.",
@@ -254,7 +283,7 @@ describe("predicting a Gameweek", () => {
       track: "match",
       fpl_id: 1,
       body: context,
-      hash: "2b1ea24ed2d6e46895b734d48408ddb65afe09769d257ec2a6aa4fb31bcb416c",
+      hash: "ea6a0ac9b73ea24635815dac37d77819c954da213fa0e33e0fb3297ebc4ee463",
       model_id: "entrant/v1",
       probs: { H: 0.6003600360036003, D: 0.23982398239823982, A: 0.15981598159815982 },
       pred_home: 2,
