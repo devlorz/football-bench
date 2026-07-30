@@ -77,7 +77,7 @@ describe("pre-flight for the Base Model roster", () => {
       await client.query(
         `insert into models (
            id, name, base_model, provider, quantization, prompt_version, role
-         ) values ($1, $2, $3, $4, $5, 'match/2026-27-v1', 'entrant')`,
+         ) values ($1, $2, $3, $4, $5, 'match/2026-27-v2', 'entrant')`,
         [
           `entrant/${index}`,
           `Entrant ${index}`,
@@ -108,7 +108,8 @@ describe("pre-flight for the Base Model roster", () => {
       "Current-Season home split: no home matches played.",
       "Current-Season away split: no away matches played.",
       "Last five matches played:",
-      "- 2025-26 Premier League | 2026-05-01 | Arsenal 3-1 Everton | W",
+      "- 2025-26 Premier League | 2026-05-01 | Arsenal 3-1 Everton | W"
+        + " | xG unavailable",
       "",
       "Coventry City",
       "Current-Season league position: no current-Season table yet.",
@@ -118,7 +119,8 @@ describe("pre-flight for the Base Model roster", () => {
       "Current-Season home split: no home matches played.",
       "Current-Season away split: no away matches played.",
       "Last five matches played:",
-      "- 2025-26 Championship | 2026-05-02 | Coventry 2-0 Hull | W",
+      "- 2025-26 Championship | 2026-05-02 | Coventry 2-0 Hull | W"
+        + " | xG unavailable",
       "",
       "Head-to-head history:",
       "No prior meeting in stored data.",
@@ -526,7 +528,7 @@ describe("pre-flight for the Base Model roster", () => {
         throw new Error("HTTP must not run");
       }
     })).rejects.toThrow(
-      "Pre-flight requires Prompt Version match/2026-27-v1; entrant/9 uses match/draft"
+      "Pre-flight requires Prompt Version match/2026-27-v2; entrant/9 uses match/draft"
     );
     expect(calls).toBe(0);
   });

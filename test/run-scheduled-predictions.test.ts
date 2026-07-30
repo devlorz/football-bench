@@ -60,7 +60,7 @@ describe("scheduled Prediction runs", () => {
          id, name, base_model, provider, prompt_version, role
        ) values (
          'entrant/v1', 'Tracer Entrant', 'openai/gpt-5.2', 'openai',
-         'match/2026-27-v1', 'entrant'
+         'match/2026-27-v2', 'entrant'
        )`
     );
   });
@@ -100,7 +100,7 @@ describe("scheduled Prediction runs", () => {
          id, name, base_model, provider, prompt_version, role
        ) values (
          'gap/v1', 'Gap Entrant', 'vendor/gap', 'pinned-gap',
-         'match/2026-27-v1', 'entrant'
+         'match/2026-27-v2', 'entrant'
        )`
     );
     let mainContext = "";
@@ -200,7 +200,7 @@ describe("scheduled Prediction runs", () => {
          id, name, base_model, provider, prompt_version, role
        ) values (
          'gap/v1', 'Unavailable Entrant', 'vendor/gap', 'pinned-gap',
-         'match/2026-27-v1', 'entrant'
+         'match/2026-27-v2', 'entrant'
        )`
     );
 

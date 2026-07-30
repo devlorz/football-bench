@@ -112,20 +112,53 @@ byte-identical to before: no aggregates, score-only head-to-head, unchanged FPL 
 **Blocked by:** Shots ride the existing CSV into the record · Understat xG fetched,
 stored, and survivable.
 
-- [ ] The context loader joins xG to historical matches by date and alias-resolved team
+- [x] The context loader joins xG to historical matches by date and alias-resolved team
       names, and carries the shot columns through to the builder
-- [ ] A form line for a match with full data reads like
+- [x] A form line for a match with full data reads like
       `W 2-1 v Chelsea (H) — shots 15-8, on target 7-3, xG 2.10-0.85`, both sides'
-      numbers ordered this-team-first per the existing line convention
-- [ ] A form line for a match with no xG row ends `xG unavailable`; every kind of gap
+      numbers ordered ~~this-team-first~~ home-team-first per the existing line convention
+- [x] A form line for a match with no xG row ends `xG unavailable`; every kind of gap
       renders identically
-- [ ] A form line for a match with no shot data omits the shot segment rather than
+- [x] A form line for a match with no shot data omits the shot segment rather than
       printing zeros
-- [ ] No season-aggregate shots or xG appear anywhere; the head-to-head section stays
+- [x] No season-aggregate shots or xG appear anywhere; the head-to-head section stays
       score-only; the FPL player section and prompt envelope are untouched
-- [ ] All matches feeding the lines remain strictly before the Gameweek's deadline
-- [ ] Pure-builder tests assert the emitted strings exactly, in the pattern of the
+- [x] All matches feeding the lines remain strictly before the Gameweek's deadline
+- [x] Pure-builder tests assert the emitted strings exactly, in the pattern of the
       existing historical-context tests
+
+**The segments are appended, not a new line format.** The criterion's example
+(`W 2-1 v Chelsea (H) — …`) is the format from the grilling session, which the spec marks
+illustrative. The real line has always been
+`- 2025-26 Premier League | 2026-05-01 | Arsenal 3-1 Everton | W`, so the signals ride it as
+a further pipe-delimited segment rather than replacing a format nothing else in the repo
+uses:
+
+```
+- 2025-26 Premier League | 2026-05-01 | Arsenal 3-1 Nott'm Forest | W | shots 15-8, on target 7-3, xG 2.10-0.85
+- 2025-26 Championship | 2026-05-02 | Coventry 2-0 Hull | W | shots 19-6, on target 8-2, xG unavailable
+```
+
+**Home-team-first, not this-team-first** (operator decision, this session). The criterion's
+wording assumed its own team-first example, where score and shots agree. On the real line the
+score is home-first, so this-team-first would print `Fulham 0-2 Arsenal | … shots 15-8` with
+the score and the shots counting from opposite ends of the same line. Home-first keeps every
+number on the line reading in the same direction as the scoreline beside it.
+
+**The xG join is date + alias, with no fallback.** `understat_match_xg` keeps Understat's
+spelling and a real kick-off instant; stored results keep football-data's spelling and the
+match date at midnight. The loader resolves the Understat name through
+`src/understat/team-identity.ts` and keys on the UTC date. An xG row that matches nothing —
+rescheduled fixture, renamed club — leaves the line reading `xG unavailable`, the same
+explicit gap a promoted side's Championship history produces. Silence is never filled with a
+neighbouring match's number.
+
+**The xG query is bounded by the deadline too, and that is load-bearing.** Stored results
+carry midnight, so a same-day Match kicking off *after* the deadline can still sit inside
+`played_on < deadline`. Its xG row carries the true kick-off instant, so without
+`kicked_off_at < deadline` a post-deadline xG could reach a form line through a match the
+existing filter already lets through. Removing the clause turns
+`test/predict-gameweek.test.ts`'s post-deadline test red — verified, not assumed.
 
 ---
 
@@ -140,8 +173,9 @@ rehearsal artifact recorded under it stay intact and attributable.
 **Blocked by:** Understat xG fetched, stored, and survivable · Form lines carry shots and
 xG.
 
-- [ ] The prompt-version constant reads `match/2026-27-v2` and its stored hash matches the
+- [x] The prompt-version constant reads `match/2026-27-v2` and its stored hash matches the
       new template bytes; the version-match assertion still refuses a mismatched Entrant
+      — **landed early, with the form-lines ticket** (see note below)
 - [ ] All nine Entrant rows point at the new Prompt Version before the Season's first Lock
 - [ ] Contexts are stored and hashed under v2 exactly as under v1, and Fill runs reuse the
       stored bytes verbatim
@@ -152,5 +186,30 @@ xG.
       day
 - [ ] No digested forecast — odds, Elo, strength ratings, lambdas — appears anywhere in
       the emitted context
+
+**Why the version bump came early** (operator decision, this session). Enriching the form
+lines changes the emitted bytes, so the frozen-checksum guard in
+`test/openrouter-entrant.test.ts` went red the moment the form-lines ticket was green. Three
+ways out, and only one keeps v1 meaning what it means: recomputing v1's hash in place would
+silently redefine the Prompt Version and leave the rehearsal attempts already recorded under
+it attributable to bytes no Entrant ever saw. So the constant pair moved to
+`match/2026-27-v2` / `29e81593…` here rather than leaving a known-red suite between tickets.
+
+**What that costs until the rest of this ticket lands.** `MATCH_PROMPT_VERSION` now reads
+v2 while the nine Entrant rows in the database still read v1, so `predictGameweek` and
+pre-flight both refuse with a version mismatch. That is the version-match assertion working,
+not a regression — but **no real prediction or pre-flight run will succeed until the Entrant
+rows are re-pointed** by the criterion below. Test-side Entrant fixtures were moved to v2
+with the constant. The v1 literals left in `test/dry-run-archive.test.ts` and
+`test/expected-dry-run-outcome.test.ts` are deliberate: those stand for rehearsal artifacts,
+which the spec requires stay attributable to v1.
+
+**The pinned fixture does not exercise the new segments.** The checksum test builds its
+context from matches carrying no shots and no xG, so every form line in the pinned bytes
+reads `xG unavailable`. The hash therefore pins the template and the builder's overall
+shape, but a bug in the shots or xG formatting specifically would not move it. Enriching
+that fixture before the freeze would make the pin cover the signals this spec exists to add;
+it was left alone here because the fixture is the frozen artifact and changing it is the
+freeze ticket's call, under review.
 
 ---

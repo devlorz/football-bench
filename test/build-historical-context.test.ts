@@ -11,7 +11,8 @@ function match(
   homeTeam: string,
   awayTeam: string,
   homeGoals: number,
-  awayGoals: number
+  awayGoals: number,
+  signals: Partial<HistoricalMatch> = {}
 ): HistoricalMatch {
   return {
     season,
@@ -20,7 +21,8 @@ function match(
     home_team: homeTeam,
     away_team: awayTeam,
     home_goals: homeGoals,
-    away_goals: awayGoals
+    away_goals: awayGoals,
+    ...signals
   };
 }
 
@@ -56,11 +58,16 @@ describe("building historical Match context", () => {
       "Current-Season home split: no home matches played.",
       "Current-Season away split: 1 played, 1W 0D 0L, GF 2, GA 0.",
       "Last five matches played:",
-      "- 2026-27 Premier League | 2026-08-10 | Fulham 0-2 Arsenal | W",
-      "- 2025-26 Premier League | 2026-05-01 | Tottenham 0-1 Arsenal | W",
-      "- 2025-26 Premier League | 2026-04-01 | Arsenal 3-1 Everton | W",
-      "- 2025-26 Premier League | 2025-08-17 | Liverpool 1-1 Arsenal | D",
-      "- 2025-26 Premier League | 2025-08-10 | Arsenal 2-0 Chelsea | W",
+      "- 2026-27 Premier League | 2026-08-10 | Fulham 0-2 Arsenal | W"
+        + " | xG unavailable",
+      "- 2025-26 Premier League | 2026-05-01 | Tottenham 0-1 Arsenal | W"
+        + " | xG unavailable",
+      "- 2025-26 Premier League | 2026-04-01 | Arsenal 3-1 Everton | W"
+        + " | xG unavailable",
+      "- 2025-26 Premier League | 2025-08-17 | Liverpool 1-1 Arsenal | D"
+        + " | xG unavailable",
+      "- 2025-26 Premier League | 2025-08-10 | Arsenal 2-0 Chelsea | W"
+        + " | xG unavailable",
       "",
       "Coventry City",
       "Current-Season league position: no current-Season table yet.",
@@ -70,15 +77,173 @@ describe("building historical Match context", () => {
       "Current-Season home split: no home matches played.",
       "Current-Season away split: no away matches played.",
       "Last five matches played:",
-      "- 2025-26 Championship | 2026-05-01 | Watford 0-3 Coventry | W",
-      "- 2025-26 Championship | 2026-04-01 | Coventry 2-1 Wrexham | W",
-      "- 2025-26 Championship | 2025-08-08 | Ipswich 2-2 Coventry | D",
-      "- 2025-26 Championship | 2025-08-01 | Coventry 1-0 Hull | W",
-      "- 2024-25 Championship | 2025-05-02 | Coventry 1-1 Stoke | D",
+      "- 2025-26 Championship | 2026-05-01 | Watford 0-3 Coventry | W"
+        + " | xG unavailable",
+      "- 2025-26 Championship | 2026-04-01 | Coventry 2-1 Wrexham | W"
+        + " | xG unavailable",
+      "- 2025-26 Championship | 2025-08-08 | Ipswich 2-2 Coventry | D"
+        + " | xG unavailable",
+      "- 2025-26 Championship | 2025-08-01 | Coventry 1-0 Hull | W"
+        + " | xG unavailable",
+      "- 2024-25 Championship | 2025-05-02 | Coventry 1-1 Stoke | D"
+        + " | xG unavailable",
       "",
       "Head-to-head history:",
       "No prior meeting in stored data."
     ].join("\n"));
+  });
+
+  test("carries both sides' shots and xG on a form line", () => {
+    const context = buildHistoricalContext({
+      season: "2026-27",
+      asOf: new Date("2026-08-21T17:30:00.000Z"),
+      homeTeam: "Arsenal",
+      awayTeam: "Everton",
+      matches: [
+        match(
+          "2025-26",
+          "Premier League",
+          "2026-05-01",
+          "Arsenal",
+          "Chelsea",
+          2,
+          1,
+          {
+            home_shots: 15,
+            away_shots: 8,
+            home_shots_on_target: 7,
+            away_shots_on_target: 3,
+            home_xg: 2.1,
+            away_xg: 0.85
+          }
+        )
+      ]
+    });
+
+    expect(context).toContain(
+      "- 2025-26 Premier League | 2026-05-01 | Arsenal 2-1 Chelsea | W"
+        + " | shots 15-8, on target 7-3, xG 2.10-0.85"
+    );
+  });
+
+  test("renders every kind of xG gap identically", () => {
+    const shots = {
+      home_shots: 19,
+      away_shots: 6,
+      home_shots_on_target: 8,
+      away_shots_on_target: 2
+    };
+    const context = buildHistoricalContext({
+      season: "2026-27",
+      asOf: new Date("2026-08-21T17:30:00.000Z"),
+      homeTeam: "Arsenal",
+      awayTeam: "Coventry City",
+      matches: [
+        // No xG row at all: an Understat outage, or a Premier League match
+        // outside the two Seasons the benchmark fetches.
+        match(
+          "2025-26",
+          "Premier League",
+          "2026-05-01",
+          "Brentford",
+          "Arsenal",
+          1,
+          0,
+          shots
+        ),
+        // A promoted side's Championship history, which Understat is never
+        // asked for.
+        match(
+          "2025-26",
+          "Championship",
+          "2026-05-02",
+          "Coventry",
+          "Hull",
+          2,
+          0,
+          { ...shots, home_xg: null, away_xg: null }
+        )
+      ]
+    });
+
+    expect(context).toContain(
+      "- 2025-26 Premier League | 2026-05-01 | Brentford 1-0 Arsenal | L"
+        + " | shots 19-6, on target 8-2, xG unavailable"
+    );
+    expect(context).toContain(
+      "- 2025-26 Championship | 2026-05-02 | Coventry 2-0 Hull | W"
+        + " | shots 19-6, on target 8-2, xG unavailable"
+    );
+  });
+
+  test("omits the shot segment rather than printing zeros", () => {
+    const context = buildHistoricalContext({
+      season: "2026-27",
+      asOf: new Date("2026-08-21T17:30:00.000Z"),
+      homeTeam: "Arsenal",
+      awayTeam: "Everton",
+      matches: [
+        match(
+          "2025-26",
+          "Premier League",
+          "2026-05-01",
+          "Arsenal",
+          "Chelsea",
+          2,
+          1,
+          { home_xg: 2.1, away_xg: 0.85 }
+        )
+      ]
+    });
+
+    expect(context).toContain(
+      "- 2025-26 Premier League | 2026-05-01 | Arsenal 2-1 Chelsea | W"
+        + " | xG 2.10-0.85"
+    );
+    expect(context).not.toContain("shots");
+    expect(context).not.toContain("on target");
+  });
+
+  test("keeps the head-to-head section score-only and adds no aggregates", () => {
+    const context = buildHistoricalContext({
+      season: "2026-27",
+      asOf: new Date("2026-08-21T17:30:00.000Z"),
+      homeTeam: "Arsenal",
+      awayTeam: "Everton",
+      matches: [
+        match(
+          "2025-26",
+          "Premier League",
+          "2026-05-01",
+          "Arsenal",
+          "Everton",
+          3,
+          1,
+          {
+            home_shots: 15,
+            away_shots: 8,
+            home_shots_on_target: 7,
+            away_shots_on_target: 3,
+            home_xg: 2.1,
+            away_xg: 0.85
+          }
+        )
+      ]
+    });
+    const headToHead = context.slice(context.indexOf("Head-to-head history:"));
+
+    expect(headToHead).toContain(
+      "- 2025-26 Premier League | 2026-05-01 | Arsenal 3-1 Everton"
+    );
+    expect(headToHead).not.toContain("shots");
+    expect(headToHead).not.toContain("xG");
+    // Five data points are the Entrant's to read. The Current-Season summary
+    // lines stay goals-only: no shot or xG totals anywhere.
+    expect(context).toContain(
+      "Current-Season overall: no matches played."
+    );
+    expect(context).not.toContain("shots for");
+    expect(context).not.toContain("total xG");
   });
 
   test("makes an unresolved Fixture team name visible", () => {

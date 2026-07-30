@@ -34,7 +34,7 @@ describe("predicting a Gameweek", () => {
     await client.query(
       `truncate
          predictions, contexts, fixtures, attempts, models, gameweeks,
-         historical_matches, fpl_players
+         historical_matches, fpl_players, understat_match_xg
        restart identity cascade`
     );
     await client.query(
@@ -50,7 +50,7 @@ describe("predicting a Gameweek", () => {
          id, name, base_model, provider, prompt_version, role
        ) values (
          'entrant/v1', 'Tracer Entrant', 'openai/gpt-5.2', 'openai',
-         'match/2026-27-v1', 'entrant'
+         'match/2026-27-v2', 'entrant'
        )`
     );
   });
@@ -138,6 +138,150 @@ describe("predicting a Gameweek", () => {
 
     const stored = await client.query("select body from contexts");
     expect(stored.rows).toEqual([{ body: prompt }]);
+  });
+
+  test("carries stored shots and joins Understat xG onto the form lines", async () => {
+    await client.query(
+      `insert into historical_matches (
+         season, division, played_on, home_team, away_team,
+         home_goals, away_goals,
+         home_shots, away_shots, home_shots_on_target, away_shots_on_target
+       ) values
+         (
+           '2025-26', 'Premier League', '2026-05-01T00:00:00Z',
+           'Arsenal', 'Nott''m Forest',
+           3, 1, 15, 8, 7, 3
+         ),
+         (
+           '2025-26', 'Championship', '2026-05-02T00:00:00Z',
+           'Coventry', 'Hull',
+           2, 0, 19, 6, 8, 2
+         )`
+    );
+    await client.query(
+      `insert into understat_match_xg (
+         season, understat_match_id, kicked_off_at,
+         home_team, away_team, home_xg, away_xg
+       ) values
+         (
+           '2025-26', '26001', '2026-05-01T14:00:00Z',
+           'Arsenal', 'Nottingham Forest', 2.10, 0.85
+         ),
+         (
+           '2025-26', '26002', '2026-05-08T14:00:00Z',
+           'Arsenal', 'Everton', 1.40, 1.10
+         )`
+    );
+    let prompt = "";
+
+    await predictGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      concurrency: 1,
+      apiKey: "test-key",
+      now: () => new Date("2026-08-21T17:29:00Z"),
+      http: async (_url, options) => {
+        const request = JSON.parse(options?.body ?? "{}") as {
+          messages: Array<{ content: string }>;
+        };
+        prompt = request.messages[0]?.content ?? "";
+        return {
+          status: 200,
+          body: JSON.stringify({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  fixture_id: 1,
+                  probs: { H: 0.6, D: 0.24, A: 0.16 },
+                  score: { home: 2, away: 1 },
+                  rationale: "Uses shots and xG."
+                })
+              }
+            }]
+          })
+        };
+      }
+    });
+
+    // Understat spells the away side "Nottingham Forest"; the stored result
+    // spells it "Nott'm Forest". The join resolves the alias.
+    expect(prompt).toContain(
+      "- 2025-26 Premier League | 2026-05-01 | Arsenal 3-1 Nott'm Forest | W"
+        + " | shots 15-8, on target 7-3, xG 2.10-0.85"
+    );
+    // Championship history is never fetched from Understat, so it degrades to
+    // the explicit marker while still carrying its shots.
+    expect(prompt).toContain(
+      "- 2025-26 Championship | 2026-05-02 | Coventry 2-0 Hull | W"
+        + " | shots 19-6, on target 8-2, xG unavailable"
+    );
+    // An xG row whose date matches no stored result is not smeared onto a
+    // neighbouring Match.
+    expect(prompt).not.toContain("1.40-1.10");
+  });
+
+  test("keeps xG from a Match that kicked off after the deadline off the lines", async () => {
+    // Stored results carry the match date at midnight, so a same-day Match
+    // that kicks off after the deadline can still sit in the window. Its xG
+    // carries a real kick-off instant and must not ride in with it.
+    await client.query(
+      `insert into historical_matches (
+         season, division, played_on, home_team, away_team,
+         home_goals, away_goals,
+         home_shots, away_shots, home_shots_on_target, away_shots_on_target
+       ) values (
+         '2026-27', 'Premier League', '2026-08-21T00:00:00Z',
+         'Arsenal', 'Everton',
+         3, 1, 15, 8, 7, 3
+       )`
+    );
+    await client.query(
+      `insert into understat_match_xg (
+         season, understat_match_id, kicked_off_at,
+         home_team, away_team, home_xg, away_xg
+       ) values (
+         '2026-27', '27001', '2026-08-21T19:00:00Z',
+         'Arsenal', 'Everton', 2.10, 0.85
+       )`
+    );
+    let prompt = "";
+
+    await predictGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      concurrency: 1,
+      apiKey: "test-key",
+      now: () => new Date("2026-08-21T17:29:00Z"),
+      http: async (_url, options) => {
+        const request = JSON.parse(options?.body ?? "{}") as {
+          messages: Array<{ content: string }>;
+        };
+        prompt = request.messages[0]?.content ?? "";
+        return {
+          status: 200,
+          body: JSON.stringify({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  fixture_id: 1,
+                  probs: { H: 0.6, D: 0.24, A: 0.16 },
+                  score: { home: 2, away: 1 },
+                  rationale: "Uses shots and xG."
+                })
+              }
+            }]
+          })
+        };
+      }
+    });
+
+    expect(prompt).toContain(
+      "- 2026-27 Premier League | 2026-08-21 | Arsenal 3-1 Everton | W"
+        + " | shots 15-8, on target 7-3, xG unavailable"
+    );
+    expect(prompt).not.toContain("2.10-0.85");
   });
 
   test("stores the Match context and its Prediction before the Lock", async () => {
@@ -593,18 +737,18 @@ describe("predicting a Gameweek", () => {
        ) values
          (
            'open-weight/v1', 'Open Weight Entrant', 'vendor/open-weight-v1',
-           'pinned-open-weight', 'fp8', 'match/2026-27-v1', 'entrant'
+           'pinned-open-weight', 'fp8', 'match/2026-27-v2', 'entrant'
          ),
          (
            'unavailable/v1', 'Unavailable Entrant', 'vendor/unavailable-v1',
-           'pinned-unavailable', null, 'match/2026-27-v1', 'entrant'
+           'pinned-unavailable', null, 'match/2026-27-v2', 'entrant'
          );
        insert into models (
          id, name, base_model, provider, prompt_version, role
        )
        select
          'entrant/' || n, 'Entrant ' || n, 'vendor/base-model-' || n,
-         'provider-' || n, 'match/2026-27-v1', 'entrant'
+         'provider-' || n, 'match/2026-27-v2', 'entrant'
        from generate_series(2, 7) as n`
     );
     const requestBodies: unknown[] = [];

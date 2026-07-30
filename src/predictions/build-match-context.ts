@@ -11,8 +11,55 @@ import {
   matchContext,
   type MatchPromptFixture
 } from "./openrouter-entrant.js";
+import { resolveUnderstatTeamName } from "../understat/team-identity.js";
 
 type Database = Pick<Client, "query">;
+
+interface StoredMatchXg {
+  kicked_off_at: Date;
+  home_team: string;
+  away_team: string;
+  home_xg: string;
+  away_xg: string;
+}
+
+function utcDate(instant: Date): string {
+  return instant.toISOString().slice(0, 10);
+}
+
+/**
+ * Understat rows carry Understat's spelling and a real kick-off instant; stored
+ * results carry football-data.co.uk's spelling and the match date. The join is
+ * by date and alias-resolved names, and there is deliberately no fallback: an
+ * xG row that matches nothing leaves the line reading "xG unavailable", which
+ * is the same explicit gap a promoted side's Championship history produces.
+ */
+function joinXg(
+  matches: HistoricalMatch[],
+  storedXg: StoredMatchXg[]
+): HistoricalMatch[] {
+  const byMatch = new Map<string, StoredMatchXg>();
+  for (const row of storedXg) {
+    const home = resolveUnderstatTeamName(row.home_team);
+    const away = resolveUnderstatTeamName(row.away_team);
+    if (home === undefined || away === undefined) {
+      continue;
+    }
+    byMatch.set(`${utcDate(row.kicked_off_at)}|${home}|${away}`, row);
+  }
+  return matches.map((match) => {
+    const xg = byMatch.get(
+      `${utcDate(match.played_on)}|${match.home_team}|${match.away_team}`
+    );
+    return xg === undefined
+      ? match
+      : {
+        ...match,
+        home_xg: Number(xg.home_xg),
+        away_xg: Number(xg.away_xg)
+      };
+  });
+}
 
 export interface MatchContextData {
   season: string;
@@ -39,10 +86,19 @@ export async function loadMatchContextData(
   const historicalMatches = await database.query<HistoricalMatch>(
     `select
        season, division, played_on, home_team, away_team,
-       home_goals, away_goals
+       home_goals, away_goals,
+       home_shots, away_shots, home_shots_on_target, away_shots_on_target
        from historical_matches
       where played_on < $1
       order by played_on`,
+    [deadline]
+  );
+  // Bounded by the same deadline as the results: an xG row for a Match played
+  // after the Lock can never reach a form line.
+  const storedXg = await database.query<StoredMatchXg>(
+    `select kicked_off_at, home_team, away_team, home_xg, away_xg
+       from understat_match_xg
+      where kicked_off_at < $1`,
     [deadline]
   );
   const fplPlayers = await database.query<FplPlayer>(
@@ -57,7 +113,7 @@ export async function loadMatchContextData(
   return {
     season,
     deadline,
-    historicalMatches: historicalMatches.rows,
+    historicalMatches: joinXg(historicalMatches.rows, storedXg.rows),
     fplPlayers: fplPlayers.rows
   };
 }

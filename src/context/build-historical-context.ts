@@ -11,6 +11,18 @@ export interface HistoricalMatch {
   away_team: string;
   home_goals: number;
   away_goals: number;
+  /**
+   * Absent and null mean the same thing throughout: the source carried no
+   * figure. Never a zero -- a match with no shot data is not a match with no
+   * shots, and xG is missing for whole legitimate categories (Championship
+   * history, the early-Season window, an Understat outage).
+   */
+  home_shots?: number | null;
+  away_shots?: number | null;
+  home_shots_on_target?: number | null;
+  away_shots_on_target?: number | null;
+  home_xg?: number | null;
+  away_xg?: number | null;
 }
 
 export interface BuildHistoricalContextOptions {
@@ -153,8 +165,43 @@ function outcome(match: HistoricalMatch, team: string): "W" | "D" | "L" {
   return goalsFor > goalsAgainst ? "W" : goalsFor === goalsAgainst ? "D" : "L";
 }
 
+function bothSides(
+  home: number | null | undefined,
+  away: number | null | undefined
+): string | undefined {
+  return typeof home === "number" && typeof away === "number"
+    ? `${home}-${away}`
+    : undefined;
+}
+
+/**
+ * Shots, shots on target and xG for the Match, every pair ordered
+ * home-team-first so the numbers count from the same end as the scoreline they
+ * sit beside. A pair the source did not carry is dropped rather than zeroed;
+ * missing xG is stated outright, because an Entrant weighing a number it cannot
+ * see is worse off than one told the number is absent.
+ */
+function performanceSegments(match: HistoricalMatch): string[] {
+  const shots = bothSides(match.home_shots, match.away_shots);
+  const onTarget = bothSides(
+    match.home_shots_on_target,
+    match.away_shots_on_target
+  );
+  return [
+    ...(shots === undefined ? [] : [`shots ${shots}`]),
+    ...(onTarget === undefined ? [] : [`on target ${onTarget}`]),
+    typeof match.home_xg === "number" && typeof match.away_xg === "number"
+      ? `xG ${match.home_xg.toFixed(2)}-${match.away_xg.toFixed(2)}`
+      : "xG unavailable"
+  ];
+}
+
 function matchLine(match: HistoricalMatch, team?: string): string {
-  const result = team === undefined ? "" : ` | ${outcome(match, team)}`;
+  // The head-to-head section stays score-only: performance signals belong on
+  // the form lines, where recent performance is what the section is for.
+  const result = team === undefined
+    ? ""
+    : ` | ${outcome(match, team)} | ${performanceSegments(match).join(", ")}`;
   return `- ${match.season} ${match.division} | `
     + `${match.played_on.toISOString().slice(0, 10)} | `
     + `${match.home_team} ${match.home_goals}-${match.away_goals} `
