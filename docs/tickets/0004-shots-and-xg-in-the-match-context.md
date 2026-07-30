@@ -81,10 +81,23 @@ introduces a per-team or per-match loop.
 
 **Two alias spellings are unverified.** `Coventry` and `Hull` in
 `src/understat/team-identity.ts` are guesses: neither club appears in the Understat Premier
-League seasons the guide covers, so their exact titles could not be confirmed offline. An
-unmapped name is a loud validation error rather than a silent gap, so the failure mode is
-safe — but the first real fetch against the 2026-27 endpoint should be run before the freeze
-to confirm them, not on opening day.
+League seasons the guide covers, so their exact titles could not be confirmed offline.
+
+Running the fetch before the Season starts does **not** confirm them. A match with no `xG`
+field is skipped before the name check (`fetch-season-xg.ts:132`), and no match has an `xG`
+field until it has been played — so the alias mapping is first exercised after GW1, which is
+after the freeze.
+
+If a spelling is wrong, one unmapped name fails validation for the whole body: no xG rows
+are stored at all, and *every* team's form lines read `xG unavailable`, not just the
+misspelled club's. Loud and recoverable by editing the mapping, but wider than it looks.
+
+To actually confirm before the freeze: fetch `getLeagueData/EPL/2026` once and read the
+archived `raw_snapshots` body — upcoming matches already carry `h.title` / `a.title`, so the
+titles are there to be grepped even though the parser never validates them. Alternatively,
+move the alias check ahead of the not-yet-played skip so a pre-season fetch validates every
+name in the feed; that turns this into an automatic pre-flight check rather than a manual
+grep, at the cost of a fetch that fails on a rename before any xG exists to lose.
 
 ---
 
