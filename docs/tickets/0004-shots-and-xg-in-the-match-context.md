@@ -180,14 +180,15 @@ xG.
       new template bytes; the version-match assertion still refuses a mismatched Entrant
       — **landed early, with the form-lines ticket** (see note below)
 - [ ] All nine Entrant rows point at the new Prompt Version before the Season's first Lock
-- [ ] Contexts are stored and hashed under v2 exactly as under v1, and Fill runs reuse the
+      — **operator-run SQL, recorded below; not yet run**
+- [x] Contexts are stored and hashed under v2 exactly as under v1, and Fill runs reuse the
       stored bytes verbatim
-- [ ] Rehearsal contexts and attempts recorded under v1 remain in the record, attributable
+- [x] Rehearsal contexts and attempts recorded under v1 remain in the record, attributable
       to v1
 - [ ] Pre-flight is re-run against the enriched context for every Entrant and its verdict
       recorded, with the prior season's xG ingested first so the contexts match opening
-      day
-- [ ] No digested forecast — odds, Elo, strength ratings, lambdas — appears anywhere in
+      day — **operator-run; needs the live database, the network and API keys**
+- [x] No digested forecast — odds, Elo, strength ratings, lambdas — appears anywhere in
       the emitted context
 
 **Why the version bump came early** (operator decision, this session). Enriching the form
@@ -220,6 +221,32 @@ scoreline beside it; shots without xG, the ordinary Championship case; and neith
 the dropped-not-zeroed shot segment stays pinned too. The hash was recomputed once more
 against the reviewed bytes, and the freeze lands with the fixture and
 `MATCH_PROMPT_SHA256` agreeing.
+
+**What the three ticked criteria rest on.** None of them needed new code; all three were
+confirmed against the suite and the source rather than assumed.
+
+*Contexts stored and hashed under v2, Fill reuses the bytes verbatim.* The storage path is
+version-agnostic by construction — `contexts` is keyed by season, Gameweek, Track and Fixture
+with a hash of the body (`predict-gameweek.ts:92-96`), and carries no Prompt Version column at
+all. The version-match assertion gates entry to the run rather than the write, so v2 stores
+exactly as v1 did. `test/predict-gameweek.test.ts` seeds Entrants at `match/2026-27-v2` and
+covers all three behaviours: the context is stored before the Lock, a Fill refuses to rebuild
+a missing one, and a Manual fill sends the stored bytes unaltered —
+`expect(prompt).toBe("Stored main-run context.")`, a byte-equality assertion, not a shape one.
+
+*v1 rehearsal artifacts stay attributable.* No code path writes `prompt_version` to a live
+`models` row: `predict-gameweek.ts` and `preflight-base-models.ts` only select it, and the
+sole insert is `src/dry-run/prepare-archived-gameweek.ts` against a throwaway database. The
+v1 literals in `test/dry-run-archive.test.ts`, `test/expected-dry-run-outcome.test.ts` and
+`test/fetch-fpl-gameweek.test.ts` are intact, and the re-point SQL below touches `models`
+only — never `contexts`, `predictions` or `attempts`.
+
+*No digested forecast.* Read directly off the emitted bytes for the pinned fixture, not
+inferred: the context carries scorelines, tables, splits, raw per-match shots and xG, and the
+FPL section. A search of `src/` for odds, Elo, strength ratings, lambdas and Poisson returns
+only substring false positives (`beforeLock`, `below`, `belong`). `docs/understat/understatService.ts`
+does carry a `getMatchLambdas`, which is exactly what ADR 0016 forbids — it is vendored
+reference material, outside the `tsconfig` include and imported nowhere.
 
 **Re-pointing the Entrant rows is operator-run SQL, not code** (operator decision, this
 session). Nothing in `src/cli/` or `migrations/` seeds or updates the live `models` rows —
