@@ -179,15 +179,17 @@ xG.
 - [x] The prompt-version constant reads `match/2026-27-v2` and its stored hash matches the
       new template bytes; the version-match assertion still refuses a mismatched Entrant
       — **landed early, with the form-lines ticket** (see note below)
-- [ ] All nine Entrant rows point at the new Prompt Version before the Season's first Lock
-      — **operator-run SQL, recorded below; not yet run**
+- [x] All nine Entrant rows point at the new Prompt Version before the Season's first Lock
+      — **run 2026-07-31**: `UPDATE 9`, after-query shows nine entrant rows on v2, none on v1
 - [x] Contexts are stored and hashed under v2 exactly as under v1, and Fill runs reuse the
       stored bytes verbatim
 - [x] Rehearsal contexts and attempts recorded under v1 remain in the record, attributable
       to v1
-- [ ] Pre-flight is re-run against the enriched context for every Entrant and its verdict
+- [x] Pre-flight is re-run against the enriched context for every Entrant and its verdict
       recorded, with the prior season's xG ingested first so the contexts match opening
-      day — **operator-run; needs the live database, the network and API keys**
+      day — **run 2026-07-31, 9/9 parseable**; verdict in
+      [the pre-flight report](../reports/2026-07-31-shots-xg-context-preflight.md), which
+      also records the one open watch item (promoted-side Understat aliases)
 - [x] No digested forecast — odds, Elo, strength ratings, lambdas — appears anywhere in
       the emitted context
 
