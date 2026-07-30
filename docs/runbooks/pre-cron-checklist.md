@@ -1,0 +1,137 @@
+# Pre-cron checklist
+
+Everything that must be true before the scheduled workflows are trusted, in order. Run this
+before the first deploy and again before each pre-Season rehearsal.
+
+Vocabulary: [CONTEXT.md](../../CONTEXT.md). The dry run referenced throughout is the
+rehearsal built by the last write-path ticket.
+
+---
+
+## 1. Apply migrations before enabling anything
+
+The deployed schema must match the repository before a workflow runs against it. A workflow
+enabled ahead of its migration fails on its first invocation, not at deploy time.
+
+```bash
+set -a; . ./.env; set +a; npm run --silent db:migrate
+```
+
+`DATABASE_URL` must be the **session pooler on port 5432**. The migration runner takes a
+session-level advisory lock, which the transaction pooler on 6543 would break.
+
+To confirm the deployed schema matches the repository, build a temporary Postgres from the
+migrations and compare `pg_dump --schema-only` output from both, filtering
+`^--|^$|^SET |^SELECT pg_catalog|^\(un)?restrict`. This has caught real drift twice.
+
+## 2. Create the repository
+
+Create it on GitHub, push `main`, and keep it **public**.
+
+Public is a deliberate decision recorded in
+[the spec](../../football-benchmark-spec.md) and
+[spec 0001](../specs/0001-match-track-write-path.md): the fifteen-minute Prediction poll is
+roughly 2,920 runs per month against a 2,000-minute private allowance, while public standard
+runners consume no metered Actions minutes.
+
+The consequence is a recurring chore — see [§6](#6-recurring-chores).
+
+## 3. Secrets
+
+| Secret | Notes |
+|---|---|
+| `DATABASE_URL` | Session pooler, port 5432 |
+| `OPENROUTER_API_KEY` | |
+
+## 4. Repository variables
+
+| Variable | Value | Notes |
+|---|---|---|
+| `SEASON` | `2026-27` | `YYYY-YY` |
+| `FOOTBALL_DATA_SEASON` | `2025-26` | `YYYY-YY`. **Advance to `2026-27` after the first matchday.** |
+| `PREDICT_CONCURRENCY` | e.g. `9` | Defaults to 9 |
+| `FETCH_ALERT_ASSIGNEE` | | Optional; see below |
+| `PREDICT_ALERT_ASSIGNEE` | | Optional; see below |
+
+`FOOTBALL_DATA_SEASON` uses the `YYYY-YY` form and becomes `2526` in the URL. football-data's
+own convention is `2526`, which is the natural thing to type and is **rejected**.
+
+Leaving it on the prior Season after the first matchday is the dangerous direction: the fetch
+keeps succeeding while current-Season results never load. A guard fails the run once
+Gameweek 1's deadline has passed with no stored matches for `SEASON` — but its tolerance is
+tight, see [§7](#7-known-imperfections).
+
+Assignees are optional. Without them, notification depends on watch settings rather than being
+addressed to a person.
+
+## 5. Before trusting cron
+
+- [ ] **GitHub Issues is enabled.** Both alert paths open issues; neither works without it.
+- [ ] **Run each workflow once by hand** via `workflow_dispatch`.
+- [ ] **Rehearse against archived data** — the dry run exercises the whole write path against
+      archived snapshots in a throwaway database, touching neither the network nor real data:
+
+      ```bash
+      set -a; . ./.env; set +a
+      GAMEWEEK=1 DRY_RUN_AT=deadline-6h npm run --silent dry-run
+      ```
+
+      Set `DRY_RUN_AT` to any instant relative to the deadline — `deadline-6h`, `deadline`,
+      `deadline+90m`, or an ISO instant — to rehearse either side of the Lock. Contexts are
+      printed for review; read a few against the real league table by eye.
+
+      The run rehearses the main run **and** the Fill, and prints the escalation body the
+      workflow would hand to `scripts/report-prediction-fill-gaps.sh`. It derives the counts
+      the archive should produce and **exits non-zero when it misses them**, so it is a check
+      rather than a report to interpret. Against the current archive:
+
+      | `DRY_RUN_AT` | Predictions | Gaps |
+      |---|---|---|
+      | before the Lock | 9 | 81 |
+      | at or after the Lock | 0 | 90 |
+
+      Replaying archived responses yields Predictions only for the Fixture each response was
+      recorded against; the remaining Gaps are an artifact of the archive, not a fault. See
+      [§7](#7-known-imperfections).
+
+## 6. Recurring chores
+
+**Re-enable scheduled workflows before every pre-Season rehearsal.** GitHub disables scheduled
+workflows on public repositories after 60 days without repository activity.
+
+**Advance `FOOTBALL_DATA_SEASON`** to the current Season after the first matchday, once that
+feed becomes available.
+
+## 7. Known imperfections
+
+These are deliberate, and recorded so they are not rediscovered as bugs.
+
+**The stale-Season guard fires early.** It triggers once Gameweek 1's deadline has passed with
+no current-Season matches stored. Real timings: deadline 21 Aug 17:30 UTC, first kick-off
+19:00, first fetch after it 22 Aug 06:00 — by which point football-data has had about eleven
+hours to publish a Friday-night result. Probably enough, not certainly. A false positive costs
+one spurious issue, not data. Keying off a kick-off more than a day old would move the first
+evaluation to 23 August and remove the noise.
+
+**A manual Fill that leaves Gaps does not open an issue** — only scheduled Fills do. That is
+the right default for an operator who triggered the run and is watching, and the wrong one for
+an operator who walks away. The annotation still records it.
+
+**A dry run reports Gaps for most Fixtures.** One OpenRouter response is archived per Base
+Model, recorded against a single Fixture; replayed against the others it is correctly rejected
+on its `fixture_id`. The dry run replays archived bytes exactly rather than adapting them, so
+a high Gap count is expected — the run states the count it should produce and fails on a
+mismatch, so read the verdict rather than the Gap total.
+
+**The dry run does not exercise the scheduler.** It calls the main run and the Fill directly,
+so `prediction_runs`, the due query and the advisory lock are covered by their own tests
+rather than by the rehearsal. Running `predict.yml` once by hand via `workflow_dispatch`
+remains the only end-to-end check of that layer.
+
+## 8. Ordering that must be preserved
+
+`deferred` is materialised by the FPL fetch, not derived on read. A schedule move seen before
+the Lock stays `false` until the first fetch at or after the deadline. The 06:00 UTC fetch
+provides that ordering for the 10:00 UTC scorer, and
+[ADR-0013](../adr/0013-a-postponed-fixture-keeps-its-original-prediction.md) requires future
+workflow changes to preserve it.

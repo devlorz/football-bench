@@ -324,7 +324,39 @@ the pipeline is proven — and its contexts read by a human — before any real 
 context: prices, availability and absence markers · Scheduled runs, manual fill and context
 reuse.
 
-- [ ] The full path runs against archived snapshots with no live network calls
-- [ ] The clock can be set to any chosen point relative to the archived Gameweek's deadline, including after it
-- [ ] Results land in a throwaway database and leave real data untouched
-- [ ] Contexts produced by the run can be printed for human review
+- [x] The full path runs against archived snapshots with no live network calls
+- [x] The clock can be set to any chosen point relative to the archived Gameweek's deadline, including after it
+- [x] Results land in a throwaway database and leave real data untouched
+- [x] Contexts produced by the run can be printed for human review
+
+The replay fetcher implements the existing outbound-HTTP seam rather than adding a third one,
+serving each archived body by the URL that produced it and refusing any URL no snapshot
+covers — so a dry run cannot silently reach the network. football-data's `2526` URL form is
+translated back to the `2025-26` its snapshot is archived under, and the Entrant an OpenRouter
+call belongs to is read from the request body, since every Entrant shares one URL.
+
+Loading runs at the archive's own observation instant while the chosen instant governs the
+prediction path, where the Lock decides whether a Prediction may be written. A post-deadline
+rehearsal would otherwise trip the stale-Season guard on a Season whose results the archive
+predates.
+
+The archive is read through a session downgraded to read only, and results land in a
+throwaway Postgres cluster that is removed when the run finishes; the test harness and the
+dry run build that cluster through the same code path.
+
+The main run and the Fill are both rehearsed. The Fill is the newest machinery in the system
+and its Gap report is the only signal that reaches a person, so running it second against
+real archived data proves both that it reuses the stored context rather than building a
+fresher one and that the escalation the workflow performs produces the body it should.
+
+Archived bytes are replayed exactly rather than adapted, so Predictions appear only for the
+Fixture each response was recorded against and the remaining Gaps are an artifact of the
+archive. Because that makes the outcome knowable in advance, the run derives the counts it
+should produce from the archived responses themselves and fails when it misses them — one
+Prediction short would otherwise look almost identical to a human skimming eighty lines of
+Gap summary. What the run does not cover is the scheduler around the two runs:
+`prediction_runs`, the due query and the advisory lock are exercised by their own tests
+rather than here.
+
+Operating knowledge that had lived only in conversation is recorded in
+[the pre-cron checklist](../runbooks/pre-cron-checklist.md).
