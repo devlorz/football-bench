@@ -1,5 +1,8 @@
 # A single, rich context arm
 
+> Status: the context contents listed here are superseded by ADR-0017 (per-match shots and
+> xG, `match/2026-27-v2`). The single-arm decision itself stands.
+
 The frozen Prompt Version hands every Entrant a full statistical dossier per Fixture: last
 five results for each side, league position, goals for and against, home and away splits,
 and availability flags. There is one context arm, not two — a minimal-context arm was
