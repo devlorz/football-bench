@@ -67,7 +67,15 @@ addressed to a person.
 ## 5. Before trusting cron
 
 - [ ] **GitHub Issues is enabled.** Both alert paths open issues; neither works without it.
-- [ ] **Run each workflow once by hand** via `workflow_dispatch`.
+- [ ] **Run `fetch.yml` once by hand** via `workflow_dispatch`. It is idempotent, so a second
+      run costs nothing.
+- [ ] **Do not hand-dispatch `predict.yml` as a smoke test.** Its manual job writes real
+      Predictions for the Gameweek named in the input. Before that Gameweek's deadline those
+      writes are valid and, because `predictions` is insert-only, permanent — the Gameweek is
+      consumed, made early on stale context, and the real run at `deadline − 6h` will find
+      every slot filled and skip it. The manual job exists to close Gaps after the Fill, not
+      to prove the pipeline. It also runs `predict`, not `predict:scheduled`, so it does not
+      exercise the scheduler at all. Let cron do that — see [§7](#7-known-imperfections).
 - [ ] **Rehearse against archived data** — the dry run exercises the whole write path against
       archived snapshots in a throwaway database, touching neither the network nor real data:
 
@@ -124,9 +132,14 @@ a high Gap count is expected — the run states the count it should produce and 
 mismatch, so read the verdict rather than the Gap total.
 
 **The dry run does not exercise the scheduler.** It calls the main run and the Fill directly,
-so `prediction_runs`, the due query and the advisory lock are covered by their own tests
-rather than by the rehearsal. Running `predict.yml` once by hand via `workflow_dispatch`
-remains the only end-to-end check of that layer.
+so `prediction_runs`, the due query and the advisory lock are not covered by the rehearsal.
+
+The scheduled run covers them, and covers them safely. Until a Gameweek reaches
+`deadline − 6h` there is no due work, so a poll takes the advisory lock, runs the due query,
+finds nothing and exits — no Entrant is called and nothing is written. Observed on
+2026-07-30: the first scheduled run completed in 18 seconds leaving
+`prediction_runs`, `predictions` and `attempts` all empty. Cron firing *is* the end-to-end
+check of this layer, and it costs nothing.
 
 ## 8. Ordering that must be preserved
 
