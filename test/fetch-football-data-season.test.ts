@@ -123,6 +123,142 @@ describe("fetching football-data.co.uk results", () => {
     ]);
   });
 
+  test("stores both sides' shots and shots on target for each division", async () => {
+    const responses = new Map([
+      [
+        "https://www.football-data.co.uk/mmz4281/2526/E0.csv",
+        await archivedBody("football-data-2526-E0.csv.gz")
+      ],
+      [
+        "https://www.football-data.co.uk/mmz4281/2526/E1.csv",
+        await archivedBody("football-data-2526-E1.csv.gz")
+      ]
+    ]);
+
+    await fetchFootballDataSeason({
+      database: client,
+      season: "2025-26",
+      http: async (url) => ({ status: 200, body: responses.get(url) ?? "" })
+    });
+
+    const stored = await client.query(
+      `select division, home_team, away_team,
+              home_shots, away_shots,
+              home_shots_on_target, away_shots_on_target
+         from historical_matches
+        where (home_team, away_team) in (
+                ('Liverpool', 'Bournemouth'), ('Birmingham', 'Ipswich')
+              )
+        order by division`
+    );
+    expect(stored.rows).toEqual([
+      {
+        division: "Championship",
+        home_team: "Birmingham",
+        away_team: "Ipswich",
+        home_shots: 11,
+        away_shots: 7,
+        home_shots_on_target: 3,
+        away_shots_on_target: 1
+      },
+      {
+        division: "Premier League",
+        home_team: "Liverpool",
+        away_team: "Bournemouth",
+        home_shots: 19,
+        away_shots: 10,
+        home_shots_on_target: 10,
+        away_shots_on_target: 3
+      }
+    ]);
+  });
+
+  test("loads a row whose shot columns are absent or blank with no counts", async () => {
+    const responses = new Map([
+      // A Season predating the shot columns entirely.
+      [
+        "https://www.football-data.co.uk/mmz4281/2526/E0.csv",
+        "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG\n"
+        + "E0,15/08/2025,20:00,Liverpool,Bournemouth,4,2\n"
+      ],
+      // The columns arrived, but this row has nothing in them.
+      [
+        "https://www.football-data.co.uk/mmz4281/2526/E1.csv",
+        "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG,HS,AS,HST,AST\n"
+        + "E1,08/08/2025,20:00,Birmingham,Ipswich,1,1,,,,\n"
+      ]
+    ]);
+
+    await fetchFootballDataSeason({
+      database: client,
+      season: "2025-26",
+      http: async (url) => ({ status: 200, body: responses.get(url) ?? "" })
+    });
+
+    const stored = await client.query(
+      `select home_team, home_goals, away_goals,
+              home_shots, away_shots,
+              home_shots_on_target, away_shots_on_target
+         from historical_matches
+        order by home_team`
+    );
+    expect(stored.rows).toEqual([
+      {
+        home_team: "Birmingham",
+        home_goals: 1,
+        away_goals: 1,
+        home_shots: null,
+        away_shots: null,
+        home_shots_on_target: null,
+        away_shots_on_target: null
+      },
+      {
+        home_team: "Liverpool",
+        home_goals: 4,
+        away_goals: 2,
+        home_shots: null,
+        away_shots: null,
+        home_shots_on_target: null,
+        away_shots_on_target: null
+      }
+    ]);
+  });
+
+  test("refuses a row whose shot column is present but malformed", async () => {
+    const responses = new Map([
+      [
+        "https://www.football-data.co.uk/mmz4281/2526/E0.csv",
+        "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG,HS,AS,HST,AST\n"
+        + "E0,15/08/2025,20:00,Liverpool,Bournemouth,4,2,19,ten,10,-3\n"
+      ],
+      [
+        "https://www.football-data.co.uk/mmz4281/2526/E1.csv",
+        "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG,HS,AS,HST,AST\n"
+        + "E1,08/08/2025,20:00,Birmingham,Ipswich,1,1,11,7,3,1\n"
+      ]
+    ]);
+
+    await expect(fetchFootballDataSeason({
+      database: client,
+      season: "2025-26",
+      http: async (url) => ({ status: 200, body: responses.get(url) ?? "" })
+    })).rejects.toMatchObject({
+      name: FootballDataSourceValidationError.name,
+      source: "football_data:2025-26:E0",
+      issues: [
+        { field: "row.2.AS", detail: "expected a non-negative integer" },
+        { field: "row.2.AST", detail: "expected a non-negative integer" }
+      ]
+    });
+
+    const stored = await client.query(
+      `select
+         (select count(*)::int from historical_matches) as matches,
+         (select count(*)::int from raw_snapshots) as snapshots`
+    );
+    expect(stored.rows).toEqual([{ matches: 0, snapshots: 2 }]);
+  });
+
   test("archives changed bytes and reports every missing consumed column", async () => {
     const premierLeague = await archivedBody("football-data-2526-E0.csv.gz");
     const championship = await archivedBody("football-data-2526-E1.csv.gz");

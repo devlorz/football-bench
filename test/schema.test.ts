@@ -51,6 +51,67 @@ describe("the benchmark database", () => {
     ]);
   });
 
+  test("keeps a historical match whose source carried no shot counts", async () => {
+    await client.query(
+      `insert into historical_matches (
+         season, division, played_on, home_team, away_team,
+         home_goals, away_goals,
+         home_shots, away_shots, home_shots_on_target, away_shots_on_target
+       ) values (
+         '2025-26', 'Premier League', '2025-08-15T00:00:00Z',
+         'Liverpool', 'Bournemouth', 4, 2, 19, 10, 10, 3
+       ), (
+         '1993-94', 'Premier League', '1993-08-14T00:00:00Z',
+         'Arsenal', 'Coventry', 0, 3, null, null, null, null
+       )`
+    );
+
+    const matches = await client.query(
+      `select home_team, home_shots, away_shots,
+              home_shots_on_target, away_shots_on_target
+         from historical_matches
+        order by season`
+    );
+    expect(matches.rows).toEqual([
+      {
+        home_team: "Arsenal",
+        home_shots: null,
+        away_shots: null,
+        home_shots_on_target: null,
+        away_shots_on_target: null
+      },
+      {
+        home_team: "Liverpool",
+        home_shots: 19,
+        away_shots: 10,
+        home_shots_on_target: 10,
+        away_shots_on_target: 3
+      }
+    ]);
+  });
+
+  test("refuses a negative shot count on a historical match", async () => {
+    const negativeCounts = [
+      "home_shots = -1",
+      "away_shots = -1",
+      "home_shots_on_target = -1",
+      "away_shots_on_target = -1"
+    ];
+
+    for (const negativeCount of negativeCounts) {
+      const [column, value] = negativeCount.split(" = ");
+      await expect(client.query(
+        `insert into historical_matches (
+           season, division, played_on, home_team, away_team,
+           home_goals, away_goals, ${column}
+         ) values (
+           '2025-26', 'Premier League', '2025-08-15T00:00:00Z',
+           'Liverpool', 'Bournemouth', 4, 2, ${value}
+         )`
+      )).rejects.toMatchObject({ code: "23514" });
+    }
+  });
+
   test("keeps Fixtures with the same FPL id in different Seasons", async () => {
     await client.query(
       `insert into gameweeks (season, gw, deadline_at) values

@@ -25,16 +25,16 @@ CSVs predate the shot columns keep loading, with those fields simply absent.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] A migration adds nullable home/away shots and shots-on-target columns to the
+- [x] A migration adds nullable home/away shots and shots-on-target columns to the
       historical-matches table, and the schema tests cover them against real Postgres
-- [ ] Running the fetch on a CSV that carries `HS`, `AS`, `HST` and `AST` stores all four
+- [x] Running the fetch on a CSV that carries `HS`, `AS`, `HST` and `AST` stores all four
       figures on each match row, for both divisions
-- [ ] A row whose shot columns are absent or blank loads with those fields null — the
+- [x] A row whose shot columns are absent or blank loads with those fields null — the
       loader never invents zeros and never fails a season for lacking them
-- [ ] A row whose shot columns are present but malformed fails validation naming the row
+- [x] A row whose shot columns are present but malformed fails validation naming the row
       and field, and stores no derived rows
-- [ ] The raw CSV is archived byte-for-byte exactly as before
-- [ ] Tests inject canned CSV bodies through the existing outbound-HTTP seam: with shot
+- [x] The raw CSV is archived byte-for-byte exactly as before
+- [x] Tests inject canned CSV bodies through the existing outbound-HTTP seam: with shot
       columns, without them, and with a malformed value
 
 ---

@@ -20,6 +20,17 @@ const REQUIRED_COLUMNS = [
   "FTAG"
 ] as const;
 
+// Shots are optional: seasons whose CSVs predate these columns still load,
+// with the fields absent rather than zeroed.
+const SHOT_COLUMNS = {
+  homeShots: "HS",
+  awayShots: "AS",
+  homeShotsOnTarget: "HST",
+  awayShotsOnTarget: "AST"
+} as const;
+
+type ShotField = keyof typeof SHOT_COLUMNS;
+
 interface HistoricalMatch {
   season: string;
   division: Division["name"];
@@ -28,6 +39,7 @@ interface HistoricalMatch {
   awayTeam: string;
   homeGoals: number;
   awayGoals: number;
+  shots: Partial<Record<ShotField, number>>;
 }
 
 export interface FootballDataSourceIssue {
@@ -147,7 +159,7 @@ function parsePlayedOn(value: string): Date | undefined {
   return date;
 }
 
-function parseGoals(value: string): number | undefined {
+function parseCount(value: string): number | undefined {
   if (!/^\d+$/.test(value)) {
     return undefined;
   }
@@ -186,11 +198,11 @@ function parseMatches(
   const issues: FootballDataSourceIssue[] = [];
   for (const [offset, row] of rows.slice(1).entries()) {
     const rowNumber = offset + 2;
-    const value = (column: typeof REQUIRED_COLUMNS[number]): string =>
+    const value = (column: string): string =>
       row[indexes.get(column) ?? -1] ?? "";
     const playedOn = parsePlayedOn(value("Date"));
-    const homeGoals = parseGoals(value("FTHG"));
-    const awayGoals = parseGoals(value("FTAG"));
+    const homeGoals = parseCount(value("FTHG"));
+    const awayGoals = parseCount(value("FTAG"));
 
     if (value("Div") !== division.code) {
       issues.push({
@@ -229,6 +241,24 @@ function parseMatches(
       });
     }
 
+    // An absent column or an empty cell means the source had no figure. Only
+    // a cell that holds something unreadable is corruption.
+    const shots: Partial<Record<ShotField, number>> = {};
+    for (const [field, column] of Object.entries(SHOT_COLUMNS)) {
+      if (!indexes.has(column) || value(column).length === 0) {
+        continue;
+      }
+      const count = parseCount(value(column));
+      if (count === undefined) {
+        issues.push({
+          field: `row.${rowNumber}.${column}`,
+          detail: "expected a non-negative integer"
+        });
+        continue;
+      }
+      shots[field as ShotField] = count;
+    }
+
     if (
       playedOn !== undefined
       && homeGoals !== undefined
@@ -244,7 +274,8 @@ function parseMatches(
         homeTeam: value("HomeTeam"),
         awayTeam: value("AwayTeam"),
         homeGoals,
-        awayGoals
+        awayGoals,
+        shots
       });
     }
   }
@@ -308,8 +339,9 @@ export async function fetchFootballDataSeason({
       await database.query(
         `insert into historical_matches (
            season, division, played_on, home_team, away_team,
-           home_goals, away_goals
-         ) values ($1, $2, $3, $4, $5, $6, $7)`,
+           home_goals, away_goals,
+           home_shots, away_shots, home_shots_on_target, away_shots_on_target
+         ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           match.season,
           match.division,
@@ -317,7 +349,11 @@ export async function fetchFootballDataSeason({
           match.homeTeam,
           match.awayTeam,
           match.homeGoals,
-          match.awayGoals
+          match.awayGoals,
+          match.shots.homeShots ?? null,
+          match.shots.awayShots ?? null,
+          match.shots.homeShotsOnTarget ?? null,
+          match.shots.awayShotsOnTarget ?? null
         ]
       );
     }

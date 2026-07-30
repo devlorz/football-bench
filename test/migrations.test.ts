@@ -162,7 +162,8 @@ describe("applying migrations", () => {
 
     expect(applied).toEqual([
       "0007_lock_fpl_player_snapshots.sql",
-      "0008_prediction_runs.sql"
+      "0008_prediction_runs.sql",
+      "0009_historical_match_shots.sql"
     ]);
     const backfill = await client.query<{
       observed_at: Date;
