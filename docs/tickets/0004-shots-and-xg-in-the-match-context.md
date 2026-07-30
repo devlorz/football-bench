@@ -79,25 +79,28 @@ backfill makes one more, once. There is no gap between requests for a delay to o
 speculative pacing machinery would be untested code. Revisit only if a future ticket
 introduces a per-team or per-match loop.
 
-**Two alias spellings are unverified.** `Coventry` and `Hull` in
-`src/understat/team-identity.ts` are guesses: neither club appears in the Understat Premier
-League seasons the guide covers, so their exact titles could not be confirmed offline.
+**Two alias spellings are unverified, and the fetch now checks them.** `Coventry` and `Hull`
+in `src/understat/team-identity.ts` are guesses: neither club appears in the Understat
+Premier League seasons the guide covers, so their exact titles could not be confirmed
+offline.
 
-Running the fetch before the Season starts does **not** confirm them. A match with no `xG`
-field is skipped before the name check (`fetch-season-xg.ts:132`), and no match has an `xG`
-field until it has been played — so the alias mapping is first exercised after GW1, which is
-after the freeze.
+They were originally unconfirmable before the Season started. A match with no `xG` field was
+skipped *before* the name check, and no match has an `xG` field until it has been played — so
+the alias mapping was first exercised in the fetch following GW1, which is after the freeze.
 
-If a spelling is wrong, one unmapped name fails validation for the whole body: no xG rows
-are stored at all, and *every* team's form lines read `xG unavailable`, not just the
-misspelled club's. Loud and recoverable by editing the mapping, but wider than it looks.
+**Resolved during the freeze ticket** (operator decision): the alias check moved ahead of the
+not-yet-played skip. Upcoming matches already carry `h.title` / `a.title`, so a pre-season
+fetch now resolves every name in the feed and fails loudly on a rename while there is still
+no stored xG to lose. This is the second of the two options weighed here, chosen over grepping
+the archived `raw_snapshots` body by hand because it makes the check standing rather than
+one-off. It alters behaviour outside this ticket's wording, and is recorded as a deliberate
+addition rather than a silent one.
 
-To actually confirm before the freeze: fetch `getLeagueData/EPL/2026` once and read the
-archived `raw_snapshots` body — upcoming matches already carry `h.title` / `a.title`, so the
-titles are there to be grepped even though the parser never validates them. Alternatively,
-move the alias check ahead of the not-yet-played skip so a pre-season fetch validates every
-name in the feed; that turns this into an automatic pre-flight check rather than a manual
-grep, at the cost of a fetch that fails on a rename before any xG exists to lose.
+The blast radius is unchanged: one unmapped name still fails validation for the whole body,
+so no xG rows are stored at all, and *every* team's form lines read `xG unavailable`, not
+just the misspelled club's. Loud and recoverable by editing the mapping, but wider than it
+looks. What changed is *when* it surfaces — a pre-season fetch rather than the first fetch
+after opening day.
 
 ---
 
@@ -193,7 +196,9 @@ lines changes the emitted bytes, so the frozen-checksum guard in
 ways out, and only one keeps v1 meaning what it means: recomputing v1's hash in place would
 silently redefine the Prompt Version and leave the rehearsal attempts already recorded under
 it attributable to bytes no Entrant ever saw. So the constant pair moved to
-`match/2026-27-v2` / `29e81593…` here rather than leaving a known-red suite between tickets.
+`match/2026-27-v2` here rather than leaving a known-red suite between tickets. The hash it
+carried then (`29e81593…`) was recomputed once more when the pinned fixture was enriched
+below; the frozen value is `7b5d0bc1…`.
 
 **What that costs until the rest of this ticket lands.** `MATCH_PROMPT_VERSION` now reads
 v2 while the nine Entrant rows in the database still read v1, so `predictGameweek` and
@@ -204,12 +209,48 @@ with the constant. The v1 literals left in `test/dry-run-archive.test.ts` and
 `test/expected-dry-run-outcome.test.ts` are deliberate: those stand for rehearsal artifacts,
 which the spec requires stay attributable to v1.
 
-**The pinned fixture does not exercise the new segments.** The checksum test builds its
-context from matches carrying no shots and no xG, so every form line in the pinned bytes
-reads `xG unavailable`. The hash therefore pins the template and the builder's overall
-shape, but a bug in the shots or xG formatting specifically would not move it. Enriching
-that fixture before the freeze would make the pin cover the signals this spec exists to add;
-it was left alone here because the fixture is the frozen artifact and changing it is the
-freeze ticket's call, under review.
+**The pinned fixture now exercises the new segments** (operator decision, freeze ticket).
+It previously built from matches carrying no shots and no xG, so every form line in the
+pinned bytes read `xG unavailable`: the hash pinned the template and the builder's overall
+shape, but a bug in the shots or xG formatting specifically would not have moved it.
+
+The four fixture matches now span every way a form line can render — both signals present;
+both present with the subject team away, pinning the home-team-first ordering against the
+scoreline beside it; shots without xG, the ordinary Championship case; and neither signal, so
+the dropped-not-zeroed shot segment stays pinned too. The hash was recomputed once more
+against the reviewed bytes, and the freeze lands with the fixture and
+`MATCH_PROMPT_SHA256` agreeing.
+
+**Re-pointing the Entrant rows is operator-run SQL, not code** (operator decision, this
+session). Nothing in `src/cli/` or `migrations/` seeds or updates the live `models` rows —
+the only `insert into models` in `src/` is `src/dry-run/prepare-archived-gameweek.ts`, which
+is dry-run scaffolding against a throwaway database. A migration was considered and rejected:
+this is a data change, not a schema change, and it would put a one-time Season event into
+schema history. Run against the live database, in order:
+
+```sql
+-- 1. Before. Expect nine entrant rows on match/2026-27-v1.
+select prompt_version, role, count(*)
+  from models group by 1, 2 order by 1, 2;
+
+-- 2. Re-point. Scoped to entrants on v1 so it is idempotent and cannot touch
+--    a reference row or a row already moved.
+begin;
+update models
+   set prompt_version = 'match/2026-27-v2'
+ where role = 'entrant'
+   and prompt_version = 'match/2026-27-v1';
+-- Expect exactly: UPDATE 9. Anything else, rollback and investigate.
+commit;
+
+-- 3. After. Expect nine entrant rows on match/2026-27-v2 and none on v1.
+select prompt_version, role, count(*)
+  from models group by 1, 2 order by 1, 2;
+```
+
+This is the step that makes the system functional again: until it runs, `predictGameweek`
+and pre-flight both refuse with a version mismatch. It does not touch `contexts`,
+`predictions` or `attempts`, so every rehearsal artifact recorded under v1 stays in the
+record and stays attributable to v1.
 
 ---

@@ -69,6 +69,22 @@ addressed to a person.
 - [ ] **GitHub Issues is enabled.** Both alert paths open issues; neither works without it.
 - [ ] **Run `fetch.yml` once by hand** via `workflow_dispatch`. It is idempotent, so a second
       run costs nothing.
+
+      This is also what confirms the Understat alias mapping. The fetch resolves every team
+      name in the feed — including matches not yet played — so a spelling `Coventry` or `Hull`
+      got wrong fails here, loudly, months before there is any stored xG to lose. A run that
+      succeeds has validated the whole mapping against the live feed.
+
+- [ ] **Ingest the prior Season's xG once**, before any rehearsal or pre-flight. The last-five
+      form window crosses the Season boundary, so without this every opening-day form line
+      reads `xG unavailable` and the rehearsed contexts do not match what Entrants will
+      actually see:
+
+      ```bash
+      set -a; . ./.env; set +a; npm run --silent fetch:xg-history
+      ```
+
+      One-off. Deeper history is deliberately not fetched.
 - [ ] **Do not hand-dispatch `predict.yml` as a smoke test.** Its manual job writes real
       Predictions for the Gameweek named in the input. Before that Gameweek's deadline those
       writes are valid and, because `predictions` is insert-only, permanent — the Gameweek is
