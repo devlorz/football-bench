@@ -1,14 +1,14 @@
 import type { Client } from "pg";
-import { runDailyFetch } from "../fetch/daily-fetch.js";
 import type { GapAlert } from "../predictions/gap-alert.js";
 import { predictGameweek } from "../predictions/predict-gameweek.js";
 import { createArchiveReplayFetcher } from "./archive-replay-fetcher.js";
+import { prepareArchivedGameweek } from "./prepare-archived-gameweek.js";
 import { resolveDryRunInstant } from "./dry-run-clock.js";
 import {
   expectedDryRunOutcome,
   type ExpectedDryRunOutcome
 } from "./expected-outcome.js";
-import type { ArchivedEntrant, DryRunArchive } from "./load-archive.js";
+import type { DryRunArchive } from "./load-archive.js";
 
 type Database = Pick<Client, "query">;
 
@@ -41,31 +41,6 @@ export interface DryRunResult {
   contexts: DryRunContext[];
   phases: DryRunPhase[];
   expected: ExpectedDryRunOutcome;
-}
-
-async function seedEntrants(
-  database: Database,
-  entrants: ArchivedEntrant[]
-): Promise<void> {
-  for (const entrant of entrants) {
-    await database.query(
-      `insert into models
-         (id, name, base_model, provider, quantization, prompt_version,
-          role, config)
-       values ($1, $2, $3, $4, $5, $6, $7, $8)
-       on conflict (id) do nothing`,
-      [
-        entrant.id,
-        entrant.name,
-        entrant.base_model,
-        entrant.provider,
-        entrant.quantization,
-        entrant.prompt_version,
-        entrant.role,
-        entrant.config
-      ]
-    );
-  }
 }
 
 async function readDeadline(
@@ -148,15 +123,7 @@ export async function runDryRun({
   concurrency
 }: RunDryRunOptions): Promise<DryRunResult> {
   const http = createArchiveReplayFetcher(archive.snapshots);
-
-  await seedEntrants(target, archive.entrants);
-  await runDailyFetch({
-    database: target,
-    season,
-    footballDataSeason,
-    http,
-    now: () => archive.observedAt
-  });
+  await prepareArchivedGameweek({ target, archive, season, footballDataSeason });
 
   const deadline = await readDeadline(target, season, gameweek);
   const instant = resolveDryRunInstant(at, deadline);

@@ -33,6 +33,12 @@ export interface PredictJobConfig extends ScheduledPredictJobConfig {
   trigger: AttemptTrigger;
 }
 
+export interface PreviewJobConfig extends DailyFetchJobConfig {
+  gameweek: number;
+  concurrency: number;
+  openRouterApiKey: string;
+}
+
 export interface DryRunJobConfig extends DailyFetchJobConfig {
   gameweek: number;
   at: string;
@@ -178,6 +184,33 @@ export function readPreflightJobConfig(
     season,
     fixtureId,
     expectedEntrantCount,
+    openRouterApiKey
+  };
+}
+
+/**
+ * The preview calls the real roster, so it needs the key the prediction job
+ * uses. It writes to a throwaway cluster, so it needs no instant: the run is
+ * always before the Lock it builds for itself.
+ */
+export function readPreviewJobConfig(
+  environment: NodeJS.ProcessEnv
+): PreviewJobConfig {
+  const { databaseUrl, season, footballDataSeason } =
+    readDailyFetchJobConfig(environment);
+  const { gameweek } = readFetchJobConfig(environment);
+  const concurrency = Number(environment.PREDICT_CONCURRENCY?.trim() || "9");
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new Error("PREDICT_CONCURRENCY must be a positive integer");
+  }
+  const openRouterApiKey = required(environment, "OPENROUTER_API_KEY");
+
+  return {
+    databaseUrl,
+    season,
+    footballDataSeason,
+    gameweek,
+    concurrency,
     openRouterApiKey
   };
 }
