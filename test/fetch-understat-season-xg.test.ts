@@ -149,10 +149,12 @@ describe("fetching Understat per-match xG", () => {
     })).rejects.toMatchObject({
       name: UnderstatSourceValidationError.name,
       source: "understat:2026-27:EPL",
+      // Team names are checked first within each entry, ahead of the
+      // not-yet-played skip; every offending field still surfaces.
       issues: [
         { field: "dates.0.xG.h", detail: "expected a non-negative decimal string" },
-        { field: "dates.1.datetime", detail: "expected YYYY-MM-DD HH:MM:SS" },
-        { field: "dates.1.h.title", detail: "team name is missing" }
+        { field: "dates.1.h.title", detail: "team name is missing" },
+        { field: "dates.1.datetime", detail: "expected YYYY-MM-DD HH:MM:SS" }
       ]
     });
 
@@ -296,5 +298,31 @@ describe("fetching Understat per-match xG", () => {
          (select count(*)::int from raw_snapshots) as snapshots`
     );
     expect(stored.rows).toEqual([{ xg: 0, snapshots: 1 }]);
+  });
+
+  test("checks the alias mapping on matches not yet played", async () => {
+    // Upcoming matches already carry h.title / a.title, so a pre-season fetch
+    // can confirm every spelling in the feed — months before the first xG
+    // exists to be lost to a rename.
+    const body = leagueBody([
+      {
+        id: "29003",
+        datetime: "2026-08-22 14:00:00",
+        home: "Arsenal",
+        away: "Coventry City"
+      }
+    ]);
+
+    await expect(fetchUnderstatSeasonXg({
+      database: client,
+      season: "2026-27",
+      http: async () => ({ status: 200, body })
+    })).rejects.toMatchObject({
+      name: UnderstatSourceValidationError.name,
+      source: "understat:2026-27:EPL",
+      issues: [
+        { field: "dates.0.a.title", detail: "unknown Understat team name" }
+      ]
+    });
   });
 });

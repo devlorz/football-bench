@@ -19,26 +19,46 @@ describe("the Match Prompt Version", () => {
       {
         season: "2026-27",
         deadline: new Date("2026-08-21T17:30:00Z"),
+        // Between them these four span every way a form line can render, so
+        // the pinned hash moves if the shots or xG formatting changes -- not
+        // only if the template or the builder's overall shape does.
         historicalMatches: [
           {
+            // Shots and xG both present.
             season: "2025-26",
             division: "Premier League",
             played_on: new Date("2026-05-01T00:00:00Z"),
             home_team: "Arsenal",
             away_team: "Everton",
             home_goals: 3,
-            away_goals: 1
+            away_goals: 1,
+            home_shots: 15,
+            away_shots: 8,
+            home_shots_on_target: 7,
+            away_shots_on_target: 3,
+            home_xg: 2.1,
+            away_xg: 0.85
           },
           {
+            // Full data with Arsenal away, pinning the home-team-first
+            // ordering against the scoreline beside it.
             season: "2026-27",
             division: "Premier League",
             played_on: new Date("2026-08-10T00:00:00Z"),
             home_team: "Fulham",
             away_team: "Arsenal",
             home_goals: 0,
-            away_goals: 2
+            away_goals: 2,
+            home_shots: 9,
+            away_shots: 17,
+            home_shots_on_target: 2,
+            away_shots_on_target: 6,
+            home_xg: 0.64,
+            away_xg: 1.9
           },
           {
+            // Neither signal: the shot segment is dropped, not zeroed, and the
+            // line still states the xG gap outright.
             season: "2024-25",
             division: "Championship",
             played_on: new Date("2025-05-02T00:00:00Z"),
@@ -48,13 +68,19 @@ describe("the Match Prompt Version", () => {
             away_goals: 1
           },
           {
+            // Shots without xG -- the ordinary Championship case, where
+            // football-data carries shots and Understat covers no such match.
             season: "2025-26",
             division: "Championship",
             played_on: new Date("2026-05-02T00:00:00Z"),
             home_team: "Coventry",
             away_team: "Hull",
             home_goals: 2,
-            away_goals: 0
+            away_goals: 0,
+            home_shots: 19,
+            away_shots: 6,
+            home_shots_on_target: 8,
+            away_shots_on_target: 2
           }
         ],
         fplPlayers: [

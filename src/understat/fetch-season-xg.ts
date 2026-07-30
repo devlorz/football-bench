@@ -127,30 +127,14 @@ function parseMatches(
       a?: { title?: unknown };
       xG?: { h?: unknown; a?: unknown };
     };
-    // No xG field at all means the match has not been played. Skipped, never
-    // stored as a zero.
-    if (match.xG === undefined || match.xG === null) {
-      continue;
-    }
-
-    const kickedOffAt = parseKickOff(match.datetime);
-    const homeXg = parseXg(match.xG.h);
-    const awayXg = parseXg(match.xG.a);
     const homeTeam = match.h?.title;
     const awayTeam = match.a?.title;
 
-    if (typeof match.id !== "string" || match.id.length === 0) {
-      issues.push({
-        field: `dates.${index}.id`,
-        detail: "expected a match id"
-      });
-    }
-    if (kickedOffAt === undefined) {
-      issues.push({
-        field: `dates.${index}.datetime`,
-        detail: "expected YYYY-MM-DD HH:MM:SS"
-      });
-    }
+    // Deliberately ahead of the not-yet-played skip below. Upcoming matches
+    // already carry both titles, so a pre-season fetch confirms every spelling
+    // in the feed while there is still no stored xG for a rename to cost.
+    // Checking after the skip would first exercise the mapping in the fetch
+    // that follows the Season's opening Gameweek.
     for (const [side, team] of [["h", homeTeam], ["a", awayTeam]] as const) {
       if (typeof team !== "string" || team.length === 0) {
         issues.push({
@@ -163,6 +147,29 @@ function parseMatches(
           detail: "unknown Understat team name"
         });
       }
+    }
+
+    // No xG field at all means the match has not been played. Skipped, never
+    // stored as a zero.
+    if (match.xG === undefined || match.xG === null) {
+      continue;
+    }
+
+    const kickedOffAt = parseKickOff(match.datetime);
+    const homeXg = parseXg(match.xG.h);
+    const awayXg = parseXg(match.xG.a);
+
+    if (typeof match.id !== "string" || match.id.length === 0) {
+      issues.push({
+        field: `dates.${index}.id`,
+        detail: "expected a match id"
+      });
+    }
+    if (kickedOffAt === undefined) {
+      issues.push({
+        field: `dates.${index}.datetime`,
+        detail: "expected YYYY-MM-DD HH:MM:SS"
+      });
     }
     if (homeXg === undefined) {
       issues.push({

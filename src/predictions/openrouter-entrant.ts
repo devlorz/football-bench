@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const MATCH_PROMPT_VERSION = "match/2026-27-v2";
 export const MATCH_PROMPT_SHA256 =
-  "29e81593e1a3b50c0b3e1b37fee0a42bdf600fcca5676197d24ed8f9a089309d";
+  "7b5d0bc1661ab1a5af0d97254425094c99edd2a58168eae9f1a7491cc4216953";
 
 export interface MatchPromptFixture {
   fpl_id: number;
