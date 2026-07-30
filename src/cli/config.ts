@@ -1,3 +1,4 @@
+import { resolveDryRunInstant } from "../dry-run/dry-run-clock.js";
 import {
   parseAttemptTrigger,
   type AttemptTrigger
@@ -30,6 +31,12 @@ export interface ScheduledPredictJobConfig {
 export interface PredictJobConfig extends ScheduledPredictJobConfig {
   gameweek: number;
   trigger: AttemptTrigger;
+}
+
+export interface DryRunJobConfig extends DailyFetchJobConfig {
+  gameweek: number;
+  at: string;
+  concurrency: number;
 }
 
 export interface PreflightJobConfig {
@@ -121,6 +128,30 @@ export function readScheduledPredictJobConfig(
     season: requiredSeason(environment),
     concurrency,
     openRouterApiKey: required(environment, "OPENROUTER_API_KEY")
+  };
+}
+
+export function readDryRunJobConfig(
+  environment: NodeJS.ProcessEnv
+): DryRunJobConfig {
+  const { databaseUrl, season, footballDataSeason } =
+    readDailyFetchJobConfig(environment);
+  const { gameweek } = readFetchJobConfig(environment);
+  const at = environment.DRY_RUN_AT?.trim() || "deadline-6h";
+  const concurrency = Number(environment.PREDICT_CONCURRENCY?.trim() || "9");
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new Error("PREDICT_CONCURRENCY must be a positive integer");
+  }
+  // Read now so an unusable instant fails before a cluster is built for it.
+  resolveDryRunInstant(at, new Date(0));
+
+  return {
+    databaseUrl,
+    season,
+    footballDataSeason,
+    gameweek,
+    at,
+    concurrency
   };
 }
 
