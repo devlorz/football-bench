@@ -4,6 +4,8 @@ import {
   fetchFplDaily,
   type FetchFplDailyResult
 } from "../fpl/fetch-gameweek.js";
+import { fetchUnderstatSeasonXg } from "../understat/fetch-season-xg.js";
+import { errorText } from "../error-text.js";
 import type { HttpFetcher } from "../http.js";
 
 type Database = Pick<Client, "query">;
@@ -16,8 +18,18 @@ export interface RunDailyFetchOptions {
   now: () => Date;
 }
 
+/**
+ * xG is enrichment, so its outcome is reported rather than thrown: per
+ * ADR 0017 an Understat outage degrades the affected form lines to an explicit
+ * marker and must never cost a Gameweek of Predictions.
+ */
+export type DailyXgOutcome =
+  | { stored: true }
+  | { stored: false; failure: string };
+
 export interface DailyFetchResult {
   fpl: FetchFplDailyResult;
+  xg: DailyXgOutcome;
 }
 
 export class StaleFootballDataSeasonError extends Error {
@@ -109,6 +121,13 @@ export async function runDailyFetch({
       errors.push(error);
     }
   }
+  let xg: DailyXgOutcome;
+  try {
+    await fetchUnderstatSeasonXg({ database, season, http });
+    xg = { stored: true };
+  } catch (error) {
+    xg = { stored: false, failure: errorText(error) };
+  }
   if (errors.length === 1) {
     throw errors[0];
   }
@@ -118,5 +137,5 @@ export async function runDailyFetch({
   if (fpl === undefined) {
     throw new Error("Daily FPL fetch completed without a result");
   }
-  return { fpl };
+  return { fpl, xg };
 }

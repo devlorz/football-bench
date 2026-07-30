@@ -9,6 +9,7 @@
     "dry-run": "tsx src/cli/dry-run.ts",
     "fetch": "tsx src/cli/fetch.ts",
     "fetch:history": "tsx src/cli/fetch-history.ts",
+    "fetch:xg-history": "tsx src/cli/fetch-understat-history.ts",
     "preflight": "tsx src/cli/preflight.ts",
     "predict": "tsx src/cli/predict.ts",
     "predict:scheduled": "tsx src/cli/predict-scheduled.ts",

@@ -50,27 +50,41 @@ because an enrichment source is never allowed to block the write path.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] A migration creates the xG table keyed by season and Understat match id, carrying
+- [x] A migration creates the xG table keyed by season and Understat match id, carrying
       kick-off time, both team names as Understat spells them, and both xG values — with
       deliberately no foreign key to historical matches, since a missing xG row is a
       legitimate state
-- [ ] The fetcher calls the internal JSON endpoints with the headers the reference guide
+- [x] The fetcher calls the internal JSON endpoints with the headers the reference guide
       documents as required, through the same injectable outbound-HTTP seam as every other
-      source, rate-limited between requests
-- [ ] Every raw response is archived exactly as received before any parsing
-- [ ] String-typed xG values are parsed to numbers at the boundary; matches without an xG
+      source, ~~rate-limited between requests~~
+- [x] Every raw response is archived exactly as received before any parsing
+- [x] String-typed xG values are parsed to numbers at the boundary; matches without an xG
       field (not yet played) are skipped, never stored as zero
-- [ ] A response with an unexpected shape is archived, then fails validation naming every
+- [x] A response with an unexpected shape is archived, then fails validation naming every
       offending field, and stores no derived rows
-- [ ] Understat team names resolve through an explicit alias mapping; an unmapped name is a
+- [x] Understat team names resolve through an explicit alias mapping; an unmapped name is a
       validation error, never a silent skip
-- [ ] A failed Understat fetch leaves the daily fetch alive and the stored xG untouched,
+- [x] A failed Understat fetch leaves the daily fetch alive and the stored xG untouched,
       and the failure is loudly logged; the football-data staleness guard still blocks as
       before
-- [ ] Re-running the fetch does not duplicate stored xG rows
-- [ ] A backfill command ingests the prior season's xG once; deeper history is not fetched
-- [ ] Tests replay canned Understat JSON through the HTTP seam: a healthy body, a reshaped
+- [x] Re-running the fetch does not duplicate stored xG rows
+- [x] A backfill command ingests the prior season's xG once; deeper history is not fetched
+- [x] Tests replay canned Understat JSON through the HTTP seam: a healthy body, a reshaped
       body, an unknown team name, and an outage that the run survives
+
+**Rate limiting struck, not skipped.** The criterion assumed the reference implementation's
+per-team fetching (20 requests a season). Using `getLeagueData` instead, a whole Season's xG
+is one request, so the daily fetch makes exactly one call to Understat per run and the
+backfill makes one more, once. There is no gap between requests for a delay to occupy, and
+speculative pacing machinery would be untested code. Revisit only if a future ticket
+introduces a per-team or per-match loop.
+
+**Two alias spellings are unverified.** `Coventry` and `Hull` in
+`src/understat/team-identity.ts` are guesses: neither club appears in the Understat Premier
+League seasons the guide covers, so their exact titles could not be confirmed offline. An
+unmapped name is a loud validation error rather than a silent gap, so the failure mode is
+safe — but the first real fetch against the 2026-27 endpoint should be run before the freeze
+to confirm them, not on opening day.
 
 ---
 

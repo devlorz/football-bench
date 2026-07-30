@@ -47,7 +47,8 @@ describe("the benchmark database", () => {
       "raw_snapshots",
       // Bookkeeping for the migration runner, not part of the write path.
       "schema_migrations",
-      "scores"
+      "scores",
+      "understat_match_xg"
     ]);
   });
 
