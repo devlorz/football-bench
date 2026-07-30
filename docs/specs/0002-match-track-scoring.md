@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 **Scope:** turning stored Predictions and results into a ranked, interval-qualified leaderboard
-**Vocabulary:** [CONTEXT.md](../../CONTEXT.md) · **Decisions:** [ADR 0001–0015](../adr/)
+**Vocabulary:** [CONTEXT.md](../../CONTEXT.md) · **Decisions:** [ADR 0001–0016](../adr/)
 **Predecessor:** [spec 0001](./0001-match-track-write-path.md), complete
 
 ---
@@ -54,8 +54,8 @@ and give the same answer as it would have then.
 1. As an operator, I want the daily fetch to record each Fixture's final score, so that there is
    something to judge Predictions against.
 2. As an operator, I want a Fixture treated as scoreable only when the feed reports it
-   `finished`, not `finished_provisional`, so that bonus points and defensive contributions have
-   settled before anything is computed from them.
+   `finished`; `finished_provisional` alone is never sufficient, so that bonus points and
+   defensive contributions have settled before anything is computed from them.
 3. As an operator, I want scoreability decided by what the feed reports rather than by what time
    the job ran, so that an early or delayed run cannot score a Gameweek that has not settled.
 4. As an auditor, I want the recorded result to carry the goals for each side and the derived
@@ -98,9 +98,9 @@ and give the same answer as it would have then.
 19. As an analyst, I want comparisons computed over the Fixtures where **every** Entrant
     produced a Prediction, so that the leaderboard cannot contradict itself with an intransitive
     ranking.
-20. As an analyst, I want intervals published against the current leader only — eight
-    comparisons, fixed in advance — so that testing every pair does not manufacture a separation
-    by chance.
+20. As an analyst, I want one interval against the current Comparison Anchor for every other
+    Entrant retained in the Season roster — eight for the current nine Entrants — so that
+    testing every pair does not manufacture a separation by chance.
 21. As an analyst, I want any comparison outside that declared set marked exploratory, so that a
     figure I went looking for is not read as one the benchmark asserts.
 22. As a sceptical reader, I want an interval spanning zero presented as a result rather than a
@@ -175,8 +175,10 @@ and give the same answer as it would have then.
 ### Results ingestion belongs here, not in the fetch ticket
 
 The FPL fetch gains the four fields it currently discards. The decision of *when* a result may
-be scored — `finished` and not `finished_provisional` — is a scoring judgement, so it is
-specified here even though the write happens in the fetch path.
+be scored is read from `finished` alone. `finished_provisional` becoming true does not make a
+Fixture scoreable, and it may remain true after `finished` becomes true, so the two flags must
+not be combined as an `and not` gate. This is a scoring judgement specified here even though
+the write happens in the fetch path.
 
 `fixtures.result` is populated as `{ home_goals, away_goals, outcome }` where outcome is `H`,
 `D` or `A` derived at write time. Storing the derived outcome rather than computing it on read
@@ -199,6 +201,10 @@ implies the goal difference implies the outcome — so cumulative scoring would 
 Brier is pinned as `Σ_i (p_i − o_i)²` over the three outcomes, unnormalised, range [0, 2].
 Published variants differ by a factor of two; this one is fixed so figures are comparable.
 
+Accuracy and Coherence use the same deterministic argmax convention: when probabilities tie,
+the first maximum in canonical `H`, `D`, `A` order wins. The rule is arbitrary but pinned; a
+database or runtime iteration order must never decide it.
+
 ### The bootstrap is seeded from its own inputs
 
 Resampling is deterministic: the seed is derived from a hash of the Paired Differences being
@@ -214,9 +220,19 @@ Paired Differences are computed over Fixtures where **every** Entrant produced a
 (ADR-0011). Pairwise deletion is rejected: it permits intransitive rankings, and a leaderboard
 that can contradict itself is unusable as a public artifact.
 
-Published intervals are **against the current leader only** — eight comparisons at nine
-Entrants, fixed in advance (ADR-0014). Any other pair may be computed but is labelled
-exploratory.
+Each cumulative Gameweek snapshot publishes one interval against its **Comparison Anchor** for
+every other Entrant retained in the Season roster — eight comparisons with the current nine
+Entrants (ADR-0016). The snapshot at Gameweek N selects its anchor using only scoreable
+Fixtures attributed to `locked_in_gw <= N`: highest Match Points, then lower RPS, then Entrant
+id, without breaking the Match Points tie itself. A deferred Fixture may update its historical
+snapshot when it settles; data attributed to Gameweek N+1 cannot. Any other pair may be
+computed but is labelled exploratory.
+
+The stored declared set for each recomputed cumulative Gameweek snapshot is replaced atomically
+on every scoring run. Once the transaction commits that snapshot contains one row per
+non-anchor Season-roster Entrant and every row names the same Comparison Anchor. A row against
+a former anchor must not survive a leader change within that snapshot; earlier Gameweek
+snapshots remain historical records.
 
 Every published figure carries its `n`.
 
@@ -228,8 +244,8 @@ months later; this is correct, and the ranked figure is the season-to-date aggre
 any single Gameweek.
 
 Note the ordering dependency ADR-0013 records: `deferred` is materialised by the FPL fetch, so
-the fetch must complete before the scorer reads it. The current 06:00 / 10:00 schedule provides
-this and must be preserved.
+the fetch must complete before the scorer reads it. The specified 06:00 fetch and 10:00 score
+jobs provide this ordering; the score workflow created by this work must establish it.
 
 ### Storage
 
@@ -238,15 +254,29 @@ this and must be preserved.
 `match_points`, `score_pct`, `outcome_pct`, `rps`, `brier`, `accuracy`, `coherence`,
 `gap_rate`. Per-Fixture breakdowns live in `detail` so an aggregate can be drilled into.
 
-Writes are upserts keyed on the primary key, so a re-run replaces rather than duplicates.
+The base metric name stores that Gameweek's value. A cumulative snapshot through that
+Gameweek uses the explicit `_season_to_date` suffix — for example `match_points` and
+`match_points_season_to_date` coexist at the same `gw`. This avoids a sentinel Gameweek and
+keeps the existing foreign key valid. A late deferred result or correction recomputes
+season-to-date snapshots from its locked Gameweek through the latest scored Gameweek.
+
+Ordinary writes are upserts keyed on the primary key, so a re-run replaces rather than
+duplicates. The declared comparison set is the exception: it is replaced as one set so rows
+against a former Comparison Anchor cannot remain.
 
 ### Reference Lines
 
 `reference-home`, `reference-uniform` and `reference-elo` are seeded as `models` rows with
 `role = 'reference'` and produce probabilities from stored Fixtures alone. They are scored on
 the probability layer and excluded from the Match Points ranking, since they name no scoreline
-(ADR-0001, ADR-0012). Being deterministic, they are back-filled across every Fixture already
-stored.
+(ADR-0001, ADR-0012).
+
+Reference Line forecasts are computed in memory whenever scoring runs. They never create
+`predictions` rows and therefore do not depend on a Fixture having a Lock. Their per-Fixture
+probabilities and contributions live in `scores.detail`; the aggregate lives in `scores.value`.
+Running the scorer over old Fixtures is the back-fill path. Elo is replayed from stored history
+on every run, so a corrected earlier result deterministically changes every affected later
+forecast.
 
 `reference-odds` is deferred — it requires odds columns from football-data.co.uk that the
 current fetch discards, and it is post-Lock information shown as a line only.
@@ -289,15 +319,26 @@ Tests run against a real Postgres, as everything else does.
   Predicted Score, a correct goal difference with the wrong score, a correct outcome with the
   wrong goal difference, and a miss.
 - **Brier's pinned convention**, so a future refactor cannot silently halve it.
+- **Argmax ties**, so accuracy and Coherence use canonical `H`, `D`, `A` order rather than an
+  incidental query or object order.
 - **The bootstrap is deterministic** — the same inputs produce a byte-identical interval across
   separate invocations.
 - **Complete-case selection** — an Entrant with a Gap removes that Fixture from every
   comparison, not only from its own.
+- **Comparison Anchor replacement** — recomputing the same cumulative snapshot after its
+  anchor changes removes the former declared row and leaves one row per non-anchor Entrant
+  retained in the Season roster, all naming the new anchor.
 - **Deferred attribution** — a Fixture locked in one Gameweek and played in another scores into
   the first.
 - **Idempotency** — scoring twice leaves the row count and every value unchanged.
-- **Results ingestion** — `finished_provisional` is not scoreable, `finished` is, and a changed
-  score updates the stored Fixture.
+- **Results ingestion** — `finished_provisional` alone is not scoreable, `finished` is
+  scoreable even when both flags are true, and a changed score updates the stored Fixture.
+- **Observed FPL semantics** — the result logic can be built before the Season from the pinned
+  `finished` contract and explicit boundary cases. After the first matchday, one live fixtures
+  response containing completed matches is archived and pinned as a regression fixture. The
+  existing pre-Season archive has only `finished = false` / `finished_provisional = false` and
+  cannot prove the transition semantics; the dated verification is an operating action, not
+  an implementation blocker.
 - **An end-to-end pass over the archived Gameweek**, following the dry run's pattern of a
   throwaway Postgres built through the same migration path the real database uses.
 

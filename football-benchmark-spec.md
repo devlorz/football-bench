@@ -349,6 +349,10 @@ Reported alongside: **Score %** (exact hits / n) and **Outcome %** (correct outc
 Expect about 1.5 points per Fixture with a per-Fixture standard deviation near 1.7. This
 layer is legible and it ranks; it does not on its own separate Base Models (ADR-0012).
 
+The base metric name stores one Gameweek; the corresponding cumulative snapshot at that
+Gameweek uses the `_season_to_date` suffix. Both therefore fit the existing `scores` key
+without a sentinel Gameweek or schema change.
+
 ### 6.2 Match track — the evidential layer
 
 **Ranked Probability Score** on `probs`, for ordered outcomes H, D, A with observed one-hot `o`:
@@ -362,16 +366,22 @@ Draw is a smaller error than predicting Home and getting an Away win.
 
 Secondary: **Brier**, defined as `Σ_i (p_i - o_i)²` over the three outcomes, unnormalised,
 range [0, 2] — the convention is pinned here because published variants differ by a factor of
-two. And **accuracy**, argmax against outcome.
+two. And **accuracy**, argmax against outcome. Argmax ties resolve to the first maximum in
+canonical H, D, A order.
 
 **Comparisons** are Paired Differences in RPS on the same Fixture, over the Fixtures where
 every Entrant produced a Prediction, with a bootstrap 95% interval (10,000 resamples). Every
 published comparison shows its n (ADR-0011).
 
 Nine Entrants make 36 pairs, enough that testing all of them would throw up a spurious
-separation or two by chance. The leaderboard publishes intervals **against the current leader
-only** — eight comparisons, declared in advance. Any other pair is exploratory and labelled
-as such (ADR-0014).
+separation or two by chance. The leaderboard publishes intervals against one current
+**Comparison Anchor** — one comparison for every other Entrant retained in the Season roster,
+currently eight. The snapshot at Gameweek N selects its anchor using only scoreable Fixtures
+attributed to `locked_in_gw <= N`: Match Points, then lower RPS and Entrant id for a tie; this
+does not break the Match Points tie. A later-settled deferred Fixture may update that snapshot,
+but data attributed to N+1 cannot. Any other pair is exploratory and labelled as such
+(ADR-0016). Each scoring run atomically replaces the declared set for each recomputed
+cumulative Gameweek snapshot, so a former anchor cannot remain within that snapshot.
 
 ### 6.3 Match track — behavioural metrics
 
@@ -387,6 +397,17 @@ Full 2026/27 rules (ADR-0003): persistent Squad, Free Transfers banked to five, 
 Chip sets (Wildcard, Free Hit, Triple Captain, Bench Boost per half; the first set expires at
 the GW19 deadline), Selling Price of purchase price plus half of any rise rounded down,
 auto-substitutions by bench order, captain and vice-captain.
+
+The Chip set and lifecycle are frozen from the Premier League's official
+[2026/27 announcement](https://www.premierleague.com/en/news/4679879/whats-happening-with-fpl-chips-in-202627),
+published 20 July 2026 and verified 30 July 2026. Every Manager State uses one `squad` JSONB
+envelope shape; its Free Hit stash is `null` normally and carries the permanent Squad, purchase
+prices, Team Sheet and bank while the active Squad is temporary. The next reducer step never
+reads an older row (ADR-0017). The current official
+[FPL FAQ](https://www.premierleague.com/en/news/4661030), verified the same day, confirms bank
+restoration and Gameweek 1 Chip availability. Playing a Free Hit consumes that Gameweek's
+granted Free Transfer, preserves previously banked Free Transfers unchanged, and lets normal
+accrual resume in the following Gameweek up to five.
 
 Validation is a **state machine replay**, not a check on a single Squad: Gameweek 20 cannot
 be validated without replaying 1–19 for the bank, Free Transfers, Chips spent and purchase
@@ -409,7 +430,8 @@ needed per Gameweek, Roll Over rate, and the violation profile from `attempts`.
 | `reference-odds` | closing odds, margin-normalised — post-Lock information, shown as a line only |
 
 Reference Lines produce probabilities but no scoreline, so they appear on the RPS layer only
-and never on the points leaderboard.
+and never on the points leaderboard. Their forecasts are computed during scoring and retained
+only as aggregate values and per-Fixture `scores.detail`; they never create `predictions` rows.
 
 ---
 
@@ -554,7 +576,7 @@ comes to assert a shape that production never has.
 | **A pinned provider is unavailable** | Request fails into a Gap rather than silently rerouting to a different quantization; the fill run retries |
 | **A Base Model refuses the task** (probability forecasting sits near betting) | Pre-flight all nine before GW1 — task 1.8. Content policy varies more across nine Base Models than across three |
 | **One Entrant gaps heavily**, shrinking the complete-case intersection for everyone — a risk that grows with the roster | Publish n on every comparison; excluding an Entrant is a single recorded decision applied to the whole Season |
-| **Spurious separations** — 36 pairs at nine Entrants | Publish intervals against the leader only, eight comparisons declared in advance (ADR-0014) |
+| **Spurious separations** — 36 pairs at nine Entrants | Publish one interval against the snapshot's Comparison Anchor for every other Season-roster Entrant, currently eight (ADR-0016) |
 | **Context builder emits wrong data all season** | Silent failure — comparisons survive but absolute results are worthless. Explicit no-data markers, stored contexts, hand-checked assertions for GW1 |
 | FPL API shape changes during the Season | archive every response before validating the fields currently consumed; fail before writing derived rows |
 | football-data.co.uk delayed | Scoring is idempotent and re-runs daily |
@@ -570,9 +592,9 @@ before its Gameweek deadline, verifiable in one query. Every context handed to a
 reproducible from storage.
 
 **Match track.** From GW10, publish weekly: a Match Points ranking, and Paired Difference
-intervals on RPS against the leader with n shown. State plainly which pairs are separated and
-which are not. An interval spanning zero is a result, not a failure — and, absent a Positive
-Control, it cannot rule out that the setup resolves nothing.
+intervals on RPS against the Comparison Anchor with n shown. State plainly which pairs are
+separated and which are not. An interval spanning zero is a result, not a failure — and,
+absent a Positive Control, it cannot rule out that the setup resolves nothing.
 
 **FPL track.** A complete season path per Entrant under the full ruleset, with Repairs and
 Roll Overs reported, presented as a demonstration rather than as evidence.

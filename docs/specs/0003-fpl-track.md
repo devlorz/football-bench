@@ -3,7 +3,7 @@
 **Status:** ready-for-agent
 **Scope:** nine Entrants managing a Fantasy Premier League team under the complete 2026/27
 ruleset, selection and scoring together
-**Vocabulary:** [CONTEXT.md](../../CONTEXT.md) · **Decisions:** [ADR 0001–0015](../adr/)
+**Vocabulary:** [CONTEXT.md](../../CONTEXT.md) · **Decisions:** [ADR 0001–0017](../adr/)
 **Siblings:** [spec 0001](./0001-match-track-write-path.md) complete ·
 [spec 0002](./0002-match-track-scoring.md) written
 
@@ -224,8 +224,37 @@ outcome depend on an ordering rule nobody chose.
 
 Every other Chip modifies one Gameweek's scoring or transfer allowance. Free Hit replaces the
 Squad for one Gameweek and reverts it afterwards, so the pre-Chip Squad must be stored and
-restored. This is the one rule that cannot be expressed as a modifier on the current state, and
-it is why `manager_states` stores the whole Squad per Gameweek rather than a diff.
+restored. Every persisted Manager State uses one `squad` JSONB envelope shape. Its
+`free_hit_stash` is `null` outside a Free Hit; during a Free Hit it holds the permanent Squad
+with purchase prices, permanent Team Sheet and bank while `active` holds the temporary Squad
+(ADR-0017). The next reducer step restores that stash before applying the next action; it never
+reads the previous database row. This preserves the fold even when the next action Rolls Over.
+
+The stored shape is pinned:
+
+```ts
+type SquadEnvelope = {
+  active: OwnedPlayer[]; // includes each purchase price
+  free_hit_stash: null | { // null in every Manager State outside a Free Hit
+    squad: OwnedPlayer[];
+    team_sheet: TeamSheet;
+    bank: number;
+  };
+};
+```
+
+### The 2026/27 Chip rules are frozen from the official source
+
+The Chip inventory and lifecycle were verified on 30 July 2026 against the Premier League's
+official [2026/27 Chips announcement](https://www.premierleague.com/en/news/4679879/whats-happening-with-fpl-chips-in-202627),
+published 20 July 2026. It confirms Wildcard, Free Hit, Triple Captain and Bench Boost once per
+half-Season; expiry of the first set at the Gameweek 19 deadline; one Chip per Gameweek; Free
+Hit being unavailable in Gameweek 1; and consecutive Free Hits being forbidden. The current
+official [FPL FAQ](https://www.premierleague.com/en/news/4661030), also verified 30 July 2026,
+confirms that Wildcard is unavailable in Gameweek 1, bank and Squad restoration after Free
+Hit, and preservation of previously banked Free Transfers. Playing a Free Hit consumes the
+Free Transfer granted for that Gameweek, leaves previously banked Free Transfers unchanged,
+and lets normal accrual resume in the following Gameweek up to the five-transfer cap.
 
 ### Data the fetch must gain
 
@@ -242,10 +271,20 @@ ADR-0003 makes Manager State the system of record for purchase prices.
 
 `manager_states` exists and needs no migration — Squad, Team Sheet, bank, Free Transfers, Chips
 used, active Chip, Rolled Over flag, Repairs used, all keyed `(model_id, season, gw)` with the
-existing immutability trigger.
+existing immutability trigger. The `squad` JSONB envelope carries both the active Squad and the
+optional Free Hit stash specified above.
 
 A new table records per-player Gameweek points. FPL points and behavioural metrics are written
 to `scores` with `track = 'fpl'`, which the schema already permits.
+
+The base metric name stores one Gameweek and the `_season_to_date` suffix stores the cumulative
+snapshot through that same Gameweek, matching spec 0002. The FPL names are `fpl_points`,
+`repairs`, `roll_over_rate` and `violation_profile`, with corresponding
+`*_season_to_date` cumulative metrics. `repairs` is Repairs used that Gameweek and its
+cumulative value is the mean per Gameweek, with the full 0/1/2/3/failed distribution in
+detail. `roll_over_rate` is 0 or 1 for one Gameweek and a cumulative fraction.
+`violation_profile` stores the total violation count as its value and the typed breakdown in
+detail, both per Gameweek and cumulatively.
 
 ### One Lock, shared
 
@@ -293,7 +332,8 @@ Tests run against a real Postgres for the persistence layer, as everything else 
 - Budget, the 2/5/5/3 quota, and the three-per-club limit, each rejected with its own kind
 - A legal formation accepted and an illegal one rejected
 - Each Chip's effect, a spent Chip refused, and the first-half set expiring at Gameweek 19
-- Free Hit reverting the Squad the following Gameweek
+- Free Hit reverting the stashed permanent Squad, Team Sheet and bank the following Gameweek
+  without a database read, including a Roll Over immediately after the Free Hit
 - Auto-substitution where the formation constraint blocks an otherwise-eligible substitute —
   the case where the ordering rule is hard rather than obvious
 - A mixed legal-and-illegal action rejected whole
@@ -304,6 +344,11 @@ Sheet standing with Free Transfers accrued.
 
 **Persistence and the Lock,** against a real Postgres: Manager State insert-only, an action
 after the deadline refused, context stored and shared.
+
+**Points ingestion,** against the pinned `data_checked` contract: unchecked data creates no
+scoreable rows and checked data does. The current archive proves only the unchecked path; the
+first observed checked bootstrap and corresponding live-points response are a dated
+post-Gameweek 1 runbook action, not an implementation blocker.
 
 **Scoring,** against hand-computed points including captain doubling, vice-captain promotion,
 Bench Boost, Triple Captain and Hits.

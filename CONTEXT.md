@@ -26,6 +26,11 @@ A deterministic, non-LLM forecaster (home prior, Elo, market odds) shown alongsi
 for orientation. Reference Lines are not ranked and cannot win.
 _Avoid_: baseline as a competitor (a Reference Line never competes)
 
+**Season Roster**:
+The Entrants included in Season-wide comparisons. Today this is every `models` row with
+`role = 'entrant'`; no exclusion is representable. Removing an Entrant would require a new
+recorded decision, ADR and storage representation.
+
 ### Forecasting
 
 **Fixture**:
@@ -88,7 +93,8 @@ _Avoid_: lineup, XI
 **Manager State**:
 Everything an Entrant carries between Gameweeks: its Squad with the price paid for each
 player, money in the bank, Free Transfers banked, and Chips not yet spent. Rebuilding it
-requires replaying every prior Gameweek.
+requires replaying every prior Gameweek. During a Free Hit it also carries the permanent
+Squad, Team Sheet and bank that must return at the next Gameweek.
 
 **Transfer**:
 Swapping one owned player for one unowned player. Each Gameweek grants one Free Transfer,
@@ -117,3 +123,11 @@ record purchase prices.
 For one Fixture, the difference between two Entrants' scores on that same Fixture. The unit
 of comparison on the leaderboard — it cancels out how hard the Fixture was and leaves only
 which Entrant forecast it better.
+
+**Comparison Anchor**:
+The one Entrant used as the common reference for a cumulative Gameweek snapshot's published
+Paired Difference intervals. The snapshot at Gameweek N selects it using only data through
+Gameweek N, meaning scoreable Fixtures whose Lock belongs to Gameweek N or earlier: Match
+Points, then lower RPS, then Entrant id. Every other Entrant retained in the Season roster has
+one comparison against it. This selects a comparison reference; it does not break a tie in
+the Match Points ranking.

@@ -110,6 +110,22 @@ workflows on public repositories after 60 days without repository activity.
 **Advance `FOOTBALL_DATA_SEASON`** to the current Season after the first matchday, once that
 feed becomes available.
 
+**Pin one observed completed-match FPL fixtures response after the first matchday.** The
+pre-Season archive contains only `finished = false` and `finished_provisional = false`, while
+FPL exposes no prior Season through this endpoint. Once at least one Fixture reports
+`finished`, archive that live response byte-for-byte, record its checksum, and add it as the
+completed-match regression fixture for result ingestion. Confirm that `finished` alone is the
+scoreability gate, including the observed state of `finished_provisional`, before trusting the
+10:00 UTC scorer. If the observed semantics disagree, stop and revise the decision rather than
+adapting the fixture.
+
+**Pin one observed checked FPL Gameweek response after Gameweek 1 settles.** The pre-Season
+archive can prove only `data_checked = false`. Once FPL reports Gameweek 1 checked, archive the
+bootstrap response carrying `data_checked = true` and the corresponding Gameweek live-points
+response byte-for-byte, record both checksums, and add them as the settled-points regression
+fixtures. Confirm the pinned `data_checked` contract before trusting FPL-track scoring. If the
+observed semantics disagree, stop and revise the decision rather than adapting either fixture.
+
 ## 7. Known imperfections
 
 These are deliberate, and recorded so they are not rediscovered as bugs.
