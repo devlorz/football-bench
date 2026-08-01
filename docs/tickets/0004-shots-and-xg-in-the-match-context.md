@@ -3,9 +3,9 @@
 Four tracer-bullet slices that put per-match shots and xG on the last-five form lines and
 freeze the result as `match/2026-27-v2` before the Season's first Lock. Source:
 [spec 0004](../specs/0004-shots-and-xg-in-the-match-context.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0001–0017](../adr/), especially
-[ADR 0016](../adr/0016-raw-signals-only-in-the-entrant-context.md) and
-[ADR 0017](../adr/0017-per-match-shots-and-xg-join-the-context-for-2026-27-v2.md).
+[CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0001–0020](../adr/), especially
+[ADR 0018](../adr/0018-raw-signals-only-in-the-entrant-context.md) and
+[ADR 0019](../adr/0019-per-match-shots-and-xg-join-the-context-for-2026-27-v2.md).
 
 Work the **frontier**: the first two tickets are independent and can run in parallel; the
 context ticket needs both; the freeze ticket comes last and gates going live.
@@ -247,7 +247,7 @@ only — never `contexts`, `predictions` or `attempts`.
 inferred: the context carries scorelines, tables, splits, raw per-match shots and xG, and the
 FPL section. A search of `src/` for odds, Elo, strength ratings, lambdas and Poisson returns
 only substring false positives (`beforeLock`, `below`, `belong`). `docs/understat/understatService.ts`
-does carry a `getMatchLambdas`, which is exactly what ADR 0016 forbids — it is vendored
+does carry a `getMatchLambdas`, which is exactly what ADR 0018 forbids — it is vendored
 reference material, outside the `tsconfig` include and imported nowhere.
 
 **Re-pointing the Entrant rows is operator-run SQL, not code** (operator decision, this

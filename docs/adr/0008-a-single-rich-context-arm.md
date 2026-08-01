@@ -1,6 +1,6 @@
 # A single, rich context arm
 
-> Status: the context contents listed here are superseded by ADR-0017 (per-match shots and
+> Status: the context contents listed here are superseded by ADR-0019 (per-match shots and
 > xG, `match/2026-27-v2`). The single-arm decision itself stands.
 
 The frozen Prompt Version hands every Entrant a full statistical dossier per Fixture: last

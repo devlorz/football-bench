@@ -8,11 +8,11 @@ Entrant cannot see that it is in a hole. Before the season's first FPL Lock, eac
 gains two aggregate windows — the whole Season and the last five Settled Gameweeks — of raw
 per-player signals: `total_points`, `minutes`, appearances, goals, assists, clean sheets,
 bonus, yellow and red cards, saves, and FPL's per-Gameweek xG, xA and xGC. The change ships
-as a new frozen Prompt Version, `fpl/2026-27-v2`, for the same reason ADR 0017 gave the
+as a new frozen Prompt Version, `fpl/2026-27-v2`, for the same reason ADR 0019 gave the
 Match track a v2: a Prompt Version is a frozen pair, and anything recorded under v1's hash
 stays attributable to v1.
 
-`total_points` is admitted under ADR 0016's raw-signals line because in this track it is a
+`total_points` is admitted under ADR 0018's raw-signals line because in this track it is a
 result, not a forecast — the very currency the Entrant is asked to optimise. The digested
 layer stays out: `form` and `ict_index` are FPL's own averages and ratings, `ep_next` is a
 forecast outright, and `selected_by_percent` is crowd wisdom — the same market signal the
@@ -20,7 +20,7 @@ odds exclusion already keeps outside the context.
 
 ## Considered options
 
-- **Per-match lines, as ADR 0017 chose for the Match track**, were rejected here on scale:
+- **Per-match lines, as ADR 0019 chose for the Match track**, were rejected here on scale:
   the Match track renders five lines per team, this pool renders six hundred players every
   Gameweek, and per-match rows would multiply an ~18k-token addition several-fold for
   little decision-relevant information beyond the two windows. Aggregation over Settled
@@ -29,7 +29,7 @@ odds exclusion already keeps outside the context.
   parsed back as the priced universe of legal transfers, so an omitted player is not merely
   undescribed but unbuyable — a silent change to the full ruleset ADR 0003 commits to. And
   any filter criterion is itself a digested recommendation of who deserves attention, which
-  ADR 0016 keeps out of the context. Compression is lossless instead: players with no
+  ADR 0018 keeps out of the context. Compression is lossless instead: players with no
   Settled minutes carry no stat block (a fact, not a curation), zero-valued fields are
   omitted, and keys are abbreviated behind a legend.
 - **Provisional numbers for an unsettled Gameweek** were rejected. The context states the

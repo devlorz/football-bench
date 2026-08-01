@@ -101,16 +101,16 @@ result is written idempotently and an unsettled Gameweek is skipped rather than 
 **Blocked by:** Collect settled player Gameweek points · Carry Manager State through
 Transfers.
 
-- [ ] A starter who did not play is replaced from the ordered bench by the first eligible player whose inclusion preserves a legal formation
-- [ ] Goalkeeper substitution and outfield substitution follow their distinct eligibility rules
-- [ ] A formation-blocked bench player is skipped in favour of the next eligible player, verified by a hand-computed hard case
-- [ ] The captain scores double when the captain played; otherwise a playing vice-captain is promoted
-- [ ] Hits recorded in Manager State are deducted in the same Gameweek
-- [ ] Only settled stored player points are read, and the scoring function makes no network or clock call
-- [ ] An unchecked Gameweek writes no FPL score row and cannot appear as a zero-point performance
-- [ ] A settled Gameweek writes one auditable points row per Entrant with player-level contributions, substitutions, captaincy and Hits in its detail
-- [ ] Re-running over the same Manager States and stored points leaves row count, value and detail unchanged
-- [ ] Scoring expectations are calculated by hand rather than by duplicating the implementation in the test
+- [x] A starter who did not play is replaced from the ordered bench by the first eligible player whose inclusion preserves a legal formation
+- [x] Goalkeeper substitution and outfield substitution follow their distinct eligibility rules
+- [x] A formation-blocked bench player is skipped in favour of the next eligible player, verified by a hand-computed hard case
+- [x] The captain scores double when the captain played; otherwise a playing vice-captain is promoted
+- [x] Hits recorded in Manager State are deducted in the same Gameweek
+- [x] Only settled stored player points are read, and the scoring function makes no network or clock call
+- [x] An unchecked Gameweek writes no FPL score row and cannot appear as a zero-point performance
+- [x] A settled Gameweek writes one auditable points row per Entrant with player-level contributions, substitutions, captaincy and Hits in its detail
+- [x] Re-running over the same Manager States and stored points leaves row count, value and detail unchanged
+- [x] Scoring expectations are calculated by hand rather than by duplicating the implementation in the test
 
 ---
 

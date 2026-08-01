@@ -3,9 +3,9 @@
 **Status:** ready-for-agent
 **Scope:** everything that must land before the FPL track's first Lock for the pool to
 carry per-player performance under a new frozen Prompt Version, `fpl/2026-27-v2`
-**Vocabulary:** [CONTEXT.md](../../CONTEXT.md) · **Decisions:** [ADR 0001–0018](../adr/),
-especially [ADR 0016](../adr/0016-raw-signals-only-in-the-entrant-context.md) and
-[ADR 0018](../adr/0018-per-player-gameweek-performance-joins-the-fpl-context-for-2026-27-v2.md)
+**Vocabulary:** [CONTEXT.md](../../CONTEXT.md) · **Decisions:** [ADR 0001–0020](../adr/),
+especially [ADR 0018](../adr/0018-raw-signals-only-in-the-entrant-context.md) and
+[ADR 0020](../adr/0020-per-player-gameweek-performance-joins-the-fpl-context-for-2026-27-v2.md)
 **Siblings:** [spec 0003](./0003-fpl-track.md) (the FPL track this extends) ·
 [spec 0004](./0004-shots-and-xg-in-the-match-context.md) (the Match track's equivalent move)
 
@@ -107,10 +107,10 @@ goals, assists, clean sheets, bonus, yellow cards, red cards, saves, and FPL's e
 goals, expected assists and expected goals conceded (decimal strings upstream, fixed-point
 in the schema). Appearances are derived — a Settled row with positive minutes — not stored.
 The set is frozen for the Season along with the Prompt Version; that is why the storage is
-typed columns rather than a JSONB envelope (ADR 0018).
+typed columns rather than a JSONB envelope (ADR 0020).
 
 The digested layer — form, ICT index, expected points next round, ownership percentage —
-is deliberately excluded under ADR 0016, and its absence is a feature to protect, not a
+is deliberately excluded under ADR 0018, and its absence is a feature to protect, not a
 gap to fill.
 
 ### Two windows, Settled Gameweeks only
@@ -141,7 +141,7 @@ fields while continuing to validate the fields it prices from.
 
 The constant changes once, before the track's first Lock. `fpl/2026-27-v1` is never edited
 in place: whatever was produced under its hash stays attributable to it, matching the
-Match track's precedent in ADR 0017.
+Match track's precedent in ADR 0019.
 
 ---
 

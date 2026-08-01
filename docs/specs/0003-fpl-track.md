@@ -256,6 +256,25 @@ Hit, and preservation of previously banked Free Transfers. Playing a Free Hit co
 Free Transfer granted for that Gameweek, leaves previously banked Free Transfers unchanged,
 and lets normal accrual resume in the following Gameweek up to the five-transfer cap.
 
+### Auto-substitution is per absent starter, not atomic
+
+Auto-substitution is per absent starter, not atomic. An absent starter remains in the lineup
+with zero points unless an eligible bench player replaces them. The maximum legal set of
+replacements is applied, with bench order breaking ties. Formation is evaluated on the original
+XI after actual replacements only.
+
+Two consequences follow that a whole-lineup reading would get wrong. A Gameweek in which the
+bench can cover only some of the absences still makes the replacements it can, rather than
+abandoning all of them. And both goalkeepers sitting out stops no outfield substitution: the
+absent starting goalkeeper is not vacated, so he keeps the eleven its one goalkeeper while
+outfield places are taken as usual.
+
+Verified 2 August 2026 against the official [FPL Help](https://fantasy.premierleague.com/help/)
+and the Premier League's
+[Managing your team](https://www.premierleague.com/en/news/2174899/fpl-basics-managing-your-team),
+which state that a team must always field one goalkeeper and that a substitution happens only
+where an eligible bench player exists.
+
 ### Data the fetch must gain
 
 Per-player Gameweek points come from FPL's live endpoint for a Gameweek, archived like every
