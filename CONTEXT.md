@@ -92,9 +92,10 @@ _Avoid_: lineup, XI
 
 **Manager State**:
 Everything an Entrant carries between Gameweeks: its Squad with the price paid for each
-player, money in the bank, Free Transfers banked, and Chips not yet spent. Rebuilding it
-requires replaying every prior Gameweek. During a Free Hit it also carries the permanent
-Squad, Team Sheet and bank that must return at the next Gameweek.
+player, money in the bank, Free Transfers banked, the Hits owed for that Gameweek's paid
+Transfers, and Chips not yet spent. Rebuilding it requires replaying every prior Gameweek.
+During a Free Hit it also carries the permanent Squad, Team Sheet and bank that must return at
+the next Gameweek.
 
 **Transfer**:
 Swapping one owned player for one unowned player. Each Gameweek grants one Free Transfer,
@@ -114,8 +115,15 @@ Squad simply goes stale.
 
 **Selling Price**:
 What an Entrant receives for a player it owns: what it paid, plus half of any rise since,
-rounded down. Distinct from the player's current price, and the reason Manager State must
-record purchase prices.
+rounded down. Only a rise is halved — a fall is passed on in full, so a player worth less than
+he cost sells for what he is now worth. Distinct from the player's current price, and the
+reason Manager State must record purchase prices.
+
+**Settled**:
+A Gameweek whose per-player points FPL has declared final. Read from the feed, never
+inferred from the clock. Only Settled Gameweeks are scored, and only Settled Gameweeks
+appear in the performance record shown to Entrants — a missing Gameweek is announced, never
+silently absent and never filled with provisional numbers.
 
 ### Scoring
 

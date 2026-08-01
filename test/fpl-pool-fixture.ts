@@ -26,11 +26,18 @@ export const FPL_POOL: readonly FixturePlayer[] = [
   { fplId: 15, webName: "Wilson", club: "Fulham", position: "FWD", priceTenths: 60 }
 ];
 
-/** Swapped in one at a time to break exactly one rule of the opening above. */
+/**
+ * Swapped in one at a time to break exactly one rule of the opening above —
+ * except player 19, who breaks none: a sixth club keeps him clear of the
+ * three-per-club limit, so a Transfer can bring him in on his own.
+ */
 export const FPL_POOL_ALTERNATES: readonly FixturePlayer[] = [
   { fplId: 16, webName: "Fernandez", club: "Chelsea", position: "MID", priceTenths: 170 },
   { fplId: 17, webName: "White", club: "Arsenal", position: "DEF", priceTenths: 50 },
-  { fplId: 18, webName: "Caicedo", club: "Chelsea", position: "MID", priceTenths: 50 }
+  { fplId: 18, webName: "Caicedo", club: "Chelsea", position: "MID", priceTenths: 50 },
+  { fplId: 19, webName: "Evanilson", club: "Bournemouth", position: "FWD", priceTenths: 60 },
+  { fplId: 20, webName: "Dewsbury-Hall", club: "Everton", position: "MID", priceTenths: 170 },
+  { fplId: 21, webName: "Branthwaite", club: "Everton", position: "DEF", priceTenths: 45 }
 ];
 
 /** The reducer takes the pool without the names the context builder shows. */
@@ -44,3 +51,9 @@ export function poolPlayers(
     priceTenths
   }));
 }
+
+/** Every player a test action may name: the locked Gameweek's whole pool. */
+export const LOCKED_POOL: PoolPlayer[] = poolPlayers([
+  ...FPL_POOL,
+  ...FPL_POOL_ALTERNATES
+]);

@@ -138,7 +138,7 @@ describe("opening the FPL track for a Gameweek", () => {
 
     const states = await client.query(
       `select model_id, season, gw, squad, team_sheet, bank, free_transfers,
-              chips_used, chip_active, rolled_over, attempts_used
+              hits, chips_used, chip_active, rolled_over, attempts_used
          from manager_states`
     );
     expect(states.rows).toEqual([{
@@ -174,6 +174,8 @@ describe("opening the FPL track for a Gameweek", () => {
       // £100.0m less the £95.5m Squad above.
       bank: 45,
       free_transfers: 1,
+      // The opening fifteen are not Transfers beyond an allowance.
+      hits: 0,
       chips_used: { firstHalf: [], secondHalf: [] },
       chip_active: null,
       rolled_over: false,

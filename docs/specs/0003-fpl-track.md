@@ -269,10 +269,16 @@ ADR-0003 makes Manager State the system of record for purchase prices.
 
 ### Storage
 
-`manager_states` exists and needs no migration — Squad, Team Sheet, bank, Free Transfers, Chips
-used, active Chip, Rolled Over flag, Repairs used, all keyed `(model_id, season, gw)` with the
-existing immutability trigger. The `squad` JSONB envelope carries both the active Squad and the
-optional Free Hit stash specified above.
+`manager_states` already holds Squad, Team Sheet, bank, Free Transfers, Chips used, active
+Chip, Rolled Over flag and Repairs used, all keyed `(model_id, season, gw)` with the existing
+immutability trigger. The `squad` JSONB envelope carries both the active Squad and the optional
+Free Hit stash specified above.
+
+One migration adds the column that enumeration missed: `hits`, the points owed for a
+Gameweek's paid Transfers. The reducer is the only step that knows how many Transfers an
+action made against how many Free Transfers were banked, and the action itself is not stored,
+so a Hit cannot be recovered later — Manager State is its system of record, as it is for
+purchase prices.
 
 A new table records per-player Gameweek points. FPL points and behavioural metrics are written
 to `scores` with `track = 'fpl'`, which the schema already permits.

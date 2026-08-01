@@ -16,6 +16,7 @@ import {
   type PoolPlayer,
   type Position
 } from "./apply-gameweek-action.js";
+import { storeManagerState } from "./manager-state-store.js";
 import { validateGameweekAction } from "./validate-gameweek-action.js";
 
 type Database = Pick<Client, "query">;
@@ -187,24 +188,12 @@ export async function openFplGameweek({
     return;
   }
 
-  const { state } = outcome;
-  await database.query(
-    `insert into manager_states (
-       model_id, season, gw, squad, team_sheet, bank, free_transfers,
-       chips_used, chip_active, attempts_used, predicted_at
-     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-    [
-      entrant.id,
-      season,
-      gameweek,
-      JSON.stringify(state.squad),
-      JSON.stringify(state.teamSheet),
-      state.bankTenths,
-      state.freeTransfers,
-      JSON.stringify(state.chipsUsed),
-      state.chipActive,
-      0,
-      receivedAt
-    ]
-  );
+  await storeManagerState(database, {
+    entrantId: entrant.id,
+    season,
+    gameweek,
+    state: outcome.state,
+    attemptsUsed: 0,
+    predictedAt: receivedAt
+  });
 }

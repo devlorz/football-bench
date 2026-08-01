@@ -2,29 +2,26 @@ import { describe, expect, test } from "vitest";
 import {
   applyGameweekAction,
   openingManagerState,
+  ENFORCED_VIOLATIONS,
+  OPENING_RULES,
   type GameweekAction
 } from "../src/fpl/apply-gameweek-action.js";
-import {
-  FPL_POOL,
-  FPL_POOL_ALTERNATES,
-  poolPlayers
-} from "./fpl-pool-fixture.js";
+import { LOCKED_POOL as POOL } from "./fpl-pool-fixture.js";
+import { OPENING_ACTION } from "./fpl-action-fixture.js";
 
-const POOL = poolPlayers([...FPL_POOL, ...FPL_POOL_ALTERNATES]);
-
-/** The legal opening of the test above, with `swap` applied player-for-player. */
+/** The one shared legal opening, with `swap` applied player-for-player. */
 function opening(swap: Record<number, number> = {}): GameweekAction {
   const replace = (fplId: number): number => swap[fplId] ?? fplId;
+  const { transfersIn, teamSheet } = OPENING_ACTION;
   return {
-    transfersIn: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
-      .map(replace),
+    transfersIn: transfersIn.map(replace),
     transfersOut: [],
     chip: null,
     teamSheet: {
-      starters: [1, 3, 4, 5, 6, 8, 9, 10, 11, 13, 14].map(replace),
-      bench: [2, 7, 12, 15].map(replace),
-      captain: replace(8),
-      viceCaptain: replace(13)
+      starters: teamSheet.starters.map(replace),
+      bench: teamSheet.bench.map(replace),
+      captain: replace(teamSheet.captain),
+      viceCaptain: replace(teamSheet.viceCaptain)
     }
   };
 }
@@ -204,6 +201,15 @@ describe("Opening Manager State", () => {
           + "different players."
       }
     });
+  });
+
+  test("shows the Entrant every rule it can be refused for, and no other", () => {
+    // ADR-0004: refusing an action for a rule the Entrant was never shown
+    // changes the difficulty of the task, and showing a rule that is never
+    // enforced misleads it. The existing context test proves each rule in the
+    // list reaches the Entrant; this one proves the list is the whole set, so
+    // that adding a Violation without adding its rule fails here.
+    expect([...OPENING_RULES].sort()).toEqual([...ENFORCED_VIOLATIONS].sort());
   });
 
   test("records one Free Transfer and both half-Season Chip sets unspent", () => {

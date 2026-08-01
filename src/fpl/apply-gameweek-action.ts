@@ -47,6 +47,8 @@ export interface ManagerState {
   teamSheet: TeamSheet | null;
   bankTenths: number;
   freeTransfers: number;
+  /** Points owed for this Gameweek's paid Transfers, deducted when it scores. */
+  hits: number;
   chipsUsed: ChipsUsed;
   chipActive: Chip | null;
 }
@@ -77,6 +79,12 @@ export const FORMATION_MINIMUMS: Readonly<Record<Position, number>> = {
 };
 
 export const MAX_PLAYERS_PER_CLUB = 3;
+
+/** Free Transfers accrue one per Gameweek and stop banking here. */
+export const MAX_FREE_TRANSFERS = 5;
+
+/** What one Transfer beyond the banked Free Transfers costs. */
+export const HIT_POINTS = 4;
 
 export const SQUAD_QUOTA: Readonly<Record<Position, number>> = {
   GKP: 2,
@@ -122,6 +130,14 @@ const VIOLATIONS = {
     kind: "unknown_player",
     message: "A Transfer can only sell a player your Squad owns."
   },
+  repeatedTransferOut: {
+    kind: "unknown_player",
+    message: "A Transfer can only sell a player once."
+  },
+  ownedTransferIn: {
+    kind: "unknown_player",
+    message: "A Transfer can only buy a player your Squad does not own."
+  },
   formation: {
     kind: "formation",
     message: "A Team Sheet must start eleven players in a legal formation: "
@@ -153,9 +169,19 @@ const VIOLATIONS = {
  * belongs here: refusing an action for a rule the Entrant was never shown
  * changes the difficulty of the task (ADR-0004).
  */
+/**
+ * Every sentence the reducer can refuse an action with, in no order. Exported
+ * so a test can hold `OPENING_RULES` to the invariant stated below rather than
+ * leaving it to whoever adds the next Violation to remember.
+ */
+export const ENFORCED_VIOLATIONS: readonly string[] =
+  Object.values(VIOLATIONS).map(({ message }) => message);
+
 export const OPENING_RULES: readonly string[] = [
   VIOLATIONS.unknownPlayer.message,
   VIOLATIONS.unownedTransferOut.message,
+  VIOLATIONS.repeatedTransferOut.message,
+  VIOLATIONS.ownedTransferIn.message,
   VIOLATIONS.duplicatePlayer.message,
   VIOLATIONS.budget.message,
   VIOLATIONS.squadQuota.message,
@@ -180,9 +206,24 @@ export function openingManagerState(): ManagerState {
     teamSheet: null,
     bankTenths: OPENING_BUDGET_TENTHS,
     freeTransfers: 0,
+    hits: 0,
     chipsUsed: { firstHalf: [], secondHalf: [] },
     chipActive: null
   };
+}
+
+/**
+ * What an Entrant receives for a player it owns: what it paid, plus half of
+ * the rise since, rounded down (CONTEXT.md, Selling Price). Only a rise is
+ * halved — a fall is passed on in full, so a player worth less than he cost
+ * sells for what he is now worth. The recorded purchase price is the system of
+ * record, not the pool's current price (ADR-0003), which is why Manager State
+ * carries it at all.
+ */
+export function sellingPrice(paidTenths: number, listedTenths: number): number {
+  return listedTenths <= paidTenths
+    ? listedTenths
+    : paidTenths + Math.floor((listedTenths - paidTenths) / 2);
 }
 
 export function applyGameweekAction(
@@ -202,9 +243,40 @@ export function applyGameweekAction(
 
   // An opening Squad is empty, so this refuses every sale before the Season
   // starts and keeps refusing sales of players never owned afterwards.
-  const owned = new Set(state.squad.active.map(({ fplId }) => fplId));
+  const owned = new Map(
+    state.squad.active.map((player) => [player.fplId, player])
+  );
   if (action.transfersOut.some((fplId) => !owned.has(fplId))) {
     return violation("unownedTransferOut");
+  }
+
+  // Before a penny is counted: Selling Price is paid once per named sale, but
+  // the Squad below loses each sold player once however many times he is
+  // named. A repeat would mint the difference out of nothing, and every later
+  // rule still reads a legal fifteen.
+  if (new Set(action.transfersOut).size !== action.transfersOut.length) {
+    return violation("repeatedTransferOut");
+  }
+
+  // A Transfer buys an unowned player (CONTEXT.md, Transfer), judged against
+  // the Squad as the Gameweek found it rather than after the sales: selling a
+  // player and buying him straight back is the same refusal, and it has to be,
+  // because that swap would reset what he cost to what he now costs and hand
+  // back a price rise the Entrant is meant to be carrying. Buying a player
+  // kept in the Squad is the other half — it would seat fourteen men in
+  // fifteen slots while every count below still read legal.
+  if (action.transfersIn.some((fplId) => owned.has(fplId))) {
+    return violation("ownedTransferIn");
+  }
+
+  let received = 0;
+  for (const fplId of action.transfersOut) {
+    const listed = byId.get(fplId);
+    if (listed === undefined) {
+      return violation("unknownPlayer");
+    }
+    const paid = owned.get(fplId)?.purchasePriceTenths ?? 0;
+    received += sellingPrice(paid, listed.priceTenths);
   }
 
   // Without this every later count would admit one player bought twice, which
@@ -221,19 +293,32 @@ export function applyGameweekAction(
     (total, { purchasePriceTenths }) => total + purchasePriceTenths,
     0
   );
-  if (spent > state.bankTenths) {
+  const bankTenths = state.bankTenths + received - spent;
+  if (bankTenths < 0) {
     return violation("budget");
   }
 
+  // Every rule below is about the Squad the Entrant ends the Gameweek with,
+  // not about what it bought: at the opening those are the same fifteen
+  // players, and from Gameweek 2 they are not.
+  const sold = new Set(action.transfersOut);
+  const squad = [
+    ...state.squad.active.filter(({ fplId }) => !sold.has(fplId)),
+    ...purchases
+  ];
+  const held = squad
+    .map(({ fplId }) => byId.get(fplId))
+    .filter((player): player is PoolPlayer => player !== undefined);
+
   const quotaMet = Object.entries(SQUAD_QUOTA).every(([position, required]) =>
-    bought.filter(({ position: held }) => held === position).length === required
+    held.filter(({ position: at }) => at === position).length === required
   );
   if (!quotaMet) {
     return violation("squadQuota");
   }
 
   const perClub = new Map<string, number>();
-  for (const { club } of bought) {
+  for (const { club } of held) {
     perClub.set(club, (perClub.get(club) ?? 0) + 1);
   }
   if ([...perClub.values()].some((count) => count > MAX_PLAYERS_PER_CLUB)) {
@@ -255,7 +340,7 @@ export function applyGameweekAction(
   }
 
   const seated = [...action.teamSheet.starters, ...action.teamSheet.bench];
-  const squadIds = new Set(purchases.map(({ fplId }) => fplId));
+  const squadIds = new Set(squad.map(({ fplId }) => fplId));
   const benchSeatsTheRest = new Set(seated).size === seated.length
     && seated.length === squadIds.size
     && seated.every((fplId) => squadIds.has(fplId));
@@ -274,12 +359,22 @@ export function applyGameweekAction(
     return violation("captainIsViceCaptain");
   }
 
+  // Nothing is owned before the Season, so the opening fifteen cost no Hit:
+  // they are not Transfers beyond an allowance, they are how one begins.
+  const paidTransfers = state.squad.active.length === 0
+    ? 0
+    : Math.max(0, action.transfersIn.length - state.freeTransfers);
+
   return {
     state: {
-      squad: { active: purchases, free_hit_stash: null },
+      squad: { active: squad, free_hit_stash: null },
       teamSheet: action.teamSheet,
-      bankTenths: state.bankTenths - spent,
-      freeTransfers: state.freeTransfers + 1,
+      bankTenths,
+      freeTransfers: Math.min(
+        Math.max(0, state.freeTransfers - action.transfersIn.length) + 1,
+        MAX_FREE_TRANSFERS
+      ),
+      hits: paidTransfers * HIT_POINTS,
       chipsUsed: state.chipsUsed,
       chipActive: action.chip
     }

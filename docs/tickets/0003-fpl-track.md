@@ -79,16 +79,16 @@ decisions compound across the Season.
 
 **Blocked by:** Lock one legal opening Manager State.
 
-- [ ] Replaying a list of Gameweek actions is a fold over the pure reducer and produces the same final state as applying each action in sequence
-- [ ] Every persisted output, including a Free Hit state, contains all information the next reducer step needs without loading an earlier Gameweek
-- [ ] One Free Transfer accrues each Gameweek and unused Free Transfers bank to no more than five
-- [ ] Transfers beyond the banked allowance deduct a four-point Hit each in the Gameweek where they occur
-- [ ] Selling Price uses the recorded purchase price plus half of a price rise rounded down, including an independently hand-computed odd-rise case
-- [ ] The next Manager State carries the resulting Squad, new purchase prices, money in the bank and remaining Free Transfers
-- [ ] Every post-transfer Squad still satisfies budget, position quota and three-per-club constraints
-- [ ] A mixed legal-and-illegal action is rejected whole: no Transfer, bank movement, Hit or partial Manager State is applied
-- [ ] Sequence tests cover inaction, banking to the cap, free Transfers, paid Transfers, a sale followed by a purchase and an invalid later action
-- [ ] Persisting successive legal states creates one immutable row per Entrant and Gameweek without changing any earlier row
+- [x] Replaying a list of Gameweek actions is a fold over the pure reducer and produces the same final state as applying each action in sequence
+- [x] Every persisted output is sufficient input to the next reducer step without loading an earlier Gameweek
+- [x] One Free Transfer accrues each Gameweek and unused Free Transfers bank to no more than five
+- [x] Transfers beyond the banked allowance deduct a four-point Hit each in the Gameweek where they occur
+- [x] Selling Price uses the recorded purchase price plus half of a price rise rounded down, including an independently hand-computed odd-rise case
+- [x] The next Manager State carries the resulting Squad, new purchase prices, money in the bank and remaining Free Transfers
+- [x] Every post-transfer Squad still satisfies budget, position quota and three-per-club constraints
+- [x] A mixed legal-and-illegal action is rejected whole: no Transfer, bank movement, Hit or partial Manager State is applied
+- [x] Sequence tests cover inaction, banking to the cap, free Transfers, paid Transfers, a sale followed by a purchase and an invalid later action
+- [x] Persisting successive legal states creates one immutable row per Entrant and Gameweek without changing any earlier row
 
 ---
 
