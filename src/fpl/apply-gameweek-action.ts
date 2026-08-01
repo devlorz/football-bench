@@ -78,6 +78,23 @@ export const FORMATION_MINIMUMS: Readonly<Record<Position, number>> = {
   FWD: 1
 };
 
+/**
+ * Whether eleven positions are a formation the game would accept. One rule,
+ * one place: the reducer judges a proposed Team Sheet with it before the Lock
+ * and scoring judges a substituted eleven with it after, and neither can drift
+ * from the other by being written down twice.
+ */
+export function legalFormation(positions: readonly Position[]): boolean {
+  const held = (position: Position): number =>
+    positions.filter((at) => at === position).length;
+
+  return positions.length === STARTERS
+    && held("GKP") === FORMATION_MINIMUMS.GKP
+    && held("DEF") >= FORMATION_MINIMUMS.DEF
+    && held("MID") >= FORMATION_MINIMUMS.MID
+    && held("FWD") >= FORMATION_MINIMUMS.FWD;
+}
+
 export const MAX_PLAYERS_PER_CLUB = 3;
 
 /** Free Transfers accrue one per Gameweek and stop banking here. */
@@ -328,14 +345,7 @@ export function applyGameweekAction(
   const starters = action.teamSheet.starters
     .map((fplId) => byId.get(fplId))
     .filter((player): player is PoolPlayer => player !== undefined);
-  const starting = (position: Position): number =>
-    starters.filter(({ position: held }) => held === position).length;
-  const formationLegal = starters.length === STARTERS
-    && starting("GKP") === FORMATION_MINIMUMS.GKP
-    && starting("DEF") >= FORMATION_MINIMUMS.DEF
-    && starting("MID") >= FORMATION_MINIMUMS.MID
-    && starting("FWD") >= FORMATION_MINIMUMS.FWD;
-  if (!formationLegal) {
+  if (!legalFormation(starters.map(({ position }) => position))) {
     return violation("formation");
   }
 

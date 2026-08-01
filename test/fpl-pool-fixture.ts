@@ -1,4 +1,5 @@
 import type { PoolPlayer } from "../src/fpl/apply-gameweek-action.js";
+import type { PlayerPosition } from "../src/fpl/score-team-sheet.js";
 
 export interface FixturePlayer extends PoolPlayer {
   webName: string;
@@ -50,6 +51,16 @@ export function poolPlayers(
     club,
     priceTenths
   }));
+}
+
+/**
+ * Scoring never prices a player, so it is handed positions alone — the
+ * season-scoped lookup rather than the Gameweek's locked pool.
+ */
+export function positionsOf(
+  players: readonly FixturePlayer[]
+): PlayerPosition[] {
+  return players.map(({ fplId, position }) => ({ fplId, position }));
 }
 
 /** Every player a test action may name: the locked Gameweek's whole pool. */
