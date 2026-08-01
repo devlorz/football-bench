@@ -117,6 +117,12 @@ What an Entrant receives for a player it owns: what it paid, plus half of any ri
 rounded down. Distinct from the player's current price, and the reason Manager State must
 record purchase prices.
 
+**Settled**:
+A Gameweek whose per-player points FPL has declared final. Read from the feed, never
+inferred from the clock. Only Settled Gameweeks are scored, and only Settled Gameweeks
+appear in the performance record shown to Entrants — a missing Gameweek is announced, never
+silently absent and never filled with provisional numbers.
+
 ### Scoring
 
 **Paired Difference**:
