@@ -3,9 +3,9 @@
 **Status:** ready-for-agent
 **Scope:** everything that must land before the 2026/27 Season's first Lock for the context
 to carry per-match shots and xG under a new frozen Prompt Version
-**Vocabulary:** [CONTEXT.md](../../CONTEXT.md) · **Decisions:** [ADR 0001–0017](../adr/),
-especially [ADR 0016](../adr/0016-raw-signals-only-in-the-entrant-context.md) and
-[ADR 0017](../adr/0017-per-match-shots-and-xg-join-the-context-for-2026-27-v2.md)
+**Vocabulary:** [CONTEXT.md](../../CONTEXT.md) · **Decisions:** [ADR 0001–0020](../adr/),
+especially [ADR 0018](../adr/0018-raw-signals-only-in-the-entrant-context.md) and
+[ADR 0019](../adr/0019-per-match-shots-and-xg-join-the-context-for-2026-27-v2.md)
 
 ---
 
@@ -39,7 +39,7 @@ reads like `W 2-1 v Chelsea (H) — shots 15-8, on target 7-3, xG 2.10-0.85`, an
 whose match has no xG says so explicitly instead of pretending the number does not exist.
 
 Everything else about the context is deliberately unchanged: no season aggregates, no
-head-to-head enrichment, and — per ADR 0016 — no digested forecasts of any kind. The
+head-to-head enrichment, and — per ADR 0018 — no digested forecasts of any kind. The
 change ships as a new frozen pair, `match/2026-27-v2`, with every Entrant re-pointed at it
 and pre-flight re-run before the Season starts.
 
@@ -222,11 +222,11 @@ assertions), and the migration tests (real database, real constraints).
 
 - **The `reference-odds` line.** Parsing odds columns is spec 0002's deferred item; this
   spec neither implements the reference line nor parses odds. Odds in the Entrant context
-  are not merely out of scope but forbidden by ADR 0016.
+  are not merely out of scope but forbidden by ADR 0018.
 - **Corners, fouls, cards, referee, attendance, half-time scores** — available in the same
   CSVs, deliberately excluded as noise.
 - **FPL strength ratings and the Understat lambda calculator** — digested forecasts,
-  excluded by ADR 0016 (the lambda machinery may someday become a Reference Line; not
+  excluded by ADR 0018 (the lambda machinery may someday become a Reference Line; not
   here).
 - **Season-aggregate shot or xG statistics** in any section of the context.
 - **Understat player-level data, shot-level data, and non-EPL leagues** — only per-match

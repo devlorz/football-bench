@@ -21,7 +21,7 @@ export interface RunDailyFetchOptions {
 
 /**
  * xG is enrichment, so its outcome is reported rather than thrown: per
- * ADR 0017 an Understat outage degrades the affected form lines to an explicit
+ * ADR 0019 an Understat outage degrades the affected form lines to an explicit
  * marker and must never cost a Gameweek of Predictions.
  */
 export type DailyXgOutcome =
