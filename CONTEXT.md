@@ -119,6 +119,14 @@ rounded down. Only a rise is halved — a fall is passed on in full, so a player
 he cost sells for what he is now worth. Distinct from the player's current price, and the
 reason Manager State must record purchase prices.
 
+**Double Gameweek**:
+A Gameweek in which a club plays two Fixtures, so its players can score twice. Never
+annotated in the context — an Entrant reads it off the raw Fixture list.
+
+**Blank Gameweek**:
+A Gameweek in which a club plays no Fixture, so its players cannot score. Like a Double,
+a fact of the schedule read off the raw Fixture list, never annotated.
+
 **Settled**:
 A Gameweek whose per-player points FPL has declared final. Read from the feed, never
 inferred from the clock. Only Settled Gameweeks are scored, and only Settled Gameweeks
