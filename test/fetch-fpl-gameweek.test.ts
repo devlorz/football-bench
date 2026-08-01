@@ -207,7 +207,8 @@ describe("fetching an FPL Gameweek", () => {
 
     expect(result).toEqual({
       gameweek: 1,
-      playerSnapshotStored: true
+      playerSnapshotStored: true,
+      settledGameweeks: []
     });
     const stored = await client.query(
       `select
@@ -266,7 +267,8 @@ describe("fetching an FPL Gameweek", () => {
 
     expect(result).toEqual({
       gameweek: 2,
-      playerSnapshotStored: true
+      playerSnapshotStored: true,
+      settledGameweeks: []
     });
     const stored = await client.query(
       `select
@@ -593,7 +595,8 @@ describe("fetching an FPL Gameweek", () => {
 
     expect(result).toEqual({
       gameweek: 1,
-      playerSnapshotStored: false
+      playerSnapshotStored: false,
+      settledGameweeks: []
     });
     const locked = await client.query(
       `select

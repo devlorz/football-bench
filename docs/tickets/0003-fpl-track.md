@@ -39,14 +39,14 @@ enough evidence to distinguish a player who appeared from one who did not.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] A numbered migration adds per-player Gameweek points keyed by Season, Gameweek and player, with the required foreign keys, constraints and row-level security
-- [ ] The FPL live endpoint is fetched through the existing outbound-HTTP seam and its raw response is archived byte-for-byte before derived writes
-- [ ] The source boundary validates every field used for points and appearance decisions and names every offending field when it rejects a response
-- [ ] Points are stored only when the corresponding FPL event reports `data_checked`; settled-ness is never inferred from the clock
-- [ ] An unchecked Gameweek creates no scoreable player-points rows and remains distinguishable from a Gameweek in which every selected player scored zero
-- [ ] Re-fetching unchanged settled data is idempotent, while a changed upstream settled value is reflected in the stored row
-- [ ] The existing pre-Lock player snapshot continues to capture that Gameweek's prices independently of the post-Gameweek points fetch
-- [ ] Tests exercise unchecked and `data_checked` boundary cases against real Postgres, treating `data_checked` as the pinned contract rather than claiming the current unchecked archive proves the settled path
+- [x] A numbered migration adds per-player Gameweek points keyed by Season, Gameweek and player, with the required foreign keys, constraints and row-level security
+- [x] The FPL live endpoint is fetched through the existing outbound-HTTP seam and its raw response is archived byte-for-byte before derived writes
+- [x] The source boundary validates every field used for points and appearance decisions and names every offending field when it rejects a response
+- [x] Points are stored only when the corresponding FPL event reports `data_checked`; settled-ness is never inferred from the clock
+- [x] An unchecked Gameweek creates no scoreable player-points rows and remains distinguishable from a Gameweek in which every selected player scored zero
+- [x] Re-fetching unchanged settled data is idempotent, while a changed upstream settled value is reflected in the stored row
+- [x] The existing pre-Lock player snapshot continues to capture that Gameweek's prices independently of the post-Gameweek points fetch
+- [x] Tests exercise unchecked and `data_checked` boundary cases against real Postgres, treating `data_checked` as the pinned contract rather than claiming the current unchecked archive proves the settled path
 
 ---
 

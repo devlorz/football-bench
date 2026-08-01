@@ -37,6 +37,7 @@ describe("the benchmark database", () => {
       "attempts",
       "contexts",
       "fixtures",
+      "fpl_player_points",
       "fpl_players",
       "gameweeks",
       "historical_matches",

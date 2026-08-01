@@ -4,6 +4,7 @@ import {
   fetchFplDaily,
   type FetchFplDailyResult
 } from "../fpl/fetch-gameweek.js";
+import { fetchFplPlayerPoints } from "../fpl/fetch-player-points.js";
 import { fetchUnderstatSeasonXg } from "../understat/fetch-season-xg.js";
 import { errorText } from "../error-text.js";
 import type { HttpFetcher } from "../http.js";
@@ -98,6 +99,15 @@ export async function runDailyFetch({
     });
   } catch (error) {
     errors.push(error);
+  }
+  if (fpl !== undefined) {
+    for (const gameweek of fpl.settledGameweeks) {
+      try {
+        await fetchFplPlayerPoints({ database, season, gameweek, http });
+      } catch (error) {
+        errors.push(error);
+      }
+    }
   }
   try {
     await fetchFootballDataSeason({

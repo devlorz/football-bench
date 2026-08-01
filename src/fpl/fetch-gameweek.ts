@@ -11,7 +11,8 @@ const FPL_FIXTURES_URL =
 const eventSchema = z.looseObject({
   id: z.number().int().positive(),
   deadline_time: z.iso.datetime(),
-  is_next: z.boolean()
+  is_next: z.boolean(),
+  data_checked: z.boolean()
 });
 
 const teamSchema = z.looseObject({
@@ -68,6 +69,8 @@ export type FetchFplDailyOptions = Omit<FetchFplGameweekOptions, "gameweek">;
 export interface FetchFplDailyResult {
   gameweek: number | null;
   playerSnapshotStored: boolean;
+  /** Gameweeks FPL reports `data_checked`, never inferred from the clock. */
+  settledGameweeks: number[];
 }
 
 export interface FplSourceIssue {
@@ -75,11 +78,13 @@ export interface FplSourceIssue {
   detail: string;
 }
 
+export type FplSource = "fpl_bootstrap" | "fpl_fixtures" | "fpl_live";
+
 export class FplSourceValidationError extends Error {
   public readonly field: string;
 
   constructor(
-    public readonly source: "fpl_bootstrap" | "fpl_fixtures",
+    public readonly source: FplSource,
     public readonly issues: FplSourceIssue[]
   ) {
     super(issues
@@ -92,7 +97,7 @@ export class FplSourceValidationError extends Error {
 
 export class FplSourceHttpError extends Error {
   constructor(
-    public readonly source: FplSourceValidationError["source"],
+    public readonly source: FplSource,
     public readonly status: number,
     public readonly url: string
   ) {
@@ -101,7 +106,7 @@ export class FplSourceHttpError extends Error {
   }
 }
 
-function parseJson(source: FplSourceValidationError["source"], body: string): unknown {
+function parseJson(source: FplSource, body: string): unknown {
   try {
     return JSON.parse(body);
   } catch {
@@ -112,8 +117,8 @@ function parseJson(source: FplSourceValidationError["source"], body: string): un
   }
 }
 
-function parseSource<T>(
-  source: FplSourceValidationError["source"],
+export function parseFplSource<T>(
+  source: FplSource,
   schema: z.ZodType<T>,
   body: string
 ): T {
@@ -186,12 +191,12 @@ async function fetchFpl({
     throw new Error("FPL fetch completed without both source responses");
   }
 
-  const bootstrap = parseSource(
+  const bootstrap = parseFplSource(
     "fpl_bootstrap",
     bootstrapSchema,
     bootstrapBody
   );
-  const fixtures = parseSource("fpl_fixtures", fixturesSchema, fixturesBody);
+  const fixtures = parseFplSource("fpl_fixtures", fixturesSchema, fixturesBody);
   const nextEvents = bootstrap.events.filter(({ is_next: isNext }) => isNext);
   if (requestedGameweek === undefined && nextEvents.length > 1) {
     throw new FplSourceValidationError("fpl_bootstrap", [{
@@ -434,7 +439,10 @@ async function fetchFpl({
     await database.query("commit");
     return {
       gameweek: gameweek ?? null,
-      playerSnapshotStored
+      playerSnapshotStored,
+      settledGameweeks: bootstrap.events.flatMap(
+        ({ id, data_checked: dataChecked }) => dataChecked ? [id] : []
+      )
     };
   } catch (error) {
     await database.query("rollback");
