@@ -397,4 +397,45 @@ describe("the benchmark database", () => {
     );
     expect(prediction.rows).toEqual([{ pred_home: 1 }]);
   });
+
+  test("refuses to rewrite or discard a stored Manager State", async () => {
+    await client.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values (
+         'entrant/v1', 'Entrant', 'provider/base-model', 'provider',
+         'match/v1', 'entrant'
+       );
+       insert into gameweeks (season, gw, deadline_at)
+       values ('2026-27', 1, '2026-08-21T17:30:00Z');
+       insert into manager_states (
+         model_id, season, gw, squad, team_sheet, bank, free_transfers,
+         chips_used, attempts_used, predicted_at
+       ) values (
+         'entrant/v1', '2026-27', 1,
+         '{"active": [], "free_hit_stash": null}', '{}', 45, 1,
+         '{"firstHalf": [], "secondHalf": []}', 0, now()
+       )`
+    );
+
+    await expect(client.query(
+      `update manager_states
+          set bank = 0
+        where model_id = 'entrant/v1' and season = '2026-27' and gw = 1`
+    )).rejects.toMatchObject({
+      code: "55000",
+      message: "manager_states rows are immutable"
+    });
+
+    await expect(client.query(
+      `delete from manager_states
+        where model_id = 'entrant/v1' and season = '2026-27' and gw = 1`
+    )).rejects.toMatchObject({
+      code: "55000",
+      message: "manager_states rows are immutable"
+    });
+
+    const stored = await client.query("select bank from manager_states");
+    expect(stored.rows).toEqual([{ bank: 45 }]);
+  });
 });

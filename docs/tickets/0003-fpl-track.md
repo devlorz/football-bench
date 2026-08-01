@@ -58,16 +58,16 @@ State containing everything needed to continue into another Gameweek.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] The reducer accepts plain Manager State and Gameweek action values and has no database, clock, network or random-number dependency
-- [ ] An opening Squad contains exactly two goalkeepers, five defenders, five midfielders and three forwards within the £100.0m budget
-- [ ] No opening Squad contains more than three players from one club, an unknown player, or a player outside the locked Gameweek's pool
-- [ ] A Team Sheet names eleven starters in a legal formation, an ordered four-player bench, and distinct captain and vice-captain choices among the starters
-- [ ] The opening state records every player's purchase price, money in the bank, Free Transfers and both half-Season Chip sets
-- [ ] The FPL context contains the Entrant's state and the locked player pool, is stored and hashed, and is the exact text handed to the Entrant
-- [ ] A legal action received before the Gameweek deadline stores one Manager State; an action received at or after it stores no state
-- [ ] The database refuses update or deletion of the stored Manager State, so a rerun cannot replace the opening decision
-- [ ] Budget, quota, club-limit, formation, captain and unknown-player cases are checked with hand-constructed values
-- [ ] Persistence and Lock tests run against real Postgres while reducer sequence tests require no database
+- [x] The reducer accepts plain Manager State and Gameweek action values and has no database, clock, network or random-number dependency
+- [x] An opening Squad contains exactly two goalkeepers, five defenders, five midfielders and three forwards within the £100.0m budget
+- [x] No opening Squad contains more than three players from one club, an unknown player, or a player outside the locked Gameweek's pool
+- [x] A Team Sheet names eleven starters in a legal formation, an ordered four-player bench, and distinct captain and vice-captain choices among the starters
+- [x] The opening state records every player's purchase price, money in the bank, Free Transfers and both half-Season Chip sets
+- [x] The FPL context contains the Entrant's state and the locked player pool, is stored and hashed, and is the exact text handed to the Entrant
+- [x] A legal action received before the Gameweek deadline stores one Manager State; an action received at or after it stores no state
+- [x] The database refuses update or deletion of the stored Manager State, so a rerun cannot replace the opening decision
+- [x] Budget, quota, club-limit, formation, captain and unknown-player cases are checked with hand-constructed values
+- [x] Persistence and Lock tests run against real Postgres while reducer sequence tests require no database
 
 ---
 
