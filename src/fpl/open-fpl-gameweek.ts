@@ -179,7 +179,12 @@ export async function openFplGameweek({
   if (!validation.ok) {
     return;
   }
-  const outcome = applyGameweekAction(opening, validation.action, pool);
+  const outcome = applyGameweekAction(
+    opening,
+    validation.action,
+    pool,
+    gameweek
+  );
   if (!("state" in outcome)) {
     return;
   }

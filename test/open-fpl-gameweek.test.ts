@@ -4,7 +4,7 @@ import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
 import { openFplGameweek } from "../src/fpl/open-fpl-gameweek.js";
 import { parseFplTrackContextPool } from "../src/context/build-fpl-track-context.js";
-import { OPENING_RULES } from "../src/fpl/apply-gameweek-action.js";
+import { GAMEWEEK_RULES } from "../src/fpl/apply-gameweek-action.js";
 import { FPL_POOL } from "./fpl-pool-fixture.js";
 
 const { Client } = pg;
@@ -124,7 +124,7 @@ describe("opening the FPL track for a Gameweek", () => {
     expect(context!.body).toContain(
       "A Transfer can only sell a player your Squad owns."
     );
-    for (const rule of OPENING_RULES) {
+    for (const rule of GAMEWEEK_RULES) {
       expect(context!.body).toContain(rule);
     }
     expect(parseFplTrackContextPool(context!.body)).toEqual(

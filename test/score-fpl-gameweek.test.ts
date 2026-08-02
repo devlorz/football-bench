@@ -6,25 +6,20 @@ import {
   scoreFplGameweek
 } from "../src/fpl/score-fpl-gameweek.js";
 import { storeManagerState } from "../src/fpl/manager-state-store.js";
+import { FPL_POOL, FPL_POOL_ALTERNATES } from "./fpl-pool-fixture.js";
+import { legalStateFrom } from "./fpl-replay.js";
 import {
-  applyGameweekAction,
-  openingManagerState,
-  type ManagerState
-} from "../src/fpl/apply-gameweek-action.js";
-import { FPL_POOL, LOCKED_POOL as POOL } from "./fpl-pool-fixture.js";
-import { OPENING_ACTION as OPENING } from "./fpl-action-fixture.js";
-import { EVERYONE_PLAYED, absent } from "./fpl-points-fixture.js";
+  FREE_HIT_REBUILD,
+  OPENING_ACTION as OPENING
+} from "./fpl-action-fixture.js";
+import {
+  EVERYONE_PLAYED,
+  FREE_HIT_GAMEWEEK,
+  absent
+} from "./fpl-points-fixture.js";
 import type { PlayerGameweekPoints } from "../src/fpl/score-team-sheet.js";
 
 const { Client } = pg;
-
-function openedState(): ManagerState {
-  const outcome = applyGameweekAction(openingManagerState(), OPENING, POOL);
-  if ("violation" in outcome) {
-    throw new Error(`the fixture action must be legal: ${outcome.violation.kind}`);
-  }
-  return outcome.state;
-}
 
 describe("scoring a Gameweek from what is stored", () => {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
@@ -81,7 +76,7 @@ describe("scoring a Gameweek from what is stored", () => {
     // The same opening Team Sheet for both, so the only thing that can move
     // one Entrant's total away from the other's is the Hits its own Manager
     // State recorded.
-    const opened = openedState();
+    const opened = legalStateFrom(OPENING);
     for (const [entrantId, hits] of [["entrant/v1", 0], ["entrant/v2", 4]] as const) {
       await storeManagerState(client, {
         entrantId,
@@ -177,7 +172,7 @@ describe("scoring a Gameweek from what is stored", () => {
       entrantId: "entrant/v1",
       season: "2026-27",
       gameweek: 2,
-      state: openedState(),
+      state: legalStateFrom(OPENING),
       attemptsUsed: 0,
       predictedAt: new Date("2026-08-28T17:00:00Z")
     });
@@ -250,6 +245,64 @@ describe("scoring a Gameweek from what is stored", () => {
     ).rejects.toThrow(/5/);
 
     expect(await storedScores()).toEqual([]);
+  });
+
+  test("scores a Free Hit Gameweek from the temporary Squad it stored", async () => {
+    // The three players the Free Hit brought in need positions, and positions
+    // are the Season's: this is the Gameweek 2 snapshot they arrive in.
+    for (const player of FPL_POOL_ALTERNATES.filter(
+      ({ fplId }) => [17, 18, 19].includes(fplId)
+    )) {
+      await client.query(
+        `insert into fpl_players (
+           season, gw, fpl_id, team_name, web_name, position, price_tenths,
+           status, chance_of_playing_next_round, news, news_added, observed_at
+         ) values (
+           '2026-27', 2, $1, $2, $3, $4, $5, 'a', null, '', null,
+           '2026-08-28T17:00:00Z'
+         )`,
+        [
+          player.fplId,
+          player.club,
+          player.webName,
+          player.position,
+          player.priceTenths
+        ]
+      );
+    }
+
+    await storeManagerState(client, {
+      entrantId: "entrant/v1",
+      season: "2026-27",
+      gameweek: 2,
+      state: legalStateFrom(FREE_HIT_REBUILD, legalStateFrom(OPENING), 2),
+      attemptsUsed: 0,
+      predictedAt: new Date("2026-08-28T17:00:00Z")
+    });
+    await settle(FREE_HIT_GAMEWEEK, 2);
+
+    await scoreFplGameweek({ database: client, season: "2026-27", gameweek: 2 });
+
+    // The borrowed eleven score 6+2+12+1+2+9+14+7+2+4+8 = 67, and Palmer's
+    // armband adds 9 for 76. The permanent eleven the Entrant still owns would
+    // have scored 58, so nothing here could have come from the stashed Squad.
+    expect(await storedScores()).toEqual([
+      {
+        model_id: "entrant/v1",
+        track: "fpl",
+        metric: FPL_POINTS_METRIC,
+        value: 76,
+        detail: expect.objectContaining({
+          players: expect.arrayContaining([
+            { fplId: 17, points: 12, multiplier: 1 },
+            { fplId: 18, points: 14, multiplier: 1 }
+          ]),
+          substitutions: [],
+          captain: 8,
+          hits: 0
+        })
+      }
+    ]);
   });
 
   test("leaves the rows untouched when it runs again", async () => {

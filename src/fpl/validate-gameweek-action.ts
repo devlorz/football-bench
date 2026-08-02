@@ -1,12 +1,14 @@
 import { z } from "zod";
-import type { GameweekAction } from "./apply-gameweek-action.js";
+import { CHIPS, type GameweekAction } from "./apply-gameweek-action.js";
 
 const fplId = z.number().int().positive();
 
 const gameweekActionSchema = z.strictObject({
   transfers_in: z.array(fplId),
   transfers_out: z.array(fplId),
-  chip: z.null(),
+  // The reducer's own inventory, so a Chip it gains is playable here the same
+  // day rather than being refused as a name this boundary has never heard.
+  chip: z.enum(CHIPS).nullable(),
   team_sheet: z.strictObject({
     starters: z.array(fplId),
     bench: z.array(fplId),
@@ -41,13 +43,13 @@ export function validateGameweekAction(
     return { ok: false, message: GAMEWEEK_ACTION_SCHEMA_MESSAGE };
   }
 
-  const { transfers_in, transfers_out, team_sheet } = parsed.data;
+  const { transfers_in, transfers_out, chip, team_sheet } = parsed.data;
   return {
     ok: true,
     action: {
       transfersIn: transfers_in,
       transfersOut: transfers_out,
-      chip: null,
+      chip,
       teamSheet: {
         starters: team_sheet.starters,
         bench: team_sheet.bench,

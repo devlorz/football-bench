@@ -1,6 +1,12 @@
 import { z } from "zod";
 import {
-  OPENING_RULES,
+  carriedIntoNextGameweek,
+  chipRefusal,
+  CHIPS,
+  FIRST_HALF_FINAL_GAMEWEEK,
+  GAMEWEEK_RULES,
+  type Chip,
+  type ChipsUsed,
   type ManagerState,
   type PoolPlayer,
   type Position
@@ -33,7 +39,37 @@ const STATUS_LABELS: Readonly<Record<string, string>> = {
   u: "unavailable"
 };
 
-const ALL_CHIPS = "wildcard, free_hit, triple_captain, bench_boost";
+/**
+ * What each half-Season's set still holds. An Entrant is refused for reaching
+ * for a Chip it has spent (ADR-0004), so it is told what it holds rather than
+ * left to remember, and told it half by half because the two sets are counted
+ * apart and the first cannot be carried into the second.
+ *
+ * The names come from the reducer's own inventory and in its order, so a Chip
+ * the rules gain is offered here without anyone remembering to add it.
+ */
+function chipsSection(state: ManagerState, gameweek: number): string[] {
+  const named = (chips: readonly Chip[]): string =>
+    chips.length === 0 ? "none" : chips.join(", ");
+  const unspent = (half: keyof ChipsUsed): string =>
+    named(CHIPS.filter((chip) => !state.chipsUsed[half].includes(chip)));
+
+  return [
+    `Chips unspent, first half (through Gameweek ${FIRST_HALF_FINAL_GAMEWEEK}`
+    + `): ${unspent("firstHalf")}`,
+    `Chips unspent, second half (from Gameweek ${FIRST_HALF_FINAL_GAMEWEEK + 1}`
+    + `): ${unspent("secondHalf")}`,
+    // The two counts above are what an Entrant plans a Season with. This is
+    // what this Gameweek will actually accept, and the two differ whenever a
+    // Chip is held but withheld — a Free Hit the Gameweek after a Free Hit,
+    // and both transfer Chips in the Gameweek the track opens on. Asking the
+    // rules rather than restating them is what keeps the answer true.
+    "Chips you can play this Gameweek: "
+    + named(CHIPS.filter(
+      (chip) => chipRefusal(state, chip, gameweek) === null
+    ))
+  ];
+}
 
 function money(tenths: number): string {
   return `£${(tenths / 10).toFixed(1)}m`;
@@ -116,9 +152,16 @@ function squadSection(state: ManagerState): string[] {
 export function buildFplTrackContext({
   season,
   gameweek,
-  state,
+  state: stored,
   pool
 }: BuildFplTrackContextOptions): string {
+  // The same reversion the reducer performs on the same stored row, so what
+  // the Entrant is shown is what its action will be judged against. Taking the
+  // row as it stands would show a Free Hit's borrowed Squad and borrowed bank
+  // to an Entrant that owns neither. Doing it here rather than leaving it to
+  // callers means no caller can forget, and doing it twice is doing it once.
+  const state = carriedIntoNextGameweek(stored);
+
   return [
     `Fantasy Premier League — ${season} Gameweek ${gameweek}`,
     "",
@@ -129,14 +172,13 @@ export function buildFplTrackContext({
     ...squadSection(state),
     `Bank: ${money(state.bankTenths)}`,
     `Free Transfers: ${state.freeTransfers}`,
-    `Chips unspent, first half: ${ALL_CHIPS}`,
-    `Chips unspent, second half: ${ALL_CHIPS}`,
+    ...chipsSection(state, gameweek),
     "",
     POOL_HEADING,
     ...pool.map(playerLine),
     "",
     "The rules your action must satisfy",
-    ...OPENING_RULES.map((rule) => `- ${rule}`),
+    ...GAMEWEEK_RULES.map((rule) => `- ${rule}`),
     "",
     "Return only JSON in exactly this shape, with no other text:",
     JSON.stringify({
