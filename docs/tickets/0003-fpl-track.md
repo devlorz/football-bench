@@ -13,7 +13,8 @@ then proceed independently before converging on the demonstration record.
 The rules remain a pure reducer:
 
 ```
-(ManagerState, GameweekAction) → { state: ManagerState } | { violation: Violation }
+(ManagerState, GameweekAction, LockedPlayerPool, GameweekNumber)
+  → { state: ManagerState } | { violation: Violation }
 ```
 
 Persistence, the outbound-HTTP seam and the Lock stay outside it. The only new persistence is
@@ -122,18 +123,18 @@ Free Hit Squad correctly.
 
 **Blocked by:** Score a Team Sheet by the real substitution rules.
 
-- [ ] Manager State carries two sets of Wildcard, Free Hit, Triple Captain and Bench Boost, one for each half-Season
-- [ ] The frozen Chip inventory and lifecycle cite the Premier League's official 2026/27 Chips announcement published 20 July 2026 and the official FPL FAQ, both verified 30 July 2026
-- [ ] A Wildcard permits unlimited legal Transfers in its Gameweek without Hits and persists the rebuilt Squad afterwards
-- [ ] A Free Hit persists the temporary Squad under `squad.active` and the permanent Squad, purchase prices, Team Sheet and bank under `squad.free_hit_stash`
-- [ ] The next reducer step restores the Free Hit stash before applying its action, without reading an earlier Manager State row
-- [ ] Free Hit scoring uses the temporary Squad while later Selling Prices continue from the restored permanent Squad
-- [ ] Previously banked Free Transfers pass through a Free Hit unchanged; the Free Transfer granted for that Gameweek is consumed by playing the Chip, and the following Gameweek accrues normally up to five
-- [ ] Wildcard and Free Hit are unavailable in Gameweek 1, and Free Hit cannot be played in consecutive Gameweeks
-- [ ] A spent Chip cannot be used again from the same half-Season set
-- [ ] The first-half Chip set remains usable through Gameweek 19 and expires unspent at that deadline
-- [ ] A Chip action that produces an illegal Squad or Team Sheet is rejected whole without consuming the Chip
-- [ ] Pure sequence tests cover Wildcard persistence, Free Hit reversion, attempted reuse and the Gameweek 19 expiry boundary
+- [x] Manager State carries two sets of Wildcard, Free Hit, Triple Captain and Bench Boost, one for each half-Season
+- [x] The frozen Chip inventory and lifecycle cite the Premier League's official 2026/27 Chips announcement published 20 July 2026 and the official FPL FAQ, both verified 30 July 2026
+- [x] A Wildcard permits unlimited legal Transfers in its Gameweek without Hits and persists the rebuilt Squad afterwards
+- [x] A Free Hit persists the temporary Squad under `squad.active` and the permanent Squad, purchase prices, Team Sheet and bank under `squad.free_hit_stash`
+- [x] The next reducer step restores the Free Hit stash before applying its action, without reading an earlier Manager State row
+- [x] Free Hit scoring uses the temporary Squad while later Selling Prices continue from the restored permanent Squad
+- [x] Previously banked Free Transfers pass through a Free Hit unchanged; the Free Transfer granted for that Gameweek is consumed by playing the Chip, and the following Gameweek accrues normally up to five
+- [x] Wildcard and Free Hit are unavailable in Gameweek 1, and Free Hit cannot be played in consecutive Gameweeks
+- [x] A spent Chip cannot be used again from the same half-Season set
+- [x] The first-half Chip set remains usable through Gameweek 19 and expires unspent at that deadline
+- [x] A Chip action that produces an illegal Squad or Team Sheet is rejected whole without consuming the Chip
+- [x] Pure sequence tests cover Wildcard persistence, Free Hit reversion, attempted reuse and the Gameweek 19 expiry boundary
 
 ---
 
@@ -145,6 +146,13 @@ changing the persistent Squad.
 
 **Blocked by:** Play Wildcard and Free Hit.
 
+Both Chips are gated off until this ticket. `chipRefusal` refuses them and the context offers
+neither, holding the invariant spec 0003 states: a Chip the rules accept is a Chip the rules
+carry out. Lifting the gate is one line — `CHIPS_WITH_EFFECT` in
+`src/fpl/apply-gameweek-action.ts` — and it belongs in the same commit as the scoring below,
+never ahead of it.
+
+- [ ] Both Chips leave `CHIPS_WITH_EFFECT` and reach the reducer in the same commit that scores them, with the context offering them from that commit and not before
 - [ ] Triple Captain trebles the playing captain's points instead of doubling them
 - [ ] When the named captain does not play under Triple Captain, the promoted playing vice-captain receives the triple multiplier
 - [ ] Bench Boost scores all fifteen eligible Squad members without applying ordinary outfield bench exclusions
@@ -164,7 +172,7 @@ the action and advances through a Roll Over instead of destroying the Entrant's 
 
 **Blocked by:** Play Wildcard and Free Hit.
 
-- [ ] Every violation has a stable kind covering budget, squad quota, club limit, formation, Chip unavailable, Chip expired, captain and unknown player
+- [ ] Every violation has a stable kind covering budget, squad quota, club limit, formation, Chip unavailable, captain and unknown player — there is deliberately no `chip expired` kind, for the reason spec 0003 §*Violations are typed, and messages are frozen* records
 - [ ] Validator messages live in one frozen vocabulary so their wording cannot drift independently during the Season
 - [ ] The complete invalid action is rejected and the violation message is appended to the same Entrant conversation for the Repair
 - [ ] An initial response plus up to three Repairs is allowed, with attempts-to-legal recorded as 0, 1, 2, 3 or failed

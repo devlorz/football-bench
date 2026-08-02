@@ -3,11 +3,18 @@ import {
   applyGameweekAction,
   openingManagerState,
   ENFORCED_VIOLATIONS,
-  OPENING_RULES,
+  GAMEWEEK_RULES,
   type GameweekAction
 } from "../src/fpl/apply-gameweek-action.js";
 import { LOCKED_POOL as POOL } from "./fpl-pool-fixture.js";
 import { OPENING_ACTION } from "./fpl-action-fixture.js";
+
+/**
+ * Every action below is the track's first, so the Gameweek the reducer is
+ * handed is only ever the one the Season starts on. It matters to the Chip
+ * rules and to nothing these tests assert.
+ */
+const OPENING_GAMEWEEK = 1;
 
 /** The one shared legal opening, with `swap` applied player-for-player. */
 function opening(swap: Record<number, number> = {}): GameweekAction {
@@ -28,7 +35,7 @@ function opening(swap: Record<number, number> = {}): GameweekAction {
 
 describe("Opening Manager State", () => {
   test("accepts two goalkeepers, five defenders, five midfielders and three forwards within budget", () => {
-    const result = applyGameweekAction(openingManagerState(), opening(), POOL);
+    const result = applyGameweekAction(openingManagerState(), opening(), POOL, OPENING_GAMEWEEK);
 
     expect(result).toMatchObject({
       state: {
@@ -60,7 +67,7 @@ describe("Opening Manager State", () => {
   test("rejects an opening Squad costing more than £100.0m", () => {
     // The legal Squad costs £95.5m; swapping a £12.0m midfielder for a
     // £17.0m one takes it to £100.5m.
-    expect(applyGameweekAction(openingManagerState(), opening({ 8: 16 }), POOL))
+    expect(applyGameweekAction(openingManagerState(), opening({ 8: 16 }), POOL, OPENING_GAMEWEEK))
       .toEqual({
         violation: {
           kind: "budget",
@@ -75,7 +82,7 @@ describe("Opening Manager State", () => {
     expect(applyGameweekAction(openingManagerState(), {
       ...opening(),
       transfersOut: [999]
-    }, POOL)).toEqual({
+    }, POOL, OPENING_GAMEWEEK)).toEqual({
       violation: {
         kind: "unknown_player",
         message: "A Transfer can only sell a player your Squad owns."
@@ -97,7 +104,7 @@ describe("Opening Manager State", () => {
         captain: 8,
         viceCaptain: 13
       }
-    }, POOL)).toEqual({
+    }, POOL, OPENING_GAMEWEEK)).toEqual({
       violation: {
         kind: "squad_quota",
         message: "A Squad must name fifteen different players."
@@ -108,7 +115,7 @@ describe("Opening Manager State", () => {
   test("rejects a Squad outside the two, five, five, three quota", () => {
     // A defender swapped for a midfielder: four defenders and six midfielders,
     // at £96.5m and still three per club, so only the quota is broken.
-    expect(applyGameweekAction(openingManagerState(), opening({ 7: 18 }), POOL))
+    expect(applyGameweekAction(openingManagerState(), opening({ 7: 18 }), POOL, OPENING_GAMEWEEK))
       .toEqual({
         violation: {
           kind: "squad_quota",
@@ -121,7 +128,7 @@ describe("Opening Manager State", () => {
   test("rejects more than three players from one club", () => {
     // A Chelsea defender swapped for an Arsenal one: four Arsenal players,
     // at £96.5m and still two, five, five, three.
-    expect(applyGameweekAction(openingManagerState(), opening({ 7: 17 }), POOL))
+    expect(applyGameweekAction(openingManagerState(), opening({ 7: 17 }), POOL, OPENING_GAMEWEEK))
       .toEqual({
         violation: {
           kind: "club_limit",
@@ -132,7 +139,7 @@ describe("Opening Manager State", () => {
   });
 
   test("rejects a player outside the locked Gameweek's player pool", () => {
-    expect(applyGameweekAction(openingManagerState(), opening({ 7: 999 }), POOL))
+    expect(applyGameweekAction(openingManagerState(), opening({ 7: 999 }), POOL, OPENING_GAMEWEEK))
       .toEqual({
         violation: {
           kind: "unknown_player",
@@ -152,7 +159,7 @@ describe("Opening Manager State", () => {
         captain: 8,
         viceCaptain: 13
       }
-    }, POOL)).toEqual({
+    }, POOL, OPENING_GAMEWEEK)).toEqual({
       violation: {
         kind: "formation",
         message: "A Team Sheet must start eleven players in a legal "
@@ -168,7 +175,7 @@ describe("Opening Manager State", () => {
     expect(applyGameweekAction(openingManagerState(), {
       ...opening(),
       teamSheet: { ...opening().teamSheet, bench: [2, 7, 12, 12] }
-    }, POOL)).toEqual({
+    }, POOL, OPENING_GAMEWEEK)).toEqual({
       violation: {
         kind: "formation",
         message: "A Team Sheet must name, in order, the four Squad members "
@@ -181,7 +188,7 @@ describe("Opening Manager State", () => {
     expect(applyGameweekAction(openingManagerState(), {
       ...opening(),
       teamSheet: { ...opening().teamSheet, captain: 2 }
-    }, POOL)).toEqual({
+    }, POOL, OPENING_GAMEWEEK)).toEqual({
       violation: {
         kind: "captain",
         message: "A Team Sheet's captain and vice-captain must both be among "
@@ -194,7 +201,7 @@ describe("Opening Manager State", () => {
     expect(applyGameweekAction(openingManagerState(), {
       ...opening(),
       teamSheet: { ...opening().teamSheet, captain: 8, viceCaptain: 8 }
-    }, POOL)).toEqual({
+    }, POOL, OPENING_GAMEWEEK)).toEqual({
       violation: {
         kind: "captain",
         message: "A Team Sheet's captain and vice-captain must be two "
@@ -209,13 +216,13 @@ describe("Opening Manager State", () => {
     // enforced misleads it. The existing context test proves each rule in the
     // list reaches the Entrant; this one proves the list is the whole set, so
     // that adding a Violation without adding its rule fails here.
-    expect([...OPENING_RULES].sort()).toEqual([...ENFORCED_VIOLATIONS].sort());
+    expect([...GAMEWEEK_RULES].sort()).toEqual([...ENFORCED_VIOLATIONS].sort());
   });
 
   test("records one Free Transfer and both half-Season Chip sets unspent", () => {
     // The real game grants the first Free Transfer for the Gameweek after the
     // opening one, and no Chip can have been spent before the Season starts.
-    expect(applyGameweekAction(openingManagerState(), opening(), POOL))
+    expect(applyGameweekAction(openingManagerState(), opening(), POOL, OPENING_GAMEWEEK))
       .toMatchObject({
         state: {
           freeTransfers: 1,

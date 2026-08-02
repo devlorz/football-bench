@@ -2,44 +2,16 @@ import { describe, expect, test } from "vitest";
 import {
   applyGameweekAction,
   openingManagerState,
-  type GameweekAction,
-  type GameweekOutcome,
-  type PoolPlayer
+  type GameweekAction
 } from "../src/fpl/apply-gameweek-action.js";
 import { LOCKED_POOL as POOL } from "./fpl-pool-fixture.js";
+import { replay, repriced } from "./fpl-replay.js";
 import {
   OPENING_ACTION as OPENING,
   SELL_WILSON_BUY_EVANILSON,
   STAND_PAT,
   TWO_TRANSFERS
 } from "./fpl-action-fixture.js";
-
-/**
- * A sequence is the unit of test here (spec 0003, §Testing Decisions), so this
- * folds the reducer over a list of actions and stops at the first violation.
- * It stays in the test suite deliberately: production has no consumer for a
- * replay yet, and an exported helper with no caller would be an interface
- * invented by its tests.
- */
-function replay(
-  actions: readonly GameweekAction[],
-  pools: readonly PoolPlayer[][] = []
-): GameweekOutcome {
-  return actions.reduce<GameweekOutcome>(
-    (outcome, action, gameweek) => "violation" in outcome
-      ? outcome
-      : applyGameweekAction(outcome.state, action, pools[gameweek] ?? POOL),
-    { state: openingManagerState() }
-  );
-}
-
-/** The pool as a later Gameweek's Lock would find it, with prices moved. */
-function repriced(moves: Record<number, number>): PoolPlayer[] {
-  return POOL.map((player) => ({
-    ...player,
-    priceTenths: moves[player.fplId] ?? player.priceTenths
-  }));
-}
 
 describe("Carrying Manager State through a Gameweek without Transfers", () => {
   test("carries the Squad and every purchase price forward untouched", () => {
@@ -90,7 +62,7 @@ describe("Selling Price", () => {
     // 60, so the £4.5m bank becomes 45 + 62 - 60 = 47.
     expect(replay(
       [OPENING, SELL_WILSON_BUY_EVANILSON],
-      [POOL, repriced({ 15: 65 })]
+      { pools: [POOL, repriced({ 15: 65 })] }
     )).toMatchObject({ state: { bankTenths: 47 } });
   });
 
@@ -100,7 +72,7 @@ describe("Selling Price", () => {
     // bank becomes 45 + 57 - 60 = 42 and the £0.3m loss is real.
     expect(replay(
       [OPENING, SELL_WILSON_BUY_EVANILSON],
-      [POOL, repriced({ 15: 57 })]
+      { pools: [POOL, repriced({ 15: 57 })] }
     )).toMatchObject({ state: { bankTenths: 42 } });
   });
 });
@@ -122,15 +94,15 @@ describe("Hits", () => {
 
 describe("Replaying a sequence", () => {
   test("folds to the same state as applying each action in turn", () => {
-    const first = applyGameweekAction(openingManagerState(), OPENING, POOL);
+    const first = applyGameweekAction(openingManagerState(), OPENING, POOL, 1);
     if ("violation" in first) {
       throw new Error("the opening of every other test must be legal here");
     }
-    const second = applyGameweekAction(first.state, STAND_PAT, POOL);
+    const second = applyGameweekAction(first.state, STAND_PAT, POOL, 2);
     if ("violation" in second) {
       throw new Error("standing pat on a legal Squad must stay legal");
     }
-    const third = applyGameweekAction(second.state, TWO_TRANSFERS, POOL);
+    const third = applyGameweekAction(second.state, TWO_TRANSFERS, POOL, 3);
 
     expect(replay([OPENING, STAND_PAT, TWO_TRANSFERS])).toEqual(third);
   });
@@ -267,7 +239,7 @@ describe("A Squad still bound by every rule after a Transfer", () => {
         chip: null,
         teamSheet: OPENING.teamSheet
       }],
-      [POOL, repriced({ 15: 65 })]
+      { pools: [POOL, repriced({ 15: 65 })] }
     )).toEqual({
       violation: {
         kind: "unknown_player",

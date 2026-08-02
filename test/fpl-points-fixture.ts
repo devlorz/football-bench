@@ -28,6 +28,19 @@ export const EVERYONE_PLAYED: PlayerGameweekPoints[] = [
   { fplId: 15, minutes: 90, totalPoints: 12 }
 ];
 
+/**
+ * The Gameweek a Free Hit's temporary Squad plays: Timber, Enzo and Wilson are
+ * away and White, Caicedo and Evanilson are in their places. The three who
+ * arrive outscore the three they replace by a wide margin, so a Gameweek
+ * scored from the permanent Squad instead would land nowhere near this one.
+ */
+export const FREE_HIT_GAMEWEEK: PlayerGameweekPoints[] = [
+  ...EVERYONE_PLAYED.filter(({ fplId }) => ![4, 9, 15].includes(fplId)),
+  { fplId: 17, minutes: 90, totalPoints: 12 },
+  { fplId: 18, minutes: 90, totalPoints: 14 },
+  { fplId: 19, minutes: 90, totalPoints: 15 }
+];
+
 /** The same Gameweek with the named players left out of the matchday squads. */
 export function absent(fplIds: readonly number[]): PlayerGameweekPoints[] {
   return EVERYONE_PLAYED.map((player) => fplIds.includes(player.fplId)

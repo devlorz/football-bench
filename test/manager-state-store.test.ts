@@ -5,26 +5,21 @@ import {
   loadManagerState,
   storeManagerState
 } from "../src/fpl/manager-state-store.js";
+import { applyGameweekAction } from "../src/fpl/apply-gameweek-action.js";
 import {
-  applyGameweekAction,
-  openingManagerState,
-  type GameweekAction
-} from "../src/fpl/apply-gameweek-action.js";
-import { LOCKED_POOL as POOL } from "./fpl-pool-fixture.js";
+  buildFplTrackContext,
+  parseFplTrackContextPool
+} from "../src/context/build-fpl-track-context.js";
+import { FPL_POOL, LOCKED_POOL as POOL } from "./fpl-pool-fixture.js";
+import { legalStateFrom } from "./fpl-replay.js";
 import {
+  FREE_HIT_REBUILD,
   OPENING_ACTION as OPENING,
+  STAND_PAT,
   TWO_TRANSFERS
 } from "./fpl-action-fixture.js";
 
 const { Client } = pg;
-
-function stateFrom(action: GameweekAction, from = openingManagerState()) {
-  const outcome = applyGameweekAction(from, action, POOL);
-  if ("violation" in outcome) {
-    throw new Error(`the fixture action must be legal: ${outcome.violation.kind}`);
-  }
-  return outcome.state;
-}
 
 describe("storing and reloading Manager State", () => {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
@@ -58,12 +53,103 @@ describe("storing and reloading Manager State", () => {
     );
   });
 
+  test("round-trips a Free Hit's stash well enough to revert from the row alone", async () => {
+    // The stash is the one part of Manager State that exists only during a
+    // Free Hit, so it is the one part a storage layer could drop without any
+    // other test noticing. Gameweek 3's action is judged against nothing but
+    // the reloaded Gameweek 2 row.
+    const opened = legalStateFrom(OPENING);
+    await storeManagerState(client, {
+      entrantId: "entrant/v1",
+      season: "2026-27",
+      gameweek: 2,
+      state: legalStateFrom(FREE_HIT_REBUILD, opened, 2),
+      attemptsUsed: 0,
+      predictedAt: new Date("2026-08-28T17:00:00Z")
+    });
+
+    const reloaded = await loadManagerState(client, {
+      entrantId: "entrant/v1",
+      season: "2026-27",
+      gameweek: 2
+    });
+
+    expect(reloaded).toMatchObject({
+      squad: {
+        active: expect.arrayContaining([
+          { fplId: 17, purchasePriceTenths: 50 }
+        ]),
+        free_hit_stash: {
+          squad: expect.arrayContaining([
+            { fplId: 15, purchasePriceTenths: 60 }
+          ]),
+          team_sheet: OPENING.teamSheet,
+          bank: 45
+        }
+      },
+      chipActive: "free_hit",
+      chipsUsed: { firstHalf: ["free_hit"], secondHalf: [] }
+    });
+
+    // Standing pat on the Gameweek 1 Team Sheet names Timber, Enzo and Wilson,
+    // whom the Free Hit sent away: it is legal only because the reloaded row
+    // carried enough to put them back.
+    expect(applyGameweekAction(reloaded!, STAND_PAT, POOL, 3)).toMatchObject({
+      state: {
+        squad: { free_hit_stash: null },
+        bankTenths: 45,
+        chipActive: null
+      }
+    });
+  });
+
+  test("shows the Entrant the Squad the reloaded row will judge it on", async () => {
+    // The whole chain a Free Hit crosses: stored, reloaded, rendered into the
+    // context the Entrant reads, and judged by the reducer. The context and
+    // the reducer revert the stash through the same function, so an Entrant
+    // that picks a Team Sheet from what it was shown cannot be refused for
+    // naming players the row says it does not own.
+    await storeManagerState(client, {
+      entrantId: "entrant/v1",
+      season: "2026-27",
+      gameweek: 2,
+      state: legalStateFrom(FREE_HIT_REBUILD, legalStateFrom(OPENING), 2),
+      attemptsUsed: 0,
+      predictedAt: new Date("2026-08-28T17:00:00Z")
+    });
+    const reloaded = await loadManagerState(client, {
+      entrantId: "entrant/v1",
+      season: "2026-27",
+      gameweek: 2
+    });
+
+    const body = buildFplTrackContext({
+      season: "2026-27",
+      gameweek: 3,
+      state: reloaded!,
+      pool: FPL_POOL.map((player) => ({ ...player, status: "a" }))
+    });
+
+    expect(body).toContain("Bank: £4.5m");
+    expect(body).toContain("- 15 | bought for £6.0m");
+    expect(body).not.toContain("- 19 |");
+
+    // Priced from the pool the context pinned, exactly as `openFplGameweek`
+    // does it. The Team Sheet names the fifteen the context showed.
+    expect(applyGameweekAction(
+      reloaded!,
+      STAND_PAT,
+      parseFplTrackContextPool(body),
+      3
+    )).toMatchObject({ state: { squad: { free_hit_stash: null } } });
+  });
+
   test("reloads a stored state complete enough to take the next action", async () => {
     await storeManagerState(client, {
       entrantId: "entrant/v1",
       season: "2026-27",
       gameweek: 1,
-      state: stateFrom(OPENING),
+      state: legalStateFrom(OPENING),
       attemptsUsed: 0,
       predictedAt: new Date("2026-08-21T17:00:00Z")
     });
@@ -78,18 +164,19 @@ describe("storing and reloading Manager State", () => {
     // reducer step runs on. Enzo and Wilson sell for the £9.0m and £6.0m they
     // cost against £5.0m and £6.0m in, so 45 + 150 - 110 = 85; the one banked
     // Free Transfer pays for the first Transfer and the second costs a Hit.
-    expect(applyGameweekAction(reloaded!, TWO_TRANSFERS, POOL)).toMatchObject({
-      state: {
-        bankTenths: 85,
-        freeTransfers: 1,
-        hits: 4,
-        squad: { free_hit_stash: null }
-      }
-    });
+    expect(applyGameweekAction(reloaded!, TWO_TRANSFERS, POOL, 2))
+      .toMatchObject({
+        state: {
+          bankTenths: 85,
+          freeTransfers: 1,
+          hits: 4,
+          squad: { free_hit_stash: null }
+        }
+      });
   });
 
   test("keeps one row per Entrant and Gameweek and leaves the earlier one alone", async () => {
-    const opened = stateFrom(OPENING);
+    const opened = legalStateFrom(OPENING);
     await storeManagerState(client, {
       entrantId: "entrant/v1",
       season: "2026-27",
@@ -102,7 +189,7 @@ describe("storing and reloading Manager State", () => {
       entrantId: "entrant/v1",
       season: "2026-27",
       gameweek: 2,
-      state: stateFrom(TWO_TRANSFERS, opened),
+      state: legalStateFrom(TWO_TRANSFERS, opened, 2),
       attemptsUsed: 0,
       predictedAt: new Date("2026-08-28T17:00:00Z")
     });

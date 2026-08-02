@@ -34,7 +34,23 @@ export interface SquadEnvelope {
   };
 }
 
-export type Chip = "wildcard" | "free_hit" | "triple_captain" | "bench_boost";
+/**
+ * Every Chip, in the order the Premier League's 2026/27 Chips announcement
+ * lists them. This tuple is the one inventory: the `Chip` type is read off it,
+ * the boundary that parses an Entrant's action enumerates it, and the context
+ * that tells an Entrant what it still holds prints it. Three readers, one
+ * list — spelling the four names out a second time somewhere else is what
+ * would let a Chip exist in the rules and be unplayable at the boundary, or
+ * be offered in the context and unjudgeable by the rules.
+ */
+export const CHIPS = [
+  "wildcard",
+  "free_hit",
+  "triple_captain",
+  "bench_boost"
+] as const;
+
+export type Chip = (typeof CHIPS)[number];
 
 /** One set per half-Season; the first expires unspent at the GW19 deadline. */
 export interface ChipsUsed {
@@ -56,7 +72,7 @@ export interface ManagerState {
 export interface GameweekAction {
   transfersIn: number[];
   transfersOut: number[];
-  chip: null;
+  chip: Chip | null;
   teamSheet: TeamSheet;
 }
 
@@ -66,7 +82,21 @@ export type ViolationKind =
   | "club_limit"
   | "unknown_player"
   | "formation"
-  | "captain";
+  | "captain"
+  | "chip_unavailable";
+
+/**
+ * The last Gameweek of the first half-Season. The first set of Chips is
+ * playable up to and including its deadline and cannot be carried past it:
+ * "they cannot be carried over into the second half" (Premier League, 2026/27
+ * Chips announcement). Nothing has to discard the set, because which set an
+ * action draws from is decided by the Gameweek it is played in.
+ */
+export const FIRST_HALF_FINAL_GAMEWEEK = 19;
+
+function halfOf(gameweek: number): keyof ChipsUsed {
+  return gameweek <= FIRST_HALF_FINAL_GAMEWEEK ? "firstHalf" : "secondHalf";
+}
 
 export const STARTERS = 11;
 
@@ -175,8 +205,38 @@ const VIOLATIONS = {
     kind: "captain",
     message: "A Team Sheet's captain and vice-captain must be two different "
       + "players."
+  },
+  chipAlreadySpent: {
+    kind: "chip_unavailable",
+    message: "A Chip can only be played once in each half of the Season."
+  },
+  openingGameweekChip: {
+    kind: "chip_unavailable",
+    message: "A Wildcard or Free Hit cannot be played in the Gameweek the "
+      + "track opens on, where every Transfer is already free."
+  },
+  consecutiveFreeHit: {
+    kind: "chip_unavailable",
+    message: "A Free Hit cannot be played in the Gameweek straight after a "
+      + "Free Hit."
+  },
+  // Deliberately general. This sentence is frozen for the Season (ADR-0004),
+  // so it must not name a reason that stops being true — what the rules can
+  // carry out is a fact about this repository on a given day, and the Entrant
+  // is owed the rule, not the reason behind it.
+  chipNotAvailable: {
+    kind: "chip_unavailable",
+    message: "This Chip is not available in this Gameweek."
   }
 } as const satisfies Readonly<Record<string, Violation>>;
+
+/**
+ * Every sentence the reducer can refuse an action with, in no order. Exported
+ * so a test can hold `GAMEWEEK_RULES` to the invariant stated below rather than
+ * leaving it to whoever adds the next Violation to remember.
+ */
+export const ENFORCED_VIOLATIONS: readonly string[] =
+  Object.values(VIOLATIONS).map(({ message }) => message);
 
 /**
  * The same frozen sentences, ordered as rules rather than as complaints, in the
@@ -185,16 +245,14 @@ const VIOLATIONS = {
  * of a rule that could drift from this one. Every rule the reducer enforces
  * belongs here: refusing an action for a rule the Entrant was never shown
  * changes the difficulty of the task (ADR-0004).
+ *
+ * These are every Gameweek's rules, not the opening Gameweek's. The list once
+ * held only rules an opening Squad could break, and the Chips brought it rules
+ * that need a Season behind them — a Chip already spent, a Free Hit straight
+ * after a Free Hit. It is shown in full every Gameweek, because a rule an
+ * Entrant is not shown is a rule it cannot be refused by.
  */
-/**
- * Every sentence the reducer can refuse an action with, in no order. Exported
- * so a test can hold `OPENING_RULES` to the invariant stated below rather than
- * leaving it to whoever adds the next Violation to remember.
- */
-export const ENFORCED_VIOLATIONS: readonly string[] =
-  Object.values(VIOLATIONS).map(({ message }) => message);
-
-export const OPENING_RULES: readonly string[] = [
+export const GAMEWEEK_RULES: readonly string[] = [
   VIOLATIONS.unknownPlayer.message,
   VIOLATIONS.unownedTransferOut.message,
   VIOLATIONS.repeatedTransferOut.message,
@@ -206,7 +264,11 @@ export const OPENING_RULES: readonly string[] = [
   VIOLATIONS.formation.message,
   VIOLATIONS.bench.message,
   VIOLATIONS.captainNotStarting.message,
-  VIOLATIONS.captainIsViceCaptain.message
+  VIOLATIONS.captainIsViceCaptain.message,
+  VIOLATIONS.chipAlreadySpent.message,
+  VIOLATIONS.openingGameweekChip.message,
+  VIOLATIONS.consecutiveFreeHit.message,
+  VIOLATIONS.chipNotAvailable.message
 ];
 
 export type GameweekOutcome = { state: ManagerState } | { violation: Violation };
@@ -243,11 +305,190 @@ export function sellingPrice(paidTenths: number, listedTenths: number): number {
     : paidTenths + Math.floor((listedTenths - paidTenths) / 2);
 }
 
-export function applyGameweekAction(
+/**
+ * What the Gameweek after this one opens with. Ordinarily each Transfer spends
+ * a banked Free Transfer and the Gameweek grants one more, capped at five.
+ *
+ * Either transfer-oriented Chip leaves the count exactly as it found it. The
+ * official FPL FAQ (verified 2 August 2026) says so in as many numbers: "when
+ * playing a Wildcard, any saved free transfers are maintained. If you had 2
+ * saved free transfers, you will still have 2 saved free transfers the
+ * following Gameweek." Two things follow, and the second is the one worth
+ * writing down: the Gameweek's Transfers take nothing from the bank, and the
+ * Free Transfer the Gameweek would have granted goes with the Chip. Normal
+ * accrual resumes in the Gameweek after.
+ */
+function bankedAfter(freeTransfers: number, action: GameweekAction): number {
+  if (action.chip === "wildcard" || action.chip === "free_hit") {
+    return freeTransfers;
+  }
+  const kept = Math.max(0, freeTransfers - action.transfersIn.length);
+  return Math.min(kept + 1, MAX_FREE_TRANSFERS);
+}
+
+/**
+ * The Chip inventory after this action. A Chip is recorded against the half of
+ * the Season the Gameweek falls in, which is what makes the first set expire
+ * unspent at the Gameweek 19 deadline without anything having to expire it.
+ */
+function chipsSpentAfter(
+  chipsUsed: ChipsUsed,
+  chip: Chip | null,
+  gameweek: number
+): ChipsUsed {
+  if (chip === null) {
+    return chipsUsed;
+  }
+  const half = halfOf(gameweek);
+  return { ...chipsUsed, [half]: [...chipsUsed[half], chip] };
+}
+
+/**
+ * What a Free Hit displaces: the permanent Squad with its purchase prices, the
+ * permanent Team Sheet and the permanent bank, carried in the row so that the
+ * next reducer step can restore them without reading an earlier Gameweek
+ * (ADR-0017). Null for every other Chip and for no Chip at all.
+ *
+ * A state with no standing Team Sheet is a state with no Squad, and the
+ * opening rule refuses a Free Hit there — so the null arm is what makes this
+ * total, not a second reading of the rule.
+ */
+function displacedByFreeHit(
   state: ManagerState,
+  chip: Chip | null
+): SquadEnvelope["free_hit_stash"] {
+  if (chip !== "free_hit" || state.teamSheet === null) {
+    return null;
+  }
+  return {
+    squad: state.squad.active,
+    team_sheet: state.teamSheet,
+    bank: state.bankTenths
+  };
+}
+
+/**
+ * What a stored Manager State means at the start of the Gameweek after it. A
+ * Free Hit lasted one Gameweek, so the next one opens by putting back the
+ * permanent Squad, purchase prices, Team Sheet and bank it stashed. The stash
+ * travels in the state itself, so this reads no earlier Manager State and the
+ * fold survives whatever the next action turns out to be — including a Roll
+ * Over (ADR-0017). Every other state passes through, and applying this twice
+ * is applying it once.
+ *
+ * Exported because the reducer must not be the only reader of it. The FPL
+ * context is built from the same stored row, and an Entrant shown the borrowed
+ * Squad while being judged on the permanent one would be picking a Team Sheet
+ * from fifteen players it does not own. One function, both callers.
+ */
+export function carriedIntoNextGameweek(state: ManagerState): ManagerState {
+  const stash = state.squad.free_hit_stash;
+  if (stash === null) {
+    return state;
+  }
+  return {
+    ...state,
+    squad: { active: stash.squad, free_hit_stash: null },
+    teamSheet: stash.team_sheet,
+    bankTenths: stash.bank
+  };
+}
+
+/**
+ * The Chips whose effect the rules can actually carry out. Wildcard and Free
+ * Hit change a Gameweek's Transfers, which the reducer does. Triple Captain
+ * and Bench Boost change a Gameweek's scoring, which nothing does yet — that
+ * is the "Play Triple Captain and Bench Boost" ticket, and until it lands the
+ * two are refused.
+ *
+ * The invariant this holds is why the gate belongs in the rules rather than in
+ * the text the Entrant reads: a Chip the context offers and the reducer
+ * accepts must be a Chip that changes the Gameweek. Accepting a Triple Captain
+ * meanwhile would spend one of an Entrant's eight Chips for the Season and
+ * double the captain exactly as it was already doubled — an Entrant's own
+ * decision quietly thrown away, in a Season that cannot be replayed.
+ *
+ * `CHIPS`, the `Chip` type, the boundary schema and the stored inventory keep
+ * all four (spec 0003): they are frozen for the Season and must not move when
+ * the ticket lands. This list is the only thing that moves, and it moves in
+ * the same commit as the scoring that makes the two real.
+ */
+const CHIPS_WITH_EFFECT: readonly Chip[] = ["wildcard", "free_hit"];
+
+/**
+ * Whether this is the Gameweek the track opens on. Read off the Squad rather
+ * than off the calendar: ADR-0003 lets the track join the Season at a Gameweek
+ * and run forward, so what makes a Gameweek an opening is having nothing yet,
+ * not being the first of the Season. Two rules turn on it — the Transfers that
+ * fill an empty Squad cost no Hit, and neither transfer Chip can be played.
+ */
+function isOpening(state: ManagerState): boolean {
+  return state.squad.active.length === 0;
+}
+
+/**
+ * Why a Chip cannot be played in this Gameweek, or null if it can. Every rule
+ * about a Chip's own availability lives here and nowhere else.
+ *
+ * Exported because the reducer must not be the only reader of it. An Entrant
+ * that is shown a whole half-Season set and refused for reaching into it has
+ * been sent to spend a Repair on a rule it was never told applied now
+ * (ADR-0004) — so the context asks the same question of every Chip and prints
+ * the answer. One function, both callers; the reducer keeps the specific
+ * sentence because it is answering about one named Chip.
+ */
+export function chipRefusal(
+  state: ManagerState,
+  chip: Chip,
+  gameweek: number
+): Violation | null {
+  if (!CHIPS_WITH_EFFECT.includes(chip)) {
+    return VIOLATIONS.chipNotAvailable;
+  }
+
+  if (state.chipsUsed[halfOf(gameweek)].includes(chip)) {
+    return VIOLATIONS.chipAlreadySpent;
+  }
+
+  // The FAQ's reason for barring both Chips from an opening — "you have
+  // infinite transfers in this Gameweek" — is a fact about the opening rather
+  // than about the date. A Free Hit has the second reason besides: nothing yet
+  // to revert to.
+  if (isOpening(state) && (chip === "wildcard" || chip === "free_hit")) {
+    return VIOLATIONS.openingGameweekChip;
+  }
+
+  // The two sets make one Free Hit per half, so the only two Gameweeks this
+  // can fall between are the nineteenth and the twentieth. `chipActive` on the
+  // state the Gameweek began with is the Chip the Gameweek before played,
+  // which is the whole history the rule needs.
+  if (chip === "free_hit" && state.chipActive === "free_hit") {
+    return VIOLATIONS.consecutiveFreeHit;
+  }
+
+  return null;
+}
+
+export function applyGameweekAction(
+  previous: ManagerState,
   action: GameweekAction,
-  pool: PoolPlayer[]
+  pool: PoolPlayer[],
+  gameweek: number
 ): GameweekOutcome {
+  // Reversion happens before the action is judged, so every rule below reads
+  // the Squad the Entrant actually owns again rather than the one it borrowed.
+  const state = carriedIntoNextGameweek(previous);
+
+  // Chip legality is judged before a penny of the action is counted, so an
+  // Entrant reaching for a Chip it cannot play is told that rather than
+  // whichever Squad rule its rebuild happened to break as well.
+  if (action.chip !== null) {
+    const refusal = chipRefusal(state, action.chip, gameweek);
+    if (refusal !== null) {
+      return { violation: refusal };
+    }
+  }
+
   const byId = new Map(pool.map((player) => [player.fplId, player]));
   const bought: PoolPlayer[] = [];
   for (const fplId of action.transfersIn) {
@@ -370,22 +611,27 @@ export function applyGameweekAction(
   }
 
   // Nothing is owned before the Season, so the opening fifteen cost no Hit:
-  // they are not Transfers beyond an allowance, they are how one begins.
-  const paidTransfers = state.squad.active.length === 0
+  // they are not Transfers beyond an allowance, they are how one begins. Both
+  // transfer-oriented Chips buy the same thing for one Gameweek in the middle
+  // of it — a Wildcard permanently, a Free Hit for that Gameweek only.
+  const unlimitedTransfers = isOpening(state)
+    || action.chip === "wildcard"
+    || action.chip === "free_hit";
+  const paidTransfers = unlimitedTransfers
     ? 0
     : Math.max(0, action.transfersIn.length - state.freeTransfers);
 
   return {
     state: {
-      squad: { active: squad, free_hit_stash: null },
+      squad: {
+        active: squad,
+        free_hit_stash: displacedByFreeHit(state, action.chip)
+      },
       teamSheet: action.teamSheet,
       bankTenths,
-      freeTransfers: Math.min(
-        Math.max(0, state.freeTransfers - action.transfersIn.length) + 1,
-        MAX_FREE_TRANSFERS
-      ),
+      freeTransfers: bankedAfter(state.freeTransfers, action),
       hits: paidTransfers * HIT_POINTS,
-      chipsUsed: state.chipsUsed,
+      chipsUsed: chipsSpentAfter(state.chipsUsed, action.chip, gameweek),
       chipActive: action.chip
     }
   };

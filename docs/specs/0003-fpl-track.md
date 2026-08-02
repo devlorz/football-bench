@@ -191,16 +191,23 @@ Over, and which rules it broke.
 The core is a function, not a service:
 
 ```
-(ManagerState, GameweekAction) → { state: ManagerState } | { violation: Violation }
+(ManagerState, GameweekAction, LockedPlayerPool, GameweekNumber)
+  → { state: ManagerState } | { violation: Violation }
 ```
 
 `ManagerState` is the Squad with the price paid for each player, the bank, Free Transfers
 banked, and Chips not yet spent. `GameweekAction` is transfers in and out, an optional Chip,
-and a Team Sheet.
+and a Team Sheet. The `LockedPlayerPool` is the Gameweek's pool as its Lock found it, which is
+what prices a Transfer. The `GameweekNumber` is which Gameweek the action is for, which is what
+decides the half-Season a Chip is drawn from.
 
-Everything the rules need is in those two values. No database, no clock, no network. Replaying
+Everything the rules need is in those four values. No database, no clock, no network. Replaying
 Gameweeks 1–19 to validate Gameweek 20 — which ADR-0003 says is unavoidable — becomes a fold
 over a list, and a sequence test becomes a list of actions and an expected final state.
+
+The last two are the Gameweek the Entrant is playing, not decisions the Entrant makes, so they
+are arguments rather than fields of `GameweekAction`: an Entrant that could name its own
+Gameweek could reach into the half-Season set it had already spent.
 
 This is the load-bearing decision of the spec. The FPL rules are the most stateful thing in the
 project, and keeping them a pure value transformation is what makes them testable at all.
@@ -211,11 +218,20 @@ result. The reducer never reads or writes.
 ### Violations are typed, and messages are frozen
 
 A `Violation` carries a kind — budget, squad quota, club limit, formation, chip unavailable,
-chip expired, captain not starting, unknown player — and a message. The kinds drive the
-violation profile; the messages are what the Entrant sees.
+captain not starting, unknown player — and a message. The kinds drive the violation profile;
+the messages are what the Entrant sees.
 
 Both are frozen for the Season (ADR-0004). Making a message more specific mid-Season changes
 the difficulty of the task while it is being measured.
+
+**There is no `chip expired` kind.** An earlier draft of this list carried one beside `chip
+unavailable`, and implementing the Chips showed it has no case to fire on. Which half-Season's
+set an action draws from is decided by the Gameweek it is played in, so the first set is out of
+reach from Gameweek 20 onwards without anything having to expire it, and the second set is
+untouched by whatever the first spent. The three refusals that exist — a Chip already spent
+from this half's set, a Wildcard or Free Hit in the opening Gameweek, and a Free Hit straight
+after a Free Hit — are all one kind. A kind no action can produce would appear in every
+violation profile as a permanent zero and suggest a rule that is not there.
 
 A mixed action is rejected whole. Applying transfers in order until one fails would make the
 outcome depend on an ordering rule nobody chose.
@@ -255,6 +271,58 @@ confirms that Wildcard is unavailable in Gameweek 1, bank and Squad restoration 
 Hit, and preservation of previously banked Free Transfers. Playing a Free Hit consumes the
 Free Transfer granted for that Gameweek, leaves previously banked Free Transfers unchanged,
 and lets normal accrual resume in the following Gameweek up to the five-transfer cap.
+
+A Wildcard treats Free Transfers exactly as a Free Hit does, and the FAQ (verified 2 August
+2026) says so in numbers rather than in principle: "when playing a Wildcard, any saved free
+transfers are maintained. If you had 2 saved free transfers, you will still have 2 saved free
+transfers the following Gameweek." Two banked before the Chip is two banked after it — the
+Gameweek's Transfers take nothing from the bank, and the Free Transfer the Gameweek would
+otherwise have granted goes with the Chip. Normal accrual resumes in the Gameweek after, up to
+the five-transfer cap.
+
+That worked example is why the sentence is quoted here rather than paraphrased. Read as
+"maintained, and the Gameweek accrues as usual" the same rule gives three, and nothing else in
+the FAQ rules that out. Both Chips are one rule, not two.
+
+A Wildcard also buys no extra money: "when using a Wildcard, you must remain within your
+current budget" (same source), so a Chip action that breaks the budget, the quota, the club
+limit or the formation is refused whole and the Chip stays unspent.
+
+**The context reports what this Gameweek will accept, not only what the sets hold.** Several of
+these rules withhold a Chip that has not been spent — a Free Hit in the Gameweek straight after
+a Free Hit, and either transfer Chip in the Gameweek the track opens on. An Entrant shown a
+whole half-Season set and refused for reaching into it has been sent to spend a Repair on a
+rule it was never told applied now, which ADR-0004 forbids. So the context carries both: the
+unspent set per half, which is what a Season is planned with, and the Chips this Gameweek will
+actually take. The second line asks the reducer's own availability rule rather than restating
+it, so the two cannot answer differently.
+
+**A Chip the rules accept is a Chip the rules carry out.** This is the invariant the
+availability rule exists to hold, and it is why a Chip lands in two steps rather than one.
+Wildcard and Free Hit change a Gameweek's Transfers and the reducer does that. Triple Captain
+and Bench Boost change a Gameweek's scoring and nothing does that yet, so until the "Play
+Triple Captain and Bench Boost" ticket lands the reducer refuses both and the context offers
+neither. Accepting one meanwhile would spend one of an Entrant's eight Chips for the Season and
+score the Gameweek exactly as it would have scored anyway — an Entrant's own decision thrown
+away silently, in a Season that cannot be replayed.
+
+The gate is a list of the Chips the rules carry out, and it is the only thing that moves when
+that ticket lands: it moves in the same commit as the scoring that makes the two real. The
+`Chip` type, the boundary schema and the stored `chips_used` inventory keep all four
+throughout, because those are frozen for the Season and a Chip that appeared in the wire schema
+partway through it would be a different task from the one being measured.
+
+The sentence the refusal carries is deliberately general — "This Chip is not available in this
+Gameweek." It is frozen for the Season like every other message here (ADR-0004), so it cannot
+name a reason that stops being true the week the ticket lands.
+
+**The opening Gameweek is read off the Squad, not off the calendar.** Both official sources
+bar a Wildcard and a Free Hit from Gameweek 1, and the reason the FAQ gives is that "you have
+infinite transfers in this Gameweek" — a fact about an Entrant's opening rather than about the
+date. ADR-0003 lets the track join the Season at a Gameweek and run forward, so the reducer
+refuses both Chips wherever the Squad is still empty. In a Season the track opens on Gameweek 1
+the two readings agree; where they diverge, only this one is right, and a Free Hit has the
+second reason besides — there is nothing yet to revert to.
 
 ### Auto-substitution is per absent starter, not atomic
 
