@@ -146,21 +146,21 @@ changing the persistent Squad.
 
 **Blocked by:** Play Wildcard and Free Hit.
 
-Both Chips are gated off until this ticket. `chipRefusal` refuses them and the context offers
+Both Chips were gated off until this ticket. `chipRefusal` refused them and the context offered
 neither, holding the invariant spec 0003 states: a Chip the rules accept is a Chip the rules
-carry out. Lifting the gate is one line — `CHIPS_WITH_EFFECT` in
-`src/fpl/apply-gameweek-action.ts` — and it belongs in the same commit as the scoring below,
-never ahead of it.
+carry out. The gate — `CHIPS_WITH_EFFECT` in `src/fpl/apply-gameweek-action.ts` — was removed
+in the same commit as the scoring below, together with the general refusal sentence that
+existed only to serve it, since neither has a case left to fire on.
 
-- [ ] Both Chips leave `CHIPS_WITH_EFFECT` and reach the reducer in the same commit that scores them, with the context offering them from that commit and not before
-- [ ] Triple Captain trebles the playing captain's points instead of doubling them
-- [ ] When the named captain does not play under Triple Captain, the promoted playing vice-captain receives the triple multiplier
-- [ ] Bench Boost scores all fifteen eligible Squad members without applying ordinary outfield bench exclusions
-- [ ] Hits and all non-Chip scoring rules still apply in a Triple Captain or Bench Boost Gameweek
-- [ ] Each Chip is consumed from the correct half-Season set and cannot affect another Gameweek
-- [ ] Only one optional Chip may be active for one Gameweek action
-- [ ] Hand-computed scoring cases cover ordinary captaincy, vice-captain promotion, Triple Captain and Bench Boost
-- [ ] Replaying the same Chip sequence produces an identical Manager State and score
+- [x] Both Chips leave `CHIPS_WITH_EFFECT` and reach the reducer in the same commit that scores them, with the context offering them from that commit and not before
+- [x] Triple Captain trebles the playing captain's points instead of doubling them
+- [x] When the named captain does not play under Triple Captain, the promoted playing vice-captain receives the triple multiplier
+- [x] Bench Boost scores all fifteen eligible Squad members without applying ordinary outfield bench exclusions
+- [x] Hits and all non-Chip scoring rules still apply in a Triple Captain or Bench Boost Gameweek
+- [x] Each Chip is consumed from the correct half-Season set and cannot affect another Gameweek
+- [x] Only one optional Chip may be active for one Gameweek action
+- [x] Hand-computed scoring cases cover ordinary captaincy, vice-captain promotion, Triple Captain and Bench Boost
+- [x] Replaying the same Chip sequence produces an identical Manager State and score
 
 ---
 

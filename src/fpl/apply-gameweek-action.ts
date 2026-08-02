@@ -219,14 +219,6 @@ const VIOLATIONS = {
     kind: "chip_unavailable",
     message: "A Free Hit cannot be played in the Gameweek straight after a "
       + "Free Hit."
-  },
-  // Deliberately general. This sentence is frozen for the Season (ADR-0004),
-  // so it must not name a reason that stops being true — what the rules can
-  // carry out is a fact about this repository on a given day, and the Entrant
-  // is owed the rule, not the reason behind it.
-  chipNotAvailable: {
-    kind: "chip_unavailable",
-    message: "This Chip is not available in this Gameweek."
   }
 } as const satisfies Readonly<Record<string, Violation>>;
 
@@ -267,8 +259,7 @@ export const GAMEWEEK_RULES: readonly string[] = [
   VIOLATIONS.captainIsViceCaptain.message,
   VIOLATIONS.chipAlreadySpent.message,
   VIOLATIONS.openingGameweekChip.message,
-  VIOLATIONS.consecutiveFreeHit.message,
-  VIOLATIONS.chipNotAvailable.message
+  VIOLATIONS.consecutiveFreeHit.message
 ];
 
 export type GameweekOutcome = { state: ManagerState } | { violation: Violation };
@@ -395,27 +386,6 @@ export function carriedIntoNextGameweek(state: ManagerState): ManagerState {
 }
 
 /**
- * The Chips whose effect the rules can actually carry out. Wildcard and Free
- * Hit change a Gameweek's Transfers, which the reducer does. Triple Captain
- * and Bench Boost change a Gameweek's scoring, which nothing does yet — that
- * is the "Play Triple Captain and Bench Boost" ticket, and until it lands the
- * two are refused.
- *
- * The invariant this holds is why the gate belongs in the rules rather than in
- * the text the Entrant reads: a Chip the context offers and the reducer
- * accepts must be a Chip that changes the Gameweek. Accepting a Triple Captain
- * meanwhile would spend one of an Entrant's eight Chips for the Season and
- * double the captain exactly as it was already doubled — an Entrant's own
- * decision quietly thrown away, in a Season that cannot be replayed.
- *
- * `CHIPS`, the `Chip` type, the boundary schema and the stored inventory keep
- * all four (spec 0003): they are frozen for the Season and must not move when
- * the ticket lands. This list is the only thing that moves, and it moves in
- * the same commit as the scoring that makes the two real.
- */
-const CHIPS_WITH_EFFECT: readonly Chip[] = ["wildcard", "free_hit"];
-
-/**
  * Whether this is the Gameweek the track opens on. Read off the Squad rather
  * than off the calendar: ADR-0003 lets the track join the Season at a Gameweek
  * and run forward, so what makes a Gameweek an opening is having nothing yet,
@@ -434,18 +404,19 @@ function isOpening(state: ManagerState): boolean {
  * that is shown a whole half-Season set and refused for reaching into it has
  * been sent to spend a Repair on a rule it was never told applied now
  * (ADR-0004) — so the context asks the same question of every Chip and prints
- * the answer. One function, both callers; the reducer keeps the specific
- * sentence because it is answering about one named Chip.
+ * the answer. One function, both callers.
+ *
+ * Every rule here is about a named Chip and a Gameweek, and none is about
+ * whether the rules carry that Chip out: all four are carried out, the two
+ * transfer Chips below and the two scoring Chips in `scoreTeamSheet`, which
+ * reads the `chipActive` this reducer records. A fifth Chip would have to
+ * arrive with its effect (spec 0003) rather than be gated here until one came.
  */
 export function chipRefusal(
   state: ManagerState,
   chip: Chip,
   gameweek: number
 ): Violation | null {
-  if (!CHIPS_WITH_EFFECT.includes(chip)) {
-    return VIOLATIONS.chipNotAvailable;
-  }
-
   if (state.chipsUsed[halfOf(gameweek)].includes(chip)) {
     return VIOLATIONS.chipAlreadySpent;
   }

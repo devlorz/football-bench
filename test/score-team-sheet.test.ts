@@ -47,7 +47,8 @@ describe("Scoring a Team Sheet whose eleven starters all played", () => {
       teamSheet: OPENING.teamSheet,
       positions: POSITIONS,
       points: EVERYONE_PLAYED,
-      hits: 0
+      hits: 0,
+      chip: null
     })).toMatchObject({ points: 58 });
   });
 
@@ -57,7 +58,8 @@ describe("Scoring a Team Sheet whose eleven starters all played", () => {
       teamSheet: OPENING.teamSheet,
       positions: POSITIONS,
       points: EVERYONE_PLAYED,
-      hits: 4
+      hits: 4,
+      chip: null
     })).toMatchObject({ points: 54 });
   });
 });
@@ -73,8 +75,122 @@ describe("Scoring a Team Sheet whose captain did not play", () => {
       teamSheet: OPENING.teamSheet,
       positions: POSITIONS,
       points: CAPTAIN_ABSENT,
-      hits: 0
+      hits: 0,
+      chip: null
     })).toMatchObject({ points: 44 });
+  });
+});
+
+describe("Scoring a Team Sheet under a Triple Captain", () => {
+  /**
+   * The eleven score 49 as they always do. Palmer captains and played, so he
+   * is counted three times rather than twice: 49 + 9 + 9 = 67.
+   */
+  test("trebles the captain instead of doubling him", () => {
+    expect(scoreTeamSheet({
+      teamSheet: OPENING.teamSheet,
+      positions: POSITIONS,
+      points: EVERYONE_PLAYED,
+      hits: 0,
+      chip: "triple_captain"
+    })).toMatchObject({ points: 67 });
+  });
+
+  /**
+   * Palmer captained and did not play, so the armband moved to Jimenez — and
+   * the FAQ moves the Chip with it: "the triple points bonus will be passed to
+   * your vice-captain." The ten who played score 40, and Jimenez's 4 is
+   * counted three times rather than twice, for 8 more.
+   */
+  test("passes the treble to a vice-captain who played", () => {
+    expect(scoreTeamSheet({
+      teamSheet: OPENING.teamSheet,
+      positions: POSITIONS,
+      points: CAPTAIN_ABSENT,
+      hits: 0,
+      chip: "triple_captain"
+    })).toMatchObject({ points: 48 });
+  });
+
+  /**
+   * Neither Palmer nor Jimenez played, so there is nobody to treble — "if your
+   * vice-captain doesn't play either then the bonus is lost, the chip isn't
+   * returned" (same source). The nine who played score
+   * 6+2+5+1+2+3+7+2+8 = 36 and nothing multiplies it.
+   */
+  test("trebles nobody when neither the captain nor his deputy played", () => {
+    expect(scoreTeamSheet({
+      teamSheet: OPENING.teamSheet,
+      positions: POSITIONS,
+      points: absent([8, 13, 2, 7, 12, 15]),
+      hits: 0,
+      chip: "triple_captain"
+    })).toEqual({
+      points: 36,
+      detail: expect.objectContaining({ captain: null })
+    });
+  });
+
+  /** The same Gameweek as the treble above after one paid Transfer: 67 - 4. */
+  test("still deducts the Hits owed for this Gameweek", () => {
+    expect(scoreTeamSheet({
+      teamSheet: OPENING.teamSheet,
+      positions: POSITIONS,
+      points: EVERYONE_PLAYED,
+      hits: 4,
+      chip: "triple_captain"
+    })).toMatchObject({ points: 63 });
+  });
+});
+
+describe("Scoring a Team Sheet under a Bench Boost", () => {
+  /**
+   * "The points scored by your benched players are included in your total."
+   * The eleven score 49 and the four on the bench 10+9+11+12 = 42, so the
+   * fifteen score 91 — and Palmer still captains for 9 more, because the Chip
+   * adds the bench and changes nothing about the armband.
+   */
+  test("counts the bench alongside the eleven", () => {
+    expect(scoreTeamSheet({
+      teamSheet: OPENING.teamSheet,
+      positions: POSITIONS,
+      points: EVERYONE_PLAYED,
+      hits: 0,
+      chip: "bench_boost"
+    })).toMatchObject({ points: 100 });
+  });
+
+  /**
+   * The Gameweek the substitution rules find hardest, played under the Chip
+   * instead: Collins and Ajer missed, and ordinarily Cucurella and Alcaraz
+   * would take their places for 75. Here nobody is substituted, because the
+   * two who would come on are already counted where they sit — the fifteen
+   * score 91 less Collins's 1 and Ajer's 2, and Palmer captains for 9 more.
+   */
+  test("substitutes nobody, because the bench is already counted", () => {
+    expect(scoreTeamSheet({
+      teamSheet: OPENING.teamSheet,
+      positions: POSITIONS,
+      points: absent([5, 6]),
+      hits: 0,
+      chip: "bench_boost"
+    })).toMatchObject({ points: 97, detail: { substitutions: [] } });
+  });
+
+  /**
+   * Palmer captained and did not play, so Jimenez takes the armband and is
+   * counted twice — a Bench Boost adds the bench and leaves every other rule
+   * where it was. The fifteen score 91 less Palmer's 9, and the four Hits owed
+   * for this Gameweek's paid Transfers still come off: 82 + 4 - 4.
+   */
+  test("promotes the vice-captain and still deducts the Hits", () => {
+    expect(scoreTeamSheet({
+      teamSheet: OPENING.teamSheet,
+      positions: POSITIONS,
+      points: absent([8]),
+      hits: 4,
+      chip: "bench_boost"
+    })).toMatchObject({ points: 82, detail: { captain: 13 } });
   });
 });
 
@@ -91,7 +207,8 @@ describe("Substituting a starter who did not play", () => {
       teamSheet: OPENING.teamSheet,
       positions: POSITIONS,
       points: absent([11]),
-      hits: 0
+      hits: 0,
+      chip: null
     })).toMatchObject({ points: 65 });
   });
 
@@ -107,7 +224,8 @@ describe("Substituting a starter who did not play", () => {
       teamSheet: KEEPER_BENCHED_THIRD,
       positions: POSITIONS,
       points: absent([1]),
-      hits: 0
+      hits: 0,
+      chip: null
     })).toMatchObject({ points: 62 });
   });
 
@@ -124,7 +242,8 @@ describe("Substituting a starter who did not play", () => {
       teamSheet: OPENING.teamSheet,
       positions: POSITIONS,
       points: absent([5, 6]),
-      hits: 0
+      hits: 0,
+      chip: null
     })).toMatchObject({ points: 75 });
   });
 
@@ -143,7 +262,8 @@ describe("Substituting a starter who did not play", () => {
       teamSheet: OPENING.teamSheet,
       positions: POSITIONS,
       points: absent([10, 11, 12, 15]),
-      hits: 0
+      hits: 0,
+      chip: null
     })).toMatchObject({ points: 58 });
   });
 
@@ -160,7 +280,8 @@ describe("Substituting a starter who did not play", () => {
       teamSheet: OPENING.teamSheet,
       positions: POSITIONS,
       points: absent([1, 2, 11]),
-      hits: 0
+      hits: 0,
+      chip: null
     })).toMatchObject({ points: 59 });
   });
 
@@ -179,7 +300,8 @@ describe("Substituting a starter who did not play", () => {
       teamSheet: THREE_AT_THE_BACK,
       positions: POSITIONS,
       points: absent([5, 11, 2, 6, 7]),
-      hits: 0
+      hits: 0,
+      chip: null
     })).toMatchObject({ points: 76 });
   });
 });
@@ -206,7 +328,8 @@ describe("Scoring a starter the bench could not replace", () => {
       teamSheet: OPENING.teamSheet,
       positions: POSITIONS,
       points: stored,
-      hits: 0
+      hits: 0,
+      chip: null
     })).toMatchObject({
       points: 57,
       detail: {
@@ -231,7 +354,8 @@ describe("Scoring a starter the bench could not replace", () => {
       teamSheet: { ...OPENING.teamSheet, bench: [12, 2, 7, 15] },
       positions: POSITIONS,
       points: absent([1, 11, 7, 15]),
-      hits: 0
+      hits: 0,
+      chip: null
     }).detail.substitutions).toEqual([
       { out: 11, in: 12 },
       { out: 1, in: 2 }
@@ -253,7 +377,8 @@ describe("The record a scored Team Sheet leaves behind", () => {
       teamSheet: OPENING.teamSheet,
       positions: POSITIONS,
       points: absent([5, 6]),
-      hits: 4
+      hits: 4,
+      chip: null
     })).toEqual({
       points: 71,
       detail: {
@@ -275,7 +400,8 @@ describe("The record a scored Team Sheet leaves behind", () => {
           { out: 6, in: 12 }
         ],
         captain: 8,
-        hits: 4
+        hits: 4,
+        chip: null
       }
     });
   });
@@ -290,7 +416,73 @@ describe("The record a scored Team Sheet leaves behind", () => {
       teamSheet: OPENING.teamSheet,
       positions: POSITIONS,
       points: CAPTAIN_ABSENT,
-      hits: 0
+      hits: 0,
+      chip: null
     }).detail).toMatchObject({ captain: 13, substitutions: [] });
+  });
+
+  /**
+   * The same Gameweek under a Bench Boost. The record names all fifteen, the
+   * eleven in the Team Sheet's order and the four behind them in the bench's,
+   * with the two who missed at nothing and nobody replaced — 46 from the
+   * eleven, the armband's 9, the bench's 42 and the Hit's -4 make 93. The Chip
+   * is named beside them because a fifteen-man record and an eleven-man one
+   * differ by a decision the Entrant made, and reading it back out of the
+   * length of a list is guessing. It is named for the same reason `hits` is:
+   * what the total was made of belongs in the record of the total.
+   */
+  test("names all fifteen and the Chip that counted them", () => {
+    expect(scoreTeamSheet({
+      teamSheet: OPENING.teamSheet,
+      positions: POSITIONS,
+      points: absent([5, 6]),
+      hits: 4,
+      chip: "bench_boost"
+    })).toEqual({
+      points: 93,
+      detail: {
+        players: [
+          { fplId: 1, points: 6, multiplier: 1 },
+          { fplId: 3, points: 2, multiplier: 1 },
+          { fplId: 4, points: 5, multiplier: 1 },
+          { fplId: 5, points: 0, multiplier: 1 },
+          { fplId: 6, points: 0, multiplier: 1 },
+          { fplId: 8, points: 9, multiplier: 2 },
+          { fplId: 9, points: 3, multiplier: 1 },
+          { fplId: 10, points: 7, multiplier: 1 },
+          { fplId: 11, points: 2, multiplier: 1 },
+          { fplId: 13, points: 4, multiplier: 1 },
+          { fplId: 14, points: 8, multiplier: 1 },
+          { fplId: 2, points: 10, multiplier: 1 },
+          { fplId: 7, points: 9, multiplier: 1 },
+          { fplId: 12, points: 11, multiplier: 1 },
+          { fplId: 15, points: 12, multiplier: 1 }
+        ],
+        substitutions: [],
+        captain: 8,
+        hits: 4,
+        chip: "bench_boost"
+      }
+    });
+  });
+
+  /**
+   * A Triple Captain leaves the eleven exactly where they were and moves one
+   * number: the armband's multiplier reads 3, so the 18 it added can be traced
+   * to the Chip rather than inferred from the total being larger than usual.
+   */
+  test("records the armband's multiplier as three under a Triple Captain", () => {
+    expect(scoreTeamSheet({
+      teamSheet: OPENING.teamSheet,
+      positions: POSITIONS,
+      points: EVERYONE_PLAYED,
+      hits: 0,
+      chip: "triple_captain"
+    }).detail).toMatchObject({
+      players: expect.arrayContaining([
+        { fplId: 8, points: 9, multiplier: 3 }
+      ]),
+      chip: "triple_captain"
+    });
   });
 });

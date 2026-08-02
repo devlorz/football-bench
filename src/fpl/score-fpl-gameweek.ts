@@ -1,5 +1,9 @@
 import type { Client } from "pg";
-import type { Position, TeamSheet } from "./apply-gameweek-action.js";
+import type {
+  Chip,
+  Position,
+  TeamSheet
+} from "./apply-gameweek-action.js";
 import {
   scoreTeamSheet,
   type PlayerGameweekPoints,
@@ -21,6 +25,7 @@ interface ManagerStateRow {
   model_id: string;
   team_sheet: TeamSheet;
   hits: number;
+  chip_active: Chip | null;
 }
 
 /**
@@ -77,7 +82,7 @@ export async function scoreFplGameweek({
   );
 
   const states = await database.query<ManagerStateRow>(
-    `select model_id, team_sheet, hits
+    `select model_id, team_sheet, hits, chip_active
        from manager_states
       where season = $1 and gw = $2
       order by model_id`,
@@ -126,7 +131,8 @@ export async function scoreFplGameweek({
       teamSheet: state.team_sheet,
       positions,
       points,
-      hits: state.hits
+      hits: state.hits,
+      chip: state.chip_active
     });
 
     // Re-running must leave the row as it was, so the same inputs upsert to

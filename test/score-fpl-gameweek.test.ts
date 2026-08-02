@@ -9,6 +9,7 @@ import { storeManagerState } from "../src/fpl/manager-state-store.js";
 import { FPL_POOL, FPL_POOL_ALTERNATES } from "./fpl-pool-fixture.js";
 import { legalStateFrom } from "./fpl-replay.js";
 import {
+  BENCH_BOOST,
   FREE_HIT_REBUILD,
   OPENING_ACTION as OPENING
 } from "./fpl-action-fixture.js";
@@ -141,7 +142,8 @@ describe("scoring a Gameweek from what is stored", () => {
           ],
           substitutions: [],
           captain: 8,
-          hits: 0
+          hits: 0,
+          chip: null
         }
       },
       {
@@ -300,6 +302,40 @@ describe("scoring a Gameweek from what is stored", () => {
           substitutions: [],
           captain: 8,
           hits: 0
+        })
+      }
+    ]);
+  });
+
+  test("scores a Bench Boost Gameweek from the Chip the row recorded", async () => {
+    // The Chip is not in the Team Sheet and not in the points: it is in the
+    // Manager State the reducer wrote, so it has to be read back out of the
+    // same row the Team Sheet and the Hits come from. A Gameweek that scored
+    // 58 without it scores the whole fifteen with it.
+    await storeManagerState(client, {
+      entrantId: "entrant/v1",
+      season: "2026-27",
+      gameweek: 2,
+      state: legalStateFrom(BENCH_BOOST, legalStateFrom(OPENING), 2),
+      attemptsUsed: 0,
+      predictedAt: new Date("2026-08-28T17:00:00Z")
+    });
+    await settle(EVERYONE_PLAYED, 2);
+
+    await scoreFplGameweek({ database: client, season: "2026-27", gameweek: 2 });
+
+    // The eleven score 49, the bench 10+9+11+12 = 42, and Palmer's armband
+    // adds 9 for 100.
+    expect(await storedScores()).toEqual([
+      {
+        model_id: "entrant/v1",
+        track: "fpl",
+        metric: FPL_POINTS_METRIC,
+        value: 100,
+        detail: expect.objectContaining({
+          substitutions: [],
+          captain: 8,
+          chip: "bench_boost"
         })
       }
     ]);
