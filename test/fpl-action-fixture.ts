@@ -47,6 +47,23 @@ export const STAND_PAT: GameweekAction = {
 };
 
 /**
+ * The opening Squad standing pat under each scoring Chip. Neither moves a
+ * player, so what the reducer does with them is a question about the Chip and
+ * nothing else — and both name the opening Team Sheet, which is the one the
+ * scoring rules were hand-computed against.
+ */
+export const TRIPLE_CAPTAIN: GameweekAction = {
+  ...STAND_PAT,
+  chip: "triple_captain"
+};
+
+/** The same, under a Bench Boost. */
+export const BENCH_BOOST: GameweekAction = {
+  ...STAND_PAT,
+  chip: "bench_boost"
+};
+
+/**
  * Enzo and Wilson out, Caicedo and Evanilson in. Two Transfers rather than one
  * deliberately: against a single banked Free Transfer the second costs a Hit,
  * so the Free Transfer count and the Hit both move. With one Transfer a

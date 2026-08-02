@@ -98,7 +98,7 @@ describe("The Chips the FPL context says can be played now", () => {
     });
 
     expect(playableLine(body)).toBe(
-      "Chips you can play this Gameweek: wildcard"
+      "Chips you can play this Gameweek: wildcard, triple_captain, bench_boost"
     );
     // The set itself is still whole — the Chip is withheld for this Gameweek,
     // not spent.
@@ -118,7 +118,10 @@ describe("The Chips the FPL context says can be played now", () => {
       gameweek: 21,
       state: afterwards,
       pool: POOL
-    }))).toBe("Chips you can play this Gameweek: wildcard, free_hit");
+    }))).toBe(
+      "Chips you can play this Gameweek: wildcard, free_hit, "
+      + "triple_captain, bench_boost"
+    );
   });
 
   test("drops a Chip this half of the Season has already spent", () => {
@@ -132,26 +135,25 @@ describe("The Chips the FPL context says can be played now", () => {
         chipsUsed: { firstHalf: ["wildcard"], secondHalf: [] }
       },
       pool: POOL
-    }))).toBe("Chips you can play this Gameweek: free_hit");
+    }))).toBe(
+      "Chips you can play this Gameweek: free_hit, triple_captain, bench_boost"
+    );
   });
 
-  test("withholds the Chips whose effect the rules cannot yet carry out", () => {
-    // Triple Captain and Bench Boost are held in both sets and offered by
-    // neither Gameweek, because nothing scores them yet. A Chip this line
-    // names must be a Chip that changes the Gameweek — otherwise an Entrant
-    // spends one of eight for a Season that scores exactly as it would have.
+  test("offers the scoring Chips in the Gameweek the track opens on", () => {
+    // The transfer Chips are barred there and these two are not, so the line
+    // that asks the rules rather than restating them says so without anyone
+    // having written this Gameweek down anywhere.
     const body = buildFplTrackContext({
       season: "2026-27",
-      gameweek: 5,
-      state: legalStateFrom(OPENING_ACTION, openingManagerState(), 1),
+      gameweek: 1,
+      state: openingManagerState(),
       pool: POOL
     });
 
     expect(playableLine(body)).toBe(
-      "Chips you can play this Gameweek: wildcard, free_hit"
+      "Chips you can play this Gameweek: triple_captain, bench_boost"
     );
-    // The inventory is unchanged: the two are held, not spent and not removed
-    // from the Season the Entrant is planning.
     expect(chipLine(body, "first")).toBe(
       "Chips unspent, first half (through Gameweek 19): wildcard, free_hit, "
       + "triple_captain, bench_boost"
@@ -159,12 +161,20 @@ describe("The Chips the FPL context says can be played now", () => {
   });
 
   test("says so plainly when this Gameweek will accept none", () => {
-    // The Gameweek the track opens on bars both transfer Chips, and the other
-    // two are not carried out yet, so there is nothing left to offer.
+    // The half-Season set is spent out, so there is nothing left to offer. An
+    // empty list after a colon reads as an omission rather than as an answer.
+    const opened = legalStateFrom(OPENING_ACTION, openingManagerState(), 1);
+
     expect(playableLine(buildFplTrackContext({
       season: "2026-27",
-      gameweek: 1,
-      state: openingManagerState(),
+      gameweek: 5,
+      state: {
+        ...opened,
+        chipsUsed: {
+          firstHalf: ["wildcard", "free_hit", "triple_captain", "bench_boost"],
+          secondHalf: []
+        }
+      },
       pool: POOL
     }))).toBe("Chips you can play this Gameweek: none");
   });

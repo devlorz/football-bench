@@ -42,4 +42,13 @@ describe("The Chip an Entrant names", () => {
     expect(validateGameweekAction(action("triple-captain")))
       .toEqual({ ok: false, message: GAMEWEEK_ACTION_SCHEMA_MESSAGE });
   });
+
+  test("refuses a Gameweek that reaches for two Chips at once", () => {
+    // One Chip per Gameweek is not a rule the reducer enforces, because the
+    // shape it is handed cannot carry two. This is where that becomes true: a
+    // list where a name belongs is a schema failure the Entrant is asked to
+    // Repair, not a Gameweek that quietly plays the first of them.
+    expect(validateGameweekAction(action(["triple_captain", "bench_boost"])))
+      .toEqual({ ok: false, message: GAMEWEEK_ACTION_SCHEMA_MESSAGE });
+  });
 });

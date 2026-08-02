@@ -297,24 +297,40 @@ unspent set per half, which is what a Season is planned with, and the Chips this
 actually take. The second line asks the reducer's own availability rule rather than restating
 it, so the two cannot answer differently.
 
-**A Chip the rules accept is a Chip the rules carry out.** This is the invariant the
-availability rule exists to hold, and it is why a Chip lands in two steps rather than one.
-Wildcard and Free Hit change a Gameweek's Transfers and the reducer does that. Triple Captain
-and Bench Boost change a Gameweek's scoring and nothing does that yet, so until the "Play
-Triple Captain and Bench Boost" ticket lands the reducer refuses both and the context offers
-neither. Accepting one meanwhile would spend one of an Entrant's eight Chips for the Season and
-score the Gameweek exactly as it would have scored anyway — an Entrant's own decision thrown
-away silently, in a Season that cannot be replayed.
+**A Chip the rules accept is a Chip the rules carry out.** All four are carried out: Wildcard
+and Free Hit change a Gameweek's Transfers and the reducer does that; Triple Captain and Bench
+Boost change a Gameweek's scoring and `scoreTeamSheet` does that, from the `chip_active` the
+reducer records on the same Manager State row that carries the Team Sheet and the Hits.
 
-The gate is a list of the Chips the rules carry out, and it is the only thing that moves when
-that ticket lands: it moves in the same commit as the scoring that makes the two real. The
-`Chip` type, the boundary schema and the stored `chips_used` inventory keep all four
+The invariant is stated here rather than enforced by a list, because a list of the Chips that
+work is only meaningful while one of them does not. It governs the next Chip instead: a Chip
+arrives with its effect, in the same commit, or it does not arrive. Accepting one whose effect
+nothing carries out would spend one of an Entrant's eight Chips for the Season and score the
+Gameweek exactly as it would have scored anyway — an Entrant's own decision thrown away
+silently, in a Season that cannot be replayed. Until "Play Triple Captain and Bench Boost"
+landed, the two scoring Chips were refused by exactly such a list and offered by no context;
+its removal, and the removal of the general refusal sentence it raised, belong to that ticket
+and to no later one.
+
+The `Chip` type, the boundary schema and the stored `chips_used` inventory kept all four
 throughout, because those are frozen for the Season and a Chip that appeared in the wire schema
 partway through it would be a different task from the one being measured.
 
-The sentence the refusal carries is deliberately general — "This Chip is not available in this
-Gameweek." It is frozen for the Season like every other message here (ADR-0004), so it cannot
-name a reason that stops being true the week the ticket lands.
+**The scoring Chips change the score and nothing else.** Triple Captain trebles the armband —
+"your captain points are tripled instead of doubled" (2026/27 Chips announcement) — and moves
+with it: when the captain does not play, "the triple points bonus will be passed to your
+vice-captain", and when neither plays "the bonus is lost, the chip isn't returned" (official
+FPL FAQ, verified 3 August 2026). Bench Boost includes "the points scored by your benched
+players" in the total, which is all fifteen.
+
+Two consequences the rules have to state rather than leave to the arithmetic. A Bench Boost
+makes **no substitutions at all**: a bench player brought on while his own points are already
+counted would be counted twice and would take an absent starter's place out of the total
+altogether, which is a different number from the one the Chip promises. And neither Chip
+touches Transfers — the Gameweek's Hits are owed as usual, its Free Transfer accrues as usual,
+and nothing is stashed — so both are playable in the Gameweek the track opens on, where the
+transfer Chips are not. The FAQ bars those two because "you have infinite transfers in this
+Gameweek", which is a reason a Chip that takes no part in Transfers was never given.
 
 **The opening Gameweek is read off the Squad, not off the calendar.** Both official sources
 bar a Wildcard and a Free Hit from Gameweek 1, and the reason the FAQ gives is that "you have
@@ -369,6 +385,12 @@ purchase prices.
 
 A new table records per-player Gameweek points. FPL points and behavioural metrics are written
 to `scores` with `track = 'fpl'`, which the schema already permits.
+
+The `fpl_points` detail names everything the total was made of: the side that counted with each
+contribution and its multiplier, the substitutions made, who actually wore the armband, the Hit
+and the Chip. `manager_states` is the system of record for the last two and the detail copies
+both, so that a stored score explains itself without a join — and so that a fifteen-man record
+is distinguishable from an eleven-man one by what it says rather than by how long it is.
 
 The base metric name stores one Gameweek and the `_season_to_date` suffix stores the cumulative
 snapshot through that same Gameweek, matching spec 0002. The FPL names are `fpl_points`,

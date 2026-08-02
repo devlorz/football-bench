@@ -6,6 +6,7 @@ import {
 import { LOCKED_POOL as POOL } from "./fpl-pool-fixture.js";
 import { legalStateFrom, replay, repriced } from "./fpl-replay.js";
 import {
+  BENCH_BOOST,
   FREE_HIT_REBUILD,
   OPENING_ACTION as OPENING,
   PAID_REBUILD,
@@ -14,8 +15,12 @@ import {
   SECOND_WILDCARD,
   SELL_WILSON_BUY_EVANILSON,
   STAND_PAT,
+  TRIPLE_CAPTAIN,
   WILDCARD_REBUILD
 } from "./fpl-action-fixture.js";
+
+/** The eleven the three-Transfer rebuild leaves standing. */
+const REBUILD_SHEET = REBUILT_STAND_PAT.teamSheet;
 
 describe("Wildcard", () => {
   test("charges no Hit however many Transfers the Gameweek makes", () => {
@@ -90,37 +95,129 @@ describe("Wildcard", () => {
   });
 });
 
-describe("A Chip whose effect the rules cannot yet carry out", () => {
-  const NOT_AVAILABLE = {
-    kind: "chip_unavailable",
-    message: "This Chip is not available in this Gameweek."
-  };
-
-  test.for(["triple_captain", "bench_boost"] as const)(
-    "refuses %s rather than spending it for nothing",
-    (chip) => {
-      // Both Chips change how a Gameweek scores, and nothing scores them yet —
-      // that is the "Play Triple Captain and Bench Boost" ticket. Accepting one
-      // meanwhile would spend one of an Entrant's eight Chips for the Season
-      // and leave the Gameweek scoring exactly as it would have.
-      expect(replay([OPENING, { ...STAND_PAT, chip }]))
-        .toEqual({ violation: NOT_AVAILABLE });
+describe("The Chips that change how a Gameweek scores", () => {
+  test.for([TRIPLE_CAPTAIN, BENCH_BOOST])(
+    "records $chip against the Gameweek that played it",
+    (action) => {
+      // The reducer's whole part in a scoring Chip: spend it from this half's
+      // set and mark it active, so the Gameweek it changes is the Gameweek
+      // that scores it.
+      expect(replay([OPENING, action])).toMatchObject({
+        state: {
+          chipActive: action.chip,
+          chipsUsed: { firstHalf: [action.chip], secondHalf: [] }
+        }
+      });
     }
   );
 
-  test("leaves the refused Chip in its half-Season set", () => {
-    // Refused before anything is counted, so the inventory the Season is
-    // planned with is the one it started the Gameweek with.
-    expect(applyGameweekAction(
-      legalStateFrom(OPENING),
-      { ...STAND_PAT, chip: "triple_captain" },
-      POOL,
-      2
-    )).toEqual({ violation: NOT_AVAILABLE });
+  test.for([TRIPLE_CAPTAIN, BENCH_BOOST])(
+    "leaves $chip behind in the Gameweek after it",
+    (action) => {
+      // A Chip lasts one Gameweek. The Gameweek after opens with none active
+      // and the same spent set, so neither Chip can reach a second Gameweek.
+      expect(replay([OPENING, action, STAND_PAT])).toMatchObject({
+        state: {
+          chipActive: null,
+          chipsUsed: { firstHalf: [action.chip], secondHalf: [] }
+        }
+      });
+    }
+  );
 
-    expect(replay([OPENING, STAND_PAT])).toMatchObject({
-      state: { chipsUsed: { firstHalf: [], secondHalf: [] } }
+  test.for([TRIPLE_CAPTAIN, BENCH_BOOST])(
+    "plays $chip in the Gameweek the track opens on",
+    (action) => {
+      // Neither transfer Chip can be played there, and these two can: the FAQ
+      // bars a Wildcard and a Free Hit because "you have infinite transfers in
+      // this Gameweek", which is a reason about Transfers. A Chip that changes
+      // nothing about Transfers keeps the reason it was never given.
+      expect(replay([{ ...OPENING, chip: action.chip }])).toMatchObject({
+        state: { chipActive: action.chip }
+      });
+    }
+  );
+
+  test.for([TRIPLE_CAPTAIN, BENCH_BOOST])(
+    "leaves $chip's Hits and Free Transfers where an ordinary Gameweek does",
+    (action) => {
+      // The same three Transfers a Wildcard forgives. Neither of these Chips
+      // does: two are beyond the single banked Free Transfer, eight points are
+      // owed, and the Gameweek after banks one as any Gameweek does. The plain
+      // action a few tests above returns exactly this, which is the point.
+      expect(replay([OPENING, { ...PAID_REBUILD, chip: action.chip }]))
+        .toMatchObject({ state: { hits: 8, freeTransfers: 1 } });
+    }
+  );
+
+  test.for([TRIPLE_CAPTAIN, BENCH_BOOST])(
+    "banks a Free Transfer in a $chip Gameweek that spent none",
+    (action) => {
+      // The Gameweek a transfer Chip is played in banks nothing: a Wildcard
+      // leaves the count exactly as it found it. These two take no part in
+      // Transfers at all, so the Gameweek they are played in accrues as any
+      // other does — two banked by Gameweek 3 become three, not two.
+      expect(replay([OPENING, STAND_PAT, action]))
+        .toMatchObject({ state: { freeTransfers: 3 } });
+    }
+  );
+
+  test.for([TRIPLE_CAPTAIN, BENCH_BOOST])(
+    "makes a $chip Gameweek's Transfers permanent, stashing nothing",
+    (action) => {
+      // Only a Free Hit borrows a Squad for one Gameweek. The rebuilt Squad
+      // stands the Gameweek after, which the Team Sheet naming White, Caicedo
+      // and Evanilson can only do if nothing was put back — and there is no
+      // stash left behind for a later Gameweek to put back either.
+      expect(replay([
+        OPENING,
+        { ...PAID_REBUILD, chip: action.chip },
+        REBUILT_STAND_PAT
+      ])).toMatchObject({
+        state: { squad: { free_hit_stash: null }, teamSheet: REBUILD_SHEET }
+      });
+    }
+  );
+
+  test("refuses a second Triple Captain from the same half-Season set", () => {
+    expect(replay([OPENING, TRIPLE_CAPTAIN, TRIPLE_CAPTAIN])).toEqual({
+      violation: {
+        kind: "chip_unavailable",
+        message: "A Chip can only be played once in each half of the Season."
+      }
     });
+  });
+
+  test("spends each of the four from its own half-Season set", () => {
+    // A spent Triple Captain says nothing about the Bench Boost beside it: the
+    // set holds one of each, not one in total. Gameweeks 18 and 19 spend the
+    // first half's pair, and Gameweeks 20 and 21 spend the second half's.
+    expect(replay(
+      [OPENING, TRIPLE_CAPTAIN, BENCH_BOOST, TRIPLE_CAPTAIN, BENCH_BOOST],
+      { openingGameweek: 17 }
+    )).toMatchObject({
+      state: {
+        chipsUsed: {
+          firstHalf: ["triple_captain", "bench_boost"],
+          secondHalf: ["triple_captain", "bench_boost"]
+        }
+      }
+    });
+  });
+
+  test("replays a Chip sequence to the same Manager State every time", () => {
+    // ADR-0003 makes the reducer the system of record, and a Season that
+    // cannot be replayed to the state it reached is not a record of anything.
+    const sequence = [OPENING, TRIPLE_CAPTAIN, SELL_WILSON_BUY_EVANILSON];
+    const reached = replay(sequence);
+    expect(reached).toMatchObject({
+      state: { chipsUsed: { firstHalf: ["triple_captain"], secondHalf: [] } }
+    });
+    // The fold is run again from the opening over the same fixture objects, so
+    // a rule that spent a Chip by pushing onto the inventory it was handed, or
+    // that otherwise wrote through to what it read, would land somewhere else
+    // the second time.
+    expect(replay(sequence)).toEqual(reached);
   });
 });
 
