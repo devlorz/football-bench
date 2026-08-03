@@ -224,23 +224,47 @@ describe("opening the FPL track for a Gameweek", () => {
     }
   }
 
-  test("hands the Entrant the stored context and keeps its opening Manager State", async () => {
-    let prompt = "";
+  /**
+   * One Entrant's Gameweek, answered by the scripted responses in order, and
+   * the conversations it was sent back — which is where a Repair either
+   * carries the reason it was given or silently loses it.
+   *
+   * The defaults are the opening: Gameweek 1, the one Entrant, and a clock
+   * comfortably inside its deadline. A test names only what it is about, and
+   * reaches for `http` or `now` only where the failure it is describing is one
+   * a scripted response and a still clock cannot express.
+   */
+  async function play({
+    gameweek = 1,
+    entrantId = "entrant/v1",
+    at = "2026-08-21T11:30:00Z",
+    responses = [],
+    http,
+    now
+  }: {
+    gameweek?: number;
+    entrantId?: string;
+    at?: string;
+    responses?: string[];
+    http?: HttpFetcher;
+    now?: () => Date;
+  }): Promise<Turn[][]> {
+    const script = scripted(responses);
     await openFplGameweek({
       database: client,
       season: "2026-27",
-      gameweek: 1,
-      entrantId: "entrant/v1",
+      gameweek,
+      entrantId,
       apiKey: "test-key",
-      now: () => new Date("2026-08-21T11:30:00Z"),
-      http: async (_url, options) => {
-        const body = JSON.parse(options?.body ?? "{}") as {
-          messages: Array<{ content: string }>;
-        };
-        prompt = body.messages[0]!.content;
-        return { status: 200, body: openRouterBody(LEGAL_ACTION) };
-      }
+      now: now ?? (() => new Date(at)),
+      http: http ?? script.http
     });
+    return script.conversations;
+  }
+
+  test("hands the Entrant the stored context and keeps its opening Manager State", async () => {
+    const [opening] = await play({ responses: [LEGAL_ACTION] });
+    const prompt = opening![0]!.content;
 
     const contexts = await client.query(
       "select track, fpl_id, hash, body from contexts"
@@ -334,18 +358,8 @@ describe("opening the FPL track for a Gameweek", () => {
   });
 
   test("sends an illegal action back with its reason and keeps the Repair", async () => {
-    const { http, conversations } = scripted([
-      CAPTAIN_ON_THE_BENCH,
-      LEGAL_ACTION
-    ]);
-    await openFplGameweek({
-      database: client,
-      season: "2026-27",
-      gameweek: 1,
-      entrantId: "entrant/v1",
-      apiKey: "test-key",
-      now: () => new Date("2026-08-21T11:30:00Z"),
-      http
+    const conversations = await play({
+      responses: [CAPTAIN_ON_THE_BENCH, LEGAL_ACTION]
     });
 
     // The Repair is asked for in the same conversation, not in a fresh one:
@@ -372,18 +386,11 @@ describe("opening the FPL track for a Gameweek", () => {
       // Attempts-to-legal is the graded observation ADR-0004 exists to
       // produce — 0/1/2/3 or failed — so every value on the scale is driven
       // through the seam rather than assumed to follow from the one below it.
-      const { http } = scripted([
-        ...Array.from({ length: repairs }, () => CAPTAIN_ON_THE_BENCH),
-        LEGAL_ACTION
-      ]);
-      await openFplGameweek({
-        database: client,
-        season: "2026-27",
-        gameweek: 1,
-        entrantId: "entrant/v1",
-        apiKey: "test-key",
-        now: () => new Date("2026-08-21T11:30:00Z"),
-        http
+      await play({
+        responses: [
+          ...Array.from({ length: repairs }, () => CAPTAIN_ON_THE_BENCH),
+          LEGAL_ACTION
+        ]
       });
 
       const states = await client.query(
@@ -404,21 +411,14 @@ describe("opening the FPL track for a Gameweek", () => {
     // something more specific mid-Season is being measured on an easier task.
     // Freezing the sentences is only half of that — this is the other half,
     // that the loop quotes them rather than composing its own.
-    const { http, conversations } = scripted([
-      "not JSON at all",
-      CAPTAIN_ON_THE_BENCH,
-      OVER_BUDGET_FERNANDEZ,
-      LEGAL_ACTION
-    ]);
     await lockPool(1, FPL_POOL_ALTERNATES);
-    await openFplGameweek({
-      database: client,
-      season: "2026-27",
-      gameweek: 1,
-      entrantId: "entrant/v1",
-      apiKey: "test-key",
-      now: () => new Date("2026-08-21T11:30:00Z"),
-      http
+    const conversations = await play({
+      responses: [
+        "not JSON at all",
+        CAPTAIN_ON_THE_BENCH,
+        OVER_BUDGET_FERNANDEZ,
+        LEGAL_ACTION
+      ]
     });
 
     const frozen = new Set([
@@ -442,11 +442,6 @@ describe("opening the FPL track for a Gameweek", () => {
     // ADR-0004 makes Repairs the sharpest signal this track produces, and the
     // typed kind is what a violation profile is later counted from. An attempt
     // that leaves no row is an attempt that never happened.
-    const { http } = scripted([
-      "sorry, I cannot pick a Squad",
-      CAPTAIN_ON_THE_BENCH,
-      LEGAL_ACTION
-    ]);
     // Each call takes a quarter of an hour of the Gameweek, all of it before
     // the deadline: two readings per attempt, so latency is measured rather
     // than assumed to be nothing.
@@ -456,12 +451,12 @@ describe("opening the FPL track for a Gameweek", () => {
       "2026-08-21T12:00:00Z", "2026-08-21T12:15:00Z"
     ].map((at) => new Date(at));
     let read = 0;
-    await openFplGameweek({
-      database: client,
-      season: "2026-27",
-      gameweek: 1,
-      entrantId: "entrant/v1",
-      apiKey: "test-key",
+    await play({
+      responses: [
+        "sorry, I cannot pick a Squad",
+        CAPTAIN_ON_THE_BENCH,
+        LEGAL_ACTION
+      ],
       now: () => {
         const at = clock[read];
         read += 1;
@@ -469,8 +464,7 @@ describe("opening the FPL track for a Gameweek", () => {
           throw new Error(`the clock was read ${read} times, more than scripted`);
         }
         return at;
-      },
-      http
+      }
     });
 
     const attempts = await client.query(
@@ -553,18 +547,10 @@ describe("opening the FPL track for a Gameweek", () => {
   });
 
   test("stores no Manager State for an action completed on the deadline", async () => {
-    await openFplGameweek({
-      database: client,
-      season: "2026-27",
-      gameweek: 1,
-      entrantId: "entrant/v1",
-      apiKey: "test-key",
+    await play({
+      responses: [LEGAL_ACTION],
       // The Lock is the deadline instant itself, not the moment after it.
-      now: () => new Date("2026-08-21T17:30:00Z"),
-      http: async () => ({
-        status: 200,
-        body: openRouterBody(LEGAL_ACTION)
-      })
+      at: "2026-08-21T17:30:00Z"
     });
 
     const states = await client.query("select model_id from manager_states");
@@ -596,31 +582,15 @@ describe("opening the FPL track for a Gameweek", () => {
     // rejected action be a real Squad change rather than a malformed one.
     await lockPool(2, [...FPL_POOL, ...FPL_POOL_ALTERNATES]);
 
-    const play = async (
-      gameweek: number,
-      responses: string[],
-      at: string
-    ): Promise<void> => {
-      await openFplGameweek({
-        database: client,
-        season: "2026-27",
-        gameweek,
-        entrantId: "entrant/v1",
-        apiKey: "test-key",
-        now: () => new Date(at),
-        http: scripted(responses).http
-      });
-    };
-
-    await play(1, [LEGAL_ACTION], "2026-08-21T11:30:00Z");
+    await play({ responses: [LEGAL_ACTION] });
     // Four responses, all the same illegal action: the initial one and three
     // Repairs. Nothing after the fourth is scripted, so a fifth call fails the
     // test rather than passing silently.
-    await play(
-      2,
-      Array.from({ length: 4 }, () => OVER_BUDGET_FERNANDEZ),
-      "2026-08-28T11:30:00Z"
-    );
+    await play({
+      gameweek: 2,
+      at: "2026-08-28T11:30:00Z",
+      responses: Array.from({ length: 4 }, () => OVER_BUDGET_FERNANDEZ)
+    });
 
     const states = await client.query(
       `select gw, squad, team_sheet, bank, free_transfers, hits, chips_used,
@@ -726,15 +696,7 @@ describe("opening the FPL track for a Gameweek", () => {
     // so there is nothing to send back and nothing to correct. The attempt is
     // recorded — every attempt is — and the loop stops, leaving no Manager
     // State rather than a Roll Over the Entrant never earned.
-    await openFplGameweek({
-      database: client,
-      season: "2026-27",
-      gameweek: 1,
-      entrantId: "entrant/v1",
-      apiKey: "test-key",
-      now: () => new Date("2026-08-21T11:30:00Z"),
-      http: scenario.http
-    });
+    await play({ http: scenario.http });
 
     const attempts = await client.query(
       `select attempt_no, ok, error_kind, error_detail, raw_response,
@@ -755,17 +717,8 @@ describe("opening the FPL track for a Gameweek", () => {
   });
 
   test("stores nothing when an opening is still illegal after its third Repair", async () => {
-    const { http } = scripted(
-      Array.from({ length: 4 }, () => CAPTAIN_ON_THE_BENCH)
-    );
-    await openFplGameweek({
-      database: client,
-      season: "2026-27",
-      gameweek: 1,
-      entrantId: "entrant/v1",
-      apiKey: "test-key",
-      now: () => new Date("2026-08-21T11:30:00Z"),
-      http
+    await play({
+      responses: Array.from({ length: 4 }, () => CAPTAIN_ON_THE_BENCH)
     });
 
     // There is no Team Sheet to Roll Over onto before the first one, and the
@@ -803,27 +756,17 @@ describe("opening the FPL track for a Gameweek", () => {
         );
         await lockPool(gameweek, FPL_POOL);
       }
-      const play = (
-        gameweek: number,
-        http: HttpFetcher
-      ): Promise<void> => openFplGameweek({
-        database: client,
-        season: "2026-27",
-        gameweek,
-        entrantId: "entrant/v1",
-        apiKey: "test-key",
-        // Comfortably before every deadline above.
-        now: () => new Date("2026-08-21T11:30:00Z"),
-        http
-      });
-
-      await play(1, scripted([LEGAL_ACTION]).http);
+      // The default clock is comfortably before every deadline above.
+      await play({ responses: [LEGAL_ACTION] });
       // These Gameweeks store nothing at all: the provider never answered, so
       // there is no action to judge and no Roll Over the Entrant earned.
       for (let gameweek = 2; gameweek < resumes; gameweek += 1) {
-        await play(gameweek, async () => ({ status: 503, body: "no answer" }));
+        await play({
+          gameweek,
+          http: async () => ({ status: 503, body: "no answer" })
+        });
       }
-      await play(resumes, scripted([STAND_PAT]).http);
+      await play({ gameweek: resumes, responses: [STAND_PAT] });
 
       const states = await client.query(
         "select gw, free_transfers from manager_states order by gw"
@@ -860,27 +803,25 @@ describe("opening the FPL track for a Gameweek", () => {
     for (const gameweek of [18, 19, 21]) {
       await lockPool(gameweek, FPL_POOL);
     }
-    const play = (
-      gameweek: number,
-      at: string,
-      response: string
-    ): Promise<void> => openFplGameweek({
-      database: client,
-      season: "2026-27",
-      gameweek,
-      entrantId: "entrant/v1",
-      apiKey: "test-key",
-      now: () => new Date(at),
-      http: scripted([response]).http
-    });
-
     // The track joins at Gameweek 18 and the first half's Free Hit is played
     // in Gameweek 19, the last Gameweek that half's set is reachable in.
-    await play(18, "2026-12-26T11:30:00Z", LEGAL_ACTION);
-    await play(19, "2026-12-30T11:30:00Z", IDLE_FREE_HIT);
+    await play({
+      gameweek: 18,
+      at: "2026-12-26T11:30:00Z",
+      responses: [LEGAL_ACTION]
+    });
+    await play({
+      gameweek: 19,
+      at: "2026-12-30T11:30:00Z",
+      responses: [IDLE_FREE_HIT]
+    });
     // Gameweek 20 is silent, and Gameweek 21 reaches into the second half's
     // set — a different Free Hit, one Gameweek clear of the first.
-    await play(21, "2027-01-09T11:30:00Z", IDLE_FREE_HIT);
+    await play({
+      gameweek: 21,
+      at: "2027-01-09T11:30:00Z",
+      responses: [IDLE_FREE_HIT]
+    });
 
     const states = await client.query(
       `select gw, free_transfers, chips_used, chip_active, rolled_over
@@ -921,29 +862,15 @@ describe("opening the FPL track for a Gameweek", () => {
     );
     await lockPool(2, FPL_POOL);
 
-    const first = scripted([LEGAL_ACTION]);
-    await openFplGameweek({
-      database: client,
-      season: "2026-27",
-      gameweek: 1,
-      entrantId: "entrant/v1",
-      apiKey: "test-key",
-      now: () => new Date("2026-08-21T11:30:00Z"),
-      http: first.http
-    });
-    const second = scripted([STAND_PAT]);
-    await openFplGameweek({
-      database: client,
-      season: "2026-27",
+    const [openingCall] = await play({ responses: [LEGAL_ACTION] });
+    const [laterCall] = await play({
       gameweek: 2,
-      entrantId: "entrant/v1",
-      apiKey: "test-key",
-      now: () => new Date("2026-08-28T11:30:00Z"),
-      http: second.http
+      at: "2026-08-28T11:30:00Z",
+      responses: [STAND_PAT]
     });
 
-    const opening = first.conversations[0]![0]!.content;
-    const later = second.conversations[0]![0]!.content;
+    const opening = openingCall![0]!.content;
+    const later = laterCall![0]!.content;
     expect(opening).toContain("Squad: none yet — this is your opening Squad.");
     // Its own fifteen at what it paid for them, which is what a Transfer is
     // priced against and what a Team Sheet must be picked from. An Entrant
@@ -967,29 +894,17 @@ describe("opening the FPL track for a Gameweek", () => {
       await lockPool(gameweek, [...FPL_POOL, ...FPL_POOL_ALTERNATES]);
     }
 
-    const play = async (
-      gameweek: number,
-      responses: string[],
-      at: string
-    ): Promise<void> => {
-      await openFplGameweek({
-        database: client,
-        season: "2026-27",
-        gameweek,
-        entrantId: "entrant/v1",
-        apiKey: "test-key",
-        now: () => new Date(at),
-        http: scripted(responses).http
-      });
-    };
-
-    await play(1, [LEGAL_ACTION], "2026-08-21T11:30:00Z");
-    await play(2, [FREE_HIT_REBUILD], "2026-08-28T11:30:00Z");
-    await play(
-      3,
-      Array.from({ length: 4 }, () => OVER_BUDGET_FERNANDEZ),
-      "2026-09-04T11:30:00Z"
-    );
+    await play({ responses: [LEGAL_ACTION] });
+    await play({
+      gameweek: 2,
+      at: "2026-08-28T11:30:00Z",
+      responses: [FREE_HIT_REBUILD]
+    });
+    await play({
+      gameweek: 3,
+      at: "2026-09-04T11:30:00Z",
+      responses: Array.from({ length: 4 }, () => OVER_BUDGET_FERNANDEZ)
+    });
 
     const states = await client.query(
       `select gw, squad, team_sheet, bank, free_transfers, chips_used,
@@ -1032,24 +947,12 @@ describe("opening the FPL track for a Gameweek", () => {
     );
     await lockPool(2, FPL_POOL);
 
-    const play = (
-      entrantId: string,
-      gameweek: number,
-      at: string,
-      response: string
-    ) =>
-      openFplGameweek({
-        database: client,
-        season: "2026-27",
-        gameweek,
-        entrantId,
-        apiKey: "test-key",
-        now: () => new Date(at),
-        http: scripted([response]).http
-      });
-
-    await play("entrant/v1", 1, "2026-08-21T11:30:00Z", LEGAL_ACTION);
-    await play("entrant/v1", 2, "2026-08-28T11:30:00Z", STAND_PAT);
+    await play({ responses: [LEGAL_ACTION] });
+    await play({
+      gameweek: 2,
+      at: "2026-08-28T11:30:00Z",
+      responses: [STAND_PAT]
+    });
 
     // `contexts_identity` allows one FPL context per Gameweek, and from the
     // Gameweek after the first Manager State each Entrant's carries its own
@@ -1057,8 +960,12 @@ describe("opening the FPL track for a Gameweek", () => {
     // players it does not own and then judge it on the ones it does. Per
     // Entrant context rows belong to "Run the FPL track under the shared
     // Lock"; until they exist this must fail loudly rather than quietly.
-    await expect(play("entrant/v2", 2, "2026-08-28T11:30:00Z", LEGAL_ACTION))
-      .rejects.toThrow(/already another Entrant's/);
+    await expect(play({
+      entrantId: "entrant/v2",
+      gameweek: 2,
+      at: "2026-08-28T11:30:00Z",
+      responses: [LEGAL_ACTION]
+    })).rejects.toThrow(/already another Entrant's/);
 
     const states = await client.query(
       "select model_id from manager_states where gw = 2"
@@ -1077,21 +984,8 @@ describe("opening the FPL track for a Gameweek", () => {
     );
     const prompts: string[] = [];
     for (const entrantId of ["entrant/v1", "entrant/v2"]) {
-      await openFplGameweek({
-        database: client,
-        season: "2026-27",
-        gameweek: 1,
-        entrantId,
-        apiKey: "test-key",
-        now: () => new Date("2026-08-21T11:30:00Z"),
-        http: async (_url, options) => {
-          const body = JSON.parse(options?.body ?? "{}") as {
-            messages: Array<{ content: string }>;
-          };
-          prompts.push(body.messages[0]!.content);
-          return { status: 200, body: openRouterBody(LEGAL_ACTION) };
-        }
-      });
+      const [call] = await play({ entrantId, responses: [LEGAL_ACTION] });
+      prompts.push(call![0]!.content);
     }
 
     const contexts = await client.query("select body from contexts");
@@ -1121,21 +1015,10 @@ describe("opening the FPL track for a Gameweek", () => {
        )`
     );
     const prompts: string[] = [];
-    const open = (entrantId: string): Promise<void> => openFplGameweek({
-      database: client,
-      season: "2026-27",
-      gameweek: 1,
-      entrantId,
-      apiKey: "test-key",
-      now: () => new Date("2026-08-21T11:30:00Z"),
-      http: async (_url, options) => {
-        const body = JSON.parse(options?.body ?? "{}") as {
-          messages: Array<{ content: string }>;
-        };
-        prompts.push(body.messages[0]!.content);
-        return { status: 200, body: openRouterBody(LEGAL_ACTION) };
-      }
-    });
+    const open = async (entrantId: string): Promise<void> => {
+      const [call] = await play({ entrantId, responses: [LEGAL_ACTION] });
+      prompts.push(call![0]!.content);
+    };
 
     await open("entrant/v1");
     // A later snapshot moves a price between the two Entrants' calls.
