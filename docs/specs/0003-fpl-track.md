@@ -308,6 +308,39 @@ exist, a second Entrant reaching a later Gameweek is refused loudly rather than 
 it does not own and then judged on the one it does. Widening that key belongs to "Run the FPL
 track under the shared Lock".
 
+### The opening is gathered whole, then committed whole
+
+Every other Gameweek stores its Manager State as soon as it has one. The opening cannot: an
+Entrant whose state was committed while another's was still to come would be a Gameweek further
+along than its peers if the rest never arrive, and a season path of a different length is a
+season path that cannot be compared. So the nine conversations run first — concurrently, each
+with its own three Repairs — and the nine Manager States are inserted in one transaction
+afterwards. A missing legal action or a failed insert leaves none of them stored.
+
+That is also what makes "the Gameweek the track started at" answerable: a Gameweek either holds
+every Entrant's opening or holds nothing, so the earliest Gameweek with any Manager State is the
+starting Gameweek, and an incomplete set can never be read as one. No column records it, because
+none is needed.
+
+The attempts are not part of that transaction and are written as each call happens. A refused
+start throws away eight legal actions; it must not throw away the record that they were made,
+because Repairs and the violation profile are read from those rows and the operator decides
+whether to try again from them. A failure to *write* one of those rows is different again: it
+aborts the opening rather than reporting an Entrant as missing, because a broken ledger must not
+read as an Entrant's own doing.
+
+Which rows are seats is read off `role = 'entrant'` and the FPL Prompt Version, so Reference
+Lines and the Match track's Entrants are excluded by what they are rather than by a list kept
+somewhere. Two seats on one Base Model is refused before the first call: ADR-0003 fixes one
+season path per Base Model, and a second is not a longer demonstration but a different
+experiment. Opening a Season already under way is refused for the mirror reason — an opening
+seeds every Entrant from the empty Squad, so it would discard the Season rather than continue
+it.
+
+The same Gameweek may be opened again while its Lock still stands, and the second run hands out
+the context already stored rather than rebuilding it. A snapshot that moved in between would
+otherwise price a Squad from a text no Entrant was ever shown.
+
 ### Free Hit needs a stashed Squad
 
 Every other Chip modifies one Gameweek's scoring or transfer allowance. Free Hit replaces the

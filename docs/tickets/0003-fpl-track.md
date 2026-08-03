@@ -193,16 +193,23 @@ opening is committed atomically so no Entrant can receive a shorter path than it
 
 **Blocked by:** Repair illegal actions, then Roll Over · Play Triple Captain and Bench Boost.
 
-- [ ] The operator selects the starting Gameweek explicitly, and that Gameweek is visible in every Entrant's first Manager State
-- [ ] Exactly one FPL-track seat per Base Model is prepared from the same locked player pool and FPL Prompt Version
-- [ ] Calls may run concurrently and fail independently while their attempts remain attributable to the correct Entrant
-- [ ] Opening actions receive the same validation and three-Repair allowance as later actions
-- [ ] All nine legal opening actions are gathered before any opening Manager State is committed
-- [ ] The nine opening Manager States are inserted in one transaction; a persistence failure or missing legal action leaves none of them stored
-- [ ] If all nine are not legal before the Lock, attempts remain recorded but the track does not start and the operator may choose the next Gameweek
-- [ ] A Gameweek whose opening set is incomplete can never be mistaken for the track's starting Gameweek
-- [ ] Reference Lines are excluded and every participating Base Model has the same number of Manager State rows
-- [ ] Tests cover a complete opening, one invalid Entrant, one persistence failure and a delayed start in a later Gameweek
+The Repair loop moved out of `open-fpl-gameweek.ts` into `ask-for-gameweek-action.ts` to make
+this ticket possible: an opening cannot store its Manager State the moment it has one. The
+extracted function records every attempt as it happens and returns what the conversation came
+to, and the caller decides what to persist — which is the whole difference between a later
+Gameweek and an opening, and the reason the three-Repair allowance is the same one rather than
+a second copy of it.
+
+- [x] The operator selects the starting Gameweek explicitly, and that Gameweek is visible in every Entrant's first Manager State
+- [x] Exactly one FPL-track seat per Base Model is prepared from the same locked player pool and FPL Prompt Version
+- [x] Calls may run concurrently and fail independently while their attempts remain attributable to the correct Entrant
+- [x] Opening actions receive the same validation and three-Repair allowance as later actions
+- [x] All nine legal opening actions are gathered before any opening Manager State is committed
+- [x] The nine opening Manager States are inserted in one transaction; a persistence failure or missing legal action leaves none of them stored
+- [x] If all nine are not legal before the Lock, attempts remain recorded but the track does not start and the operator may choose the next Gameweek
+- [x] A Gameweek whose opening set is incomplete can never be mistaken for the track's starting Gameweek
+- [x] Reference Lines are excluded and every participating Base Model has the same number of Manager State rows
+- [x] Tests cover a complete opening, one invalid Entrant, one persistence failure and a delayed start in a later Gameweek
 
 ---
 
