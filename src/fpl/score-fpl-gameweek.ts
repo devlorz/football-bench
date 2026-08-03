@@ -170,6 +170,15 @@ async function scoreOneGameweek(
   // Every rule below is about what a Team Sheet needs to be scored at all, and
   // all of them are checked before a single row is written: a Gameweek that
   // cannot be scored for one Entrant must not be half-scored for the others.
+  //
+  // Each names the Gameweek it is about. One call now walks the Season from
+  // its starting Gameweek, so an unattributed "no settled points for player 4"
+  // leaves an operator to work out which of a dozen Gameweeks produced it —
+  // and these are the refusals a partly-removed Gameweek arrives through,
+  // which is precisely when the answer matters.
+  const refuse = (why: string): never => {
+    throw new Error(`Gameweek ${gameweek} of ${season} ${why}`);
+  };
   for (const state of states.rows) {
     const named = [
       ...state.team_sheet.starters,
@@ -177,22 +186,23 @@ async function scoreOneGameweek(
     ];
     for (const fplId of named) {
       if (!settledIds.has(fplId)) {
-        throw new Error(
-          `the Gameweek has no settled points for player ${fplId}, `
-          + "so it is not wholly settled and cannot be scored"
+        refuse(
+          `has no settled points for player ${fplId}, so it is not wholly `
+          + "settled and cannot be scored; nothing has been changed"
         );
       }
       const held = positionOf.get(fplId) ?? [];
       if (held.length === 0) {
-        throw new Error(
-          `the Season records no position for player ${fplId}, `
-          + "so the substitution rules cannot judge his Team Sheet"
+        refuse(
+          `names player ${fplId}, for whom the Season records no position, so `
+          + "the substitution rules cannot judge his Team Sheet"
         );
       }
       if (held.length > 1) {
-        throw new Error(
-          `the Season records player ${fplId} as ${held.join(" and ")}, `
-          + "so his position cannot be read across Gameweeks"
+        refuse(
+          `names player ${fplId}, whom the Season records as `
+          + `${held.join(" and ")}, so his position cannot be read across `
+          + "Gameweeks"
         );
       }
     }
@@ -409,7 +419,10 @@ async function writeRecordThrough(
     // every path, including from the Entrants that were working fine. The
     // remedy is a fill run while the Lock is still open, not a record of
     // unequal lengths.
-    if (played === null || !roster.every((entrantId) => played.has(entrantId))) {
+    const absent = played === null
+      ? []
+      : roster.filter((entrantId) => !played.has(entrantId));
+    if (played === null || absent.length > 0) {
       // A Gameweek already on record that has stopped scoring is refused, and
       // nothing is changed. Returning quietly would leave its rows standing
       // with nothing behind them and nobody told; deleting them would let
@@ -419,12 +432,9 @@ async function writeRecordThrough(
       // `manager_states` refuses a delete outright — so what this answers is
       // an operator at the database.
       if (published.has(gw)) {
-        const absent = played === null
-          ? null
-          : roster.filter((entrantId) => !played.has(entrantId));
         throw new Error(
           `Gameweek ${gw} of ${season} holds a stored FPL record and `
-          + (absent === null
+          + (played === null
             ? "its points are not settled"
             : `${absent.join(", ")} stored no Manager State for it`)
           + "; nothing has been changed"
