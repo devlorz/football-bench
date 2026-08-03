@@ -39,6 +39,7 @@ describe("the benchmark database", () => {
       "fixtures",
       "fpl_player_points",
       "fpl_players",
+      "fpl_runs",
       "gameweeks",
       "historical_matches",
       "manager_states",
