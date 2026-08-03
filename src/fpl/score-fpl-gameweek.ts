@@ -260,31 +260,29 @@ async function storeMetric(
 }
 
 /**
- * Every Gameweek after `gameweek` whose record has already been published.
+ * Every Gameweek whose record is already on record.
  *
- * They are what a late settlement invalidates. Their own values are still
- * right — a Gameweek's points do not change because an earlier one settled —
- * but each carries a Season total that was taken over a path with a hole in
- * it, and rewriting only the Gameweek that settled would leave the record
- * saying different things depending on the order it was filled in.
+ * Two things are read off it. A published Gameweek *after* the one being
+ * scored is rewritten, because a late settlement leaves its Season total taken
+ * over a path with a hole in it — while its own value is still right, since a
+ * Gameweek's points do not change because an earlier one settled. And a
+ * published Gameweek that no longer scores at all is a refusal, below.
  *
  * Only Gameweeks already published are rewritten. A later Gameweek nobody has
  * scored yet is not this operation's to score: it will fold in the whole path
  * when it is scored on its own.
  */
-async function publishedAfter(
+async function publishedGameweeks(
   database: Database,
-  season: string,
-  gameweek: number
-): Promise<number[]> {
+  season: string
+): Promise<Set<number>> {
   const rows = await database.query<{ gw: number }>(
     `select distinct gw
        from scores
-      where season = $1 and track = 'fpl' and gw > $2
-      order by gw`,
-    [season, gameweek]
+      where season = $1 and track = 'fpl'`,
+    [season]
   );
-  return rows.rows.map((row) => row.gw);
+  return new Set(rows.rows.map((row) => row.gw));
 }
 
 /** Writes one Gameweek's eight rows for every Entrant that played it. */
@@ -392,27 +390,50 @@ async function writeRecordThrough(
     return;
   }
   const roster = await loadStartedRoster(database, season, start);
+  const published = await publishedGameweeks(database, season);
   const targets = new Set([
     gameweek,
-    ...await publishedAfter(database, season, gameweek)
+    ...[...published].filter((gw) => gw > gameweek)
   ]);
   const through = Math.max(...targets);
 
   const history = new Map<string, ScoredEntry[]>();
   for (let gw = start; gw <= through; gw += 1) {
     const played = await scoreOneGameweek(database, season, gw);
-    // Two ways a Gameweek is not the Season's, and they are the same way: it
-    // has not settled, or it is not every Entrant's. A Gameweek published for
-    // eight Entrants of nine would give those eight a path a Gameweek longer
-    // than the ninth's, which is the comparison the whole track exists to
-    // make — so ADR-0011's answer holds here as it does for the Match track,
-    // and one Entrant's Gap removes the Gameweek from every path, including
-    // from the Entrants that were working fine. The remedy is a fill run while
-    // the Lock is still open, not a record of unequal lengths.
+    // Two ways a Gameweek is not the Season's, and they come to the same
+    // thing: it has not settled, or it is not every Entrant's. A Gameweek
+    // published for eight Entrants of nine would give those eight a season
+    // path a Gameweek longer than the ninth's, which is the comparison the
+    // whole track exists to make — so ADR-0011's answer holds here as it does
+    // for the Match track, and one Entrant's Gap removes the Gameweek from
+    // every path, including from the Entrants that were working fine. The
+    // remedy is a fill run while the Lock is still open, not a record of
+    // unequal lengths.
     if (played === null || !roster.every((entrantId) => played.has(entrantId))) {
-      // Nothing is written for it, and nothing this call would otherwise have
-      // rewritten either: nothing downstream has changed. Nothing has been
-      // written yet, because no target is earlier than the Gameweek asked for.
+      // A Gameweek already on record that has stopped scoring is refused, and
+      // nothing is changed. Returning quietly would leave its rows standing
+      // with nothing behind them and nobody told; deleting them would let
+      // absent data destroy published data, so that a half-restored database
+      // would silently unpublish a Gameweek. Neither state is reachable from
+      // the code — stored points are only ever inserted or updated, and
+      // `manager_states` refuses a delete outright — so what this answers is
+      // an operator at the database.
+      if (published.has(gw)) {
+        const absent = played === null
+          ? null
+          : roster.filter((entrantId) => !played.has(entrantId));
+        throw new Error(
+          `Gameweek ${gw} of ${season} holds a stored FPL record and `
+          + (absent === null
+            ? "its points are not settled"
+            : `${absent.join(", ")} stored no Manager State for it`)
+          + "; nothing has been changed"
+        );
+      }
+      // Otherwise it is simply not part of the record: skipped, along with
+      // everything this call would have rewritten, because nothing downstream
+      // has changed. Nothing has been written yet either — no target is
+      // earlier than the Gameweek asked for.
       if (gw === gameweek) {
         return;
       }

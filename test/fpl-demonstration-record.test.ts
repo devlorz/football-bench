@@ -673,6 +673,35 @@ describe("the FPL demonstration record", () => {
     ]);
   });
 
+  test("refuses to leave a published Gameweek standing once it stops scoring", async () => {
+    await seed({ gameweek: 1 });
+    await seed({ gameweek: 2, state: STOOD_PAT });
+    await seed({ gameweek: 3, state: STOOD_PAT });
+    await settle(1);
+    await settle(2);
+    await settle(3);
+    await score(1);
+    await score(2);
+    await score(3);
+    const published = await stored([FPL_POINTS_SEASON_TO_DATE_METRIC]);
+
+    // Gameweek 2's settled points are taken away. No code path does this —
+    // `fetchFplPlayerPoints` only inserts and updates, and `manager_states`
+    // refuses a delete outright — so this is an operator at the database.
+    await client.query("delete from fpl_player_points where gw = 2");
+
+    // Returning quietly would leave Gameweek 2's rows on record with nothing
+    // behind them and nobody told. Deleting them would let absent data destroy
+    // published data, which is worse: a half-restored database would silently
+    // unpublish a Gameweek. So the run refuses and names the Gameweek.
+    await expect(score(2)).rejects.toThrow(/Gameweek 2/);
+    // Scoring a later Gameweek is refused for the same reason rather than
+    // recomputing a Season total that skips a Gameweek still on record.
+    await expect(score(3)).rejects.toThrow(/Gameweek 2/);
+
+    expect(await stored([FPL_POINTS_SEASON_TO_DATE_METRIC])).toEqual(published);
+  });
+
   test("stores none of a Gameweek's record when one row cannot persist", async () => {
     await seed({ gameweek: 1 });
     await settle(1);
