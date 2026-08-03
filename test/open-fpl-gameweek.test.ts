@@ -3,6 +3,7 @@ import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
 import { openFplGameweek } from "../src/fpl/open-fpl-gameweek.js";
+import { storeManagerState } from "../src/fpl/manager-state-store.js";
 import { parseFplTrackContextPool } from "../src/context/build-fpl-track-context.js";
 import {
   ENFORCED_VIOLATIONS,
@@ -18,11 +19,23 @@ import {
   FPL_POOL_ALTERNATES,
   type FixturePlayer
 } from "./fpl-pool-fixture.js";
+import { OPENING_ACTION } from "./fpl-action-fixture.js";
+import { legalStateFrom } from "./fpl-replay.js";
 
 const { Client } = pg;
 
-const LEGAL_ACTION = JSON.stringify({
-  transfers_in: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+/**
+ * The Team Sheet the standing Squad already plays, named again with no
+ * Transfer: what a later Gameweek's inaction is, and the legal action every
+ * test here that is not about an action itself uses.
+ *
+ * There is no opening action in this file any more. An opening is committed
+ * for all nine Entrants at once or for none of them, which is
+ * `startFplTrack`'s job and `test/start-fpl-track.test.ts`'s subject; what
+ * `openFplGameweek` plays is always a Gameweek with a Squad already standing.
+ */
+const STAND_PAT = JSON.stringify({
+  transfers_in: [],
   transfers_out: [],
   chip: null,
   team_sheet: {
@@ -36,12 +49,12 @@ const LEGAL_ACTION = JSON.stringify({
 /**
  * The same action with the armband on a substitute. One rule broken and only
  * one, so what the Entrant is sent back is a sentence about captaincy rather
- * than whichever other rule a wholly rebuilt Squad happened to break as well.
+ * than whichever other rule a changed Squad happened to break as well.
  */
 const CAPTAIN_ON_THE_BENCH = JSON.stringify({
-  ...JSON.parse(LEGAL_ACTION) as object,
+  ...JSON.parse(STAND_PAT) as object,
   team_sheet: {
-    ...(JSON.parse(LEGAL_ACTION) as { team_sheet: object }).team_sheet,
+    ...(JSON.parse(STAND_PAT) as { team_sheet: object }).team_sheet,
     captain: 2
   }
 });
@@ -62,12 +75,6 @@ const OVER_BUDGET_FERNANDEZ = JSON.stringify({
     captain: 8,
     vice_captain: 13
   }
-});
-
-/** The same Team Sheet with no Transfer: what a later Gameweek's inaction is. */
-const STAND_PAT = JSON.stringify({
-  ...JSON.parse(LEGAL_ACTION) as object,
-  transfers_in: []
 });
 
 /**
@@ -186,8 +193,9 @@ describe("opening the FPL track for a Gameweek", () => {
        restart identity cascade`
     );
     await client.query(
-      `insert into gameweeks (season, gw, deadline_at)
-       values ('2026-27', 1, '2026-08-21T17:30:00Z');
+      `insert into gameweeks (season, gw, deadline_at) values
+         ('2026-27', 1, '2026-08-21T17:30:00Z'),
+         ('2026-27', 2, '2026-08-28T17:30:00Z');
        insert into models (
          id, name, base_model, provider, prompt_version, role
        ) values (
@@ -196,7 +204,34 @@ describe("opening the FPL track for a Gameweek", () => {
        )`
     );
     await lockPool(1, FPL_POOL);
+    await lockPool(2, FPL_POOL);
   });
+
+  /**
+   * Puts an Entrant on the fixture Squad at a Gameweek, without playing it.
+   *
+   * The track opens for all nine Entrants at once or for none, so an opening
+   * cannot be reached one Entrant at a time from here — and every test in this
+   * file is about a Gameweek *after* the opening anyway. Seeding the row
+   * directly says so, and says it in one line rather than in a scripted
+   * conversation whose only purpose is to leave a Squad behind.
+   *
+   * The state comes from the reducer over the shared opening fixture, so what
+   * is stood on here is the state the reducer's own rules were proved against.
+   */
+  async function standing(
+    gameweek = 1,
+    entrantId = "entrant/v1"
+  ): Promise<void> {
+    await storeManagerState(client, {
+      entrantId,
+      season: "2026-27",
+      gameweek,
+      state: legalStateFrom(OPENING_ACTION),
+      attemptsUsed: 0,
+      predictedAt: new Date("2026-08-21T11:30:00Z")
+    });
+  }
 
   /** The Gameweek's pool as its Lock found it, at unmoved opening prices. */
   async function lockPool(
@@ -229,15 +264,16 @@ describe("opening the FPL track for a Gameweek", () => {
    * the conversations it was sent back — which is where a Repair either
    * carries the reason it was given or silently loses it.
    *
-   * The defaults are the opening: Gameweek 1, the one Entrant, and a clock
-   * comfortably inside its deadline. A test names only what it is about, and
-   * reaches for `http` or `now` only where the failure it is describing is one
-   * a scripted response and a still clock cannot express.
+   * The defaults are the Gameweek after the opening: Gameweek 2, the one
+   * Entrant, and a clock comfortably inside its deadline. A test names only
+   * what it is about, and reaches for `http` or `now` only where the failure
+   * it is describing is one a scripted response and a still clock cannot
+   * express.
    */
   async function play({
-    gameweek = 1,
+    gameweek = 2,
     entrantId = "entrant/v1",
-    at = "2026-08-21T11:30:00Z",
+    at = "2026-08-28T11:30:00Z",
     responses = [],
     http,
     now
@@ -262,9 +298,10 @@ describe("opening the FPL track for a Gameweek", () => {
     return script.conversations;
   }
 
-  test("hands the Entrant the stored context and keeps its opening Manager State", async () => {
-    const [opening] = await play({ responses: [LEGAL_ACTION] });
-    const prompt = opening![0]!.content;
+  test("hands the Entrant the stored context and keeps the state it produces", async () => {
+    await standing();
+    const [played] = await play({ responses: [STAND_PAT] });
+    const prompt = played![0]!.content;
 
     const contexts = await client.query(
       "select track, fpl_id, hash, body from contexts"
@@ -313,12 +350,16 @@ describe("opening the FPL track for a Gameweek", () => {
     const states = await client.query(
       `select model_id, season, gw, squad, team_sheet, bank, free_transfers,
               hits, chips_used, chip_active, rolled_over, attempts_used
-         from manager_states`
+         from manager_states
+        where gw = 2`
     );
     expect(states.rows).toEqual([{
       model_id: "entrant/v1",
       season: "2026-27",
-      gw: 1,
+      gw: 2,
+      // Carried forward whole from the Squad the Entrant was standing on: the
+      // fifteen at what it paid for them, and the £100.0m less the £95.5m it
+      // spent.
       squad: {
         active: [
           { fplId: 1, purchasePriceTenths: 45 },
@@ -345,10 +386,10 @@ describe("opening the FPL track for a Gameweek", () => {
         captain: 8,
         viceCaptain: 13
       },
-      // £100.0m less the £95.5m Squad above.
       bank: 45,
-      free_transfers: 1,
-      // The opening fifteen are not Transfers beyond an allowance.
+      // The one this Gameweek granted, banked on top of the one standing.
+      free_transfers: 2,
+      // No Transfer was made, so nothing was beyond an allowance.
       hits: 0,
       chips_used: { firstHalf: [], secondHalf: [] },
       chip_active: null,
@@ -357,9 +398,35 @@ describe("opening the FPL track for a Gameweek", () => {
     }]);
   });
 
+  test("refuses a Gameweek for an Entrant that has never opened", async () => {
+    // The bypass this refusal closes: seeding one Entrant from the empty Squad
+    // here would store the earliest Manager State the Season has, which is by
+    // definition the Gameweek the track started at — for one Entrant of nine,
+    // permanently, because `manager_states` is insert-only. An opening is
+    // `startFplTrack`'s and is committed for all nine or for none.
+    let called = 0;
+    await expect(play({
+      responses: [STAND_PAT],
+      http: async () => {
+        called += 1;
+        return { status: 200, body: openRouterBody(STAND_PAT) };
+      }
+    })).rejects.toThrow(
+      "entrant/v1 has no Manager State to carry into Gameweek 2 of 2026-27; "
+      + "the FPL track opens through startFplTrack"
+    );
+
+    expect(called).toBe(0);
+    const states = await client.query("select gw from manager_states");
+    expect(states.rows).toEqual([]);
+    const contexts = await client.query("select track from contexts");
+    expect(contexts.rows).toEqual([]);
+  });
+
   test("sends an illegal action back with its reason and keeps the Repair", async () => {
+    await standing();
     const conversations = await play({
-      responses: [CAPTAIN_ON_THE_BENCH, LEGAL_ACTION]
+      responses: [CAPTAIN_ON_THE_BENCH, STAND_PAT]
     });
 
     // The Repair is asked for in the same conversation, not in a fresh one:
@@ -376,7 +443,9 @@ describe("opening the FPL track for a Gameweek", () => {
     const states = await client.query(
       "select attempts_used, rolled_over from manager_states"
     );
-    expect(states.rows).toEqual([{ attempts_used: 1, rolled_over: false }]);
+    expect(states.rows)
+      .toEqual([{ attempts_used: 0, rolled_over: false },
+        { attempts_used: 1, rolled_over: false }]);
   });
 
   test.for([0, 1, 2, 3])(
@@ -386,15 +455,16 @@ describe("opening the FPL track for a Gameweek", () => {
       // Attempts-to-legal is the graded observation ADR-0004 exists to
       // produce — 0/1/2/3 or failed — so every value on the scale is driven
       // through the seam rather than assumed to follow from the one below it.
+      await standing();
       await play({
         responses: [
           ...Array.from({ length: repairs }, () => CAPTAIN_ON_THE_BENCH),
-          LEGAL_ACTION
+          STAND_PAT
         ]
       });
 
       const states = await client.query(
-        "select attempts_used, rolled_over from manager_states"
+        "select attempts_used, rolled_over from manager_states where gw = 2"
       );
       expect(states.rows)
         .toEqual([{ attempts_used: repairs, rolled_over: false }]);
@@ -411,13 +481,14 @@ describe("opening the FPL track for a Gameweek", () => {
     // something more specific mid-Season is being measured on an easier task.
     // Freezing the sentences is only half of that — this is the other half,
     // that the loop quotes them rather than composing its own.
-    await lockPool(1, FPL_POOL_ALTERNATES);
+    await standing();
+    await lockPool(2, FPL_POOL_ALTERNATES);
     const conversations = await play({
       responses: [
         "not JSON at all",
         CAPTAIN_ON_THE_BENCH,
         OVER_BUDGET_FERNANDEZ,
-        LEGAL_ACTION
+        STAND_PAT
       ]
     });
 
@@ -451,11 +522,12 @@ describe("opening the FPL track for a Gameweek", () => {
       "2026-08-21T12:00:00Z", "2026-08-21T12:15:00Z"
     ].map((at) => new Date(at));
     let read = 0;
+    await standing();
     await play({
       responses: [
         "sorry, I cannot pick a Squad",
         CAPTAIN_ON_THE_BENCH,
-        LEGAL_ACTION
+        STAND_PAT
       ],
       now: () => {
         const at = clock[read];
@@ -478,7 +550,7 @@ describe("opening the FPL track for a Gameweek", () => {
       {
         model_id: "entrant/v1",
         season: "2026-27",
-        gw: 1,
+        gw: 2,
         track: "fpl",
         // An FPL action is one Gameweek's, not one Fixture's.
         fpl_id: null,
@@ -498,7 +570,7 @@ describe("opening the FPL track for a Gameweek", () => {
       {
         model_id: "entrant/v1",
         season: "2026-27",
-        gw: 1,
+        gw: 2,
         track: "fpl",
         fpl_id: null,
         attempt_no: 1,
@@ -516,7 +588,7 @@ describe("opening the FPL track for a Gameweek", () => {
       {
         model_id: "entrant/v1",
         season: "2026-27",
-        gw: 1,
+        gw: 2,
         track: "fpl",
         fpl_id: null,
         attempt_no: 2,
@@ -541,19 +613,22 @@ describe("opening the FPL track for a Gameweek", () => {
       .toBe(openRouterBody("sorry, I cannot pick a Squad"));
 
     const states = await client.query(
-      "select attempts_used from manager_states"
+      "select attempts_used from manager_states where gw = 2"
     );
     expect(states.rows).toEqual([{ attempts_used: 2 }]);
   });
 
   test("stores no Manager State for an action completed on the deadline", async () => {
+    await standing();
     await play({
-      responses: [LEGAL_ACTION],
+      responses: [STAND_PAT],
       // The Lock is the deadline instant itself, not the moment after it.
-      at: "2026-08-21T17:30:00Z"
+      at: "2026-08-28T17:30:00Z"
     });
 
-    const states = await client.query("select model_id from manager_states");
+    const states = await client.query(
+      "select model_id from manager_states where gw = 2"
+    );
     expect(states.rows).toEqual([]);
     // The context is built before any action, so it is stored either way.
     const contexts = await client.query("select track from contexts");
@@ -569,26 +644,19 @@ describe("opening the FPL track for a Gameweek", () => {
       attempt_no: 0,
       ok: false,
       error_kind: "deadline",
-      error_detail: "The Lock passed at 2026-08-21T17:30:00.000Z."
+      error_detail: "The Lock passed at 2026-08-28T17:30:00.000Z."
     }]);
   });
 
   test("Rolls the Gameweek over when the third Repair is still illegal", async () => {
-    await client.query(
-      `insert into gameweeks (season, gw, deadline_at)
-       values ('2026-27', 2, '2026-08-28T17:30:00Z')`
-    );
     // Fernandez is in the second Gameweek's pool, which is what lets the
     // rejected action be a real Squad change rather than a malformed one.
-    await lockPool(2, [...FPL_POOL, ...FPL_POOL_ALTERNATES]);
-
-    await play({ responses: [LEGAL_ACTION] });
+    await lockPool(2, FPL_POOL_ALTERNATES);
+    await standing();
     // Four responses, all the same illegal action: the initial one and three
     // Repairs. Nothing after the fourth is scripted, so a fifth call fails the
     // test rather than passing silently.
     await play({
-      gameweek: 2,
-      at: "2026-08-28T11:30:00Z",
       responses: Array.from({ length: 4 }, () => OVER_BUDGET_FERNANDEZ)
     });
 
@@ -598,14 +666,14 @@ describe("opening the FPL track for a Gameweek", () => {
          from manager_states
         order by gw`
     );
-    const [opening, rolled] = states.rows as Array<Record<string, unknown>>;
+    const [standingOn, rolled] = states.rows as Array<Record<string, unknown>>;
     expect(rolled).toEqual({
       gw: 2,
       // Not one player of the rejected action, and not one penny of it: the
       // action is discarded whole (ADR-0004), Fernandez was never bought and
       // Enzo was never sold.
-      squad: opening!.squad,
-      team_sheet: opening!.team_sheet,
+      squad: standingOn!.squad,
+      team_sheet: standingOn!.team_sheet,
       bank: 45,
       // Accrued exactly as an untouched Gameweek's would be.
       free_transfers: 2,
@@ -696,6 +764,7 @@ describe("opening the FPL track for a Gameweek", () => {
     // so there is nothing to send back and nothing to correct. The attempt is
     // recorded — every attempt is — and the loop stops, leaving no Manager
     // State rather than a Roll Over the Entrant never earned.
+    await standing();
     await play({ http: scenario.http });
 
     const attempts = await client.query(
@@ -712,27 +781,10 @@ describe("opening the FPL track for a Gameweek", () => {
       resolved_provider: scenario.resolvedProvider,
       tokens_in: scenario.tokensIn
     }]);
-    const states = await client.query("select gw from manager_states");
-    expect(states.rows).toEqual([]);
-  });
-
-  test("stores nothing when an opening is still illegal after its third Repair", async () => {
-    await play({
-      responses: Array.from({ length: 4 }, () => CAPTAIN_ON_THE_BENCH)
-    });
-
-    // There is no Team Sheet to Roll Over onto before the first one, and the
-    // rules cannot invent a Squad. What becomes of a Gameweek nobody opened
-    // belongs to "Start all nine Entrants together", where the opening is
-    // committed for all nine or for none — so this stores no state at all
-    // rather than a Rolled Over row standing on nothing.
-    const states = await client.query("select gw from manager_states");
-    expect(states.rows).toEqual([]);
-    // The four attempts still happened, and are still the record of them.
-    const attempts = await client.query<{ count: string }>(
-      "select count(*) as count from attempts"
+    const states = await client.query(
+      "select gw from manager_states where gw = 2"
     );
-    expect(attempts.rows[0]!.count).toBe("4");
+    expect(states.rows).toEqual([]);
   });
 
   test.for([1, 2])(
@@ -742,7 +794,7 @@ describe("opening the FPL track for a Gameweek", () => {
       // lasted would be right for a single Gameweek and wrong for every longer
       // gap, and one case cannot tell those apart.
       const resumes = silent + 2;
-      for (let gameweek = 2; gameweek <= resumes; gameweek += 1) {
+      for (let gameweek = 3; gameweek <= resumes; gameweek += 1) {
         await client.query(
           `insert into gameweeks (season, gw, deadline_at)
            values ('2026-27', $1, $2)`,
@@ -757,7 +809,7 @@ describe("opening the FPL track for a Gameweek", () => {
         await lockPool(gameweek, FPL_POOL);
       }
       // The default clock is comfortably before every deadline above.
-      await play({ responses: [LEGAL_ACTION] });
+      await standing();
       // These Gameweeks store nothing at all: the provider never answered, so
       // there is no action to judge and no Roll Over the Entrant earned.
       for (let gameweek = 2; gameweek < resumes; gameweek += 1) {
@@ -805,11 +857,7 @@ describe("opening the FPL track for a Gameweek", () => {
     }
     // The track joins at Gameweek 18 and the first half's Free Hit is played
     // in Gameweek 19, the last Gameweek that half's set is reachable in.
-    await play({
-      gameweek: 18,
-      at: "2026-12-26T11:30:00Z",
-      responses: [LEGAL_ACTION]
-    });
+    await standing(18);
     await play({
       gameweek: 19,
       at: "2026-12-30T11:30:00Z",
@@ -856,22 +904,10 @@ describe("opening the FPL track for a Gameweek", () => {
   });
 
   test("shows a later Gameweek the Squad the Entrant is standing on", async () => {
-    await client.query(
-      `insert into gameweeks (season, gw, deadline_at)
-       values ('2026-27', 2, '2026-08-28T17:30:00Z')`
-    );
-    await lockPool(2, FPL_POOL);
+    await standing();
+    const [laterCall] = await play({ responses: [STAND_PAT] });
 
-    const [openingCall] = await play({ responses: [LEGAL_ACTION] });
-    const [laterCall] = await play({
-      gameweek: 2,
-      at: "2026-08-28T11:30:00Z",
-      responses: [STAND_PAT]
-    });
-
-    const opening = openingCall![0]!.content;
     const later = laterCall![0]!.content;
-    expect(opening).toContain("Squad: none yet — this is your opening Squad.");
     // Its own fifteen at what it paid for them, which is what a Transfer is
     // priced against and what a Team Sheet must be picked from. An Entrant
     // shown an empty Squad and judged on a full one would spend a Repair on a
@@ -883,23 +919,15 @@ describe("opening the FPL track for a Gameweek", () => {
   });
 
   test("gives back what a Free Hit borrowed when the next Gameweek Rolls Over", async () => {
-    for (const [gameweek, deadline] of [
-      [2, "2026-08-28T17:30:00Z"],
-      [3, "2026-09-04T17:30:00Z"]
-    ] as Array<[number, string]>) {
-      await client.query(
-        `insert into gameweeks (season, gw, deadline_at) values ('2026-27', $1, $2)`,
-        [gameweek, deadline]
-      );
-      await lockPool(gameweek, [...FPL_POOL, ...FPL_POOL_ALTERNATES]);
-    }
+    await client.query(
+      `insert into gameweeks (season, gw, deadline_at)
+       values ('2026-27', 3, '2026-09-04T17:30:00Z')`
+    );
+    await lockPool(2, FPL_POOL_ALTERNATES);
+    await lockPool(3, [...FPL_POOL, ...FPL_POOL_ALTERNATES]);
 
-    await play({ responses: [LEGAL_ACTION] });
-    await play({
-      gameweek: 2,
-      at: "2026-08-28T11:30:00Z",
-      responses: [FREE_HIT_REBUILD]
-    });
+    await standing();
+    await play({ responses: [FREE_HIT_REBUILD] });
     await play({
       gameweek: 3,
       at: "2026-09-04T11:30:00Z",
@@ -912,18 +940,18 @@ describe("opening the FPL track for a Gameweek", () => {
          from manager_states
         order by gw`
     );
-    const [opening, borrowed, rolled] =
+    const [permanent, borrowed, rolled] =
       states.rows as Array<Record<string, unknown>>;
     // The Free Hit really did displace the Squad, so what follows is a claim
     // about the reversion rather than about a Gameweek that changed nothing.
-    expect(borrowed!.squad).not.toEqual(opening!.squad);
+    expect(borrowed!.squad).not.toEqual(permanent!.squad);
 
     expect(rolled).toEqual({
       gw: 3,
       // A Roll Over reverts before it stores: three failed Repairs after a
       // Free Hit must not be what makes a one-week Squad permanent (ADR-0017).
-      squad: opening!.squad,
-      team_sheet: opening!.team_sheet,
+      squad: permanent!.squad,
+      team_sheet: permanent!.team_sheet,
       bank: 45,
       free_transfers: 2,
       // Spent when it was played. A Gameweek that Rolls Over gives nothing
@@ -936,123 +964,32 @@ describe("opening the FPL track for a Gameweek", () => {
 
   test("refuses to hand a second Entrant a context built from another's Squad", async () => {
     await client.query(
-      `insert into gameweeks (season, gw, deadline_at)
-       values ('2026-27', 2, '2026-08-28T17:30:00Z');
-       insert into models (
+      `insert into models (
          id, name, base_model, provider, prompt_version, role
        ) values (
          'entrant/v2', 'Second Entrant', 'anthropic/claude-opus-5', 'anthropic',
          'fpl/2026-27-v1', 'entrant'
        )`
     );
-    await lockPool(2, FPL_POOL);
+    await standing();
+    await standing(1, "entrant/v2");
 
-    await play({ responses: [LEGAL_ACTION] });
-    await play({
-      gameweek: 2,
-      at: "2026-08-28T11:30:00Z",
-      responses: [STAND_PAT]
-    });
+    await play({ responses: [STAND_PAT] });
 
-    // `contexts_identity` allows one FPL context per Gameweek, and from the
-    // Gameweek after the first Manager State each Entrant's carries its own
-    // Squad. Handing this one the row already there would show it fifteen
-    // players it does not own and then judge it on the ones it does. Per
-    // Entrant context rows belong to "Run the FPL track under the shared
+    // `contexts_identity` allows one FPL context per Gameweek, and every
+    // Gameweek this function plays is one where each Entrant's context carries
+    // its own Squad. Handing this one the row already there would show it
+    // fifteen players it does not own and then judge it on the ones it does.
+    // Per-Entrant context rows belong to "Run the FPL track under the shared
     // Lock"; until they exist this must fail loudly rather than quietly.
     await expect(play({
       entrantId: "entrant/v2",
-      gameweek: 2,
-      at: "2026-08-28T11:30:00Z",
-      responses: [LEGAL_ACTION]
+      responses: [STAND_PAT]
     })).rejects.toThrow(/already another Entrant's/);
 
     const states = await client.query(
       "select model_id from manager_states where gw = 2"
     );
     expect(states.rows).toEqual([{ model_id: "entrant/v1" }]);
-  });
-
-  test("stores one shared context however many Entrants open the Gameweek", async () => {
-    await client.query(
-      `insert into models (
-         id, name, base_model, provider, prompt_version, role
-       ) values (
-         'entrant/v2', 'Second Entrant', 'anthropic/claude-opus-5', 'anthropic',
-         'fpl/2026-27-v1', 'entrant'
-       )`
-    );
-    const prompts: string[] = [];
-    for (const entrantId of ["entrant/v1", "entrant/v2"]) {
-      const [call] = await play({ entrantId, responses: [LEGAL_ACTION] });
-      prompts.push(call![0]!.content);
-    }
-
-    const contexts = await client.query("select body from contexts");
-    expect(contexts.rows).toHaveLength(1);
-    // Both Entrants were handed the one stored text.
-    expect(prompts).toEqual([
-      (contexts.rows[0] as { body: string }).body,
-      (contexts.rows[0] as { body: string }).body
-    ]);
-
-    const states = await client.query(
-      "select model_id from manager_states order by model_id"
-    );
-    expect(states.rows).toEqual([
-      { model_id: "entrant/v1" },
-      { model_id: "entrant/v2" }
-    ]);
-  });
-
-  test("hands the second Entrant the stored context, not a rebuilt one", async () => {
-    await client.query(
-      `insert into models (
-         id, name, base_model, provider, prompt_version, role
-       ) values (
-         'entrant/v2', 'Second Entrant', 'anthropic/claude-opus-5', 'anthropic',
-         'fpl/2026-27-v1', 'entrant'
-       )`
-    );
-    const prompts: string[] = [];
-    const open = async (entrantId: string): Promise<void> => {
-      const [call] = await play({ entrantId, responses: [LEGAL_ACTION] });
-      prompts.push(call![0]!.content);
-    };
-
-    await open("entrant/v1");
-    // A later snapshot moves a price between the two Entrants' calls.
-    await client.query(
-      `update fpl_players
-          set price_tenths = 125
-        where season = '2026-27' and gw = 1 and fpl_id = 8`
-    );
-    await open("entrant/v2");
-
-    const contexts = await client.query("select hash, body from contexts");
-    expect(contexts.rows).toHaveLength(1);
-    const [stored] = contexts.rows as Array<{ hash: string; body: string }>;
-    // Both Entrants saw the one audited text, and neither saw the new price.
-    expect(prompts).toEqual([stored!.body, stored!.body]);
-    expect(stored!.body).toContain("Palmer");
-    expect(stored!.body).not.toContain("£12.5m");
-    expect(stored!.hash).toBe(
-      createHash("sha256").update(stored!.body).digest("hex")
-    );
-
-    // And is charged the price it was shown: Palmer at £12.0m, £4.5m banked.
-    const second = await client.query<{
-      squad: { active: Array<{ fplId: number; purchasePriceTenths: number }> };
-      bank: number;
-    }>(
-      `select squad, bank
-         from manager_states
-        where model_id = 'entrant/v2'`
-    );
-    expect(second.rows[0]!.squad.active).toContainEqual({
-      fplId: 8,
-      purchasePriceTenths: 120
-    });
-    expect(second.rows[0]!.bank).toBe(45);
   });
 });
