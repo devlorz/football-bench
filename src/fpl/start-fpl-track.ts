@@ -18,6 +18,7 @@ import {
   storeFplContext
 } from "./fpl-gameweek-context.js";
 import { storeManagerState } from "./manager-state-store.js";
+import { SEASON_ROSTER_SIZE } from "../season-roster.js";
 
 type Database = Pick<Client, "query">;
 
@@ -96,15 +97,10 @@ export async function startFplTrack({
     [FPL_PROMPT_VERSION]
   );
   const entrants = entrantResult.rows;
-  if (entrants.length === 0) {
-    throw new Error(
-      `No Entrants are configured for Prompt Version ${FPL_PROMPT_VERSION}`
-    );
-  }
   // One seat per Base Model is what makes this ranking a demonstration of one
   // season path each (ADR-0003), and a second seat would quietly make it
-  // something else. Asked before the first call, so a roster question is
-  // answered nowhere near the Lock.
+  // something else. Named first because it says which Base Model is at fault,
+  // which the count below cannot.
   const seats = new Map<string, string[]>();
   for (const { id, base_model: baseModel } of entrants) {
     seats.set(baseModel, [...seats.get(baseModel) ?? [], id]);
@@ -115,6 +111,18 @@ export async function startFplTrack({
         `${baseModel} has more than one FPL seat: ${ids.join(", ")}`
       );
     }
+  }
+  // And there are as many of them as the Season has Entrants. `missing` is
+  // measured against the roster that was queried, so a roster of the wrong
+  // size reports nobody missing and starts a Season that is not the one
+  // ADR-0014 describes — with no way back, because `manager_states` is
+  // insert-only. Both questions are asked before the first call, so a roster
+  // problem is never discovered next to a Lock.
+  if (entrants.length !== SEASON_ROSTER_SIZE) {
+    throw new Error(
+      `the FPL track needs ${SEASON_ROSTER_SIZE} seats at Prompt Version `
+      + `${FPL_PROMPT_VERSION}, but ${entrants.length} are configured`
+    );
   }
 
   // Every Entrant starts from the same seed state and the same locked pool, so

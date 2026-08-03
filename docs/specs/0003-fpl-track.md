@@ -295,18 +295,20 @@ back rather than making the borrowed one permanent, which is the case ADR-0017 p
 the row for. A Rolled Over Gameweek is scored from the standing Team Sheet like any other,
 which is the whole of the argument for rolling over rather than scoring zero.
 
-An opening that fails its third Repair stores nothing: there is no Team Sheet to roll onto
-before the first one, and the rules cannot invent a Squad. What becomes of that Gameweek
-belongs to "Start all nine Entrants together", where the opening is committed for all nine or
-for none.
+A Gameweek is only ever played for an Entrant that has a Manager State to carry into it. There
+is no Team Sheet to roll onto before the first one and the rules cannot invent a Squad, so an
+Entrant with nothing standing is refused before the first call rather than seeded from the
+empty Squad — seeding one would store the earliest Manager State the Season has, which is by
+definition the Gameweek the track started at, for one Entrant of nine and permanently, because
+`manager_states` is insert-only. Openings belong to "Start all nine Entrants together" and to
+nowhere else.
 
 **One FPL context per Gameweek is sound only at an opening.** Every Entrant opens from the same
-seed state, so one stored row is one Entrant's context and every Entrant's at once. Once any
-Manager State exists, each Entrant's context carries its own Squad, and `contexts_identity` —
-unique on `(season, gw, track, fpl_id)` — has room for one of them. Until per-Entrant rows
-exist, a second Entrant reaching a later Gameweek is refused loudly rather than handed a Squad
-it does not own and then judged on the one it does. Widening that key belongs to "Run the FPL
-track under the shared Lock".
+seed state, so the one row the opening stores is one Entrant's context and every Entrant's at
+once. Every later Gameweek's context carries its own Squad, and `contexts_identity` — unique on
+`(season, gw, track, fpl_id)` — has room for one of them, so a second Entrant reaching a later
+Gameweek is refused loudly rather than handed a Squad it does not own and then judged on the one
+it does. Widening that key belongs to "Run the FPL track under the shared Lock".
 
 ### The opening is gathered whole, then committed whole
 
@@ -331,11 +333,24 @@ read as an Entrant's own doing.
 
 Which rows are seats is read off `role = 'entrant'` and the FPL Prompt Version, so Reference
 Lines and the Match track's Entrants are excluded by what they are rather than by a list kept
-somewhere. Two seats on one Base Model is refused before the first call: ADR-0003 fixes one
-season path per Base Model, and a second is not a longer demonstration but a different
-experiment. Opening a Season already under way is refused for the mirror reason — an opening
-seeds every Entrant from the empty Squad, so it would discard the Season rather than continue
-it.
+somewhere. Three refusals, all before the first call, so a roster problem is never discovered
+next to a Lock:
+
+- **Two seats on one Base Model.** ADR-0003 fixes one season path per Base Model, and a second
+  is not a longer demonstration but a different experiment.
+- **A roster that is not the Season's.** ADR-0014 fixes nine Entrants, and the count is checked
+  against that rather than against whatever `models` happens to hold. Nothing else would catch
+  it: which Entrants are missing is measured against the rows that were queried, so an
+  eight-seat roster reports nobody missing and starts a Season quietly short of a Base Model.
+  With `manager_states` insert-only there is no undoing it, and half the published results —
+  ADR-0011's complete-case intersection, ADR-0016's eight comparisons against the leader — are
+  read against the same nine.
+- **A Season already under way.** An opening seeds every Entrant from the empty Squad, so it
+  would discard the Season rather than continue it.
+
+The mirror of the last one is that no other entry point may open the track at all: a Gameweek
+played for an Entrant with nothing standing is refused rather than seeded, for the reason given
+under the Repair loop above.
 
 The same Gameweek may be opened again while its Lock still stands, and the second run hands out
 the context already stored rather than rebuilding it. A snapshot that moved in between would

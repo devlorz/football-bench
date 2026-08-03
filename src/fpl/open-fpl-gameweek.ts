@@ -5,7 +5,6 @@ import {
 } from "../context/build-fpl-track-context.js";
 import type { HttpFetcher } from "../http.js";
 import {
-  openingManagerState,
   rolledOverState,
   type ManagerState
 } from "./apply-gameweek-action.js";
@@ -105,30 +104,30 @@ export async function openFplGameweek({
     throw new Error(`${entrantId} is not an Entrant`);
   }
 
-  // What the Entrant carries in. Nothing stored yet is what makes a Gameweek
-  // an opening, and it is also what decides whether a failed Gameweek can Roll
-  // Over: there is no standing Team Sheet to roll onto before the first one.
+  // What the Entrant carries in — and it must carry something in. An opening
+  // seeds from the empty Squad, and seeding one Entrant here would start the
+  // Season for one of nine: `manager_states` is insert-only, so that row is
+  // permanent, it is the earliest the Season has, and it would therefore be
+  // the Gameweek the track started at. Openings are `startFplTrack`'s, which
+  // commits all nine or none.
   const standing = await loadStandingManagerState(database, {
     entrantId,
     season,
     before: gameweek
   });
-  const previous = standing === null
-    ? openingManagerState()
-    : await carriedThroughSilence(database, season, standing, gameweek);
+  if (standing === null) {
+    throw new Error(
+      `${entrantId} has no Manager State to carry into Gameweek ${gameweek} `
+      + `of ${season}; the FPL track opens through startFplTrack`
+    );
+  }
+  const previous =
+    await carriedThroughSilence(database, season, standing, gameweek);
 
-  // Whether this Gameweek's context says anything about who is reading it.
-  // It does not while every Entrant is still at its opening seed, and the
-  // question is about every Entrant rather than this one: an Entrant that has
-  // stored nothing yet would otherwise be handed a context built from someone
-  // else's Squad and judged on the empty Squad it actually has.
-  const started = await database.query(
-    `select 1
-       from manager_states
-      where season = $1 and gw < $2
-      limit 1`,
-    [season, gameweek]
-  );
+  // From here every Entrant's context carries its own Squad, so the one row
+  // `contexts_identity` allows belongs to whichever Entrant stored it. Sharing
+  // it would show this one fifteen players it does not own and then judge it
+  // on the ones it does.
   const body = await storeFplContext(
     database,
     season,
@@ -139,7 +138,7 @@ export async function openFplGameweek({
       state: previous,
       pool: contextPool
     }),
-    started.rows.length === 0
+    false
   );
 
   const outcome = await askForGameweekAction({
@@ -172,13 +171,9 @@ export async function openFplGameweek({
   // The fourth invalid response. The action is discarded whole and the
   // Gameweek Rolls Over onto the Team Sheet already standing (ADR-0004) —
   // never a score of zero, because zero is a punishment large enough to drown
-  // out every other signal this track produces.
-  //
-  // Unless there is nothing standing. An Entrant that never produced a legal
-  // opening has no Squad to play, and inventing one is not a thing the rules
-  // can do; what happens to the Gameweek then belongs to "Start all nine
-  // Entrants together", where the whole opening is committed or none of it is.
-  if (outcome.kind === "exhausted" && standing !== null) {
+  // out every other signal this track produces. There is always something
+  // standing here: an Entrant without one never got past the check above.
+  if (outcome.kind === "exhausted") {
     await storeManagerState(database, {
       entrantId: entrant.id,
       season,

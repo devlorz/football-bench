@@ -200,6 +200,13 @@ to, and the caller decides what to persist — which is the whole difference bet
 Gameweek and an opening, and the reason the three-Repair allowance is the same one rather than
 a second copy of it.
 
+`openFplGameweek` then stopped being able to open at all. It refuses an Entrant with no standing
+Manager State, because seeding one from the empty Squad would store the earliest state the
+Season has — the starting Gameweek by definition, for one Entrant of nine, with no way back
+through an insert-only table. The roster size is checked against ADR-0014's nine for the
+adjacent reason: which Entrants are missing is measured against the rows that were queried, so
+a short roster reports nobody missing and starts a Season quietly without a Base Model.
+
 - [x] The operator selects the starting Gameweek explicitly, and that Gameweek is visible in every Entrant's first Manager State
 - [x] Exactly one FPL-track seat per Base Model is prepared from the same locked player pool and FPL Prompt Version
 - [x] Calls may run concurrently and fail independently while their attempts remain attributable to the correct Entrant

@@ -3,7 +3,12 @@ import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
 import { startFplTrack } from "../src/fpl/start-fpl-track.js";
-import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
+import {
+  FPL_PROMPT_VERSION,
+  parseFplTrackContextPool
+} from "../src/context/build-fpl-track-context.js";
+import { GAMEWEEK_RULES } from "../src/fpl/apply-gameweek-action.js";
+import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
 import type { HttpFetcher } from "../src/http.js";
 import { FPL_POOL, type FixturePlayer } from "./fpl-pool-fixture.js";
 
@@ -11,7 +16,7 @@ const { Client } = pg;
 
 /** The nine seats ADR-0014 puts on the track, one per Base Model. */
 const BASE_MODELS = Array.from(
-  { length: 9 },
+  { length: SEASON_ROSTER_SIZE },
   (_unused, index) => `vendor/base-${index + 1}`
 );
 
@@ -259,6 +264,54 @@ describe("starting the FPL track for all nine Entrants", () => {
     expect(states.rows).toEqual(
       BASE_MODELS.map((baseModel) => ({ model_id: seatId(baseModel), gw: 2 }))
     );
+
+    // And each of them is a whole opening Manager State: the fifteen at what
+    // they were bought for, which is what Selling Price is later computed
+    // against and what no other row records (ADR-0003).
+    const first = await client.query(
+      `select squad, team_sheet, bank, free_transfers, hits, chips_used,
+              chip_active, rolled_over, attempts_used
+         from manager_states
+        where model_id = $1`,
+      [seatId(BASE_MODELS[0]!)]
+    );
+    expect(first.rows).toEqual([{
+      squad: {
+        active: [
+          { fplId: 1, purchasePriceTenths: 45 },
+          { fplId: 2, purchasePriceTenths: 40 },
+          { fplId: 3, purchasePriceTenths: 60 },
+          { fplId: 4, purchasePriceTenths: 55 },
+          { fplId: 5, purchasePriceTenths: 50 },
+          { fplId: 6, purchasePriceTenths: 45 },
+          { fplId: 7, purchasePriceTenths: 40 },
+          { fplId: 8, purchasePriceTenths: 120 },
+          { fplId: 9, purchasePriceTenths: 90 },
+          { fplId: 10, purchasePriceTenths: 75 },
+          { fplId: 11, purchasePriceTenths: 55 },
+          { fplId: 12, purchasePriceTenths: 45 },
+          { fplId: 13, purchasePriceTenths: 105 },
+          { fplId: 14, purchasePriceTenths: 70 },
+          { fplId: 15, purchasePriceTenths: 60 }
+        ],
+        free_hit_stash: null
+      },
+      team_sheet: {
+        starters: [1, 3, 4, 5, 6, 8, 9, 10, 11, 13, 14],
+        bench: [2, 7, 12, 15],
+        captain: 8,
+        viceCaptain: 13
+      },
+      // £100.0m less the £95.5m Squad above.
+      bank: 45,
+      free_transfers: 1,
+      // The opening fifteen are not Transfers beyond an allowance.
+      hits: 0,
+      chips_used: { firstHalf: [], secondHalf: [] },
+      chip_active: null,
+      rolled_over: false,
+      attempts_used: 0
+    }]);
   });
 
   test("hands every Entrant the one context stored for the Gameweek", async () => {
@@ -284,6 +337,28 @@ describe("starting the FPL track for all nine Entrants", () => {
     for (const { messages } of calls) {
       expect(messages[0]).toEqual({ role: "user", content: context!.body });
     }
+
+    // What that one text says: nobody owns anything yet, every rule the
+    // reducer can refuse an action for, and the locked pool with each player
+    // pinned on one line the reducer can price from.
+    expect(context!.body)
+      .toContain("Squad: none yet — this is your opening Squad.");
+    expect(context!.body).toContain("£100.0m");
+    expect(context!.body).toContain(
+      '{"id":8,"name":"Palmer","club":"Chelsea","position":"MID",'
+      + '"price":"£12.0m","price_tenths":120,"status":"available"}'
+    );
+    for (const rule of GAMEWEEK_RULES) {
+      expect(context!.body).toContain(rule);
+    }
+    expect(parseFplTrackContextPool(context!.body)).toEqual(
+      FPL_POOL.map(({ fplId, club, position, priceTenths }) => ({
+        fplId,
+        club,
+        position,
+        priceTenths
+      }))
+    );
   });
 
   test("does not start when the Lock passes before every opening is legal", async () => {
@@ -594,6 +669,8 @@ describe("starting the FPL track for all nine Entrants", () => {
     for (const { messages } of calls) {
       expect(messages[0]!.content).toBe(stored.rows[0]!.body);
     }
+    expect(stored.rows[0]!.body).toContain("Palmer");
+    expect(stored.rows[0]!.body).not.toContain("£13.0m");
     const states = await client.query<{ squad: { active: unknown[] } }>(
       "select squad from manager_states limit 1"
     );
@@ -605,15 +682,42 @@ describe("starting the FPL track for all nine Entrants", () => {
     );
   });
 
-  test("refuses to start a track with no seats at all", async () => {
+  test.for([
+    { what: "no seats at all", seats: 0 },
+    { what: "one seat short", seats: 8 },
+    { what: "one seat too many", seats: 10 }
+  ])("refuses to start a roster of $what", async ({ seats }) => {
+    // `missing` is measured against the roster that was queried, so a roster
+    // of the wrong size reports nobody missing and starts a Season that is not
+    // the one ADR-0014 describes. `manager_states` is insert-only, so there is
+    // no undoing it afterwards — the count is checked before the first call.
     await client.query("delete from models");
+    for (let seat = 1; seat <= seats; seat += 1) {
+      await client.query(
+        `insert into models (
+           id, name, base_model, provider, prompt_version, role
+         ) values ($1, $2, $3, 'vendor', $4, 'entrant')`,
+        [`fpl/seat-${seat}`, `Seat ${seat}`, `vendor/seat-${seat}`,
+          FPL_PROMPT_VERSION]
+      );
+    }
 
-    // Nobody legal and nobody missing is not a complete opening, and a
-    // Gameweek that stored nothing must never read as the Gameweek the track
-    // started at.
-    await expect(open()).rejects.toThrow(
-      `No Entrants are configured for Prompt Version ${FPL_PROMPT_VERSION}`
+    let called = 0;
+    await expect(open({
+      http: async () => {
+        called += 1;
+        return { status: 200, body: openRouterBody(LEGAL_ACTION) };
+      }
+    })).rejects.toThrow(
+      `the FPL track needs ${SEASON_ROSTER_SIZE} seats at Prompt Version `
+      + `${FPL_PROMPT_VERSION}, but ${seats} are configured`
     );
+
+    // Nobody was called and nothing was spent on a roster that could not have
+    // started a Season.
+    expect(called).toBe(0);
+    const attempts = await client.query("select id from attempts");
+    expect(attempts.rows).toEqual([]);
   });
 
   test("refuses a concurrency that would call nobody", async () => {
