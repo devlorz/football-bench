@@ -505,7 +505,10 @@ describe("pre-flight for the Base Model roster", () => {
         calls += 1;
         throw new Error("HTTP must not run");
       }
-    })).rejects.toThrow("Pre-flight requires exactly 10 Entrants; found 9");
+    })).rejects.toThrow(
+      "Pre-flight requires exactly 10 Entrants at Prompt Version "
+      + "match/2026-27-v2; found 9"
+    );
     expect(calls).toBe(0);
   });
 
@@ -517,6 +520,10 @@ describe("pre-flight for the Base Model roster", () => {
     );
     let calls = 0;
 
+    // A seat whose Prompt Version is not this track's is not this track's
+    // seat, so it is not reported as a mismatch any more — it is not selected
+    // at all, and what is refused is the roster it leaves behind. The count is
+    // what catches it either way, and catches it before the first call.
     await expect(preflightBaseModels({
       database: client,
       season: "2026-27",
@@ -528,9 +535,68 @@ describe("pre-flight for the Base Model roster", () => {
         throw new Error("HTTP must not run");
       }
     })).rejects.toThrow(
-      "Pre-flight requires Prompt Version match/2026-27-v2; entrant/9 uses match/draft"
+      "Pre-flight requires exactly 9 Entrants at Prompt Version "
+      + "match/2026-27-v2; found 8"
     );
     expect(calls).toBe(0);
+  });
+
+  test("leaves the FPL track's seats out of the roster it checks", async () => {
+    // The nine Match seats are already configured; nine FPL seats beside them
+    // are a second track's roster, not a roster of eighteen. Counting them
+    // would refuse a pre-flight that is correctly configured.
+    await client.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       )
+       select
+         'fpl/' || n, 'FPL Seat ' || n, 'vendor/base-model-' || n,
+         'provider-' || n, 'fpl/2026-27-v1', 'entrant'
+       from generate_series(1, 9) as n`
+    );
+    const called: string[] = [];
+
+    const report = await preflightBaseModels({
+      database: client,
+      season: "2026-27",
+      fixtureId: 1,
+      expectedEntrantCount: 9,
+      apiKey: "test-key",
+      http: async (_url, options) => {
+        const request = JSON.parse(options?.body ?? "{}") as { model: string };
+        called.push(request.model);
+        return {
+          status: 200,
+          body: JSON.stringify({
+            model: request.model,
+            openrouter_metadata: {
+              endpoints: {
+                available: [{
+                  provider: `Resolved ${request.model}`,
+                  model: request.model,
+                  selected: true
+                }]
+              }
+            },
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  fixture_id: 1,
+                  probs: { H: 0.6, D: 0.24, A: 0.16 },
+                  score: { home: 2, away: 1 },
+                  rationale: "Pre-flight answer."
+                })
+              }
+            }]
+          })
+        };
+      }
+    });
+
+    expect(report.ok).toBe(true);
+    expect(called).toHaveLength(9);
+    expect(report.results.map(({ entrantId }) => entrantId))
+      .toEqual(Array.from({ length: 9 }, (_u, n) => `entrant/${n + 1}`));
   });
 
   test("replays a byte-exact successful OpenRouter response observed in pre-flight", async () => {

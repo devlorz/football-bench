@@ -244,26 +244,22 @@ export async function preflightBaseModels({
     throw new Error(`Fixture ${fixtureId} does not exist in Season ${season}`);
   }
 
+  // The Match track's seats, told from the FPL track's by Prompt Version:
+  // both mark a competitor with `role = 'entrant'` in the same table. The
+  // count is still checked, and against the same number as before, so a
+  // roster short of a Base Model is still refused before the first call.
   const entrants = await database.query<EntrantRow>(
     `select id, base_model, provider, quantization, prompt_version
        from models
-      where role = 'entrant'
-      order by id`
+      where role = 'entrant' and prompt_version = $1
+      order by id`,
+    [MATCH_PROMPT_VERSION]
   );
   if (entrants.rows.length !== expectedEntrantCount) {
     throw new Error(
-      `Pre-flight requires exactly ${expectedEntrantCount} Entrants; `
+      `Pre-flight requires exactly ${expectedEntrantCount} Entrants at `
+      + `Prompt Version ${MATCH_PROMPT_VERSION}; `
       + `found ${entrants.rows.length}`
-    );
-  }
-  const mismatchedPrompt = entrants.rows.find(
-    ({ prompt_version: promptVersion }) =>
-      promptVersion !== MATCH_PROMPT_VERSION
-  );
-  if (mismatchedPrompt !== undefined) {
-    throw new Error(
-      `Pre-flight requires Prompt Version ${MATCH_PROMPT_VERSION}; `
-      + `${mismatchedPrompt.id} uses ${mismatchedPrompt.prompt_version}`
     );
   }
 
