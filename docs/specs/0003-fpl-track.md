@@ -359,20 +359,44 @@ otherwise price a Squad from a text no Entrant was ever shown.
 ### The record is written whole, or not at all
 
 A Gameweek's eight rows — points and behaviour, each with its cumulative twin — are written on
-one condition and one only: that the Gameweek's points have settled. The behavioural three could
-be written the moment the actions are in, and are not. A record whose Repairs ran a Gameweek
-ahead of its points would have to be read with a note about which half of it was current, and
-the whole of the argument for writing the behaviour beside the points is that they are read
-together.
+two conditions: that the Gameweek's points have settled, and that every Entrant on the roster
+stored a Manager State for it. The behavioural three could be written the moment the actions are
+in, and are not. A record whose Repairs ran a Gameweek ahead of its points would have to be read
+with a note about which half of it was current, and the whole of the argument for writing the
+behaviour beside the points is that they are read together.
 
 Nothing is lost by waiting. Repairs, Roll Overs and violations are derived from stored Manager
 States and attempts, both of which are already on record; when the Gameweek settles, the same
 run writes them.
 
+**One Entrant's Gap takes the Gameweek from everyone.** A Gameweek published for eight Entrants
+of nine gives those eight a season path a Gameweek longer than the ninth's, which is the one
+comparison the track exists to make and the reason the opening commits all nine or none.
+ADR-0011's answer for the Match track holds here without amendment: a blocked Gap removes that
+Gameweek from every comparison, including between Entrants that were working fine, and the
+remedy is a fill run while the Lock is still open rather than a record of unequal lengths. The
+roster is read from the starting Gameweek's own rows — the opening has already checked its size
+against ADR-0014's nine, and what is wanted afterwards is *which* Entrants.
+
+The alternative was to derive a standing Manager State for the silent Entrant, which is what
+the real game does and what `carriedThroughSilence` already does for the next Gameweek's reducer
+input. It was rejected here: the Gameweek would score, but its behavioural row would read as
+nought Repairs and no violations, so an Entrant whose provider was down would appear in the
+profile as one that played a flawless Gameweek.
+
 The cumulative values are folded from the Season's own Gameweeks rather than added to the score
-rows already stored. Scoring the same Gameweek twice, scoring Gameweek 4 before Gameweek 3
-settles, or rerunning the lot after a late settlement must all produce the same numbers, and a
-running total kept in the rows would instead depend on the order they were written in.
+rows already stored, and a Gameweek that settles late rewrites every published Gameweek after
+it. Scoring the same Gameweek twice, scoring Gameweek 4 before Gameweek 3 settles, and rerunning
+the lot after a late settlement all have to produce the same numbers. A running total kept in
+the rows would depend on the order they were written in; recomputing only the Gameweek that
+settled would leave every published Gameweek after it holding a total taken over a path with a
+hole in it. Only Gameweeks already published are rewritten — a later Gameweek nobody has scored
+yet folds in the whole path when it is scored on its own.
+
+**All of it commits together**, across every metric and every Entrant and every Gameweek the
+call rewrites. A Gameweek's points without the behaviour that produced them is worse than
+nothing at all: a reader cannot tell a record whose second half is still to be written from one
+whose Entrant behaved impeccably.
 
 **A Gameweek before the shared starting Gameweek contributes nothing**, and it takes no guard to
 make that true: no Entrant has a Manager State before the start, because the opening commits all

@@ -107,6 +107,56 @@ export async function loadManagerState(
   return managerState(result.rows[0]);
 }
 
+/**
+ * The Gameweek the Season's FPL track started at, or null before it has
+ * started.
+ *
+ * There is no column for it and there must not be one. A Gameweek either holds
+ * every Entrant's opening or holds nothing — `startFplTrack` commits all nine
+ * or none — so the earliest Gameweek any Manager State belongs to *is* the
+ * starting Gameweek. A stored column would be a second answer to a question
+ * that already has one, and nothing would keep the two in agreement.
+ *
+ * It lives here, beside the table it is read from, because two callers need it
+ * for opposite reasons: an opening refuses to run when it is not null, and the
+ * demonstration record counts from it. Two copies of one `min(gw)` would be
+ * two places for "the Gameweek the track started at" to drift apart.
+ */
+export async function loadStartingGameweek(
+  database: Database,
+  season: string
+): Promise<number | null> {
+  const result = await database.query<{ gw: number | null }>(
+    `select min(gw)::int as gw from manager_states where season = $1`,
+    [season]
+  );
+  return result.rows[0]?.gw ?? null;
+}
+
+/**
+ * The Entrants whose Season path the Season is a record of: whoever holds a
+ * Manager State at the Gameweek the track started at.
+ *
+ * Read from the opening rather than counted against ADR-0014's nine, because
+ * the opening has already checked it against nine — `startFplTrack` refuses a
+ * roster of any other size and commits all of them or none. What is wanted
+ * downstream is *which* Entrants, and only the opening knows that.
+ */
+export async function loadStartedRoster(
+  database: Database,
+  season: string,
+  startingGameweek: number
+): Promise<string[]> {
+  const result = await database.query<{ model_id: string }>(
+    `select model_id
+       from manager_states
+      where season = $1 and gw = $2
+      order by model_id`,
+    [season, startingGameweek]
+  );
+  return result.rows.map((row) => row.model_id);
+}
+
 /** A stored Manager State and the Gameweek it was stored for. */
 export interface StandingManagerState {
   gameweek: number;

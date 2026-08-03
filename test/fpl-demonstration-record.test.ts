@@ -583,6 +583,135 @@ describe("the FPL demonstration record", () => {
     expect(again.rows).toHaveLength(16);
   });
 
+  test("rewrites the Season totals already published when a Gameweek settles late", async () => {
+    await seed({ gameweek: 1 });
+    await seed({ gameweek: 2, state: STOOD_PAT });
+    await seed({ gameweek: 3, state: STOOD_PAT });
+    await settle(1);
+    await settle(3);
+    await score(1);
+    await score(3);
+
+    // Gameweek 3 was published while Gameweek 2 was still unsettled, so its
+    // Season total is two Gameweeks.
+    expect((await stored([FPL_POINTS_SEASON_TO_DATE_METRIC])).at(-1)).toEqual(
+      expect.objectContaining({ gw: 3, value: 116, n: 2 })
+    );
+
+    // Gameweek 2 settles afterwards. Its own row is not the only one that
+    // changes: every published Gameweek after it has a Season total that was
+    // computed without it, and a record whose totals depend on when a Gameweek
+    // happened to settle is a record nobody can reproduce.
+    await settle(2);
+    await score(2);
+
+    expect(await stored([FPL_POINTS_SEASON_TO_DATE_METRIC])).toEqual([
+      expect.objectContaining({ gw: 1, value: 58, n: 1 }),
+      expect.objectContaining({ gw: 2, value: 116, n: 2 }),
+      {
+        model_id: "entrant/v1",
+        gw: 3,
+        metric: "fpl_points_season_to_date",
+        value: 174,
+        n: 3,
+        detail: {
+          qualification: DEMONSTRATION_QUALIFICATION,
+          startingGameweek: 1,
+          gameweeks: [
+            { gw: 1, points: 58 },
+            { gw: 2, points: 58 },
+            { gw: 3, points: 58 }
+          ]
+        }
+      }
+    ]);
+  });
+
+  test("scores nobody's Gameweek when one Entrant never stored a state", async () => {
+    for (const entrantId of ["entrant/v1", "entrant/v2"]) {
+      await seed({ gameweek: 1, entrantId });
+      await seed({ gameweek: 3, entrantId, state: STOOD_PAT });
+    }
+    // Gameweek 2 belongs to the first Entrant alone: the second's provider
+    // never answered, and the Lock has long passed, so it never will.
+    await seed({ gameweek: 2, state: STOOD_PAT });
+    await settle(1);
+    await settle(2);
+    await settle(3);
+
+    await score(1);
+    await score(2);
+    await score(3);
+
+    // Publishing the one Entrant that acted would give it a path one Gameweek
+    // longer than its peer's, which is the comparison the whole track is for.
+    // ADR-0011's answer to one Entrant's Gap is to remove the Gameweek from
+    // every comparison, including between Entrants that were working fine, and
+    // the remedy is a fill run before the Lock rather than a shorter record.
+    const written = await client.query(
+      `select distinct gw from scores where track = 'fpl' order by gw`
+    );
+    expect(written.rows).toEqual([{ gw: 1 }, { gw: 3 }]);
+
+    // And it is missing from both Entrants' paths, not just the silent one's.
+    expect(await stored([FPL_POINTS_SEASON_TO_DATE_METRIC])).toEqual([
+      expect.objectContaining({ model_id: "entrant/v1", gw: 1, n: 1 }),
+      {
+        model_id: "entrant/v1",
+        gw: 3,
+        metric: "fpl_points_season_to_date",
+        value: 116,
+        n: 2,
+        detail: {
+          qualification: DEMONSTRATION_QUALIFICATION,
+          startingGameweek: 1,
+          gameweeks: [{ gw: 1, points: 58 }, { gw: 3, points: 58 }]
+        }
+      },
+      expect.objectContaining({ model_id: "entrant/v2", gw: 1, n: 1 }),
+      expect.objectContaining({ model_id: "entrant/v2", gw: 3, n: 2 })
+    ]);
+  });
+
+  test("stores none of a Gameweek's record when one row cannot persist", async () => {
+    await seed({ gameweek: 1 });
+    await settle(1);
+    await client.query(
+      `create function fail_one_metric()
+       returns trigger
+       language plpgsql
+       as $$
+       begin
+         if new.metric = 'roll_over_rate' then
+           raise exception 'simulated score persistence failure';
+         end if;
+         return new;
+       end;
+       $$;
+       create trigger scores_fail_for_one_metric
+       before insert on scores
+       for each row execute function fail_one_metric()`
+    );
+
+    try {
+      // The points rows are written before the Roll Over rate reaches the
+      // table. Leaving them there would publish a Gameweek's points with no
+      // account of the behaviour that produced them — which is the one thing
+      // the record is written together to avoid.
+      await expect(score(1)).rejects.toThrow(
+        "simulated score persistence failure"
+      );
+    } finally {
+      await client.query(
+        `drop trigger scores_fail_for_one_metric on scores;
+         drop function fail_one_metric()`
+      );
+    }
+
+    const rows = await client.query("select metric from scores");
+    expect(rows.rows).toEqual([]);
+  });
+
   test("tells two Entrants' Seasons apart on points and on behaviour", async () => {
     // Two paths of the same length that diverge in both things the record
     // holds. The first Entrant was legal first time, then took one Repair and

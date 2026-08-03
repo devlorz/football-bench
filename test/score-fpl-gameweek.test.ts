@@ -120,15 +120,38 @@ describe("scoring a Gameweek from what is stored", () => {
    * metrics stored beside them are the demonstration record's, and they are
    * asserted where they are decided — `fpl-demonstration-record.test.ts`.
    */
-  async function storedPoints(): Promise<unknown[]> {
+  async function storedPoints(entrantId?: string): Promise<unknown[]> {
     const rows = await client.query(
       `select model_id, track, metric, value::int as value, detail
          from scores
-        where metric = $1
+        where metric = $1 and ($2::text is null or model_id = $2)
         order by model_id`,
-      [FPL_POINTS_METRIC]
+      [FPL_POINTS_METRIC, entrantId ?? null]
     );
     return rows.rows;
+  }
+
+  /**
+   * The Entrant this test is not about, standing pat in the same Gameweek.
+   *
+   * Both Entrants opened at Gameweek 1, so both are on the roster the record
+   * measures, and a later Gameweek only one of them stored a state for is not
+   * scored for either (ADR-0011). These tests are about how one Team Sheet is
+   * scored, not about a Gap, so the other seat is filled and left alone.
+   */
+  async function alsoPlayed(
+    entrantId: string,
+    gameweek: number,
+    state = legalStateFrom(OPENING)
+  ): Promise<void> {
+    await storeManagerState(client, {
+      entrantId,
+      season: "2026-27",
+      gameweek,
+      state,
+      attemptsUsed: 0,
+      predictedAt: new Date("2026-08-28T17:00:00Z")
+    });
   }
 
   test("writes one scored row per Entrant with the total and its record", async () => {
@@ -206,9 +229,11 @@ describe("scoring a Gameweek from what is stored", () => {
     // adds 9 for 65.
     await settle(absent([11]), 2);
 
+    await alsoPlayed("entrant/v2", 2);
+
     await scoreFplGameweek({ database: client, season: "2026-27", gameweek: 2 });
 
-    expect(await storedPoints()).toEqual([
+    expect(await storedPoints("entrant/v1")).toEqual([
       {
         model_id: "entrant/v1",
         track: "fpl",
@@ -292,9 +317,11 @@ describe("scoring a Gameweek from what is stored", () => {
     });
     await settle(EVERYONE_PLAYED, 2);
 
+    await alsoPlayed("entrant/v1", 2);
+
     await scoreFplGameweek({ database: client, season: "2026-27", gameweek: 2 });
 
-    expect(await storedPoints()).toEqual([
+    expect(await storedPoints("entrant/v2")).toEqual([
       {
         model_id: "entrant/v2",
         track: "fpl",
@@ -344,12 +371,20 @@ describe("scoring a Gameweek from what is stored", () => {
     });
     await settle(FREE_HIT_GAMEWEEK, 2);
 
+    // The other seat plays the same borrowed fifteen: this Gameweek's points
+    // are the Free Hit's, and a Squad it sold has no settled row to score from.
+    await alsoPlayed(
+      "entrant/v2",
+      2,
+      legalStateFrom(FREE_HIT_REBUILD, legalStateFrom(OPENING), 2)
+    );
+
     await scoreFplGameweek({ database: client, season: "2026-27", gameweek: 2 });
 
     // The borrowed eleven score 6+2+12+1+2+9+14+7+2+4+8 = 67, and Palmer's
     // armband adds 9 for 76. The permanent eleven the Entrant still owns would
     // have scored 58, so nothing here could have come from the stashed Squad.
-    expect(await storedPoints()).toEqual([
+    expect(await storedPoints("entrant/v1")).toEqual([
       {
         model_id: "entrant/v1",
         track: "fpl",
@@ -383,11 +418,13 @@ describe("scoring a Gameweek from what is stored", () => {
     });
     await settle(EVERYONE_PLAYED, 2);
 
+    await alsoPlayed("entrant/v2", 2);
+
     await scoreFplGameweek({ database: client, season: "2026-27", gameweek: 2 });
 
     // The eleven score 49, the bench 10+9+11+12 = 42, and Palmer's armband
     // adds 9 for 100.
-    expect(await storedPoints()).toEqual([
+    expect(await storedPoints("entrant/v1")).toEqual([
       {
         model_id: "entrant/v1",
         track: "fpl",
