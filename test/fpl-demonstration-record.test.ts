@@ -177,6 +177,33 @@ describe("the FPL demonstration record", () => {
     return rows.rows;
   }
 
+  /** Every stored row, whole, for the tests that must leave them untouched. */
+  async function everyScoreRow(): Promise<unknown[]> {
+    const rows = await client.query(
+      `select model_id, season, gw, track, metric, value::float8 as value, n,
+              detail
+         from scores
+        order by model_id, gw, metric`
+    );
+    return rows.rows;
+  }
+
+  /**
+   * One Entrant's first three Gameweeks, settled and on record, and the rows
+   * they came to. What the refusals are all measured against: each breaks one
+   * of these Gameweeks afterwards and asserts that none of them moved.
+   */
+  async function publishThreeGameweeks(): Promise<unknown[]> {
+    await seed({ gameweek: 1 });
+    await seed({ gameweek: 2, state: STOOD_PAT });
+    await seed({ gameweek: 3, state: STOOD_PAT });
+    for (const gameweek of [1, 2, 3]) {
+      await settle(gameweek);
+      await score(gameweek);
+    }
+    return everyScoreRow();
+  }
+
   test("carries the Season total forward beside each Gameweek's own", async () => {
     await seed({ gameweek: 1 });
     await seed({ gameweek: 2, state: STOOD_PAT });
@@ -674,16 +701,7 @@ describe("the FPL demonstration record", () => {
   });
 
   test("refuses to leave a published Gameweek standing once it stops scoring", async () => {
-    await seed({ gameweek: 1 });
-    await seed({ gameweek: 2, state: STOOD_PAT });
-    await seed({ gameweek: 3, state: STOOD_PAT });
-    await settle(1);
-    await settle(2);
-    await settle(3);
-    await score(1);
-    await score(2);
-    await score(3);
-    const published = await stored([FPL_POINTS_SEASON_TO_DATE_METRIC]);
+    const published = await publishThreeGameweeks();
 
     // Gameweek 2's settled points are taken away. No code path does this —
     // `fetchFplPlayerPoints` only inserts and updates, and `manager_states`
@@ -694,40 +712,54 @@ describe("the FPL demonstration record", () => {
     // behind them and nobody told. Deleting them would let absent data destroy
     // published data, which is worse: a half-restored database would silently
     // unpublish a Gameweek. So the run refuses and names the Gameweek.
-    await expect(score(2)).rejects.toThrow(/Gameweek 2/);
+    await expect(score(2)).rejects.toThrow(
+      /Gameweek 2 of 2026-27 holds a stored FPL record and its points are not settled/
+    );
     // Scoring a later Gameweek is refused for the same reason rather than
     // recomputing a Season total that skips a Gameweek still on record.
-    await expect(score(3)).rejects.toThrow(/Gameweek 2/);
+    await expect(score(3)).rejects.toThrow(/Gameweek 2 of 2026-27/);
 
-    expect(await stored([FPL_POINTS_SEASON_TO_DATE_METRIC])).toEqual(published);
+    expect(await everyScoreRow()).toEqual(published);
   });
 
   test("says which Gameweek stopped scoring when only some points are gone", async () => {
-    await seed({ gameweek: 1 });
-    await seed({ gameweek: 2, state: STOOD_PAT });
-    await seed({ gameweek: 3, state: STOOD_PAT });
-    await settle(1);
-    await settle(2);
-    await settle(3);
-    await score(1);
-    await score(2);
-    await score(3);
-    const published = await stored([FPL_POINTS_SEASON_TO_DATE_METRIC]);
+    const published = await publishThreeGameweeks();
 
     // One player's row rather than the whole Gameweek's. Read as it stands he
     // played no minutes, which would bring a substitute on for him and store a
     // total the Gameweek never saw — so it is refused, as a first run of it
-    // would be.
+    // would be. The refusal walks several Gameweeks now, so "no settled points
+    // for player 4" on its own leaves the operator to work out which of them
+    // it came from.
     await client.query("delete from fpl_player_points where gw = 2 and fpl_id = 4");
 
-    // The refusal walks several Gameweeks now, so "no settled points for
-    // player 4" on its own leaves the operator to work out which of them it
-    // came from.
-    await expect(score(2)).rejects.toThrow(/Gameweek 2 of 2026-27/);
+    await expect(score(2)).rejects.toThrow(
+      /Gameweek 2 of 2026-27 has no settled points for player 4/
+    );
     await expect(score(3)).rejects.toThrow(/Gameweek 2 of 2026-27/);
-    await expect(score(2)).rejects.toThrow(/player 4/);
 
-    expect(await stored([FPL_POINTS_SEASON_TO_DATE_METRIC])).toEqual(published);
+    expect(await everyScoreRow()).toEqual(published);
+  });
+
+  test("rolls back a Gameweek it rewrote when a later one refuses", async () => {
+    const published = await publishThreeGameweeks();
+
+    // Gameweek 2's points are corrected upward, so rescoring it would really
+    // move its stored rows — and Gameweek 3, which the same call must rewrite
+    // because a Gameweek that settles late invalidates every published
+    // Gameweek after it, is broken.
+    await client.query(
+      "update fpl_player_points set total_points = 3 where gw = 2 and fpl_id = 1"
+    );
+    await client.query("delete from fpl_player_points where gw = 3 and fpl_id = 4");
+
+    // Gameweek 2 is written first and Gameweek 3 raises afterwards, so this is
+    // the case a transaction opened per Gameweek would pass and one opened
+    // around the whole call would not: the correction to Gameweek 2 has to go
+    // back with it.
+    await expect(score(2)).rejects.toThrow(/Gameweek 3 of 2026-27/);
+
+    expect(await everyScoreRow()).toEqual(published);
   });
 
   test("stores none of a Gameweek's record when one row cannot persist", async () => {
