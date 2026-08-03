@@ -9,7 +9,10 @@
  * along the same line.
  */
 import { MAX_REPAIRS } from "../repairs.js";
-import { VIOLATION_KINDS } from "./apply-gameweek-action.js";
+import {
+  VIOLATION_KINDS,
+  type ViolationKind
+} from "./apply-gameweek-action.js";
 
 /**
  * The FPL points ranking is a demonstration, and the label is not decoration.
@@ -102,14 +105,46 @@ export const VIOLATION_PROFILE_METRIC = "violation_profile";
 export const VIOLATION_PROFILE_SEASON_TO_DATE_METRIC =
   "violation_profile_season_to_date";
 
+/**
+ * How many times each rule was broken. Keyed by the closed set of kinds rather
+ * than by string, so a profile cannot gain a column for a kind no rule
+ * produces — which is the same thing spec 0003 refuses a `chip expired` kind
+ * for, and the reason the kinds are a tuple the type is read off.
+ */
+export type ViolationProfile = Record<ViolationKind, number>;
+
 /** The profile before any attempt is counted: every kind at zero. */
-export function emptyViolationProfile(): Record<string, number> {
-  return Object.fromEntries(VIOLATION_KINDS.map((kind) => [kind, 0]));
+export function emptyViolationProfile(): ViolationProfile {
+  return Object.fromEntries(
+    VIOLATION_KINDS.map((kind) => [kind, 0])
+  ) as ViolationProfile;
 }
 
 export function repairBucket(repairs: number, rolledOver: boolean): string {
   return rolledOver ? "failed" : String(repairs);
 }
+
+/**
+ * Every metric the record is made of: four measures, each with the Gameweek's
+ * own value and the Season's through it.
+ *
+ * A closed set rather than a `string`, so a row cannot be filed under a metric
+ * nothing reads. `scores.metric` is a free text column shared with the Match
+ * track, and a typo there does not fail — it stores a row that no reader will
+ * ever ask for.
+ */
+export const FPL_DEMONSTRATION_METRICS = [
+  FPL_POINTS_METRIC,
+  FPL_POINTS_SEASON_TO_DATE_METRIC,
+  REPAIRS_METRIC,
+  REPAIRS_SEASON_TO_DATE_METRIC,
+  ROLL_OVER_RATE_METRIC,
+  ROLL_OVER_RATE_SEASON_TO_DATE_METRIC,
+  VIOLATION_PROFILE_METRIC,
+  VIOLATION_PROFILE_SEASON_TO_DATE_METRIC
+] as const;
+
+export type FplDemonstrationMetric = (typeof FPL_DEMONSTRATION_METRICS)[number];
 
 /** The distribution before any Gameweek is counted: every bucket at zero. */
 export function emptyRepairDistribution(): Record<string, number> {

@@ -1,6 +1,7 @@
 import type { Client } from "pg";
 import {
   VIOLATION_KINDS,
+  type ViolationKind,
   type Chip,
   type Position,
   type TeamSheet
@@ -17,8 +18,14 @@ import {
   ROLL_OVER_RATE_SEASON_TO_DATE_METRIC,
   emptyViolationProfile,
   VIOLATION_PROFILE_METRIC,
-  VIOLATION_PROFILE_SEASON_TO_DATE_METRIC
+  VIOLATION_PROFILE_SEASON_TO_DATE_METRIC,
+  type FplDemonstrationMetric,
+  type ViolationProfile
 } from "./demonstration-record.js";
+import {
+  loadStartedRoster,
+  loadStartingGameweek
+} from "./manager-state-store.js";
 import {
   scoreTeamSheet,
   type PlayerGameweekPoints,
@@ -59,7 +66,7 @@ interface EntrantGameweek {
   repairs: number;
   rolledOver: boolean;
   /** How many times each rule of the game was broken, kind by kind. */
-  violations: Record<string, number>;
+  violations: ViolationProfile;
 }
 
 /**
@@ -78,10 +85,12 @@ async function violationsByEntrant(
   database: Database,
   season: string,
   gameweek: number
-): Promise<Map<string, Record<string, number>>> {
+): Promise<Map<string, ViolationProfile>> {
+  // The query asks for the seven and nothing else, so what comes back is a
+  // `ViolationKind` by construction rather than by hope.
   const counted = await database.query<{
     model_id: string;
-    error_kind: string;
+    error_kind: ViolationKind;
     count: number;
   }>(
     `select model_id, error_kind, count(*)::int as count
@@ -91,36 +100,13 @@ async function violationsByEntrant(
       group by model_id, error_kind`,
     [season, gameweek, [...VIOLATION_KINDS]]
   );
-  const profiles = new Map<string, Record<string, number>>();
+  const profiles = new Map<string, ViolationProfile>();
   for (const row of counted.rows) {
     const profile = profiles.get(row.model_id) ?? emptyViolationProfile();
     profile[row.error_kind] = row.count;
     profiles.set(row.model_id, profile);
   }
   return profiles;
-}
-
-/**
- * The Gameweek every Entrant's Season path starts at.
- *
- * There is no column for it and there must not be one. A Gameweek either holds
- * every Entrant's opening or holds nothing — `startFplTrack` commits all nine
- * or none — so the earliest Gameweek any Manager State belongs to *is* the
- * starting Gameweek. A stored column would be a second answer to a question
- * that already has one, and nothing would keep the two in agreement.
- *
- * Null before the track has started, which is every Gameweek's answer until
- * one opening is committed.
- */
-async function startingGameweek(
-  database: Database,
-  season: string
-): Promise<number | null> {
-  const result = await database.query<{ gw: number | null }>(
-    `select min(gw)::int as gw from manager_states where season = $1`,
-    [season]
-  );
-  return result.rows[0]?.gw ?? null;
 }
 
 /**
@@ -245,15 +231,20 @@ interface ScoredEntry extends EntrantGameweek {
   gw: number;
 }
 
+interface StoredMetric {
+  entrantId: string;
+  season: string;
+  gameweek: number;
+  metric: FplDemonstrationMetric;
+  value: number;
+  /** How many Gameweeks a cumulative value was taken over; null for one. */
+  n: number | null;
+  detail: unknown;
+}
+
 async function storeMetric(
   database: Database,
-  entrantId: string,
-  season: string,
-  gameweek: number,
-  metric: string,
-  value: number,
-  n: number | null,
-  detail: unknown
+  { entrantId, season, gameweek, metric, value, n, detail }: StoredMetric
 ): Promise<void> {
   // Re-running must leave the row as it was, so the same inputs upsert to the
   // same value and detail rather than inserting a second row or moving the one
@@ -269,58 +260,52 @@ async function storeMetric(
 }
 
 /**
- * Writes the FPL demonstration record for one Gameweek: what each Entrant
- * scored, and what the Season has come to through the same Gameweek.
+ * Every Gameweek after `gameweek` whose record has already been published.
  *
- * Reads stored Manager States and stored player points and nothing else — no
- * network call, no clock, and no re-derivation of a decision already made — so
- * running it twice over the same stored inputs produces the same rows.
+ * They are what a late settlement invalidates. Their own values are still
+ * right — a Gameweek's points do not change because an earlier one settled —
+ * but each carries a Season total that was taken over a path with a hole in
+ * it, and rewriting only the Gameweek that settled would leave the record
+ * saying different things depending on the order it was filled in.
  *
- * The cumulative values are folded from the Season's own Gameweeks rather than
- * from the score rows already written, so that a Gameweek scored out of order,
- * or one that settled late, cannot leave a total that depends on which order
- * the Gameweeks happened to be scored in.
+ * Only Gameweeks already published are rewritten. A later Gameweek nobody has
+ * scored yet is not this operation's to score: it will fold in the whole path
+ * when it is scored on its own.
  */
-export async function scoreFplGameweek({
-  database,
-  season,
-  gameweek
-}: ScoreFplGameweekOptions): Promise<void> {
-  const start = await startingGameweek(database, season);
-  if (start === null || gameweek < start) {
-    return;
-  }
+async function publishedAfter(
+  database: Database,
+  season: string,
+  gameweek: number
+): Promise<number[]> {
+  const rows = await database.query<{ gw: number }>(
+    `select distinct gw
+       from scores
+      where season = $1 and track = 'fpl' and gw > $2
+      order by gw`,
+    [season, gameweek]
+  );
+  return rows.rows.map((row) => row.gw);
+}
 
-  const scored = await scoreOneGameweek(database, season, gameweek);
-  if (scored === null) {
-    return;
-  }
-
-  const history = new Map<string, ScoredEntry[]>();
-  const record = (gw: number, byEntrant: Map<string, EntrantGameweek>): void => {
-    for (const [entrantId, entry] of byEntrant) {
-      const kept = history.get(entrantId) ?? [];
-      kept.push({ gw, ...entry });
-      history.set(entrantId, kept);
-    }
-  };
-  for (let earlier = start; earlier < gameweek; earlier += 1) {
-    const before = await scoreOneGameweek(database, season, earlier);
-    if (before !== null) {
-      record(earlier, before);
-    }
-  }
-  record(gameweek, scored);
-
-  for (const [entrantId, entry] of scored) {
+/** Writes one Gameweek's eight rows for every Entrant that played it. */
+async function writeRecord(
+  database: Database,
+  season: string,
+  gameweek: number,
+  start: number,
+  played: Map<string, EntrantGameweek>,
+  history: Map<string, ScoredEntry[]>
+): Promise<void> {
+  for (const [entrantId, entry] of played) {
     const path = history.get(entrantId) ?? [];
     const store = (
-      metric: string,
+      metric: FplDemonstrationMetric,
       value: number,
       n: number | null,
       detail: unknown
-    ) => storeMetric(database, entrantId, season, gameweek, metric, value, n,
-      detail);
+    ) => storeMetric(database, {
+      entrantId, season, gameweek, metric, value, n, detail
+    });
 
     await store(
       FPL_POINTS_METRIC,
@@ -349,8 +334,8 @@ export async function scoreFplGameweek({
       }
     );
     const distribution = emptyRepairDistribution();
-    for (const played of path) {
-      const bucket = repairBucket(played.repairs, played.rolledOver);
+    for (const before of path) {
+      const bucket = repairBucket(before.repairs, before.rolledOver);
       distribution[bucket] = (distribution[bucket] ?? 0) + 1;
     }
     await store(
@@ -360,7 +345,7 @@ export async function scoreFplGameweek({
       { startingGameweek: start, distribution }
     );
 
-    const total = (profile: Record<string, number>): number =>
+    const total = (profile: ViolationProfile): number =>
       Object.values(profile).reduce((sum, count) => sum + count, 0);
     await store(
       VIOLATION_PROFILE_METRIC,
@@ -369,9 +354,9 @@ export async function scoreFplGameweek({
       { kinds: entry.violations }
     );
     const kinds = emptyViolationProfile();
-    for (const played of path) {
-      for (const [kind, count] of Object.entries(played.violations)) {
-        kinds[kind] = (kinds[kind] ?? 0) + count;
+    for (const before of path) {
+      for (const kind of VIOLATION_KINDS) {
+        kinds[kind] += before.violations[kind];
       }
     }
     await store(
@@ -389,5 +374,89 @@ export async function scoreFplGameweek({
       path.length,
       { startingGameweek: start, gameweeks: rolledOver.map(({ gw }) => gw) }
     );
+  }
+}
+
+/**
+ * Walks the Season from its starting Gameweek, folding each Entrant's path as
+ * it goes, and writes the record at `gameweek` and at every Gameweek after it
+ * whose record was already published.
+ */
+async function writeRecordThrough(
+  database: Database,
+  season: string,
+  gameweek: number
+): Promise<void> {
+  const start = await loadStartingGameweek(database, season);
+  if (start === null || gameweek < start) {
+    return;
+  }
+  const roster = await loadStartedRoster(database, season, start);
+  const targets = new Set([
+    gameweek,
+    ...await publishedAfter(database, season, gameweek)
+  ]);
+  const through = Math.max(...targets);
+
+  const history = new Map<string, ScoredEntry[]>();
+  for (let gw = start; gw <= through; gw += 1) {
+    const played = await scoreOneGameweek(database, season, gw);
+    // Two ways a Gameweek is not the Season's, and they are the same way: it
+    // has not settled, or it is not every Entrant's. A Gameweek published for
+    // eight Entrants of nine would give those eight a path a Gameweek longer
+    // than the ninth's, which is the comparison the whole track exists to
+    // make — so ADR-0011's answer holds here as it does for the Match track,
+    // and one Entrant's Gap removes the Gameweek from every path, including
+    // from the Entrants that were working fine. The remedy is a fill run while
+    // the Lock is still open, not a record of unequal lengths.
+    if (played === null || !roster.every((entrantId) => played.has(entrantId))) {
+      // Nothing is written for it, and nothing this call would otherwise have
+      // rewritten either: nothing downstream has changed. Nothing has been
+      // written yet, because no target is earlier than the Gameweek asked for.
+      if (gw === gameweek) {
+        return;
+      }
+      continue;
+    }
+    for (const [entrantId, entry] of played) {
+      history.set(entrantId, [...history.get(entrantId) ?? [], { gw, ...entry }]);
+    }
+    if (targets.has(gw)) {
+      await writeRecord(database, season, gw, start, played, history);
+    }
+  }
+}
+
+/**
+ * Writes the FPL demonstration record for one Gameweek: what each Entrant
+ * scored, and what the Season has come to through the same Gameweek.
+ *
+ * Reads stored Manager States, attempts and stored player points and nothing
+ * else — no network call, no clock, and no re-derivation of a decision already
+ * made — so running it twice over the same stored inputs produces the same
+ * rows.
+ *
+ * Cumulative values are folded from the Season's own Gameweeks rather than
+ * added to the totals already stored, and a Gameweek that settles late rewrites
+ * every published Gameweek after it. Between them, what the record says never
+ * depends on the order its Gameweeks happened to be scored in.
+ *
+ * All of it commits together. A Gameweek's eight rows are the points and the
+ * behaviour that produced them, and half of that pair is worse than none of it:
+ * a reader cannot tell a Gameweek whose behaviour is still to be written from
+ * one whose Entrant behaved impeccably.
+ */
+export async function scoreFplGameweek({
+  database,
+  season,
+  gameweek
+}: ScoreFplGameweekOptions): Promise<void> {
+  await database.query("begin");
+  try {
+    await writeRecordThrough(database, season, gameweek);
+    await database.query("commit");
+  } catch (error) {
+    await database.query("rollback");
+    throw error;
   }
 }

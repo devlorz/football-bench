@@ -17,7 +17,10 @@ import {
   loadLockedGameweek,
   storeFplContext
 } from "./fpl-gameweek-context.js";
-import { storeManagerState } from "./manager-state-store.js";
+import {
+  loadStartingGameweek,
+  storeManagerState
+} from "./manager-state-store.js";
 import { SEASON_ROSTER_SIZE } from "../season-roster.js";
 
 type Database = Pick<Client, "query">;
@@ -75,11 +78,7 @@ export async function startFplTrack({
   // that is already under way would discard it rather than continue it. A
   // refused start stores nothing, which is what leaves this clear for the
   // operator's next Gameweek.
-  const started = await database.query<{ gw: number }>(
-    `select min(gw)::int as gw from manager_states where season = $1`,
-    [season]
-  );
-  const startedAt = started.rows[0]?.gw ?? null;
+  const startedAt = await loadStartingGameweek(database, season);
   if (startedAt !== null) {
     throw new Error(
       `the FPL track for ${season} already started at Gameweek ${startedAt}`
