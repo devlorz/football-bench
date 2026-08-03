@@ -4,8 +4,20 @@ import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
 import { openFplGameweek } from "../src/fpl/open-fpl-gameweek.js";
 import { parseFplTrackContextPool } from "../src/context/build-fpl-track-context.js";
-import { GAMEWEEK_RULES } from "../src/fpl/apply-gameweek-action.js";
-import { FPL_POOL } from "./fpl-pool-fixture.js";
+import {
+  ENFORCED_VIOLATIONS,
+  GAMEWEEK_RULES
+} from "../src/fpl/apply-gameweek-action.js";
+import {
+  gameweekRepairMessage,
+  GAMEWEEK_ACTION_SCHEMA_MESSAGE
+} from "../src/fpl/validate-gameweek-action.js";
+import type { HttpFetcher } from "../src/http.js";
+import {
+  FPL_POOL,
+  FPL_POOL_ALTERNATES,
+  type FixturePlayer
+} from "./fpl-pool-fixture.js";
 
 const { Client } = pg;
 
@@ -21,8 +33,111 @@ const LEGAL_ACTION = JSON.stringify({
   }
 });
 
+/**
+ * The same action with the armband on a substitute. One rule broken and only
+ * one, so what the Entrant is sent back is a sentence about captaincy rather
+ * than whichever other rule a wholly rebuilt Squad happened to break as well.
+ */
+const CAPTAIN_ON_THE_BENCH = JSON.stringify({
+  ...JSON.parse(LEGAL_ACTION) as object,
+  team_sheet: {
+    ...(JSON.parse(LEGAL_ACTION) as { team_sheet: object }).team_sheet,
+    captain: 2
+  }
+});
+
+/**
+ * Enzo out for Fernandez: £9.0m received against £17.0m spent, which £4.5m in
+ * the bank cannot cover. Position for position and club for club, so the only
+ * rule it breaks is the budget — and it is a real Squad change, so a Manager
+ * State that kept any part of it would show.
+ */
+const OVER_BUDGET_FERNANDEZ = JSON.stringify({
+  transfers_in: [16],
+  transfers_out: [9],
+  chip: null,
+  team_sheet: {
+    starters: [1, 3, 4, 5, 6, 8, 16, 10, 11, 13, 14],
+    bench: [2, 7, 12, 15],
+    captain: 8,
+    vice_captain: 13
+  }
+});
+
+/** The same Team Sheet with no Transfer: what a later Gameweek's inaction is. */
+const STAND_PAT = JSON.stringify({
+  ...JSON.parse(LEGAL_ACTION) as object,
+  transfers_in: []
+});
+
+/**
+ * Timber, Enzo and Wilson out for White, Caicedo and Evanilson under a Free
+ * Hit: fifteen different players borrowed for one Gameweek, so the Gameweek
+ * after it either gives the permanent Squad back or visibly does not.
+ */
+const FREE_HIT_REBUILD = JSON.stringify({
+  transfers_in: [17, 18, 19],
+  transfers_out: [4, 9, 15],
+  chip: "free_hit",
+  team_sheet: {
+    starters: [1, 3, 17, 5, 6, 8, 18, 10, 11, 13, 14],
+    bench: [2, 7, 12, 19],
+    captain: 8,
+    vice_captain: 13
+  }
+});
+
+const CAPTAIN_NOT_STARTING =
+  "A Team Sheet's captain and vice-captain must both be among the eleven "
+  + "starters.";
+
 function openRouterBody(content: string): string {
-  return JSON.stringify({ choices: [{ message: { content } }] });
+  return JSON.stringify({
+    choices: [{ message: { content } }],
+    openrouter_metadata: {
+      endpoints: {
+        available: [
+          { provider: "azure", model: "openai/gpt-5.2", selected: false },
+          { provider: "openai", model: "openai/gpt-5.2-2026-05", selected: true }
+        ]
+      }
+    },
+    usage: { prompt_tokens: 4096, completion_tokens: 256 }
+  });
+}
+
+interface Turn {
+  role: string;
+  content: string;
+}
+
+/**
+ * Answers each call with the next scripted response and records the whole
+ * conversation the Entrant was sent, which is where a Repair either carries
+ * the reason it was given or silently loses it.
+ */
+function scripted(responses: string[]): {
+  http: HttpFetcher;
+  conversations: Turn[][];
+} {
+  const conversations: Turn[][] = [];
+  return {
+    conversations,
+    http: async (_url, options) => {
+      const { messages } = JSON.parse(options?.body ?? "{}") as {
+        messages: Turn[];
+      };
+      conversations.push(messages);
+      const response = responses[conversations.length - 1];
+      if (response === undefined) {
+        throw new Error(
+          `the Entrant was called ${conversations.length} times, `
+          + `but only ${responses.length} responses were scripted`
+        );
+      }
+      return { status: 200, body: openRouterBody(response) };
+    }
+  };
 }
 
 describe("opening the FPL track for a Gameweek", () => {
@@ -54,16 +169,25 @@ describe("opening the FPL track for a Gameweek", () => {
          'fpl/2026-27-v1', 'entrant'
        )`
     );
-    for (const player of FPL_POOL) {
+    await lockPool(1, FPL_POOL);
+  });
+
+  /** The Gameweek's pool as its Lock found it, at unmoved opening prices. */
+  async function lockPool(
+    gameweek: number,
+    players: readonly FixturePlayer[]
+  ): Promise<void> {
+    for (const player of players) {
       await client.query(
         `insert into fpl_players (
            season, gw, fpl_id, team_name, web_name, position, price_tenths,
            status, chance_of_playing_next_round, news, news_added, observed_at
          ) values (
-           '2026-27', 1, $1, $2, $3, $4, $5, 'a', null, '', null,
+           '2026-27', $1, $2, $3, $4, $5, $6, 'a', null, '', null,
            '2026-08-21T17:00:00Z'
          )`,
         [
+          gameweek,
           player.fplId,
           player.club,
           player.webName,
@@ -72,7 +196,7 @@ describe("opening the FPL track for a Gameweek", () => {
         ]
       );
     }
-  });
+  }
 
   test("hands the Entrant the stored context and keeps its opening Manager State", async () => {
     let prompt = "";
@@ -183,6 +307,225 @@ describe("opening the FPL track for a Gameweek", () => {
     }]);
   });
 
+  test("sends an illegal action back with its reason and keeps the Repair", async () => {
+    const { http, conversations } = scripted([
+      CAPTAIN_ON_THE_BENCH,
+      LEGAL_ACTION
+    ]);
+    await openFplGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      entrantId: "entrant/v1",
+      apiKey: "test-key",
+      now: () => new Date("2026-08-21T11:30:00Z"),
+      http
+    });
+
+    // The Repair is asked for in the same conversation, not in a fresh one:
+    // an Entrant handed its own rejected action and the reason it failed is
+    // being measured on self-correction (ADR-0004), which is the whole point
+    // of the loop. Starting over would measure a second first attempt.
+    expect(conversations).toHaveLength(2);
+    expect(conversations[1]).toEqual([
+      { role: "user", content: conversations[0]![0]!.content },
+      { role: "assistant", content: CAPTAIN_ON_THE_BENCH },
+      { role: "user", content: gameweekRepairMessage(CAPTAIN_NOT_STARTING) }
+    ]);
+
+    const states = await client.query(
+      "select attempts_used, rolled_over from manager_states"
+    );
+    expect(states.rows).toEqual([{ attempts_used: 1, rolled_over: false }]);
+  });
+
+  test.for([0, 1, 2, 3])(
+    "reaches a legal action on Repair %i and records that it took that many",
+    async (repairs) => {
+      // The three allowed Repairs, each exercised at the count it succeeds on.
+      // Attempts-to-legal is the graded observation ADR-0004 exists to
+      // produce — 0/1/2/3 or failed — so every value on the scale is driven
+      // through the seam rather than assumed to follow from the one below it.
+      const { http } = scripted([
+        ...Array.from({ length: repairs }, () => CAPTAIN_ON_THE_BENCH),
+        LEGAL_ACTION
+      ]);
+      await openFplGameweek({
+        database: client,
+        season: "2026-27",
+        gameweek: 1,
+        entrantId: "entrant/v1",
+        apiKey: "test-key",
+        now: () => new Date("2026-08-21T11:30:00Z"),
+        http
+      });
+
+      const states = await client.query(
+        "select attempts_used, rolled_over from manager_states"
+      );
+      expect(states.rows)
+        .toEqual([{ attempts_used: repairs, rolled_over: false }]);
+      const attempts = await client.query<{ count: string }>(
+        "select count(*) as count from attempts"
+      );
+      // One row for the initial response and one for each Repair.
+      expect(attempts.rows[0]!.count).toBe(String(repairs + 1));
+    }
+  );
+
+  test("sends back nothing but the frozen vocabulary, whatever went wrong", async () => {
+    // ADR-0004 makes the messages part of the experiment: an Entrant told
+    // something more specific mid-Season is being measured on an easier task.
+    // Freezing the sentences is only half of that — this is the other half,
+    // that the loop quotes them rather than composing its own.
+    const { http, conversations } = scripted([
+      "not JSON at all",
+      CAPTAIN_ON_THE_BENCH,
+      OVER_BUDGET_FERNANDEZ,
+      LEGAL_ACTION
+    ]);
+    await lockPool(1, FPL_POOL_ALTERNATES);
+    await openFplGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      entrantId: "entrant/v1",
+      apiKey: "test-key",
+      now: () => new Date("2026-08-21T11:30:00Z"),
+      http
+    });
+
+    const frozen = new Set([
+      ...ENFORCED_VIOLATIONS.map(({ message }) => message),
+      GAMEWEEK_ACTION_SCHEMA_MESSAGE
+    ]);
+    const asked = conversations.at(-1)!
+      .slice(1)
+      .filter(({ role }) => role === "user")
+      .map(({ content }) => content);
+    expect(asked).toHaveLength(3);
+    for (const message of asked) {
+      expect([...frozen].map(gameweekRepairMessage)).toContain(message);
+    }
+    // And the three reasons really were three different ones, so this is not
+    // one sentence proved three times.
+    expect(new Set(asked).size).toBe(3);
+  });
+
+  test("records every attempt with what it cost and why it was refused", async () => {
+    // ADR-0004 makes Repairs the sharpest signal this track produces, and the
+    // typed kind is what a violation profile is later counted from. An attempt
+    // that leaves no row is an attempt that never happened.
+    const { http } = scripted([
+      "sorry, I cannot pick a Squad",
+      CAPTAIN_ON_THE_BENCH,
+      LEGAL_ACTION
+    ]);
+    // Each call takes a quarter of an hour of the Gameweek, all of it before
+    // the deadline: two readings per attempt, so latency is measured rather
+    // than assumed to be nothing.
+    const clock = [
+      "2026-08-21T11:00:00Z", "2026-08-21T11:15:00Z",
+      "2026-08-21T11:30:00Z", "2026-08-21T11:45:00Z",
+      "2026-08-21T12:00:00Z", "2026-08-21T12:15:00Z"
+    ].map((at) => new Date(at));
+    let read = 0;
+    await openFplGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      entrantId: "entrant/v1",
+      apiKey: "test-key",
+      now: () => {
+        const at = clock[read];
+        read += 1;
+        if (at === undefined) {
+          throw new Error(`the clock was read ${read} times, more than scripted`);
+        }
+        return at;
+      },
+      http
+    });
+
+    const attempts = await client.query(
+      `select model_id, season, gw, track, fpl_id, attempt_no, ok, error_kind,
+              error_detail, resolved_provider, resolved_model, latency_ms,
+              tokens_in, tokens_out, trigger, attempted_at
+         from attempts
+        order by attempt_no`
+    );
+    expect(attempts.rows).toEqual([
+      {
+        model_id: "entrant/v1",
+        season: "2026-27",
+        gw: 1,
+        track: "fpl",
+        // An FPL action is one Gameweek's, not one Fixture's.
+        fpl_id: null,
+        attempt_no: 0,
+        ok: false,
+        // Not a rule of the game broken — no action was returned at all.
+        error_kind: "schema",
+        error_detail: "Response must be JSON matching the Gameweek action schema.",
+        resolved_provider: "openai",
+        resolved_model: "openai/gpt-5.2-2026-05",
+        latency_ms: 900_000,
+        tokens_in: 4096,
+        tokens_out: 256,
+        trigger: "main",
+        attempted_at: new Date("2026-08-21T11:15:00Z")
+      },
+      {
+        model_id: "entrant/v1",
+        season: "2026-27",
+        gw: 1,
+        track: "fpl",
+        fpl_id: null,
+        attempt_no: 1,
+        ok: false,
+        error_kind: "captain",
+        error_detail: CAPTAIN_NOT_STARTING,
+        resolved_provider: "openai",
+        resolved_model: "openai/gpt-5.2-2026-05",
+        latency_ms: 900_000,
+        tokens_in: 4096,
+        tokens_out: 256,
+        trigger: "main",
+        attempted_at: new Date("2026-08-21T11:45:00Z")
+      },
+      {
+        model_id: "entrant/v1",
+        season: "2026-27",
+        gw: 1,
+        track: "fpl",
+        fpl_id: null,
+        attempt_no: 2,
+        ok: true,
+        error_kind: null,
+        error_detail: null,
+        resolved_provider: "openai",
+        resolved_model: "openai/gpt-5.2-2026-05",
+        latency_ms: 900_000,
+        tokens_in: 4096,
+        tokens_out: 256,
+        trigger: "main",
+        attempted_at: new Date("2026-08-21T12:15:00Z")
+      }
+    ]);
+
+    // The raw response is kept whole, not just the sentence read out of it.
+    const raw = await client.query<{ raw_response: string }>(
+      "select raw_response from attempts order by attempt_no limit 1"
+    );
+    expect(raw.rows[0]!.raw_response)
+      .toBe(openRouterBody("sorry, I cannot pick a Squad"));
+
+    const states = await client.query(
+      "select attempts_used from manager_states"
+    );
+    expect(states.rows).toEqual([{ attempts_used: 2 }]);
+  });
+
   test("stores no Manager State for an action completed on the deadline", async () => {
     await openFplGameweek({
       database: client,
@@ -203,6 +546,355 @@ describe("opening the FPL track for a Gameweek", () => {
     // The context is built before any action, so it is stored either way.
     const contexts = await client.query("select track from contexts");
     expect(contexts.rows).toEqual([{ track: "fpl" }]);
+    // The attempt happened and is recorded, but the Lock — not the rules —
+    // is what refused it. Recording it as a legal action would say a Manager
+    // State should exist, and recording it as a violation would put a
+    // punctuality failure into the profile of how a Squad is managed.
+    const attempts = await client.query(
+      "select attempt_no, ok, error_kind, error_detail from attempts"
+    );
+    expect(attempts.rows).toEqual([{
+      attempt_no: 0,
+      ok: false,
+      error_kind: "deadline",
+      error_detail: "The Lock passed at 2026-08-21T17:30:00.000Z."
+    }]);
+  });
+
+  test("Rolls the Gameweek over when the third Repair is still illegal", async () => {
+    await client.query(
+      `insert into gameweeks (season, gw, deadline_at)
+       values ('2026-27', 2, '2026-08-28T17:30:00Z')`
+    );
+    // Fernandez is in the second Gameweek's pool, which is what lets the
+    // rejected action be a real Squad change rather than a malformed one.
+    await lockPool(2, [...FPL_POOL, ...FPL_POOL_ALTERNATES]);
+
+    const play = async (
+      gameweek: number,
+      responses: string[],
+      at: string
+    ): Promise<void> => {
+      await openFplGameweek({
+        database: client,
+        season: "2026-27",
+        gameweek,
+        entrantId: "entrant/v1",
+        apiKey: "test-key",
+        now: () => new Date(at),
+        http: scripted(responses).http
+      });
+    };
+
+    await play(1, [LEGAL_ACTION], "2026-08-21T11:30:00Z");
+    // Four responses, all the same illegal action: the initial one and three
+    // Repairs. Nothing after the fourth is scripted, so a fifth call fails the
+    // test rather than passing silently.
+    await play(
+      2,
+      Array.from({ length: 4 }, () => OVER_BUDGET_FERNANDEZ),
+      "2026-08-28T11:30:00Z"
+    );
+
+    const states = await client.query(
+      `select gw, squad, team_sheet, bank, free_transfers, hits, chips_used,
+              chip_active, rolled_over, attempts_used
+         from manager_states
+        order by gw`
+    );
+    const [opening, rolled] = states.rows as Array<Record<string, unknown>>;
+    expect(rolled).toEqual({
+      gw: 2,
+      // Not one player of the rejected action, and not one penny of it: the
+      // action is discarded whole (ADR-0004), Fernandez was never bought and
+      // Enzo was never sold.
+      squad: opening!.squad,
+      team_sheet: opening!.team_sheet,
+      bank: 45,
+      // Accrued exactly as an untouched Gameweek's would be.
+      free_transfers: 2,
+      hits: 0,
+      chips_used: { firstHalf: [], secondHalf: [] },
+      chip_active: null,
+      rolled_over: true,
+      // All three Repairs were used, and `rolled_over` is what says they
+      // failed — the fifth value on ADR-0004's scale.
+      attempts_used: 3
+    });
+
+    const attempts = await client.query(
+      `select attempt_no, ok, error_kind
+         from attempts
+        where gw = 2
+        order by attempt_no`
+    );
+    expect(attempts.rows).toEqual([0, 1, 2, 3].map((attempt_no) => ({
+      attempt_no,
+      ok: false,
+      error_kind: "budget"
+    })));
+  });
+
+  test.for([
+    {
+      what: "a provider that answered with an error",
+      http: (async () => ({ status: 500, body: "upstream exploded" })) as HttpFetcher,
+      kind: "provider",
+      detail: "OpenRouter returned HTTP 500.",
+      raw: "upstream exploded"
+    },
+    {
+      what: "a provider that rate-limited the call",
+      http: (async () => ({ status: 429, body: "slow down" })) as HttpFetcher,
+      kind: "rate_limit",
+      detail: "OpenRouter returned HTTP 429.",
+      raw: "slow down"
+    },
+    {
+      what: "a call that timed out",
+      http: (async () => {
+        const error = new Error("the request took too long");
+        error.name = "TimeoutError";
+        throw error;
+      }) as HttpFetcher,
+      kind: "timeout",
+      detail: "OpenRouter call failed: the request took too long.",
+      raw: null
+    },
+    {
+      what: "a Base Model that refused to answer",
+      http: (async () => ({
+        status: 200,
+        body: JSON.stringify({
+          choices: [{ message: { content: null, refusal: "I will not." } }]
+        })
+      })) as HttpFetcher,
+      kind: "refusal",
+      detail: "I will not.",
+      raw: JSON.stringify({
+        choices: [{ message: { content: null, refusal: "I will not." } }]
+      })
+    },
+    {
+      what: "a response of a shape nothing can read",
+      http: (async () => ({ status: 200, body: "{}" })) as HttpFetcher,
+      kind: "provider",
+      detail: "OpenRouter returned an unexpected response shape.",
+      raw: "{}"
+    }
+  ])("records $what and asks for no Repair", async (scenario) => {
+    // A provider failure is not an illegal action: the Entrant never answered,
+    // so there is nothing to send back and nothing to correct. The attempt is
+    // recorded — every attempt is — and the loop stops, leaving no Manager
+    // State rather than a Roll Over the Entrant never earned.
+    await openFplGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      entrantId: "entrant/v1",
+      apiKey: "test-key",
+      now: () => new Date("2026-08-21T11:30:00Z"),
+      http: scenario.http
+    });
+
+    const attempts = await client.query(
+      `select attempt_no, ok, error_kind, error_detail, raw_response,
+              resolved_provider, tokens_in
+         from attempts`
+    );
+    expect(attempts.rows).toEqual([{
+      attempt_no: 0,
+      ok: false,
+      error_kind: scenario.kind,
+      error_detail: scenario.detail,
+      raw_response: scenario.raw,
+      // Nothing was resolved and nothing was counted, and a zero would say
+      // otherwise.
+      resolved_provider: null,
+      tokens_in: null
+    }]);
+    const states = await client.query("select gw from manager_states");
+    expect(states.rows).toEqual([]);
+  });
+
+  test("stores nothing when an opening is still illegal after its third Repair", async () => {
+    const { http } = scripted(
+      Array.from({ length: 4 }, () => CAPTAIN_ON_THE_BENCH)
+    );
+    await openFplGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      entrantId: "entrant/v1",
+      apiKey: "test-key",
+      now: () => new Date("2026-08-21T11:30:00Z"),
+      http
+    });
+
+    // There is no Team Sheet to Roll Over onto before the first one, and the
+    // rules cannot invent a Squad. What becomes of a Gameweek nobody opened
+    // belongs to "Start all nine Entrants together", where the opening is
+    // committed for all nine or for none — so this stores no state at all
+    // rather than a Rolled Over row standing on nothing.
+    const states = await client.query("select gw from manager_states");
+    expect(states.rows).toEqual([]);
+    // The four attempts still happened, and are still the record of them.
+    const attempts = await client.query<{ count: string }>(
+      "select count(*) as count from attempts"
+    );
+    expect(attempts.rows[0]!.count).toBe("4");
+  });
+
+  test("shows a later Gameweek the Squad the Entrant is standing on", async () => {
+    await client.query(
+      `insert into gameweeks (season, gw, deadline_at)
+       values ('2026-27', 2, '2026-08-28T17:30:00Z')`
+    );
+    await lockPool(2, FPL_POOL);
+
+    const first = scripted([LEGAL_ACTION]);
+    await openFplGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      entrantId: "entrant/v1",
+      apiKey: "test-key",
+      now: () => new Date("2026-08-21T11:30:00Z"),
+      http: first.http
+    });
+    const second = scripted([STAND_PAT]);
+    await openFplGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 2,
+      entrantId: "entrant/v1",
+      apiKey: "test-key",
+      now: () => new Date("2026-08-28T11:30:00Z"),
+      http: second.http
+    });
+
+    const opening = first.conversations[0]![0]!.content;
+    const later = second.conversations[0]![0]!.content;
+    expect(opening).toContain("Squad: none yet — this is your opening Squad.");
+    // Its own fifteen at what it paid for them, which is what a Transfer is
+    // priced against and what a Team Sheet must be picked from. An Entrant
+    // shown an empty Squad and judged on a full one would spend a Repair on a
+    // rule it could not have seen.
+    expect(later).toContain("Squad, with what you paid for each player:");
+    expect(later).toContain("- 8 | bought for £12.0m");
+    expect(later).toContain("Bank: £4.5m");
+    expect(later).toContain("Free Transfers: 1");
+  });
+
+  test("gives back what a Free Hit borrowed when the next Gameweek Rolls Over", async () => {
+    for (const [gameweek, deadline] of [
+      [2, "2026-08-28T17:30:00Z"],
+      [3, "2026-09-04T17:30:00Z"]
+    ] as Array<[number, string]>) {
+      await client.query(
+        `insert into gameweeks (season, gw, deadline_at) values ('2026-27', $1, $2)`,
+        [gameweek, deadline]
+      );
+      await lockPool(gameweek, [...FPL_POOL, ...FPL_POOL_ALTERNATES]);
+    }
+
+    const play = async (
+      gameweek: number,
+      responses: string[],
+      at: string
+    ): Promise<void> => {
+      await openFplGameweek({
+        database: client,
+        season: "2026-27",
+        gameweek,
+        entrantId: "entrant/v1",
+        apiKey: "test-key",
+        now: () => new Date(at),
+        http: scripted(responses).http
+      });
+    };
+
+    await play(1, [LEGAL_ACTION], "2026-08-21T11:30:00Z");
+    await play(2, [FREE_HIT_REBUILD], "2026-08-28T11:30:00Z");
+    await play(
+      3,
+      Array.from({ length: 4 }, () => OVER_BUDGET_FERNANDEZ),
+      "2026-09-04T11:30:00Z"
+    );
+
+    const states = await client.query(
+      `select gw, squad, team_sheet, bank, free_transfers, chips_used,
+              chip_active, rolled_over
+         from manager_states
+        order by gw`
+    );
+    const [opening, borrowed, rolled] =
+      states.rows as Array<Record<string, unknown>>;
+    // The Free Hit really did displace the Squad, so what follows is a claim
+    // about the reversion rather than about a Gameweek that changed nothing.
+    expect(borrowed!.squad).not.toEqual(opening!.squad);
+
+    expect(rolled).toEqual({
+      gw: 3,
+      // A Roll Over reverts before it stores: three failed Repairs after a
+      // Free Hit must not be what makes a one-week Squad permanent (ADR-0017).
+      squad: opening!.squad,
+      team_sheet: opening!.team_sheet,
+      bank: 45,
+      free_transfers: 2,
+      // Spent when it was played. A Gameweek that Rolls Over gives nothing
+      // back, and plays nothing of its own.
+      chips_used: { firstHalf: ["free_hit"], secondHalf: [] },
+      chip_active: null,
+      rolled_over: true
+    });
+  });
+
+  test("refuses to hand a second Entrant a context built from another's Squad", async () => {
+    await client.query(
+      `insert into gameweeks (season, gw, deadline_at)
+       values ('2026-27', 2, '2026-08-28T17:30:00Z');
+       insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values (
+         'entrant/v2', 'Second Entrant', 'anthropic/claude-opus-5', 'anthropic',
+         'fpl/2026-27-v1', 'entrant'
+       )`
+    );
+    await lockPool(2, FPL_POOL);
+
+    const play = (
+      entrantId: string,
+      gameweek: number,
+      at: string,
+      response: string
+    ) =>
+      openFplGameweek({
+        database: client,
+        season: "2026-27",
+        gameweek,
+        entrantId,
+        apiKey: "test-key",
+        now: () => new Date(at),
+        http: scripted([response]).http
+      });
+
+    await play("entrant/v1", 1, "2026-08-21T11:30:00Z", LEGAL_ACTION);
+    await play("entrant/v1", 2, "2026-08-28T11:30:00Z", STAND_PAT);
+
+    // `contexts_identity` allows one FPL context per Gameweek, and from the
+    // Gameweek after the first Manager State each Entrant's carries its own
+    // Squad. Handing this one the row already there would show it fifteen
+    // players it does not own and then judge it on the ones it does. Per
+    // Entrant context rows belong to "Run the FPL track under the shared
+    // Lock"; until they exist this must fail loudly rather than quietly.
+    await expect(play("entrant/v2", 2, "2026-08-28T11:30:00Z", LEGAL_ACTION))
+      .rejects.toThrow(/already another Entrant's/);
+
+    const states = await client.query(
+      "select model_id from manager_states where gw = 2"
+    );
+    expect(states.rows).toEqual([{ model_id: "entrant/v1" }]);
   });
 
   test("stores one shared context however many Entrants open the Gameweek", async () => {

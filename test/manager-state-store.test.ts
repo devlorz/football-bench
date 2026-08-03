@@ -3,6 +3,7 @@ import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
 import {
   loadManagerState,
+  loadStandingManagerState,
   storeManagerState
 } from "../src/fpl/manager-state-store.js";
 import { applyGameweekAction } from "../src/fpl/apply-gameweek-action.js";
@@ -206,5 +207,38 @@ describe("storing and reloading Manager State", () => {
       { gw: 1, bank: 45, free_transfers: 1, hits: 0, last_owned: "15" },
       { gw: 2, bank: 85, free_transfers: 1, hits: 4, last_owned: "19" }
     ]);
+  });
+
+  test("carries the last state stored into a Gameweek, across a silent one", async () => {
+    await client.query(
+      `insert into gameweeks (season, gw, deadline_at)
+       values ('2026-27', 3, '2026-09-04T17:30:00Z')`
+    );
+    const opened = legalStateFrom(OPENING);
+    await storeManagerState(client, {
+      entrantId: "entrant/v1",
+      season: "2026-27",
+      gameweek: 1,
+      state: opened,
+      attemptsUsed: 0,
+      predictedAt: new Date("2026-08-21T17:00:00Z")
+    });
+
+    // Gameweek 2 stored nothing — a provider that never answered, or an action
+    // that landed after the Lock. The Squad did not stop existing because the
+    // Gameweek was silent, so Gameweek 3 is played on the last one that stood.
+    expect(await loadStandingManagerState(client, {
+      entrantId: "entrant/v1",
+      season: "2026-27",
+      before: 3
+    })).toEqual(opened);
+
+    // And an Entrant with nothing behind it is at its opening, which is what
+    // decides that its Gameweek has no Team Sheet to Roll Over onto.
+    expect(await loadStandingManagerState(client, {
+      entrantId: "entrant/v1",
+      season: "2026-27",
+      before: 1
+    })).toBeNull();
   });
 });

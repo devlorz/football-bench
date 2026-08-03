@@ -172,16 +172,16 @@ the action and advances through a Roll Over instead of destroying the Entrant's 
 
 **Blocked by:** Play Wildcard and Free Hit.
 
-- [ ] Every violation has a stable kind covering budget, squad quota, club limit, formation, Chip unavailable, captain and unknown player — there is deliberately no `chip expired` kind, for the reason spec 0003 §*Violations are typed, and messages are frozen* records
-- [ ] Validator messages live in one frozen vocabulary so their wording cannot drift independently during the Season
-- [ ] The complete invalid action is rejected and the violation message is appended to the same Entrant conversation for the Repair
-- [ ] An initial response plus up to three Repairs is allowed, with attempts-to-legal recorded as 0, 1, 2, 3 or failed
-- [ ] Every attempt records its raw response, violation kind or provider failure, latency, token counts and resolved endpoint metadata
-- [ ] A legal Repair stores the resulting Manager State and the number of Repairs used
-- [ ] A fourth invalid response stores no part of the proposed action and creates a Roll Over state
-- [ ] Roll Over retains the previous permanent Squad and Team Sheet, consumes no Chip, and accrues Free Transfers normally, including immediately after a Free Hit
-- [ ] A Rolled Over Gameweek is scored from the standing Team Sheet rather than forced to zero
-- [ ] Scripted HTTP responses exercise success at each Repair count and final Roll Over, while reducer behaviour remains pure
+- [x] Every violation has a stable kind covering budget, squad quota, club limit, formation, Chip unavailable, captain and unknown player — there is deliberately no `chip expired` kind, for the reason spec 0003 §*Violations are typed, and messages are frozen* records
+- [x] Validator messages live in one frozen vocabulary so their wording cannot drift independently during the Season
+- [x] The complete invalid action is rejected and the violation message is appended to the same Entrant conversation for the Repair
+- [x] An initial response plus up to three Repairs is allowed, with attempts-to-legal recorded as 0, 1, 2, 3 or failed
+- [x] Every attempt records its raw response, violation kind or provider failure, latency, token counts and resolved endpoint metadata
+- [x] A legal Repair stores the resulting Manager State and the number of Repairs used
+- [x] A fourth invalid response stores no part of the proposed action and creates a Roll Over state
+- [x] Roll Over retains the previous permanent Squad and Team Sheet, consumes no Chip, and accrues Free Transfers normally, including immediately after a Free Hit
+- [x] A Rolled Over Gameweek is scored from the standing Team Sheet rather than forced to zero
+- [x] Scripted HTTP responses exercise success at each Repair count and final Roll Over, while reducer behaviour remains pure
 
 ---
 

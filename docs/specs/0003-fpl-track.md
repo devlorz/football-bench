@@ -236,6 +236,62 @@ violation profile as a permanent zero and suggest a rule that is not there.
 A mixed action is rejected whole. Applying transfers in order until one fails would make the
 outcome depend on an ordering rule nobody chose.
 
+**A malformed response is not a `Violation`.** A response that is not a Gameweek action at all
+costs a Repair and is recorded like any other refusal, but under its own `schema` kind rather
+than one of the seven. The violation profile records how an Entrant manages a Squad, and
+failing to return JSON is not a rule of the game it broke; counting it beside a club-limit
+breach would make the profile of a Base Model that cannot hold a format look like the profile
+of one that cannot count to three players per club. The kinds are a tuple the `ViolationKind`
+type is read off, so what a profile must have columns for can be enumerated rather than
+remembered.
+
+The sentence an Entrant is sent back is frozen with the reason inside it. It quotes the reason,
+asks for a correction and does nothing else — it does not restate the rules, which the context
+already lists in full every Gameweek, and it does not say which Repair this is, because an
+Entrant told it is on its last chance is being measured on a different task from one that is
+not.
+
+### The Repair loop is one conversation, and the fourth failure Rolls Over
+
+An initial response and up to three Repairs (ADR-0010 fixes three on both tracks, so the number
+is one constant both read). Each rejected response is appended to the same conversation with
+the reason it failed, so what is measured is an Entrant correcting its own answer rather than
+answering afresh three more times.
+
+Every attempt leaves one row whatever became of it, because the Repair count and the violation
+profile are read from those rows and neither can count what was never written. A row is `ok`
+only for an action that was legal and in time; everything else carries one kind — one of the
+seven, `schema`, `deadline` for an attempt that landed at or after the Lock, or a provider
+failure that never reached a Base Model at all (`provider`, `rate_limit`, `timeout`,
+`refusal`).
+
+A provider failure is not an illegal action and does not Roll Over. The Entrant never answered,
+so there is nothing to send back and nothing to correct: the Gameweek stops with the attempts
+recorded and no Manager State, and the Gameweek after it plays on the last state that stood.
+That is why the standing state is read as the most recent stored Gameweek rather than the one
+immediately behind — a Squad must not vanish because a Gameweek was silent.
+
+The fourth invalid response discards the action whole and stores a Roll Over: the standing
+Squad and Team Sheet, the Free Transfer the Gameweek grants banked as an untouched Gameweek's
+would be, no Hit, and no Chip — a Chip named in the discarded action is not spent by naming it.
+The reversion runs first, so a Roll Over immediately after a Free Hit gives the permanent Squad
+back rather than making the borrowed one permanent, which is the case ADR-0017 put the stash in
+the row for. A Rolled Over Gameweek is scored from the standing Team Sheet like any other,
+which is the whole of the argument for rolling over rather than scoring zero.
+
+An opening that fails its third Repair stores nothing: there is no Team Sheet to roll onto
+before the first one, and the rules cannot invent a Squad. What becomes of that Gameweek
+belongs to "Start all nine Entrants together", where the opening is committed for all nine or
+for none.
+
+**One FPL context per Gameweek is sound only at an opening.** Every Entrant opens from the same
+seed state, so one stored row is one Entrant's context and every Entrant's at once. Once any
+Manager State exists, each Entrant's context carries its own Squad, and `contexts_identity` —
+unique on `(season, gw, track, fpl_id)` — has room for one of them. Until per-Entrant rows
+exist, a second Entrant reaching a later Gameweek is refused loudly rather than handed a Squad
+it does not own and then judged on the one it does. Widening that key belongs to "Run the FPL
+track under the shared Lock".
+
 ### Free Hit needs a stashed Squad
 
 Every other Chip modifies one Gameweek's scoring or transfer allowance. Free Hit replaces the
