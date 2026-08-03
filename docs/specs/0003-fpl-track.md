@@ -262,14 +262,30 @@ Every attempt leaves one row whatever became of it, because the Repair count and
 profile are read from those rows and neither can count what was never written. A row is `ok`
 only for an action that was legal and in time; everything else carries one kind — one of the
 seven, `schema`, `deadline` for an attempt that landed at or after the Lock, or a provider
-failure that never reached a Base Model at all (`provider`, `rate_limit`, `timeout`,
-`refusal`).
+failure (`provider`, `rate_limit`, `timeout`, `refusal`).
+
+A row keeps whatever telemetry the response actually carried, and null only where there was
+none. A refusal in particular is a call that was made, resolved and billed: its endpoint and
+token counts are on the response like any other, and they are what the per-call cost is read
+from after the first Gameweek. Recording them as unknown because no action came back would
+lose the very numbers this spec says to measure the FPL prompt's cost with.
 
 A provider failure is not an illegal action and does not Roll Over. The Entrant never answered,
 so there is nothing to send back and nothing to correct: the Gameweek stops with the attempts
-recorded and no Manager State, and the Gameweek after it plays on the last state that stood.
-That is why the standing state is read as the most recent stored Gameweek rather than the one
-immediately behind — a Squad must not vanish because a Gameweek was silent.
+recorded and no Manager State.
+
+**A silent Gameweek still happened.** A stored Manager State is sufficient input to the *next*
+Gameweek's reducer step and to that one only (ADR-0017), so the Gameweek it was stored for is
+loaded with it and every Gameweek between that one and the one being played is folded through
+the same neutral transition a Roll Over uses. Two things would otherwise be wrong, and both are
+about a state being read as though no time had passed: the Free Transfers those Gameweeks
+granted would be lost, and `chipActive` would still name a Chip that stopped being active when
+its Gameweek ended — refusing a Free Hit as consecutive with a whole Gameweek sitting between
+the two. The silent Gameweeks are counted from `gameweeks`, which is the record of which
+Gameweeks a Season has; arithmetic on the numbers would invent any it does not.
+
+That is also why the standing state is read as the most recent stored Gameweek rather than the
+one immediately behind — a Squad must not vanish because a Gameweek was silent.
 
 The fourth invalid response discards the action whole and stores a Roll Over: the standing
 Squad and Team Sheet, the Free Transfer the Gameweek grants banked as an untouched Gameweek's
