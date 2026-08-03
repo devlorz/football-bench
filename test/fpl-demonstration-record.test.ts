@@ -702,6 +702,34 @@ describe("the FPL demonstration record", () => {
     expect(await stored([FPL_POINTS_SEASON_TO_DATE_METRIC])).toEqual(published);
   });
 
+  test("says which Gameweek stopped scoring when only some points are gone", async () => {
+    await seed({ gameweek: 1 });
+    await seed({ gameweek: 2, state: STOOD_PAT });
+    await seed({ gameweek: 3, state: STOOD_PAT });
+    await settle(1);
+    await settle(2);
+    await settle(3);
+    await score(1);
+    await score(2);
+    await score(3);
+    const published = await stored([FPL_POINTS_SEASON_TO_DATE_METRIC]);
+
+    // One player's row rather than the whole Gameweek's. Read as it stands he
+    // played no minutes, which would bring a substitute on for him and store a
+    // total the Gameweek never saw — so it is refused, as a first run of it
+    // would be.
+    await client.query("delete from fpl_player_points where gw = 2 and fpl_id = 4");
+
+    // The refusal walks several Gameweeks now, so "no settled points for
+    // player 4" on its own leaves the operator to work out which of them it
+    // came from.
+    await expect(score(2)).rejects.toThrow(/Gameweek 2 of 2026-27/);
+    await expect(score(3)).rejects.toThrow(/Gameweek 2 of 2026-27/);
+    await expect(score(2)).rejects.toThrow(/player 4/);
+
+    expect(await stored([FPL_POINTS_SEASON_TO_DATE_METRIC])).toEqual(published);
+  });
+
   test("stores none of a Gameweek's record when one row cannot persist", async () => {
     await seed({ gameweek: 1 });
     await settle(1);
