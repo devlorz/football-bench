@@ -21,6 +21,7 @@ import {
 } from "./fpl-pool-fixture.js";
 import { OPENING_ACTION } from "./fpl-action-fixture.js";
 import { legalStateFrom } from "./fpl-replay.js";
+import { storedState } from "./fpl-state-fixture.js";
 
 const { Client } = pg;
 
@@ -208,7 +209,10 @@ describe("opening the FPL track for a Gameweek", () => {
   });
 
   /**
-   * Puts an Entrant on the fixture Squad at a Gameweek, without playing it.
+   * Stores a Manager State for an Entrant at a Gameweek, putting it on the
+   * fixture Squad without playing for it. It writes a row — the name says so,
+   * because a test that reads as though it were asking a question would hide
+   * the one piece of setup every test in this file depends on.
    *
    * The track opens for all nine Entrants at once or for none, so an opening
    * cannot be reached one Entrant at a time from here — and every test in this
@@ -219,7 +223,7 @@ describe("opening the FPL track for a Gameweek", () => {
    * The state comes from the reducer over the shared opening fixture, so what
    * is stood on here is the state the reducer's own rules were proved against.
    */
-  async function standing(
+  async function seedStandingManagerState(
     gameweek = 1,
     entrantId = "entrant/v1"
   ): Promise<void> {
@@ -299,7 +303,7 @@ describe("opening the FPL track for a Gameweek", () => {
   }
 
   test("hands the Entrant the stored context and keeps the state it produces", async () => {
-    await standing();
+    await seedStandingManagerState();
     const [played] = await play({ responses: [STAND_PAT] });
     const prompt = played![0]!.content;
 
@@ -353,49 +357,15 @@ describe("opening the FPL track for a Gameweek", () => {
          from manager_states
         where gw = 2`
     );
-    expect(states.rows).toEqual([{
+    expect(states.rows).toEqual([storedState({
       model_id: "entrant/v1",
       season: "2026-27",
       gw: 2,
-      // Carried forward whole from the Squad the Entrant was standing on: the
-      // fifteen at what it paid for them, and the £100.0m less the £95.5m it
-      // spent.
-      squad: {
-        active: [
-          { fplId: 1, purchasePriceTenths: 45 },
-          { fplId: 2, purchasePriceTenths: 40 },
-          { fplId: 3, purchasePriceTenths: 60 },
-          { fplId: 4, purchasePriceTenths: 55 },
-          { fplId: 5, purchasePriceTenths: 50 },
-          { fplId: 6, purchasePriceTenths: 45 },
-          { fplId: 7, purchasePriceTenths: 40 },
-          { fplId: 8, purchasePriceTenths: 120 },
-          { fplId: 9, purchasePriceTenths: 90 },
-          { fplId: 10, purchasePriceTenths: 75 },
-          { fplId: 11, purchasePriceTenths: 55 },
-          { fplId: 12, purchasePriceTenths: 45 },
-          { fplId: 13, purchasePriceTenths: 105 },
-          { fplId: 14, purchasePriceTenths: 70 },
-          { fplId: 15, purchasePriceTenths: 60 }
-        ],
-        free_hit_stash: null
-      },
-      team_sheet: {
-        starters: [1, 3, 4, 5, 6, 8, 9, 10, 11, 13, 14],
-        bench: [2, 7, 12, 15],
-        captain: 8,
-        viceCaptain: 13
-      },
-      bank: 45,
-      // The one this Gameweek granted, banked on top of the one standing.
-      free_transfers: 2,
-      // No Transfer was made, so nothing was beyond an allowance.
-      hits: 0,
-      chips_used: { firstHalf: [], secondHalf: [] },
-      chip_active: null,
-      rolled_over: false,
-      attempts_used: 0
-    }]);
+      // The Squad, its purchase prices, the Team Sheet and the bank all carried
+      // forward whole; the one Free Transfer this Gameweek granted banked on
+      // top of the one already standing is the only thing that moved.
+      free_transfers: 2
+    })]);
   });
 
   test("refuses a Gameweek for an Entrant that has never opened", async () => {
@@ -424,7 +394,7 @@ describe("opening the FPL track for a Gameweek", () => {
   });
 
   test("sends an illegal action back with its reason and keeps the Repair", async () => {
-    await standing();
+    await seedStandingManagerState();
     const conversations = await play({
       responses: [CAPTAIN_ON_THE_BENCH, STAND_PAT]
     });
@@ -455,7 +425,7 @@ describe("opening the FPL track for a Gameweek", () => {
       // Attempts-to-legal is the graded observation ADR-0004 exists to
       // produce — 0/1/2/3 or failed — so every value on the scale is driven
       // through the seam rather than assumed to follow from the one below it.
-      await standing();
+      await seedStandingManagerState();
       await play({
         responses: [
           ...Array.from({ length: repairs }, () => CAPTAIN_ON_THE_BENCH),
@@ -481,7 +451,7 @@ describe("opening the FPL track for a Gameweek", () => {
     // something more specific mid-Season is being measured on an easier task.
     // Freezing the sentences is only half of that — this is the other half,
     // that the loop quotes them rather than composing its own.
-    await standing();
+    await seedStandingManagerState();
     await lockPool(2, FPL_POOL_ALTERNATES);
     const conversations = await play({
       responses: [
@@ -522,7 +492,7 @@ describe("opening the FPL track for a Gameweek", () => {
       "2026-08-21T12:00:00Z", "2026-08-21T12:15:00Z"
     ].map((at) => new Date(at));
     let read = 0;
-    await standing();
+    await seedStandingManagerState();
     await play({
       responses: [
         "sorry, I cannot pick a Squad",
@@ -619,7 +589,7 @@ describe("opening the FPL track for a Gameweek", () => {
   });
 
   test("stores no Manager State for an action completed on the deadline", async () => {
-    await standing();
+    await seedStandingManagerState();
     await play({
       responses: [STAND_PAT],
       // The Lock is the deadline instant itself, not the moment after it.
@@ -652,7 +622,7 @@ describe("opening the FPL track for a Gameweek", () => {
     // Fernandez is in the second Gameweek's pool, which is what lets the
     // rejected action be a real Squad change rather than a malformed one.
     await lockPool(2, FPL_POOL_ALTERNATES);
-    await standing();
+    await seedStandingManagerState();
     // Four responses, all the same illegal action: the initial one and three
     // Repairs. Nothing after the fourth is scripted, so a fifth call fails the
     // test rather than passing silently.
@@ -764,7 +734,7 @@ describe("opening the FPL track for a Gameweek", () => {
     // so there is nothing to send back and nothing to correct. The attempt is
     // recorded — every attempt is — and the loop stops, leaving no Manager
     // State rather than a Roll Over the Entrant never earned.
-    await standing();
+    await seedStandingManagerState();
     await play({ http: scenario.http });
 
     const attempts = await client.query(
@@ -809,7 +779,7 @@ describe("opening the FPL track for a Gameweek", () => {
         await lockPool(gameweek, FPL_POOL);
       }
       // The default clock is comfortably before every deadline above.
-      await standing();
+      await seedStandingManagerState();
       // These Gameweeks store nothing at all: the provider never answered, so
       // there is no action to judge and no Roll Over the Entrant earned.
       for (let gameweek = 2; gameweek < resumes; gameweek += 1) {
@@ -857,7 +827,7 @@ describe("opening the FPL track for a Gameweek", () => {
     }
     // The track joins at Gameweek 18 and the first half's Free Hit is played
     // in Gameweek 19, the last Gameweek that half's set is reachable in.
-    await standing(18);
+    await seedStandingManagerState(18);
     await play({
       gameweek: 19,
       at: "2026-12-30T11:30:00Z",
@@ -904,7 +874,7 @@ describe("opening the FPL track for a Gameweek", () => {
   });
 
   test("shows a later Gameweek the Squad the Entrant is standing on", async () => {
-    await standing();
+    await seedStandingManagerState();
     const [laterCall] = await play({ responses: [STAND_PAT] });
 
     const later = laterCall![0]!.content;
@@ -926,7 +896,7 @@ describe("opening the FPL track for a Gameweek", () => {
     await lockPool(2, FPL_POOL_ALTERNATES);
     await lockPool(3, [...FPL_POOL, ...FPL_POOL_ALTERNATES]);
 
-    await standing();
+    await seedStandingManagerState();
     await play({ responses: [FREE_HIT_REBUILD] });
     await play({
       gameweek: 3,
@@ -971,8 +941,8 @@ describe("opening the FPL track for a Gameweek", () => {
          'fpl/2026-27-v1', 'entrant'
        )`
     );
-    await standing();
-    await standing(1, "entrant/v2");
+    await seedStandingManagerState();
+    await seedStandingManagerState(1, "entrant/v2");
 
     await play({ responses: [STAND_PAT] });
 

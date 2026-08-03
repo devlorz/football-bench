@@ -11,6 +11,7 @@ import { GAMEWEEK_RULES } from "../src/fpl/apply-gameweek-action.js";
 import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
 import type { HttpFetcher } from "../src/http.js";
 import { FPL_POOL, type FixturePlayer } from "./fpl-pool-fixture.js";
+import { STORED_OPENING_STATE } from "./fpl-state-fixture.js";
 
 const { Client } = pg;
 
@@ -275,43 +276,7 @@ describe("starting the FPL track for all nine Entrants", () => {
         where model_id = $1`,
       [seatId(BASE_MODELS[0]!)]
     );
-    expect(first.rows).toEqual([{
-      squad: {
-        active: [
-          { fplId: 1, purchasePriceTenths: 45 },
-          { fplId: 2, purchasePriceTenths: 40 },
-          { fplId: 3, purchasePriceTenths: 60 },
-          { fplId: 4, purchasePriceTenths: 55 },
-          { fplId: 5, purchasePriceTenths: 50 },
-          { fplId: 6, purchasePriceTenths: 45 },
-          { fplId: 7, purchasePriceTenths: 40 },
-          { fplId: 8, purchasePriceTenths: 120 },
-          { fplId: 9, purchasePriceTenths: 90 },
-          { fplId: 10, purchasePriceTenths: 75 },
-          { fplId: 11, purchasePriceTenths: 55 },
-          { fplId: 12, purchasePriceTenths: 45 },
-          { fplId: 13, purchasePriceTenths: 105 },
-          { fplId: 14, purchasePriceTenths: 70 },
-          { fplId: 15, purchasePriceTenths: 60 }
-        ],
-        free_hit_stash: null
-      },
-      team_sheet: {
-        starters: [1, 3, 4, 5, 6, 8, 9, 10, 11, 13, 14],
-        bench: [2, 7, 12, 15],
-        captain: 8,
-        viceCaptain: 13
-      },
-      // £100.0m less the £95.5m Squad above.
-      bank: 45,
-      free_transfers: 1,
-      // The opening fifteen are not Transfers beyond an allowance.
-      hits: 0,
-      chips_used: { firstHalf: [], secondHalf: [] },
-      chip_active: null,
-      rolled_over: false,
-      attempts_used: 0
-    }]);
+    expect(first.rows).toEqual([STORED_OPENING_STATE]);
   });
 
   test("hands every Entrant the one context stored for the Gameweek", async () => {
