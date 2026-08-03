@@ -393,6 +393,16 @@ settled would leave every published Gameweek after it holding a total taken over
 hole in it. Only Gameweeks already published are rewritten — a later Gameweek nobody has scored
 yet folds in the whole path when it is scored on its own.
 
+**A published Gameweek that stops scoring is a refusal.** If a Gameweek already on record turns
+out to be unsettled or short an Entrant, the run raises and changes nothing, naming the Gameweek
+and what is wrong with it. Returning quietly would leave its rows standing with nothing behind
+them and nobody told. Deleting them was the other candidate and is worse: it would make absent
+data destroy published data, so a run against a half-restored database would silently unpublish
+a Gameweek. Neither state is reachable from the code — stored points are only ever inserted or
+updated, and `manager_states` refuses a delete outright — so what the refusal answers is an
+operator working directly on the database, and refusing is the only one of the three answers
+that cannot make such a session worse.
+
 **All of it commits together**, across every metric and every Entrant and every Gameweek the
 call rewrites. A Gameweek's points without the behaviour that produced them is worse than
 nothing at all: a reader cannot tell a record whose second half is still to be written from one
