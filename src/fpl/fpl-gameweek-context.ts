@@ -61,60 +61,55 @@ export async function loadLockedGameweek(
 }
 
 /**
- * Stores the Gameweek's one FPL context and returns the body that is on
- * record. A later caller gets the stored text back rather than the one it just
- * built, so a player snapshot that moves between two Entrants cannot hand the
- * second of them a text the stored hash does not cover.
+ * Stores one Entrant's FPL context for a Gameweek and returns the body that is
+ * on record. A later run gets the stored text back rather than the one it just
+ * built, so a player snapshot that moved in between cannot price a Squad from
+ * a text the Entrant was never shown and the stored hash does not cover.
  *
- * That sharing is sound only while the text says nothing about which Entrant
- * is reading it, and `shared` is where the caller states that it does not. At
- * an opening every Entrant is handed the same seed state, so one row is one
- * Entrant's context and every Entrant's at once. Once any Manager State has
- * been stored, each Entrant's context carries its own Squad, and
- * `contexts_identity` — unique on (season, gw, track, fpl_id) — has room for
- * only one of them.
+ * One row per Entrant per Gameweek, because from the second Gameweek onwards
+ * the text carries that Entrant's own Squad. The opening's nine bodies are
+ * identical — every Entrant is seeded from the same empty Squad — and are
+ * still stored one apiece, so that no reader of `contexts` has to know which
+ * Gameweek was the exception.
  */
 export async function storeFplContext(
   database: Database,
   season: string,
   gameweek: number,
-  body: string,
-  shared: boolean
+  entrantId: string,
+  body: string
 ): Promise<string> {
   const inserted = await database.query<{ body: string }>(
-    `insert into contexts (season, gw, track, hash, body)
-     values ($1, $2, 'fpl', $3, $4)
-     on conflict (season, gw, track, (coalesce(fpl_id, -1))) do nothing
+    `insert into contexts (season, gw, track, model_id, hash, body)
+     values ($1, $2, 'fpl', $3, $4, $5)
+     on conflict (
+       season, gw, track, (coalesce(fpl_id, -1)), (coalesce(model_id, ''))
+     ) do nothing
      returning body`,
-    [season, gameweek, createHash("sha256").update(body).digest("hex"), body]
+    [
+      season,
+      gameweek,
+      entrantId,
+      createHash("sha256").update(body).digest("hex"),
+      body
+    ]
   );
   const insertedBody = inserted.rows[0]?.body;
   if (insertedBody !== undefined) {
     return insertedBody;
   }
 
-  // The row that is already there belongs to another Entrant, and handing it
-  // over would show this one a Squad it does not own and then judge it on the
-  // Squad it does. Refusing loudly is the honest behaviour until per-Entrant
-  // context rows exist — that belongs to "Run the FPL track under the shared
-  // Lock", which is where the migration that widens the key belongs too.
-  if (!shared) {
-    throw new Error(
-      `the FPL context for Gameweek ${gameweek} of ${season} is already `
-      + "another Entrant's, and one Gameweek can hold only one"
-    );
-  }
-
   const stored = await database.query<{ body: string }>(
     `select body
        from contexts
-      where season = $1 and gw = $2 and track = 'fpl'`,
-    [season, gameweek]
+      where season = $1 and gw = $2 and track = 'fpl' and model_id = $3`,
+    [season, gameweek, entrantId]
   );
   const storedBody = stored.rows[0]?.body;
   if (storedBody === undefined) {
     throw new Error(
-      `FPL context for Gameweek ${gameweek} of ${season} was not stored`
+      `FPL context for ${entrantId} at Gameweek ${gameweek} of ${season} `
+      + "was not stored"
     );
   }
   return storedBody;

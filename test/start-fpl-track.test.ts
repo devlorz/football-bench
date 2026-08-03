@@ -279,25 +279,38 @@ describe("starting the FPL track for all nine Entrants", () => {
     expect(first.rows).toEqual([STORED_OPENING_STATE]);
   });
 
-  test("hands every Entrant the one context stored for the Gameweek", async () => {
+  test("stores one opening context per Entrant, every body the same", async () => {
     const { calls } = await open();
 
-    // One row, and every Entrant read it. At an opening the text says nothing
-    // about who is reading it — the same seed Squad, the same locked pool —
-    // so one context is every Entrant's at once, and the hash is what proves
-    // afterwards that nobody saw a different pool from anybody else.
+    // One row per seat. At an opening the text says nothing about who is
+    // reading it — the same seed Squad, the same locked pool — so the nine
+    // bodies are identical and the hashes with them, which is what proves
+    // afterwards that nobody saw a different pool from anybody else. They are
+    // stored one apiece regardless, because from the next Gameweek onwards a
+    // context carries its own Entrant's Squad, and one shape for the whole
+    // Season beats a single Gameweek every reader has to know is different.
     const contexts = await client.query<{
       track: string;
       fpl_id: number | null;
+      model_id: string;
       hash: string;
       body: string;
-    }>("select track, fpl_id, hash, body from contexts");
-    expect(contexts.rows).toHaveLength(1);
-    const [context] = contexts.rows;
-    expect(context).toMatchObject({ track: "fpl", fpl_id: null });
-    expect(context!.hash).toBe(
-      createHash("sha256").update(context!.body).digest("hex")
+    }>(
+      `select track, fpl_id, model_id, hash, body
+         from contexts
+        order by model_id`
     );
+    expect(contexts.rows).toHaveLength(BASE_MODELS.length);
+    expect(contexts.rows.map(({ model_id: id }) => id))
+      .toEqual([...BASE_MODELS.map(seatId)].sort());
+    const [context] = contexts.rows;
+    for (const row of contexts.rows) {
+      expect(row).toMatchObject({ track: "fpl", fpl_id: null });
+      expect(row.body).toBe(context!.body);
+      expect(row.hash).toBe(
+        createHash("sha256").update(row.body).digest("hex")
+      );
+    }
     expect(calls).toHaveLength(BASE_MODELS.length);
     for (const { messages } of calls) {
       expect(messages[0]).toEqual({ role: "user", content: context!.body });

@@ -124,21 +124,19 @@ export async function openFplGameweek({
   const previous =
     await carriedThroughSilence(database, season, standing, gameweek);
 
-  // From here every Entrant's context carries its own Squad, so the one row
-  // `contexts_identity` allows belongs to whichever Entrant stored it. Sharing
-  // it would show this one fifteen players it does not own and then judge it
-  // on the ones it does.
+  // This Entrant's own context, carrying this Entrant's own Squad. Stored
+  // before the call, so what it saw is on record whatever the call comes to.
   const body = await storeFplContext(
     database,
     season,
     gameweek,
+    entrant.id,
     buildFplTrackContext({
       season,
       gameweek,
       state: previous,
       pool: contextPool
-    }),
-    false
+    })
   );
 
   const outcome = await askForGameweekAction({

@@ -237,7 +237,13 @@ describe("the benchmark database", () => {
 
   test("requires context identity to match its track", async () => {
     await client.query(
-      `insert into gameweeks (season, gw, deadline_at)
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values (
+         'entrant/v1', 'Entrant', 'provider/base-model', 'provider',
+         'fpl/v1', 'entrant'
+       );
+       insert into gameweeks (season, gw, deadline_at)
        values ('2026-27', 1, '2026-08-21T17:30:00Z')`
     );
 
@@ -250,6 +256,64 @@ describe("the benchmark database", () => {
       `insert into contexts (season, gw, track, fpl_id, hash, body)
        values ('2026-27', 1, 'fpl', 1, 'fpl-hash', 'context')`
     )).rejects.toMatchObject({ code: "23514" });
+
+    // A Match context is one Fixture's and every Entrant sees the same text;
+    // an FPL context is one Entrant's, because it carries that Entrant's own
+    // Squad. Naming the wrong one of the two is refused in both directions.
+    await expect(client.query(
+      `insert into contexts (season, gw, track, fpl_id, model_id, hash, body)
+       values ('2026-27', 1, 'match', 1, 'entrant/v1', 'match-hash', 'context')`
+    )).rejects.toMatchObject({ code: "23514" });
+
+    await expect(client.query(
+      `insert into contexts (season, gw, track, hash, body)
+       values ('2026-27', 1, 'fpl', 'fpl-hash', 'context')`
+    )).rejects.toMatchObject({ code: "23514" });
+  });
+
+  test("gives every Entrant its own FPL context for one Gameweek", async () => {
+    await client.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values
+         (
+           'entrant/one', 'One', 'vendor/one', 'provider', 'fpl/v1', 'entrant'
+         ),
+         (
+           'entrant/two', 'Two', 'vendor/two', 'provider', 'fpl/v1', 'entrant'
+         );
+       insert into gameweeks (season, gw, deadline_at)
+       values ('2026-27', 1, '2026-08-21T17:30:00Z')`
+    );
+
+    // Two Entrants, one Gameweek, two contexts. Every Gameweek after the
+    // opening hands each Entrant a text carrying its own Squad, so a key with
+    // room for one of them would show the second a Squad it does not own and
+    // then judge it on the Squad it does.
+    await client.query(
+      `insert into contexts (season, gw, track, model_id, hash, body)
+       values
+         ('2026-27', 1, 'fpl', 'entrant/one', 'one-hash', 'one context'),
+         ('2026-27', 1, 'fpl', 'entrant/two', 'two-hash', 'two context')`
+    );
+
+    // And one apiece: the stored text is what "it saw only this" is verified
+    // against, so a second row for the same seat would leave two answers.
+    await expect(client.query(
+      `insert into contexts (season, gw, track, model_id, hash, body)
+       values ('2026-27', 1, 'fpl', 'entrant/one', 'again', 'another context')`
+    )).rejects.toMatchObject({ code: "23505" });
+
+    const stored = await client.query<{ model_id: string; body: string }>(
+      `select model_id, body
+         from contexts
+        where season = '2026-27' and gw = 1 and track = 'fpl'
+        order by model_id`
+    );
+    expect(stored.rows).toEqual([
+      { model_id: "entrant/one", body: "one context" },
+      { model_id: "entrant/two", body: "two context" }
+    ]);
   });
 
   test("names a scheduled Gap-closing run as a fill", async () => {

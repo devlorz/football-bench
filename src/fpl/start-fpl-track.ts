@@ -125,21 +125,16 @@ export async function startFplTrack({
   }
 
   // Every Entrant starts from the same seed state and the same locked pool, so
-  // there is one context and it is every Entrant's at once.
+  // the nine bodies are identical. They are still stored one apiece, because a
+  // context is one Entrant's from the next Gameweek onwards and one shape for
+  // the whole Season is worth nine copies of one body.
   const previous = openingManagerState();
-  const body = await storeFplContext(
-    database,
+  const opening = buildFplTrackContext({
     season,
     gameweek,
-    buildFplTrackContext({
-      season,
-      gameweek,
-      state: previous,
-      pool: contextPool
-    }),
-    true
-  );
-  const pool = parseFplTrackContextPool(body);
+    state: previous,
+    pool: contextPool
+  });
 
   const openings = new Map<string, {
     state: ManagerState;
@@ -157,6 +152,17 @@ export async function startFplTrack({
       if (entrant === undefined) {
         return;
       }
+      // Stored before the Entrant is called, and the stored text is what it is
+      // handed: a second attempt at the same opening gives back the row on
+      // record rather than a rebuilt one, so a snapshot that moved in between
+      // cannot price a Squad from a text nobody was shown.
+      const body = await storeFplContext(
+        database,
+        season,
+        gameweek,
+        entrant.id,
+        opening
+      );
       const outcome = await askForGameweekAction({
         database,
         season,
@@ -164,7 +170,7 @@ export async function startFplTrack({
         entrant,
         body,
         previous,
-        pool,
+        pool: parseFplTrackContextPool(body),
         deadline,
         apiKey,
         http,

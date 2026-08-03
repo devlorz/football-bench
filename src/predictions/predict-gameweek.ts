@@ -90,7 +90,9 @@ async function storeContext(
   const inserted = await database.query<{ id: number }>(
     `insert into contexts (season, gw, track, fpl_id, hash, body)
      values ($1, $2, 'match', $3, $4, $5)
-     on conflict (season, gw, track, (coalesce(fpl_id, -1))) do nothing
+     on conflict (
+       season, gw, track, (coalesce(fpl_id, -1)), (coalesce(model_id, ''))
+     ) do nothing
      returning id`,
     [season, gameweek, fixture.fpl_id, sha256(body), body]
   );
