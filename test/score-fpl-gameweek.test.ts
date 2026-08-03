@@ -6,6 +6,7 @@ import {
   scoreFplGameweek
 } from "../src/fpl/score-fpl-gameweek.js";
 import { storeManagerState } from "../src/fpl/manager-state-store.js";
+import { rolledOverState } from "../src/fpl/apply-gameweek-action.js";
 import { FPL_POOL, FPL_POOL_ALTERNATES } from "./fpl-pool-fixture.js";
 import { legalStateFrom } from "./fpl-replay.js";
 import {
@@ -247,6 +248,45 @@ describe("scoring a Gameweek from what is stored", () => {
     ).rejects.toThrow(/5/);
 
     expect(await storedScores()).toEqual([]);
+  });
+
+  test("scores a Rolled Over Gameweek from the Team Sheet still standing", async () => {
+    // Rolling over is preferred to scoring zero because zero is a punishment
+    // large enough to drown out every other signal, while a stale Squad
+    // degrades gradually (ADR-0004). This is where that is either true or an
+    // intention: the row is scored exactly as any other, and nothing about it
+    // reaches the scorer except the Team Sheet, the Hits and the Chip.
+    //
+    // The second Entrant owed a four-point Hit in Gameweek 1, and this
+    // Gameweek made no Transfer to owe one for — so the same eleven that
+    // scored 54 under the Hit score 58 without it.
+    await storeManagerState(client, {
+      entrantId: "entrant/v2",
+      season: "2026-27",
+      gameweek: 2,
+      state: rolledOverState({ ...legalStateFrom(OPENING), hits: 4 }),
+      attemptsUsed: 3,
+      rolledOver: true,
+      predictedAt: new Date("2026-08-28T17:00:00Z")
+    });
+    await settle(EVERYONE_PLAYED, 2);
+
+    await scoreFplGameweek({ database: client, season: "2026-27", gameweek: 2 });
+
+    expect(await storedScores()).toEqual([
+      {
+        model_id: "entrant/v2",
+        track: "fpl",
+        metric: FPL_POINTS_METRIC,
+        value: 58,
+        detail: expect.objectContaining({
+          captain: 8,
+          substitutions: [],
+          hits: 0,
+          chip: null
+        })
+      }
+    ]);
   });
 
   test("scores a Free Hit Gameweek from the temporary Squad it stored", async () => {

@@ -1,8 +1,10 @@
 import { describe, expect, test } from "vitest";
 import {
+  gameweekRepairMessage,
   GAMEWEEK_ACTION_SCHEMA_MESSAGE,
   validateGameweekAction
 } from "../src/fpl/validate-gameweek-action.js";
+import { ENFORCED_VIOLATIONS } from "../src/fpl/apply-gameweek-action.js";
 
 /** The shape an Entrant returns, with `chip` left to each test. */
 function action(chip: unknown): string {
@@ -40,7 +42,11 @@ describe("The Chip an Entrant names", () => {
     // schema failure the Entrant is asked to Repair, not a Gameweek that
     // quietly plays no Chip.
     expect(validateGameweekAction(action("triple-captain")))
-      .toEqual({ ok: false, message: GAMEWEEK_ACTION_SCHEMA_MESSAGE });
+      .toEqual({
+        ok: false,
+        kind: "schema",
+        message: GAMEWEEK_ACTION_SCHEMA_MESSAGE
+      });
   });
 
   test("refuses a Gameweek that reaches for two Chips at once", () => {
@@ -49,6 +55,36 @@ describe("The Chip an Entrant names", () => {
     // list where a name belongs is a schema failure the Entrant is asked to
     // Repair, not a Gameweek that quietly plays the first of them.
     expect(validateGameweekAction(action(["triple_captain", "bench_boost"])))
-      .toEqual({ ok: false, message: GAMEWEEK_ACTION_SCHEMA_MESSAGE });
+      .toEqual({
+        ok: false,
+        kind: "schema",
+        message: GAMEWEEK_ACTION_SCHEMA_MESSAGE
+      });
+  });
+});
+
+describe("The Repair an Entrant is asked for", () => {
+  test("quotes the reason it was given and asks only for a correction", () => {
+    // Frozen for the Season with the Violations themselves (ADR-0004): the
+    // wrapper is as much of what the Entrant reads as the sentence inside it,
+    // and making either more helpful mid-Season changes the difficulty of the
+    // task while it is being measured.
+    expect(gameweekRepairMessage("A Squad must cost no more than £100.0m."))
+      .toBe(
+        "Your previous Gameweek action was rejected:\n"
+        + "A Squad must cost no more than £100.0m.\n"
+        + "Return only a corrected Gameweek action as JSON."
+      );
+  });
+
+  test.for([
+    ...ENFORCED_VIOLATIONS.map(({ message }) => message),
+    GAMEWEEK_ACTION_SCHEMA_MESSAGE
+  ])("carries the whole of %s back to the Entrant", (reason) => {
+    // Every sentence the loop can be handed, from either boundary: the reducer
+    // refuses an action the rules reject, and the validator refuses a response
+    // that is not an action at all. Both reach the Entrant intact — a Repair
+    // asked for without the reason is a Repair asked for blind.
+    expect(gameweekRepairMessage(reason)).toContain(reason);
   });
 });

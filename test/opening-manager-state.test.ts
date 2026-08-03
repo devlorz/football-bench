@@ -4,6 +4,7 @@ import {
   openingManagerState,
   ENFORCED_VIOLATIONS,
   GAMEWEEK_RULES,
+  VIOLATION_KINDS,
   type GameweekAction
 } from "../src/fpl/apply-gameweek-action.js";
 import { LOCKED_POOL as POOL } from "./fpl-pool-fixture.js";
@@ -210,13 +211,25 @@ describe("Opening Manager State", () => {
     });
   });
 
+  test("carries every kind a violation profile can report, and no other", () => {
+    // The messages are what the Entrant is shown; the kinds are what the
+    // record counts (ADR-0004). A kind no Violation produces would stand in
+    // every violation profile as a permanent zero and suggest a rule that is
+    // not there — spec 0003 §Violations are typed records exactly that reason
+    // for having no `chip expired`. This is what holds the two lists together,
+    // in whichever direction they are pulled apart.
+    expect([...new Set(ENFORCED_VIOLATIONS.map(({ kind }) => kind))].sort())
+      .toEqual([...VIOLATION_KINDS].sort());
+  });
+
   test("shows the Entrant every rule it can be refused for, and no other", () => {
     // ADR-0004: refusing an action for a rule the Entrant was never shown
     // changes the difficulty of the task, and showing a rule that is never
     // enforced misleads it. The existing context test proves each rule in the
     // list reaches the Entrant; this one proves the list is the whole set, so
     // that adding a Violation without adding its rule fails here.
-    expect([...GAMEWEEK_RULES].sort()).toEqual([...ENFORCED_VIOLATIONS].sort());
+    expect([...GAMEWEEK_RULES].sort())
+      .toEqual(ENFORCED_VIOLATIONS.map(({ message }) => message).sort());
   });
 
   test("records one Free Transfer and both half-Season Chip sets unspent", () => {

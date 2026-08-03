@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { Client } from "pg";
 import { errorText } from "../error-text.js";
 import type { HttpFetcher, HttpResponse } from "../http.js";
+import { MAX_REPAIRS } from "../repairs.js";
 import {
   buildMatchContext,
   loadMatchContextData
@@ -74,8 +75,6 @@ type ProviderFailureKind =
   | "refusal"
   | "rate_limit"
   | "timeout";
-
-const MAX_REPAIRS = 3;
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");

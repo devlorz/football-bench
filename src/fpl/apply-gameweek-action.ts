@@ -76,14 +76,28 @@ export interface GameweekAction {
   teamSheet: TeamSheet;
 }
 
-export type ViolationKind =
-  | "budget"
-  | "squad_quota"
-  | "club_limit"
-  | "unknown_player"
-  | "formation"
-  | "captain"
-  | "chip_unavailable";
+/**
+ * Every kind a refused action can be recorded under. The `Violation` type is
+ * read off this tuple so that the kinds are one list rather than a type in one
+ * place and a vocabulary in another, and the reason to spell them as values at
+ * all is that the violation profile counts them: a profile is only complete if
+ * something can enumerate the columns it must have.
+ *
+ * A malformed response is not here. It breaks no rule of the game — it is not
+ * an action at all — and counting it beside a club-limit breach would put a
+ * failure to return JSON into a profile of how an Entrant manages a Squad.
+ */
+export const VIOLATION_KINDS = [
+  "budget",
+  "squad_quota",
+  "club_limit",
+  "unknown_player",
+  "formation",
+  "captain",
+  "chip_unavailable"
+] as const;
+
+export type ViolationKind = (typeof VIOLATION_KINDS)[number];
 
 /**
  * The last Gameweek of the first half-Season. The first set of Chips is
@@ -223,12 +237,13 @@ const VIOLATIONS = {
 } as const satisfies Readonly<Record<string, Violation>>;
 
 /**
- * Every sentence the reducer can refuse an action with, in no order. Exported
- * so a test can hold `GAMEWEEK_RULES` to the invariant stated below rather than
- * leaving it to whoever adds the next Violation to remember.
+ * Every refusal the reducer can return, in no order. Exported so a test can
+ * hold `GAMEWEEK_RULES` to the invariant stated below, and `VIOLATION_KINDS` to
+ * the one above it, rather than leaving either to whoever adds the next
+ * Violation to remember.
  */
-export const ENFORCED_VIOLATIONS: readonly string[] =
-  Object.values(VIOLATIONS).map(({ message }) => message);
+export const ENFORCED_VIOLATIONS: readonly Violation[] =
+  Object.values(VIOLATIONS);
 
 /**
  * The same frozen sentences, ordered as rules rather than as complaints, in the
@@ -309,11 +324,15 @@ export function sellingPrice(paidTenths: number, listedTenths: number): number {
  * Free Transfer the Gameweek would have granted goes with the Chip. Normal
  * accrual resumes in the Gameweek after.
  */
-function bankedAfter(freeTransfers: number, action: GameweekAction): number {
-  if (action.chip === "wildcard" || action.chip === "free_hit") {
+function bankedAfter(
+  freeTransfers: number,
+  chip: Chip | null,
+  transfersMade: number
+): number {
+  if (chip === "wildcard" || chip === "free_hit") {
     return freeTransfers;
   }
-  const kept = Math.max(0, freeTransfers - action.transfersIn.length);
+  const kept = Math.max(0, freeTransfers - transfersMade);
   return Math.min(kept + 1, MAX_FREE_TRANSFERS);
 }
 
@@ -382,6 +401,34 @@ export function carriedIntoNextGameweek(state: ManagerState): ManagerState {
     squad: { active: stash.squad, free_hit_stash: null },
     teamSheet: stash.team_sheet,
     bankTenths: stash.bank
+  };
+}
+
+/**
+ * What a Gameweek nobody legally acted in leaves behind. The action that failed
+ * its third Repair is discarded whole and the Gameweek is played on the Squad
+ * and Team Sheet already standing (ADR-0004), so this takes no action at all —
+ * there is no legal one to take.
+ *
+ * Three things follow from discarding the action rather than scoring the
+ * Gameweek zero, and each is a line below. No Transfer was made, so the Free
+ * Transfer the Gameweek grants is banked exactly as an untouched Gameweek's
+ * would be. No Transfer was paid for, so the Hit the previous Gameweek owed is
+ * not owed again by this one. And no Chip was played, so `chipActive` is null
+ * and the half-Season sets are untouched — a Chip named in the discarded action
+ * is not spent by naming it.
+ *
+ * The reversion comes first, so a Roll Over immediately after a Free Hit gives
+ * back the permanent Squad, Team Sheet and bank rather than making the borrowed
+ * ones permanent. That is the case ADR-0017 put the stash in the row for.
+ */
+export function rolledOverState(previous: ManagerState): ManagerState {
+  const state = carriedIntoNextGameweek(previous);
+  return {
+    ...state,
+    freeTransfers: bankedAfter(state.freeTransfers, null, 0),
+    hits: 0,
+    chipActive: null
   };
 }
 
@@ -600,7 +647,11 @@ export function applyGameweekAction(
       },
       teamSheet: action.teamSheet,
       bankTenths,
-      freeTransfers: bankedAfter(state.freeTransfers, action),
+      freeTransfers: bankedAfter(
+        state.freeTransfers,
+        action.chip,
+        action.transfersIn.length
+      ),
       hits: paidTransfers * HIT_POINTS,
       chipsUsed: chipsSpentAfter(state.chipsUsed, action.chip, gameweek),
       chipActive: action.chip

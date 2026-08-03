@@ -72,6 +72,23 @@ export async function storeManagerState(
   );
 }
 
+function managerState(row: ManagerStateRow | undefined): ManagerState | null {
+  return row === undefined
+    ? null
+    : {
+      squad: row.squad,
+      teamSheet: row.team_sheet,
+      bankTenths: row.bank,
+      freeTransfers: row.free_transfers,
+      hits: row.hits,
+      chipsUsed: row.chips_used,
+      chipActive: row.chip_active
+    };
+}
+
+const MANAGER_STATE_COLUMNS =
+  "squad, team_sheet, bank, free_transfers, hits, chips_used, chip_active";
+
 /**
  * The stored row is the whole input to the next reducer step (ADR-0017): this
  * reads one row and reads nothing else, so a Gameweek can be replayed without
@@ -82,24 +99,40 @@ export async function loadManagerState(
   { entrantId, season, gameweek }: ManagerStateKey
 ): Promise<ManagerState | null> {
   const result = await database.query<ManagerStateRow>(
-    `select squad, team_sheet, bank, free_transfers, hits, chips_used,
-            chip_active
+    `select ${MANAGER_STATE_COLUMNS}
        from manager_states
       where model_id = $1 and season = $2 and gw = $3`,
     [entrantId, season, gameweek]
   );
-  const [row] = result.rows;
-  if (row === undefined) {
-    return null;
-  }
+  return managerState(result.rows[0]);
+}
 
-  return {
-    squad: row.squad,
-    teamSheet: row.team_sheet,
-    bankTenths: row.bank,
-    freeTransfers: row.free_transfers,
-    hits: row.hits,
-    chipsUsed: row.chips_used,
-    chipActive: row.chip_active
-  };
+/**
+ * What the Entrant carries into `before`: the last Gameweek it stored a
+ * Manager State for, or null if it has stored none and this is its opening.
+ *
+ * The last stored rather than the one immediately behind, because a Gameweek
+ * can store nothing at all — a provider that never answered, an action that
+ * landed after the Lock — and a Squad must not vanish because the Gameweek
+ * between was silent. What stands is what last stood, which is the same row
+ * `gameweek - 1` would have found whenever there is one.
+ *
+ * Still one row and still no history: the reducer is handed a value, exactly
+ * as it is at an opening.
+ */
+export async function loadStandingManagerState(
+  database: Database,
+  { entrantId, season, before }: Omit<ManagerStateKey, "gameweek"> & {
+    before: number;
+  }
+): Promise<ManagerState | null> {
+  const result = await database.query<ManagerStateRow>(
+    `select ${MANAGER_STATE_COLUMNS}
+       from manager_states
+      where model_id = $1 and season = $2 and gw < $3
+      order by gw desc
+      limit 1`,
+    [entrantId, season, before]
+  );
+  return managerState(result.rows[0]);
 }
