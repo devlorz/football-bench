@@ -356,6 +356,45 @@ The same Gameweek may be opened again while its Lock still stands, and the secon
 the context already stored rather than rebuilding it. A snapshot that moved in between would
 otherwise price a Squad from a text no Entrant was ever shown.
 
+### The record is written whole, or not at all
+
+A Gameweek's eight rows — points and behaviour, each with its cumulative twin — are written on
+one condition and one only: that the Gameweek's points have settled. The behavioural three could
+be written the moment the actions are in, and are not. A record whose Repairs ran a Gameweek
+ahead of its points would have to be read with a note about which half of it was current, and
+the whole of the argument for writing the behaviour beside the points is that they are read
+together.
+
+Nothing is lost by waiting. Repairs, Roll Overs and violations are derived from stored Manager
+States and attempts, both of which are already on record; when the Gameweek settles, the same
+run writes them.
+
+The cumulative values are folded from the Season's own Gameweeks rather than added to the score
+rows already stored. Scoring the same Gameweek twice, scoring Gameweek 4 before Gameweek 3
+settles, or rerunning the lot after a late settlement must all produce the same numbers, and a
+running total kept in the rows would instead depend on the order they were written in.
+
+**A Gameweek before the shared starting Gameweek contributes nothing**, and it takes no guard to
+make that true: no Entrant has a Manager State before the start, because the opening commits all
+nine or none. The bound is stated in the code anyway — the fold begins at the starting Gameweek
+and an earlier one is refused — but it restates an invariant rather than creating one, and a
+mutation that removes either one cannot be told apart from the code that keeps it. What the
+starting Gameweek does decide is what the record *says*: it is stored in the cumulative detail,
+because a season path of eleven Gameweeks that began at Gameweek 28 is a different claim from
+one that began at Gameweek 1 and lost most of it.
+
+**The violation profile counts kinds, not failures.** It asks for the seven and counts what
+comes back, rather than counting every attempt that was not `ok` — `schema`, `deadline` and the
+provider kinds are all failures and none of them is a rule of the game (see *Violations are
+typed* above). Only `schema` and a provider failure can share a Gameweek with a stored Manager
+State, the first inside the same conversation and the second from an earlier run over the same
+Gameweek, so those are the two the counting has to survive.
+
+**The qualification is stored, not applied at publication.** It goes in the detail of every row
+a ranking can be read off — the Gameweek's points and the Season's — so that a value cannot
+reach a reader without the sentence that says what it is worth. A label added by whatever
+publishes the table is a label the next thing to read the table will not have.
+
 ### Free Hit needs a stashed Squad
 
 Every other Chip modifies one Gameweek's scoring or transfer allowance. Free Hit replaces the
