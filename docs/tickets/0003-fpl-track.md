@@ -229,18 +229,18 @@ evidence of Base Model superiority.
 
 **Blocked by:** Start all nine Entrants together.
 
-- [ ] Every settled Gameweek stores `fpl_points` and `fpl_points_season_to_date` for each Entrant from the shared starting Gameweek onward
-- [ ] `repairs` stores Repairs used that Gameweek; `repairs_season_to_date` stores the mean per Gameweek with the 0/1/2/3/failed distribution in detail
-- [ ] `roll_over_rate` stores 0 or 1 for one Gameweek; `roll_over_rate_season_to_date` stores the cumulative fraction
-- [ ] `violation_profile` and `violation_profile_season_to_date` store total violation counts as values and their typed breakdowns in detail
-- [ ] Behavioural rows retain enough detail to trace every count to stored Manager States and attempts
-- [ ] Score rows name the Season, Gameweek, Entrant, FPL track and metric
-- [ ] Points-ranking detail carries the demonstration qualification wherever the ranking value is stored for later publication
-- [ ] A Gameweek before the shared starting Gameweek contributes nothing and cannot lengthen one Entrant's path
-- [ ] An unsettled Gameweek is skipped, while a settled zero-point Team Sheet remains a real scored result
-- [ ] Scoring is a pure function of stored Manager States, attempts and player points and performs no LLM or network call
-- [ ] Re-running upserts the same logical rows without duplicates or changed values
-- [ ] Tests verify Gameweek and cumulative totals plus behavioural metrics against a hand-constructed multi-Entrant sequence
+- [x] Every settled Gameweek stores `fpl_points` and `fpl_points_season_to_date` for each Entrant from the shared starting Gameweek onward
+- [x] `repairs` stores Repairs used that Gameweek; `repairs_season_to_date` stores the mean per Gameweek with the 0/1/2/3/failed distribution in detail
+- [x] `roll_over_rate` stores 0 or 1 for one Gameweek; `roll_over_rate_season_to_date` stores the cumulative fraction
+- [x] `violation_profile` and `violation_profile_season_to_date` store total violation counts as values and their typed breakdowns in detail
+- [x] Behavioural rows retain enough detail to trace every count to stored Manager States and attempts
+- [x] Score rows name the Season, Gameweek, Entrant, FPL track and metric
+- [x] Points-ranking detail carries the demonstration qualification wherever the ranking value is stored for later publication
+- [x] A Gameweek before the shared starting Gameweek contributes nothing and cannot lengthen one Entrant's path
+- [x] An unsettled Gameweek is skipped, while a settled zero-point Team Sheet remains a real scored result
+- [x] Scoring is a pure function of stored Manager States, attempts and player points and performs no LLM or network call
+- [x] Re-running upserts the same logical rows without duplicates or changed values
+- [x] Tests verify Gameweek and cumulative totals plus behavioural metrics against a hand-constructed multi-Entrant sequence
 
 ---
 

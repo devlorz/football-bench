@@ -1,10 +1,11 @@
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
+import { scoreFplGameweek } from "../src/fpl/score-fpl-gameweek.js";
 import {
-  FPL_POINTS_METRIC,
-  scoreFplGameweek
-} from "../src/fpl/score-fpl-gameweek.js";
+  DEMONSTRATION_QUALIFICATION,
+  FPL_POINTS_METRIC
+} from "../src/fpl/demonstration-record.js";
 import { storeManagerState } from "../src/fpl/manager-state-store.js";
 import { rolledOverState } from "../src/fpl/apply-gameweek-action.js";
 import { FPL_POOL, FPL_POOL_ALTERNATES } from "./fpl-pool-fixture.js";
@@ -104,11 +105,28 @@ describe("scoring a Gameweek from what is stored", () => {
     }
   }
 
+  /** Every score row there is, for the Gameweeks that must write none. */
   async function storedScores(): Promise<unknown[]> {
     const rows = await client.query(
       `select model_id, track, metric, value::int as value, detail
          from scores
-        order by model_id`
+        order by model_id, metric`
+    );
+    return rows.rows;
+  }
+
+  /**
+   * The Gameweek's own points and nothing else. The cumulative and behavioural
+   * metrics stored beside them are the demonstration record's, and they are
+   * asserted where they are decided — `fpl-demonstration-record.test.ts`.
+   */
+  async function storedPoints(): Promise<unknown[]> {
+    const rows = await client.query(
+      `select model_id, track, metric, value::int as value, detail
+         from scores
+        where metric = $1
+        order by model_id`,
+      [FPL_POINTS_METRIC]
     );
     return rows.rows;
   }
@@ -121,7 +139,7 @@ describe("scoring a Gameweek from what is stored", () => {
     // Everybody played, so nobody was replaced: the eleven score
     // 6+2+5+1+2+9+3+7+2+4+8 = 49 and Palmer's armband adds 9 for 58. The
     // second Entrant played the identical Team Sheet and owed a Hit, so 54.
-    expect(await storedScores()).toEqual([
+    expect(await storedPoints()).toEqual([
       {
         model_id: "entrant/v1",
         track: "fpl",
@@ -144,7 +162,10 @@ describe("scoring a Gameweek from what is stored", () => {
           substitutions: [],
           captain: 8,
           hits: 0,
-          chip: null
+          chip: null,
+          // Wherever a points value is stored, the sentence that says what
+          // ranking it is stored for goes with it.
+          qualification: DEMONSTRATION_QUALIFICATION
         }
       },
       {
@@ -187,7 +208,7 @@ describe("scoring a Gameweek from what is stored", () => {
 
     await scoreFplGameweek({ database: client, season: "2026-27", gameweek: 2 });
 
-    expect(await storedScores()).toEqual([
+    expect(await storedPoints()).toEqual([
       {
         model_id: "entrant/v1",
         track: "fpl",
@@ -273,7 +294,7 @@ describe("scoring a Gameweek from what is stored", () => {
 
     await scoreFplGameweek({ database: client, season: "2026-27", gameweek: 2 });
 
-    expect(await storedScores()).toEqual([
+    expect(await storedPoints()).toEqual([
       {
         model_id: "entrant/v2",
         track: "fpl",
@@ -328,7 +349,7 @@ describe("scoring a Gameweek from what is stored", () => {
     // The borrowed eleven score 6+2+12+1+2+9+14+7+2+4+8 = 67, and Palmer's
     // armband adds 9 for 76. The permanent eleven the Entrant still owns would
     // have scored 58, so nothing here could have come from the stashed Squad.
-    expect(await storedScores()).toEqual([
+    expect(await storedPoints()).toEqual([
       {
         model_id: "entrant/v1",
         track: "fpl",
@@ -366,7 +387,7 @@ describe("scoring a Gameweek from what is stored", () => {
 
     // The eleven score 49, the bench 10+9+11+12 = 42, and Palmer's armband
     // adds 9 for 100.
-    expect(await storedScores()).toEqual([
+    expect(await storedPoints()).toEqual([
       {
         model_id: "entrant/v1",
         track: "fpl",
