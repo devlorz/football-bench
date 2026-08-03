@@ -24,7 +24,8 @@ import {
 } from "./apply-gameweek-action.js";
 import {
   loadStandingManagerState,
-  storeManagerState
+  storeManagerState,
+  type StandingManagerState
 } from "./manager-state-store.js";
 import {
   gameweekRepairMessage,
@@ -191,6 +192,47 @@ interface RecordedAttempt {
 }
 
 /**
+ * The Manager State the Entrant actually carries into `gameweek`, given the
+ * Gameweek its last stored one belongs to.
+ *
+ * A stored state is sufficient input to the *next* Gameweek's reducer step and
+ * to that one only (ADR-0017). A Gameweek can store nothing — a provider that
+ * never answered, an action that arrived after the Lock — and those Gameweeks
+ * still happened: they still granted a Free Transfer, and the Chip that was
+ * active during the stored one stopped being active when it ended. Handing the
+ * stored row straight to a Gameweek two or more later would bank one Free
+ * Transfer for however many Gameweeks passed, and would refuse a Free Hit as
+ * consecutive when a whole Gameweek sat between the two.
+ *
+ * A Gameweek nobody acted in is a Gameweek nothing was done in, which is what
+ * `rolledOverState` already means — so the silent ones are folded through it
+ * one at a time. Idempotent where there is no gap: no silent Gameweek, no
+ * transition, and the stored row is passed through as it stands.
+ *
+ * The silent Gameweeks are counted from `gameweeks` rather than by
+ * subtracting, because that table is the record of which Gameweeks a Season
+ * has and arithmetic would invent any it does not.
+ */
+async function carriedThroughSilence(
+  database: Database,
+  season: string,
+  standing: StandingManagerState,
+  gameweek: number
+): Promise<ManagerState> {
+  const silent = await database.query<{ count: number }>(
+    `select count(*)::int as count
+       from gameweeks
+      where season = $1 and gw > $2 and gw < $3`,
+    [season, standing.gameweek, gameweek]
+  );
+  const passed = silent.rows[0]?.count ?? 0;
+  return Array.from({ length: passed }).reduce<ManagerState>(
+    (state) => rolledOverState(state),
+    standing.state
+  );
+}
+
+/**
  * An attempt with nothing resolved and nothing counted, for the failures that
  * never reached a Base Model. Null rather than zero throughout: a token count
  * of zero would claim a call that was made and cost nothing.
@@ -322,7 +364,9 @@ export async function openFplGameweek({
     season,
     before: gameweek
   });
-  const previous = standing ?? openingManagerState();
+  const previous = standing === null
+    ? openingManagerState()
+    : await carriedThroughSilence(database, season, standing, gameweek);
 
   // Whether this Gameweek's context says anything about who is reading it.
   // It does not while every Entrant is still at its opening seed, and the
@@ -420,6 +464,15 @@ export async function openFplGameweek({
             ?? "OpenRouter returned an unexpected response shape.",
         },
         rawResponse: response.body,
+        // A refusal is a call that was made, resolved and billed, and its
+        // endpoint and token counts are on the response like any other. They
+        // are what the per-call cost is measured from (spec 0003), so the row
+        // keeps whatever the response carried and falls back to null only for
+        // a body nothing could read.
+        resolvedProvider: parsed?.resolvedProvider ?? null,
+        resolvedModel: parsed?.resolvedModel ?? null,
+        tokensIn: parsed?.tokensIn ?? null,
+        tokensOut: parsed?.tokensOut ?? null,
         latencyMs: elapsed(startedAt, receivedAt),
         attemptedAt: receivedAt
       });
@@ -485,7 +538,7 @@ export async function openFplGameweek({
           entrantId: entrant.id,
           season,
           gameweek,
-          state: rolledOverState(standing),
+          state: rolledOverState(previous),
           attemptsUsed: MAX_REPAIRS,
           rolledOver: true,
           predictedAt: receivedAt

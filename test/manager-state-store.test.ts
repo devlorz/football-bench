@@ -227,11 +227,16 @@ describe("storing and reloading Manager State", () => {
     // Gameweek 2 stored nothing — a provider that never answered, or an action
     // that landed after the Lock. The Squad did not stop existing because the
     // Gameweek was silent, so Gameweek 3 is played on the last one that stood.
+    //
+    // Which Gameweek it last stood in comes back with it. Without that the
+    // caller cannot tell one silent Gameweek from ten, and a state carried
+    // across a gap as though there were none loses every Free Transfer the
+    // gap would have granted and keeps a Chip active that stopped being so.
     expect(await loadStandingManagerState(client, {
       entrantId: "entrant/v1",
       season: "2026-27",
       before: 3
-    })).toEqual(opened);
+    })).toEqual({ gameweek: 1, state: opened });
 
     // And an Entrant with nothing behind it is at its opening, which is what
     // decides that its Gameweek has no Team Sheet to Roll Over onto.

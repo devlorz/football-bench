@@ -71,6 +71,16 @@ const STAND_PAT = JSON.stringify({
 });
 
 /**
+ * A Free Hit with nothing to spend it on. Every Squad and Team Sheet rule is
+ * satisfied and no Transfer is made, so whether the action stands is a
+ * question about the Chip and about nothing else.
+ */
+const IDLE_FREE_HIT = JSON.stringify({
+  ...JSON.parse(STAND_PAT) as object,
+  chip: "free_hit"
+});
+
+/**
  * Timber, Enzo and Wilson out for White, Caicedo and Evanilson under a Free
  * Hit: fifteen different players borrowed for one Gameweek, so the Gameweek
  * after it either gives the permanent Squad back or visibly does not.
@@ -105,6 +115,22 @@ function openRouterBody(content: string): string {
     usage: { prompt_tokens: 4096, completion_tokens: 256 }
   });
 }
+
+/**
+ * A refusal as OpenRouter actually returns one: no content, a reason, and the
+ * endpoint and usage of a call that was made and billed all the same.
+ */
+const REFUSED = JSON.stringify({
+  choices: [{ message: { content: null, refusal: "I will not." } }],
+  openrouter_metadata: {
+    endpoints: {
+      available: [
+        { provider: "openai", model: "openai/gpt-5.2-2026-05", selected: true }
+      ]
+    }
+  },
+  usage: { prompt_tokens: 4096, completion_tokens: 12 }
+});
 
 interface Turn {
   role: string;
@@ -641,14 +667,22 @@ describe("opening the FPL track for a Gameweek", () => {
       http: (async () => ({ status: 500, body: "upstream exploded" })) as HttpFetcher,
       kind: "provider",
       detail: "OpenRouter returned HTTP 500.",
-      raw: "upstream exploded"
+      raw: "upstream exploded",
+      // Nothing was resolved and nothing was counted, and a zero would
+      // say otherwise.
+      resolvedProvider: null,
+      tokensIn: null
     },
     {
       what: "a provider that rate-limited the call",
       http: (async () => ({ status: 429, body: "slow down" })) as HttpFetcher,
       kind: "rate_limit",
       detail: "OpenRouter returned HTTP 429.",
-      raw: "slow down"
+      raw: "slow down",
+      // Nothing was resolved and nothing was counted, and a zero would
+      // say otherwise.
+      resolvedProvider: null,
+      tokensIn: null
     },
     {
       what: "a call that timed out",
@@ -659,28 +693,33 @@ describe("opening the FPL track for a Gameweek", () => {
       }) as HttpFetcher,
       kind: "timeout",
       detail: "OpenRouter call failed: the request took too long.",
-      raw: null
+      raw: null,
+      // Nothing was resolved and nothing was counted, and a zero would
+      // say otherwise.
+      resolvedProvider: null,
+      tokensIn: null
     },
     {
       what: "a Base Model that refused to answer",
-      http: (async () => ({
-        status: 200,
-        body: JSON.stringify({
-          choices: [{ message: { content: null, refusal: "I will not." } }]
-        })
-      })) as HttpFetcher,
+      http: (async () => ({ status: 200, body: REFUSED })) as HttpFetcher,
       kind: "refusal",
       detail: "I will not.",
-      raw: JSON.stringify({
-        choices: [{ message: { content: null, refusal: "I will not." } }]
-      })
+      raw: REFUSED,
+      // A refusal is a call that was made, resolved and billed. Its telemetry
+      // exists and is what the per-call cost is measured from, so recording it
+      // as unknown would lose the very numbers spec 0003 says to read the FPL
+      // track's cost from after the first Gameweek.
+      resolvedProvider: "openai",
+      tokensIn: 4096
     },
     {
       what: "a response of a shape nothing can read",
       http: (async () => ({ status: 200, body: "{}" })) as HttpFetcher,
       kind: "provider",
       detail: "OpenRouter returned an unexpected response shape.",
-      raw: "{}"
+      raw: "{}",
+      resolvedProvider: null,
+      tokensIn: null
     }
   ])("records $what and asks for no Repair", async (scenario) => {
     // A provider failure is not an illegal action: the Entrant never answered,
@@ -708,10 +747,8 @@ describe("opening the FPL track for a Gameweek", () => {
       error_kind: scenario.kind,
       error_detail: scenario.detail,
       raw_response: scenario.raw,
-      // Nothing was resolved and nothing was counted, and a zero would say
-      // otherwise.
-      resolved_provider: null,
-      tokens_in: null
+      resolved_provider: scenario.resolvedProvider,
+      tokens_in: scenario.tokensIn
     }]);
     const states = await client.query("select gw from manager_states");
     expect(states.rows).toEqual([]);
@@ -743,6 +780,138 @@ describe("opening the FPL track for a Gameweek", () => {
       "select count(*) as count from attempts"
     );
     expect(attempts.rows[0]!.count).toBe("4");
+  });
+
+  test.for([1, 2])(
+    "banks the Free Transfer each of %i silent Gameweeks granted",
+    async (silent) => {
+      // Two counts, not one: a fold that ran once however long the silence
+      // lasted would be right for a single Gameweek and wrong for every longer
+      // gap, and one case cannot tell those apart.
+      const resumes = silent + 2;
+      for (let gameweek = 2; gameweek <= resumes; gameweek += 1) {
+        await client.query(
+          `insert into gameweeks (season, gw, deadline_at)
+           values ('2026-27', $1, $2)`,
+          [
+            gameweek,
+            new Date(
+              Date.parse("2026-08-21T17:30:00Z")
+              + (gameweek - 1) * 7 * 24 * 60 * 60 * 1000
+            )
+          ]
+        );
+        await lockPool(gameweek, FPL_POOL);
+      }
+      const play = (
+        gameweek: number,
+        http: HttpFetcher
+      ): Promise<void> => openFplGameweek({
+        database: client,
+        season: "2026-27",
+        gameweek,
+        entrantId: "entrant/v1",
+        apiKey: "test-key",
+        // Comfortably before every deadline above.
+        now: () => new Date("2026-08-21T11:30:00Z"),
+        http
+      });
+
+      await play(1, scripted([LEGAL_ACTION]).http);
+      // These Gameweeks store nothing at all: the provider never answered, so
+      // there is no action to judge and no Roll Over the Entrant earned.
+      for (let gameweek = 2; gameweek < resumes; gameweek += 1) {
+        await play(gameweek, async () => ({ status: 503, body: "no answer" }));
+      }
+      await play(resumes, scripted([STAND_PAT]).http);
+
+      const states = await client.query(
+        "select gw, free_transfers from manager_states order by gw"
+      );
+      // A Gameweek happened whether or not anyone answered for it, and granted
+      // its Free Transfer like any other: one after the opening, one for each
+      // silent Gameweek, and one more when the Gameweek that resumes grants
+      // its own. Reading the opening row as though nothing had passed would
+      // leave two however long the silence.
+      expect(states.rows).toEqual([
+        { gw: 1, free_transfers: 1 },
+        { gw: resumes, free_transfers: silent + 2 }
+      ]);
+    }
+  );
+
+  test("lets a Free Hit stand a Gameweek after a silent one", async () => {
+    // The rule is that a Free Hit cannot follow a Free Hit, and `chipActive`
+    // on the stored row is the whole history it reads. A silent Gameweek in
+    // between is a Gameweek in which the Chip was not active — so reading the
+    // Gameweek 19 row directly at Gameweek 21 would refuse a Free Hit the
+    // rules allow, three Repairs later and a Roll Over after that.
+    for (const [gameweek, deadline] of [
+      [18, "2026-12-26T17:30:00Z"],
+      [19, "2026-12-30T17:30:00Z"],
+      [20, "2027-01-02T17:30:00Z"],
+      [21, "2027-01-09T17:30:00Z"]
+    ] as Array<[number, string]>) {
+      await client.query(
+        "insert into gameweeks (season, gw, deadline_at) values ('2026-27', $1, $2)",
+        [gameweek, deadline]
+      );
+    }
+    for (const gameweek of [18, 19, 21]) {
+      await lockPool(gameweek, FPL_POOL);
+    }
+    const play = (
+      gameweek: number,
+      at: string,
+      response: string
+    ): Promise<void> => openFplGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek,
+      entrantId: "entrant/v1",
+      apiKey: "test-key",
+      now: () => new Date(at),
+      http: scripted([response]).http
+    });
+
+    // The track joins at Gameweek 18 and the first half's Free Hit is played
+    // in Gameweek 19, the last Gameweek that half's set is reachable in.
+    await play(18, "2026-12-26T11:30:00Z", LEGAL_ACTION);
+    await play(19, "2026-12-30T11:30:00Z", IDLE_FREE_HIT);
+    // Gameweek 20 is silent, and Gameweek 21 reaches into the second half's
+    // set — a different Free Hit, one Gameweek clear of the first.
+    await play(21, "2027-01-09T11:30:00Z", IDLE_FREE_HIT);
+
+    const states = await client.query(
+      `select gw, free_transfers, chips_used, chip_active, rolled_over
+         from manager_states
+        order by gw`
+    );
+    expect(states.rows).toEqual([
+      {
+        gw: 18,
+        free_transfers: 1,
+        chips_used: { firstHalf: [], secondHalf: [] },
+        chip_active: null,
+        rolled_over: false
+      },
+      {
+        gw: 19,
+        free_transfers: 1,
+        chips_used: { firstHalf: ["free_hit"], secondHalf: [] },
+        chip_active: "free_hit",
+        rolled_over: false
+      },
+      {
+        gw: 21,
+        // The silent Gameweek granted one, and a Free Hit leaves the count as
+        // it found it.
+        free_transfers: 2,
+        chips_used: { firstHalf: ["free_hit"], secondHalf: ["free_hit"] },
+        chip_active: "free_hit",
+        rolled_over: false
+      }
+    ]);
   });
 
   test("shows a later Gameweek the Squad the Entrant is standing on", async () => {

@@ -107,15 +107,27 @@ export async function loadManagerState(
   return managerState(result.rows[0]);
 }
 
+/** A stored Manager State and the Gameweek it was stored for. */
+export interface StandingManagerState {
+  gameweek: number;
+  state: ManagerState;
+}
+
 /**
- * What the Entrant carries into `before`: the last Gameweek it stored a
- * Manager State for, or null if it has stored none and this is its opening.
+ * What the Entrant last stood on before `before`: the most recent Gameweek it
+ * stored a Manager State for, or null if it has stored none and this is its
+ * opening.
  *
  * The last stored rather than the one immediately behind, because a Gameweek
  * can store nothing at all — a provider that never answered, an action that
  * landed after the Lock — and a Squad must not vanish because the Gameweek
  * between was silent. What stands is what last stood, which is the same row
- * `gameweek - 1` would have found whenever there is one.
+ * `before - 1` would have found whenever there is one.
+ *
+ * Which Gameweek that was comes back with it, and the caller needs it: a state
+ * is only sufficient input to the *next* Gameweek's reducer step, and carrying
+ * one across a gap as though there were none would lose every Free Transfer
+ * the silent Gameweeks granted and leave a Chip active that stopped being so.
  *
  * Still one row and still no history: the reducer is handed a value, exactly
  * as it is at an opening.
@@ -125,14 +137,18 @@ export async function loadStandingManagerState(
   { entrantId, season, before }: Omit<ManagerStateKey, "gameweek"> & {
     before: number;
   }
-): Promise<ManagerState | null> {
-  const result = await database.query<ManagerStateRow>(
-    `select ${MANAGER_STATE_COLUMNS}
+): Promise<StandingManagerState | null> {
+  const result = await database.query<ManagerStateRow & { gw: number }>(
+    `select gw, ${MANAGER_STATE_COLUMNS}
        from manager_states
       where model_id = $1 and season = $2 and gw < $3
       order by gw desc
       limit 1`,
     [entrantId, season, before]
   );
-  return managerState(result.rows[0]);
+  const [row] = result.rows;
+  const state = managerState(row);
+  return row === undefined || state === null
+    ? null
+    : { gameweek: row.gw, state };
 }
