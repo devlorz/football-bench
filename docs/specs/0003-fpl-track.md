@@ -611,9 +611,26 @@ poll, on the same six-hour lead as the Match track's main run.
 
 There is no FPL equivalent of the Match track's fill run. A fill exists there because
 Predictions are insert-only and a Gap can only be closed by asking again; an FPL run already
-skips every Entrant that holds the Gameweek, so re-running *is* the fill. That is what the
-ledger's retry performs: a failed run keeps `completed_at` null, and the next poll calls only
-the Entrants that produced nothing.
+skips every Entrant that holds the Gameweek, so re-running *is* the fill.
+
+**A run is finished when the Gameweek is, not when the run returns.** An Entrant that produced
+nothing does not raise — a provider that never answered is an Entrant with a Gap, not a broken
+run — so a ledger closed on a clean return would close a Gameweek with a Gap in it, and no poll
+would ask again. One Gap takes the Gameweek from everyone (ADR-0011), which is precisely what
+the remaining polls before the Lock exist to prevent. So `completed_at` is written only when
+every Entrant holds the Gameweek, or when the Lock has passed and no further answer could be
+accepted; every poll in between calls only the Entrants that produced nothing.
+
+Past the Lock the Gameweek is walked without a call being spent on it. Every answer it could
+collect would be refused on arrival, and what the Entrants did is already in the attempts the
+run that straddled the Lock recorded — so the ledger closes rather than sitting open for ever,
+and nine calls are not spent recording nine refusals.
+
+**The two runs are ordered, not merely separated.** The FPL workflow is triggered by the
+Prediction workflow's completion rather than by a cron of its own. Two polls on the same cadence
+left the order to whichever GitHub happened to start first, which is the delay this section
+exists to rule out; separate advisory locks and separate concurrency groups stop them queueing
+behind each other but say nothing about which goes first.
 
 Which seats are which track's is read off the Prompt Version. Both tracks mark a competitor with
 `role = 'entrant'` in one `models` table, so the role alone stopped telling them apart the moment

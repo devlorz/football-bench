@@ -637,6 +637,36 @@ describe("running a Gameweek for the whole FPL roster", () => {
     expect(rescored.rows).toEqual(scored.rows);
   });
 
+  test("calls no more Entrants at once than the operator allowed", async () => {
+    await openTheTrack();
+    let active = 0;
+    let peak = 0;
+
+    // Nine seats through a pool of three. The bound is what an operator sets
+    // `FPL_CONCURRENCY` for — nine simultaneous calls carrying a
+    // six-hundred-player pool each is a different load on the provider from
+    // three — so a pool that ignored it would spend the whole roster at once.
+    await run({
+      concurrency: 3,
+      http: async () => {
+        active += 1;
+        peak = Math.max(peak, active);
+        // Parked until the macrotask queue drains, so every worker the pool
+        // allows is inside this call at the same moment and the peak is what
+        // the bound permits rather than what the scheduling happened to do.
+        await new Promise<void>((resolve) => { setTimeout(resolve, 0); });
+        active -= 1;
+        return { status: 200, body: openRouterBody(STAND_PAT) };
+      }
+    });
+
+    expect(peak).toBe(3);
+    const states = await client.query<{ count: number }>(
+      "select count(*)::int as count from manager_states where gw = 2"
+    );
+    expect(states.rows).toEqual([{ count: BASE_MODELS.length }]);
+  });
+
   test("refuses an invalid concurrency before issuing a call", async () => {
     await openTheTrack();
     let calls = 0;

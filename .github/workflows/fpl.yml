@@ -1,11 +1,19 @@
 name: Deadline-relative FPL Gameweek actions
 
 on:
-  schedule:
-    # Postgres deadlines decide when work is due, as they do for Predictions.
-    # This cadence assumes a public repository; see spec 0001. Re-enable the
-    # schedule before each Season if off-season inactivity disabled it.
-    - cron: "*/15 * * * *"
+  # Chained to the Prediction workflow rather than given a cron of its own.
+  # Postgres deadlines still decide when work is due — the FPL scheduler polls
+  # exactly as the Match one does — but the two tracks share a deadline
+  # (ADR-0006) and the Match track's write path must not wait behind an FPL
+  # Gameweek. A second `*/15` cron ran the two in whichever order GitHub
+  # happened to start them; `workflow_run` puts Predictions first every time.
+  #
+  # `types: [completed]` fires whatever the Match run concluded. A failing
+  # Prediction run is not a reason to stop managing nine Squads, and the FPL
+  # Gameweek has its own Lock to reach.
+  workflow_run:
+    workflows: ["Deadline-relative Predictions"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       gameweek:
@@ -16,17 +24,17 @@ on:
 permissions:
   contents: read
 
-# Its own group, deliberately not `prediction-runs`. Both tracks lock at the
-# same deadline (ADR-0006) and the FPL prompt is several times the size, so
-# sharing a group would queue Predictions behind an FPL Gameweek and delay a
-# write path that was ready to go.
+# Its own group, deliberately not `prediction-runs`. The ordering above decides
+# which starts first; this decides that neither ever queues behind the other —
+# an FPL Gameweek that overran would otherwise hold up the next Prediction poll
+# fifteen minutes later.
 concurrency:
   group: fpl-runs
   cancel-in-progress: false
 
 jobs:
   scheduled:
-    if: ${{ github.event_name == 'schedule' }}
+    if: ${{ github.event_name == 'workflow_run' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:

@@ -1,4 +1,5 @@
 import type { Client } from "pg";
+import { whileHoldingLock } from "../db/advisory-lock.js";
 import { errorText } from "../error-text.js";
 import type { HttpFetcher } from "../http.js";
 import { predictGameweek } from "./predict-gameweek.js";
@@ -42,15 +43,7 @@ export async function runScheduledPredictions({
   now,
   onCompletedRun
 }: RunScheduledPredictionsOptions): Promise<CompletedPredictionRun[]> {
-  const lock = await database.query<{ acquired: boolean }>(
-    "select pg_try_advisory_lock($1) as acquired",
-    [SCHEDULER_LOCK_KEY]
-  );
-  if (lock.rows[0]?.acquired !== true) {
-    return [];
-  }
-
-  try {
+  return whileHoldingLock(database, SCHEDULER_LOCK_KEY, async () => {
     const observedAt = now();
     const due = await database.query<DueRun>(
       `select
@@ -130,9 +123,5 @@ export async function runScheduledPredictions({
     }
 
     return completed;
-  } finally {
-    await database.query("select pg_advisory_unlock($1)", [
-      SCHEDULER_LOCK_KEY
-    ]);
-  }
+  });
 }

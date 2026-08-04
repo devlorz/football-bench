@@ -5,6 +5,7 @@ import {
   type FetchFplDailyResult
 } from "../fpl/fetch-gameweek.js";
 import { fetchFplPlayerPoints } from "../fpl/fetch-player-points.js";
+import { scoreFplGameweek } from "../fpl/score-fpl-gameweek.js";
 import { fetchUnderstatSeasonXg } from "../understat/fetch-season-xg.js";
 import { errorText } from "../error-text.js";
 import type { HttpFetcher } from "../http.js";
@@ -104,6 +105,26 @@ export async function runDailyFetch({
     for (const gameweek of fpl.settledGameweeks) {
       try {
         await fetchFplPlayerPoints({ database, season, gameweek, http });
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    // Every settled Gameweek's points are stored before any of them is
+    // scored, and deliberately in two passes rather than one. A Gameweek's
+    // record is folded from the Season's whole path, so scoring Gameweek 3
+    // while Gameweek 2's points were still to be written would find a hole
+    // where Gameweek 2 should be and skip the lot.
+    //
+    // This is where the record is written in production. The scorer is a pure
+    // function of stored Manager States, attempts and player points, and the
+    // daily fetch is where settlement is learnt — so the run that discovers a
+    // Gameweek has checked is the run that records what it came to. An
+    // unsettled Gameweek, or one an Entrant stored no Manager State for, is
+    // skipped by the scorer rather than refused, and a Season whose FPL track
+    // has not started scores nothing at all.
+    for (const gameweek of fpl.settledGameweeks) {
+      try {
+        await scoreFplGameweek({ database, season, gameweek });
       } catch (error) {
         errors.push(error);
       }

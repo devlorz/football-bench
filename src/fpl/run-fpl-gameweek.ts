@@ -1,4 +1,5 @@
 import type { Client } from "pg";
+import { eachBounded } from "../bounded-concurrency.js";
 import { FPL_PROMPT_VERSION } from "../context/build-fpl-track-context.js";
 import type { HttpFetcher } from "../http.js";
 import type { GameweekEntrant } from "./ask-for-gameweek-action.js";
@@ -113,40 +114,22 @@ export async function runFplGameweek({
 
   const locked = await loadLockedGameweek(database, season, gameweek);
 
+  // Nine conversations at once, up to the operator's limit. Each Entrant's own
+  // Repairs stay in its own conversation, so the only thing concurrency shares
+  // is the wait — which is the point, with one Lock to finish inside.
   const results = new Map<string, FplGameweekResult>();
-  let nextSeat = 0;
-  async function worker(): Promise<void> {
-    for (;;) {
-      const entrant = entrants[nextSeat];
-      nextSeat += 1;
-      if (entrant === undefined) {
-        return;
-      }
-      results.set(entrant.id, await playFplGameweek({
-        database,
-        season,
-        gameweek,
-        entrant,
-        locked,
-        apiKey,
-        http,
-        now
-      }));
-    }
-  }
-  // Settled rather than raced, as the opening is: a worker whose database
-  // write failed must not leave its peers writing into a call that has already
-  // returned.
-  const finished = await Promise.allSettled(
-    Array.from(
-      { length: Math.min(concurrency, entrants.length) },
-      () => worker()
-    )
-  );
-  const failed = finished.find((result) => result.status === "rejected");
-  if (failed !== undefined) {
-    throw failed.reason;
-  }
+  await eachBounded(entrants, concurrency, async (entrant) => {
+    results.set(entrant.id, await playFplGameweek({
+      database,
+      season,
+      gameweek,
+      entrant,
+      locked,
+      apiKey,
+      http,
+      now
+    }));
+  });
 
   const inState = (wanted: FplGameweekResult): string[] => entrants
     .map(({ id }) => id)
