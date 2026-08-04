@@ -1,0 +1,68 @@
+name: Deadline-relative FPL Gameweek actions
+
+on:
+  schedule:
+    # Postgres deadlines decide when work is due, as they do for Predictions.
+    # This cadence assumes a public repository; see spec 0001. Re-enable the
+    # schedule before each Season if off-season inactivity disabled it.
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      gameweek:
+        description: Gameweek to start the FPL track at, for all nine Entrants
+        required: true
+        type: number
+
+permissions:
+  contents: read
+
+# Its own group, deliberately not `prediction-runs`. Both tracks lock at the
+# same deadline (ADR-0006) and the FPL prompt is several times the size, so
+# sharing a group would queue Predictions behind an FPL Gameweek and delay a
+# write path that was ready to go.
+concurrency:
+  group: fpl-runs
+  cancel-in-progress: false
+
+jobs:
+  scheduled:
+    if: ${{ github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SEASON: ${{ vars.SEASON }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      FPL_CONCURRENCY: ${{ vars.FPL_CONCURRENCY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Migrations are deployed deliberately before enabling this workflow.
+      - name: Run due FPL Gameweek actions
+        run: npm run fpl:scheduled
+
+  start:
+    # The one thing an operator does by hand. It commits all nine opening
+    # Manager States or none, and it refuses a Season already under way, so
+    # running it twice cannot discard a track that has begun.
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SEASON: ${{ vars.SEASON }}
+      GAMEWEEK: ${{ inputs.gameweek }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      FPL_CONCURRENCY: ${{ vars.FPL_CONCURRENCY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run fpl:start

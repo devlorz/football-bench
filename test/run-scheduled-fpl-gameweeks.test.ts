@@ -1,0 +1,414 @@
+import pg from "pg";
+import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { resetSchema } from "./schema-fixture.js";
+import {
+  runScheduledFplGameweeks
+} from "../src/fpl/run-scheduled-fpl-gameweeks.js";
+import { startFplTrack } from "../src/fpl/start-fpl-track.js";
+import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
+import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
+import type { HttpFetcher } from "../src/http.js";
+import { FPL_POOL } from "./fpl-pool-fixture.js";
+
+const { Client } = pg;
+
+const BASE_MODELS = Array.from(
+  { length: SEASON_ROSTER_SIZE },
+  (_unused, index) => `vendor/base-${index + 1}`
+);
+
+function seatId(baseModel: string): string {
+  return `fpl/${baseModel.split("/")[1]}`;
+}
+
+const OPENING = JSON.stringify({
+  transfers_in: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+  transfers_out: [],
+  chip: null,
+  team_sheet: {
+    starters: [1, 3, 4, 5, 6, 8, 9, 10, 11, 13, 14],
+    bench: [2, 7, 12, 15],
+    captain: 8,
+    vice_captain: 13
+  }
+});
+
+const STAND_PAT = JSON.stringify({
+  transfers_in: [],
+  transfers_out: [],
+  chip: null,
+  team_sheet: (JSON.parse(OPENING) as { team_sheet: unknown }).team_sheet
+});
+
+function openRouterBody(content: string): string {
+  return JSON.stringify({
+    choices: [{ message: { content } }],
+    openrouter_metadata: {
+      endpoints: {
+        available: [
+          { provider: "vendor", model: "vendor/base-x", selected: true }
+        ]
+      }
+    },
+    usage: { prompt_tokens: 4096, completion_tokens: 256 }
+  });
+}
+
+/** Answers every call with the same action, and counts the calls. */
+function answering(content: string): {
+  http: HttpFetcher;
+  calls: () => number;
+} {
+  let calls = 0;
+  return {
+    calls: () => calls,
+    http: async () => {
+      calls += 1;
+      return { status: 200, body: openRouterBody(content) };
+    }
+  };
+}
+
+describe("scheduled FPL Gameweek runs", () => {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+
+  beforeAll(async () => {
+    await client.connect();
+    await resetSchema(client);
+
+    return async () => {
+      await client.end();
+    };
+  });
+
+  beforeEach(async () => {
+    await client.query(
+      `truncate
+         fpl_runs, prediction_runs, predictions, contexts, fixtures,
+         manager_states, attempts, models, gameweeks, fpl_players
+       restart identity cascade`
+    );
+    await client.query(
+      `insert into gameweeks (season, gw, deadline_at) values
+         ('2026-27', 1, '2026-08-21T17:30:00Z'),
+         ('2026-27', 2, '2026-08-28T17:30:00Z'),
+         ('2026-27', 3, '2026-09-12T17:30:00Z')`
+    );
+    for (const baseModel of BASE_MODELS) {
+      await client.query(
+        `insert into models (
+           id, name, base_model, provider, prompt_version, role
+         ) values ($1, $2, $3, 'vendor', $4, 'entrant')`,
+        [seatId(baseModel), baseModel, baseModel, FPL_PROMPT_VERSION]
+      );
+    }
+    for (const gameweek of [1, 2, 3]) {
+      for (const player of FPL_POOL) {
+        await client.query(
+          `insert into fpl_players (
+             season, gw, fpl_id, team_name, web_name, position, price_tenths,
+             status, chance_of_playing_next_round, news, news_added, observed_at
+           ) values (
+             '2026-27', $1, $2, $3, $4, $5, $6, 'a', null, '', null,
+             '2026-08-21T17:00:00Z'
+           )`,
+          [
+            gameweek,
+            player.fplId,
+            player.club,
+            player.webName,
+            player.position,
+            player.priceTenths
+          ]
+        );
+      }
+    }
+  });
+
+  async function openTheTrack(gameweek = 1): Promise<void> {
+    const opening = await startFplTrack({
+      database: client,
+      season: "2026-27",
+      gameweek,
+      concurrency: 3,
+      apiKey: "test-key",
+      now: () => new Date("2026-08-21T11:30:00Z"),
+      http: answering(OPENING).http
+    });
+    expect(opening.missing).toEqual([]);
+  }
+
+  async function schedule({
+    at,
+    http
+  }: { at: string; http: HttpFetcher }): Promise<
+    Awaited<ReturnType<typeof runScheduledFplGameweeks>>
+  > {
+    return runScheduledFplGameweeks({
+      database: client,
+      season: "2026-27",
+      concurrency: 3,
+      apiKey: "test-key",
+      now: () => new Date(at),
+      http
+    });
+  }
+
+  test("runs a Gameweek when its Lock is six hours away", async () => {
+    await openTheTrack();
+    const script = answering(STAND_PAT);
+
+    // Gameweek 2 locks at 17:30, so it is due at 11:30 and not before.
+    const early = await schedule({
+      at: "2026-08-28T11:29:00Z",
+      http: script.http
+    });
+    expect(early).toEqual([]);
+    expect(script.calls()).toBe(0);
+
+    const runs = await schedule({
+      at: "2026-08-28T11:30:00Z",
+      http: script.http
+    });
+
+    expect(runs).toEqual([{
+      gameweek: 2,
+      outcome: {
+        kind: "played",
+        gameweek: 2,
+        played: BASE_MODELS.map(seatId),
+        standing: [],
+        missing: []
+      }
+    }]);
+    expect(script.calls()).toBe(BASE_MODELS.length);
+    const ledger = await client.query<{
+      gw: number;
+      attempt_count: number;
+      completed: boolean;
+      last_error: string | null;
+    }>(
+      `select gw, attempt_count, completed_at is not null as completed,
+              last_error
+         from fpl_runs
+        order by gw`
+    );
+    expect(ledger.rows).toEqual([{
+      gw: 2,
+      attempt_count: 1,
+      completed: true,
+      last_error: null
+    }]);
+  });
+
+  test("does not run a Gameweek the ledger has already completed", async () => {
+    await openTheTrack();
+    await schedule({
+      at: "2026-08-28T11:30:00Z",
+      http: answering(STAND_PAT).http
+    });
+    const again = answering(STAND_PAT);
+
+    const runs = await schedule({
+      at: "2026-08-28T12:00:00Z",
+      http: again.http
+    });
+
+    expect(runs).toEqual([]);
+    expect(again.calls()).toBe(0);
+  });
+
+  test("leaves a failed run for the next poll to retry", async () => {
+    await openTheTrack();
+    await client.query(
+      `create function fail_one_scheduled_state()
+       returns trigger
+       language plpgsql
+       as $$
+       begin
+         if new.model_id = 'fpl/base-4' and new.gw = 2 then
+           raise exception 'simulated Manager State persistence failure';
+         end if;
+         return new;
+       end;
+       $$;
+       create trigger manager_states_fail_for_one_scheduled_seat
+       before insert on manager_states
+       for each row execute function fail_one_scheduled_state()`
+    );
+
+    try {
+      await expect(schedule({
+        at: "2026-08-28T11:30:00Z",
+        http: answering(STAND_PAT).http
+      })).rejects.toThrow("simulated Manager State persistence failure");
+    } finally {
+      await client.query(
+        `drop trigger manager_states_fail_for_one_scheduled_seat
+           on manager_states;
+         drop function fail_one_scheduled_state()`
+      );
+    }
+
+    // The row records the failure and stays open. The Match track's answer to
+    // a Gap is a second scheduled run; here the retry is the same thing,
+    // because a re-run skips every Entrant that already holds the Gameweek.
+    const failed = await client.query<{
+      attempt_count: number;
+      completed: boolean;
+      last_error: string | null;
+    }>(
+      `select attempt_count, completed_at is not null as completed, last_error
+         from fpl_runs where gw = 2`
+    );
+    expect(failed.rows[0]).toMatchObject({
+      attempt_count: 1,
+      completed: false
+    });
+    expect(failed.rows[0]!.last_error)
+      .toContain("simulated Manager State persistence failure");
+
+    const retry = answering(STAND_PAT);
+    const runs = await schedule({
+      at: "2026-08-28T12:00:00Z",
+      http: retry.http
+    });
+
+    // Only the Entrants that did not get through are called again, and the
+    // ledger counts the second attempt.
+    expect(runs).toHaveLength(1);
+    expect(runs[0]!.outcome).toMatchObject({
+      kind: "played",
+      standing: BASE_MODELS
+        .map(seatId)
+        .filter((id) => id !== "fpl/base-4")
+    });
+    expect(retry.calls()).toBe(1);
+    const healed = await client.query<{
+      attempt_count: number;
+      completed: boolean;
+      last_error: string | null;
+    }>(
+      `select attempt_count, completed_at is not null as completed, last_error
+         from fpl_runs where gw = 2`
+    );
+    expect(healed.rows).toEqual([{
+      attempt_count: 2,
+      completed: true,
+      last_error: null
+    }]);
+  });
+
+  test("schedules nothing while the track has not started", async () => {
+    const script = answering(STAND_PAT);
+
+    const runs = await schedule({
+      at: "2026-08-28T11:30:00Z",
+      http: script.http
+    });
+
+    expect(runs).toEqual([]);
+    expect(script.calls()).toBe(0);
+    // And no ledger row: a Gameweek recorded as completed before the operator
+    // opened the track on it would never be run afterwards.
+    const ledger = await client.query<{ count: number }>(
+      "select count(*)::int as count from fpl_runs"
+    );
+    expect(ledger.rows).toEqual([{ count: 0 }]);
+  });
+
+  test("never schedules a Gameweek before the one the track started at", async () => {
+    // The operator starts at Gameweek 3, and polls inside Gameweek 2's window:
+    // its Lock is six hours away and has not passed, so nothing but the
+    // starting Gameweek keeps it off the list. A run for it would find the
+    // track inactive, and would then write a ledger row marking a Gameweek
+    // completed that the track was never going to play.
+    await openTheTrack(3);
+    const script = answering(STAND_PAT);
+
+    const runs = await schedule({
+      at: "2026-08-28T12:00:00Z",
+      http: script.http
+    });
+
+    expect(runs).toEqual([]);
+    expect(script.calls()).toBe(0);
+    const ledger = await client.query<{ count: number }>(
+      "select count(*)::int as count from fpl_runs"
+    );
+    expect(ledger.rows).toEqual([{ count: 0 }]);
+  });
+
+  test("does not start a Gameweek whose Lock has already passed", async () => {
+    await openTheTrack();
+    const script = answering(STAND_PAT);
+
+    // Polled after Gameweek 2's deadline, having never run it. Asking now
+    // would spend nine calls on a Gameweek every one of whose answers is
+    // already too late, and would record nine `deadline` attempts that say
+    // only that the run was started too late to matter. Gameweek 3 is not due
+    // for another fortnight, so the poll finds nothing at all.
+    const runs = await schedule({
+      at: "2026-08-28T18:00:00Z",
+      http: script.http
+    });
+
+    expect(runs).toEqual([]);
+    expect(script.calls()).toBe(0);
+    const ledger = await client.query<{ count: number }>(
+      "select count(*)::int as count from fpl_runs"
+    );
+    expect(ledger.rows).toEqual([{ count: 0 }]);
+  });
+
+  test("still retries a started run whose Lock has since passed", async () => {
+    await openTheTrack();
+    await client.query(
+      `insert into fpl_runs (season, gw, scheduled_for, started_at)
+       values (
+         '2026-27', 2, '2026-08-28T11:30:00Z', '2026-08-28T11:30:00Z'
+       )`
+    );
+    const script = answering(STAND_PAT);
+
+    // A run that started before the Lock and never completed is picked up
+    // again even afterwards. What it finds may all be late, but an operator
+    // reading `last_error` needs the ledger to close rather than to sit open
+    // for ever on a Gameweek nothing will touch again.
+    const runs = await schedule({
+      at: "2026-08-28T18:00:00Z",
+      http: script.http
+    });
+
+    expect(runs.map(({ gameweek }) => gameweek)).toEqual([2]);
+    expect(runs[0]!.outcome).toMatchObject({
+      kind: "played",
+      played: [],
+      missing: BASE_MODELS.map(seatId)
+    });
+  });
+
+  test("returns without running when another process holds the lock", async () => {
+    await openTheTrack();
+    const holder = new Client({
+      connectionString: process.env.DATABASE_URL
+    });
+    await holder.connect();
+
+    try {
+      await holder.query("select pg_advisory_lock(8150529)");
+      const script = answering(STAND_PAT);
+
+      const runs = await schedule({
+        at: "2026-08-28T11:30:00Z",
+        http: script.http
+      });
+
+      expect(runs).toEqual([]);
+      expect(script.calls()).toBe(0);
+    } finally {
+      await holder.query("select pg_advisory_unlock(8150529)");
+      await holder.end();
+    }
+  });
+});

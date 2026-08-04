@@ -1278,6 +1278,97 @@ describe("predicting a Gameweek", () => {
     ]);
   });
 
+  test("leaves the FPL track's seats to the FPL track", async () => {
+    // The two tracks share the `models` table and the `role = 'entrant'` that
+    // marks a competitor, and they are told apart by Prompt Version. Selecting
+    // on the role alone made every FPL seat a Match Entrant with the wrong
+    // Prompt Version, which is a refusal — so seeding the FPL roster would
+    // have stopped the Match track's runner outright.
+    await client.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values (
+         'fpl/gpt-5.2', 'FPL Seat', 'openai/gpt-5.2', 'openai',
+         'fpl/2026-27-v1', 'entrant'
+       )`
+    );
+    const called: string[] = [];
+
+    await predictGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      concurrency: 2,
+      apiKey: "test-key",
+      now: () => new Date("2026-08-21T17:29:00Z"),
+      http: async (_url, options) => {
+        called.push((JSON.parse(options?.body ?? "{}") as {
+          model: string;
+        }).model);
+        return {
+          status: 200,
+          body: JSON.stringify({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  fixture_id: 1,
+                  probs: { H: 0.6, D: 0.24, A: 0.16 },
+                  score: { home: 2, away: 1 },
+                  rationale: "Match seat only."
+                })
+              }
+            }],
+            usage: { prompt_tokens: 83, completion_tokens: 37 }
+          })
+        };
+      }
+    });
+
+    // One call and one Prediction: the Match seat's. The FPL seat is not a
+    // Match Entrant that failed, it is not a Match Entrant at all, so it
+    // leaves no Prediction, no attempt and no Gap behind.
+    expect(called).toEqual(["openai/gpt-5.2"]);
+    const stored = await client.query<{ model_id: string }>(
+      "select model_id from predictions order by model_id"
+    );
+    expect(stored.rows).toEqual([{ model_id: "entrant/v1" }]);
+    const attempted = await client.query<{ model_id: string }>(
+      "select distinct model_id from attempts order by model_id"
+    );
+    expect(attempted.rows).toEqual([{ model_id: "entrant/v1" }]);
+  });
+
+  test("refuses a roster that holds only the other track's seats", async () => {
+    // Nine FPL seats and no Match seat is a misconfiguration, not an empty
+    // Gameweek. Counting the seats without asking which track they belong to
+    // would find nine, find no work to pair them with, and run the Match track
+    // to completion having predicted nothing at all.
+    await client.query(
+      `delete from models;
+       insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values (
+         'fpl/gpt-5.2', 'FPL Seat', 'openai/gpt-5.2', 'openai',
+         'fpl/2026-27-v1', 'entrant'
+       )`
+    );
+    let calls = 0;
+
+    await expect(predictGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      concurrency: 1,
+      apiKey: "test-key",
+      now: () => new Date("2026-08-21T17:29:00Z"),
+      http: async () => {
+        calls += 1;
+        throw new Error("HTTP must not run");
+      }
+    })).rejects.toThrow("No Entrants are configured");
+    expect(calls).toBe(0);
+  });
+
   test("does not duplicate or replace a Prediction when the job is run twice", async () => {
     let calls = 0;
     const options = {

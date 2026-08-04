@@ -10,6 +10,8 @@
     "fetch": "tsx src/cli/fetch.ts",
     "fetch:history": "tsx src/cli/fetch-history.ts",
     "fetch:xg-history": "tsx src/cli/fetch-understat-history.ts",
+    "fpl:start": "tsx src/cli/fpl-start.ts",
+    "fpl:scheduled": "tsx src/cli/fpl-scheduled.ts",
     "preflight": "tsx src/cli/preflight.ts",
     "predict": "tsx src/cli/predict.ts",
     "predict:scheduled": "tsx src/cli/predict-scheduled.ts",

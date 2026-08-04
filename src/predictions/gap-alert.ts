@@ -1,4 +1,5 @@
 import type { Client } from "pg";
+import { MATCH_PROMPT_VERSION } from "./openrouter-entrant.js";
 
 type Database = Pick<Client, "query">;
 
@@ -140,6 +141,7 @@ export async function readGapAlert(
      where f.season = $1
        and f.locked_in_gw = $2
        and m.role = 'entrant'
+       and m.prompt_version = $3
        and not exists (
          select 1
            from predictions p
@@ -148,7 +150,12 @@ export async function readGapAlert(
             and p.fpl_id = f.fpl_id
        )
      order by m.id, f.fpl_id`,
-    [season, gameweek]
+    // A Gap is a Fixture a Match Entrant produced no Prediction for, and an
+    // FPL seat is not a Match Entrant. Selecting on the role alone reported
+    // every FPL seat as a Gap on every Fixture, and one with no recorded cause
+    // at that, because the attempt it looks for is a Match attempt it never
+    // made.
+    [season, gameweek, MATCH_PROMPT_VERSION]
   );
   const first = result.rows[0];
   if (first === undefined) {

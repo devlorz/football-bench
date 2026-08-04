@@ -19,7 +19,10 @@ import {
   FPL_POOL_ALTERNATES,
   type FixturePlayer
 } from "./fpl-pool-fixture.js";
-import { OPENING_ACTION } from "./fpl-action-fixture.js";
+import {
+  OPENING_ACTION,
+  SELL_WILSON_BUY_EVANILSON
+} from "./fpl-action-fixture.js";
 import { legalStateFrom } from "./fpl-replay.js";
 import { storedState } from "./fpl-state-fixture.js";
 
@@ -932,7 +935,7 @@ describe("opening the FPL track for a Gameweek", () => {
     });
   });
 
-  test("refuses to hand a second Entrant a context built from another's Squad", async () => {
+  test("re-runs a Gameweek on the Entrant's own stored context", async () => {
     await client.query(
       `insert into models (
          id, name, base_model, provider, prompt_version, role
@@ -941,25 +944,149 @@ describe("opening the FPL track for a Gameweek", () => {
          'fpl/2026-27-v1', 'entrant'
        )`
     );
+    await lockPool(
+      2,
+      FPL_POOL_ALTERNATES.filter(({ fplId }) => fplId === 19)
+    );
     await seedStandingManagerState();
-    await seedStandingManagerState(1, "entrant/v2");
+    await storeManagerState(client, {
+      entrantId: "entrant/v2",
+      season: "2026-27",
+      gameweek: 1,
+      state: legalStateFrom(
+        SELL_WILSON_BUY_EVANILSON,
+        legalStateFrom(OPENING_ACTION)
+      ),
+      attemptsUsed: 0,
+      predictedAt: new Date("2026-08-21T11:30:00Z")
+    });
+
+    const standPatOnEvanilson = JSON.stringify({
+      ...JSON.parse(STAND_PAT) as object,
+      team_sheet: {
+        ...(JSON.parse(STAND_PAT) as { team_sheet: object }).team_sheet,
+        bench: [2, 7, 12, 19]
+      }
+    });
+    await play({ responses: [STAND_PAT] });
+    // The second Entrant's provider fails, so its Gameweek stores a context
+    // and nothing else — the case a second run over the same Gameweek is for.
+    // It is the *second* Entrant that re-runs deliberately: `contexts_identity`
+    // orders by `model_id`, so a read-back that forgot whose context it wanted
+    // would reach the first Entrant's row and be right by accident if the two
+    // were the other way round.
+    await play({
+      entrantId: "entrant/v2",
+      responses: [standPatOnEvanilson],
+      http: async () => ({ status: 500, body: "upstream exploded" })
+    });
+    const stored = await client.query<{ model_id: string; body: string }>(
+      `select model_id, body
+         from contexts
+        where gw = 2 and track = 'fpl'
+        order by model_id`
+    );
+    const [first, second] = stored.rows;
+
+    // And between the runs the snapshot moves: Palmer rises to £13.0m. What
+    // the Entrant is judged on is the text it was handed, so the second run
+    // must hand back the stored row rather than rebuild one from a pool that
+    // has moved since — and it must hand back *this* Entrant's row.
+    await client.query(
+      `update fpl_players set price_tenths = 130
+        where season = '2026-27' and gw = 2 and fpl_id = 8`
+    );
+    const [rerun] = await play({
+      entrantId: "entrant/v2",
+      responses: [standPatOnEvanilson]
+    });
+
+    expect(rerun![0]!.content).toBe(second!.body);
+    expect(second!.body).not.toBe(first!.body);
+    expect(second!.body).not.toContain("£13.0m");
+    const after = await client.query<{ model_id: string; body: string }>(
+      `select model_id, body
+         from contexts
+        where gw = 2 and track = 'fpl'
+        order by model_id`
+    );
+    expect(after.rows).toEqual(stored.rows);
+  });
+
+  test("gives a second Entrant its own context rather than the first's", async () => {
+    await client.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values (
+         'entrant/v2', 'Second Entrant', 'anthropic/claude-opus-5', 'anthropic',
+         'fpl/2026-27-v1', 'entrant'
+       )`
+    );
+    // Evanilson joins the Gameweek's pool because the second Entrant owns him:
+    // a player in a Squad is a player the Gameweek prices, and a pool without
+    // him would refuse that Squad rather than the action being tested.
+    await lockPool(
+      2,
+      FPL_POOL_ALTERNATES.filter(({ fplId }) => fplId === 19)
+    );
+    await seedStandingManagerState();
+    // The second Entrant stands one Transfer from the first: Wilson sold and
+    // Evanilson bought, so a context built for either of them names a player
+    // the other does not own and is visibly wrong rather than accidentally
+    // right.
+    await storeManagerState(client, {
+      entrantId: "entrant/v2",
+      season: "2026-27",
+      gameweek: 1,
+      state: legalStateFrom(
+        SELL_WILSON_BUY_EVANILSON,
+        legalStateFrom(OPENING_ACTION)
+      ),
+      attemptsUsed: 0,
+      predictedAt: new Date("2026-08-21T11:30:00Z")
+    });
+
+    // Each stands pat on the Squad it actually owns. The second's Team Sheet
+    // benches Evanilson where the first's benches Wilson, which is the whole
+    // reason the two cannot share one context: an action legal for one of them
+    // names a player the other never bought.
+    const standPatOnEvanilson = JSON.stringify({
+      ...JSON.parse(STAND_PAT) as object,
+      team_sheet: {
+        ...(JSON.parse(STAND_PAT) as { team_sheet: { bench: number[] } })
+          .team_sheet,
+        bench: [2, 7, 12, 19]
+      }
+    });
 
     await play({ responses: [STAND_PAT] });
+    await play({ entrantId: "entrant/v2", responses: [standPatOnEvanilson] });
 
-    // `contexts_identity` allows one FPL context per Gameweek, and every
-    // Gameweek this function plays is one where each Entrant's context carries
-    // its own Squad. Handing this one the row already there would show it
-    // fifteen players it does not own and then judge it on the ones it does.
-    // Per-Entrant context rows belong to "Run the FPL track under the shared
-    // Lock"; until they exist this must fail loudly rather than quietly.
-    await expect(play({
-      entrantId: "entrant/v2",
-      responses: [STAND_PAT]
-    })).rejects.toThrow(/already another Entrant's/);
-
-    const states = await client.query(
-      "select model_id from manager_states where gw = 2"
+    // One row apiece, and each carries the Squad its own Entrant owns. Sharing
+    // the row would have shown the second fifteen players it does not own and
+    // then judged it on the ones it does.
+    const contexts = await client.query<{ model_id: string; body: string }>(
+      `select model_id, body
+         from contexts
+        where gw = 2 and track = 'fpl'
+        order by model_id`
     );
-    expect(states.rows).toEqual([{ model_id: "entrant/v1" }]);
+    expect(contexts.rows.map(({ model_id: id }) => id))
+      .toEqual(["entrant/v1", "entrant/v2"]);
+    const [first, second] = contexts.rows;
+    expect(first!.body).toContain("- 15 | bought for");
+    expect(first!.body).not.toContain("- 19 | bought for");
+    expect(second!.body).toContain("- 19 | bought for");
+    expect(second!.body).not.toContain("- 15 | bought for");
+
+    // And both played, which is the whole point of the widening: a Gameweek
+    // the roster can get through rather than one that stops at the second seat.
+    const states = await client.query(
+      "select model_id from manager_states where gw = 2 order by model_id"
+    );
+    expect(states.rows).toEqual([
+      { model_id: "entrant/v1" },
+      { model_id: "entrant/v2" }
+    ]);
   });
 });

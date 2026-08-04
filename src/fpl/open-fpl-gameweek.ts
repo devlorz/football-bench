@@ -14,10 +14,12 @@ import {
 } from "./ask-for-gameweek-action.js";
 import {
   loadLockedGameweek,
-  storeFplContext
+  storeFplContext,
+  type LockedGameweek
 } from "./fpl-gameweek-context.js";
 import { MAX_REPAIRS } from "../repairs.js";
 import {
+  loadManagerState,
   loadStandingManagerState,
   storeManagerState,
   type StandingManagerState
@@ -81,27 +83,62 @@ async function carriedThroughSilence(
   );
 }
 
-export async function openFplGameweek({
+/**
+ * What one Entrant's Gameweek came to.
+ *
+ * `played` stored a Manager State — a legal action's, or a Roll Over's after
+ * the fourth invalid response. `standing` is an Entrant that already held one
+ * for this Gameweek and was not called again. `missing` is every way it
+ * produced nothing: a provider that failed or refused, a response nothing
+ * could read, a Lock already passed.
+ */
+export type FplGameweekResult = "played" | "standing" | "missing";
+
+export interface PlayFplGameweekOptions {
+  database: Database;
+  season: string;
+  gameweek: number;
+  entrant: GameweekEntrant;
+  /** The Gameweek's Lock and pool, read once for however many Entrants play. */
+  locked: LockedGameweek;
+  apiKey: string;
+  http: HttpFetcher;
+  now: () => Date;
+}
+
+/**
+ * One Entrant's Gameweek, from the Manager State it carries in to the one it
+ * leaves behind.
+ *
+ * It takes the Gameweek's Lock and pool rather than reading them, because a
+ * whole roster plays one Gameweek and the deadline and the snapshot belong to
+ * the Gameweek rather than to whoever is reading them. Every Entrant must be
+ * priced from one pool, or two of them are playing different games.
+ */
+export async function playFplGameweek({
   database,
   season,
   gameweek,
-  entrantId,
+  entrant,
+  locked: { deadline, pool: contextPool },
   apiKey,
   http,
   now
-}: OpenFplGameweekOptions): Promise<void> {
-  const { deadline, pool: contextPool } =
-    await loadLockedGameweek(database, season, gameweek);
+}: PlayFplGameweekOptions): Promise<FplGameweekResult> {
+  const entrantId = entrant.id;
 
-  const entrantResult = await database.query<GameweekEntrant>(
-    `select id, base_model, provider, quantization
-       from models
-      where id = $1 and role = 'entrant'`,
-    [entrantId]
-  );
-  const [entrant] = entrantResult.rows;
-  if (entrant === undefined) {
-    throw new Error(`${entrantId} is not an Entrant`);
+  // A Gameweek an Entrant already has a Manager State for is a decision
+  // already taken. `manager_states` is insert-only and refuses an update, so
+  // a second run could not replace it in any case — what this saves is the
+  // call that would have been made and thrown away, and the crash that
+  // storing it would have been.
+  const already = await loadManagerState(database, {
+    entrantId,
+    season,
+    gameweek
+  });
+  if (already !== null) {
+    return "standing";
   }
 
   // What the Entrant carries in — and it must carry something in. An opening
@@ -124,21 +161,19 @@ export async function openFplGameweek({
   const previous =
     await carriedThroughSilence(database, season, standing, gameweek);
 
-  // From here every Entrant's context carries its own Squad, so the one row
-  // `contexts_identity` allows belongs to whichever Entrant stored it. Sharing
-  // it would show this one fifteen players it does not own and then judge it
-  // on the ones it does.
+  // This Entrant's own context, carrying this Entrant's own Squad. Stored
+  // before the call, so what it saw is on record whatever the call comes to.
   const body = await storeFplContext(
     database,
     season,
     gameweek,
+    entrant.id,
     buildFplTrackContext({
       season,
       gameweek,
       state: previous,
       pool: contextPool
-    }),
-    false
+    })
   );
 
   const outcome = await askForGameweekAction({
@@ -166,7 +201,7 @@ export async function openFplGameweek({
       attemptsUsed: outcome.repairsUsed,
       predictedAt: outcome.receivedAt
     });
-    return;
+    return "played";
   }
   // The fourth invalid response. The action is discarded whole and the
   // Gameweek Rolls Over onto the Team Sheet already standing (ADR-0004) —
@@ -183,5 +218,49 @@ export async function openFplGameweek({
       rolledOver: true,
       predictedAt: outcome.receivedAt
     });
+    return "played";
   }
+  return "missing";
+}
+
+/**
+ * One Entrant's Gameweek, reading the Gameweek's Lock and pool for itself.
+ *
+ * The whole roster plays a Gameweek through `runFplGameweek`, which reads
+ * those once and hands them to every Entrant. This is the same Gameweek for
+ * one Entrant — what an operator reaches for to carry a single seat forward,
+ * and what the per-Entrant behaviour is tested through.
+ */
+export async function openFplGameweek({
+  database,
+  season,
+  gameweek,
+  entrantId,
+  apiKey,
+  http,
+  now
+}: OpenFplGameweekOptions): Promise<FplGameweekResult> {
+  const locked = await loadLockedGameweek(database, season, gameweek);
+
+  const entrantResult = await database.query<GameweekEntrant>(
+    `select id, base_model, provider, quantization
+       from models
+      where id = $1 and role = 'entrant'`,
+    [entrantId]
+  );
+  const [entrant] = entrantResult.rows;
+  if (entrant === undefined) {
+    throw new Error(`${entrantId} is not an Entrant`);
+  }
+
+  return playFplGameweek({
+    database,
+    season,
+    gameweek,
+    entrant,
+    locked,
+    apiKey,
+    http,
+    now
+  });
 }

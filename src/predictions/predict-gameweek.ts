@@ -90,7 +90,9 @@ async function storeContext(
   const inserted = await database.query<{ id: number }>(
     `insert into contexts (season, gw, track, fpl_id, hash, body)
      values ($1, $2, 'match', $3, $4, $5)
-     on conflict (season, gw, track, (coalesce(fpl_id, -1))) do nothing
+     on conflict (
+       season, gw, track, (coalesce(fpl_id, -1)), (coalesce(model_id, ''))
+     ) do nothing
      returning id`,
     [season, gameweek, fixture.fpl_id, sha256(body), body]
   );
@@ -354,25 +356,24 @@ export async function predictGameweek({
     throw new Error("Prediction concurrency must be a positive integer");
   }
 
+  // Which seats are this track's is read off the Prompt Version, exactly as
+  // `startFplTrack` reads off its own. Both tracks mark a competitor with
+  // `role = 'entrant'` and share one `models` table, so the role alone stopped
+  // telling them apart the moment the FPL track had seats: every one of them
+  // would have been a Match Entrant carrying the wrong Prompt Version, which
+  // this function used to refuse outright.
+  //
+  // The refusal it replaces asserted that every Entrant is a Match Entrant.
+  // That premise has expired rather than the check having been weakened.
   const entrantResult = await database.query<EntrantRow>(
     `select id, base_model, provider, quantization, prompt_version
        from models
-      where role = 'entrant'
-      order by id`
+      where role = 'entrant' and prompt_version = $1
+      order by id`,
+    [MATCH_PROMPT_VERSION]
   );
   if (entrantResult.rows.length === 0) {
     throw new Error("No Entrants are configured");
-  }
-  const mismatchedPrompt = entrantResult.rows.find(
-    ({ prompt_version: promptVersion }) =>
-      promptVersion !== MATCH_PROMPT_VERSION
-  );
-  if (mismatchedPrompt !== undefined) {
-    throw new Error(
-      `Entrant ${mismatchedPrompt.id} uses Prompt Version `
-      + `${mismatchedPrompt.prompt_version}; `
-      + `expected ${MATCH_PROMPT_VERSION}`
-    );
   }
 
   const work = await database.query<WorkItemRow>(
@@ -384,6 +385,7 @@ export async function predictGameweek({
       where f.season = $1
         and coalesce(f.locked_in_gw, f.gw) = $2
         and m.role = 'entrant'
+        and m.prompt_version = $3
         and not exists (
           select 1
             from predictions p
@@ -392,7 +394,7 @@ export async function predictGameweek({
              and p.fpl_id = f.fpl_id
         )
       order by f.fpl_id, m.id`,
-    [season, gameweek]
+    [season, gameweek, MATCH_PROMPT_VERSION]
   );
 
   const contextData = trigger === "main"

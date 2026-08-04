@@ -124,6 +124,62 @@ describe("applying migrations", () => {
     expect(unprotected.rows).toEqual([]);
   });
 
+  test("refuses an FPL context that cannot name the Entrant it was built for", async () => {
+    await client.query(
+      `create table schema_migrations (
+         filename   text primary key,
+         applied_at timestamptz not null default now()
+       )`
+    );
+    for (const filename of [
+      "0001_initial.sql",
+      "0002_rename_attempt_trigger_to_fill.sql",
+      "0003_restrict_public_role_access.sql",
+      "0004_historical_matches.sql",
+      "0005_fpl_players.sql",
+      "0006_gameweek_scoped_fpl_players.sql",
+      "0007_lock_fpl_player_snapshots.sql",
+      "0008_prediction_runs.sql",
+      "0009_historical_match_shots.sql",
+      "0010_understat_match_xg.sql",
+      "0011_fpl_player_points.sql",
+      "0012_record_gameweek_hits.sql"
+    ]) {
+      await client.query(
+        await readFile(new URL(filename, realMigrationsUrl), "utf8")
+      );
+      await client.query(
+        "insert into schema_migrations (filename) values ($1)",
+        [filename]
+      );
+    }
+    // One FPL context under the old key: one row for the whole Gameweek, with
+    // no column that could say whose Squad it carries.
+    await client.query(
+      `insert into gameweeks (season, gw, deadline_at)
+       values ('2026-27', 1, '2026-08-21T17:30:00Z');
+       insert into contexts (season, gw, track, hash, body)
+       values ('2026-27', 1, 'fpl', 'hash', 'context')`
+    );
+
+    // Attributing it would mean guessing, and guessing wrong would put a text
+    // on record as one an Entrant saw when it did not. The migration says so
+    // in a sentence, carried on the cause, instead of failing through the
+    // check constraint below it with nothing but a constraint name.
+    const failure = await applyMigrations(client)
+      .then(() => null, (error: unknown) => error);
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message)
+      .toBe("Migration 0013_per_entrant_fpl_contexts.sql failed");
+    expect(((failure as Error).cause as Error).message)
+      .toMatch(/predate per-Entrant identity/);
+
+    const untouched = await client.query<{ count: number }>(
+      "select count(*)::int as count from contexts"
+    );
+    expect(untouched.rows).toEqual([{ count: 1 }]);
+  });
+
   test("locks player snapshots over the deployed 0006 schema", async () => {
     await client.query(
       `create table schema_migrations (
@@ -166,7 +222,9 @@ describe("applying migrations", () => {
       "0009_historical_match_shots.sql",
       "0010_understat_match_xg.sql",
       "0011_fpl_player_points.sql",
-      "0012_record_gameweek_hits.sql"
+      "0012_record_gameweek_hits.sql",
+      "0013_per_entrant_fpl_contexts.sql",
+      "0014_fpl_runs.sql"
     ]);
     const backfill = await client.query<{
       observed_at: Date;

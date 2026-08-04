@@ -303,12 +303,15 @@ definition the Gameweek the track started at, for one Entrant of nine and perman
 `manager_states` is insert-only. Openings belong to "Start all nine Entrants together" and to
 nowhere else.
 
-**One FPL context per Gameweek is sound only at an opening.** Every Entrant opens from the same
-seed state, so the one row the opening stores is one Entrant's context and every Entrant's at
-once. Every later Gameweek's context carries its own Squad, and `contexts_identity` — unique on
-`(season, gw, track, fpl_id)` — has room for one of them, so a second Entrant reaching a later
-Gameweek is refused loudly rather than handed a Squad it does not own and then judged on the one
-it does. Widening that key belongs to "Run the FPL track under the shared Lock".
+**A context belongs to one Entrant, because it carries that Entrant's Squad.** `contexts_identity`
+is unique on `(season, gw, track, fpl_id, model_id)`, and an FPL context names the Entrant where a
+Match context names the Fixture — the check refuses either identity on the wrong track.
+
+The opening is the one Gameweek where this is not forced: every Entrant is seeded from the same
+empty Squad and the same locked pool, so the nine bodies are byte-identical and the nine hashes
+with them. They are stored one apiece regardless. Leaving `model_id` null for exactly one Gameweek
+of the Season would make every later reader of `contexts` need to know which Gameweek that was —
+a cost paid for the whole Season to save eight rows once.
 
 ### The opening is gathered whole, then committed whole
 
@@ -594,10 +597,27 @@ detail. `roll_over_rate` is 0 or 1 for one Gameweek and a cumulative fraction.
 `violation_profile` stores the total violation count as its value and the typed breakdown in
 detail, both per Gameweek and cumulatively.
 
-### One Lock, shared
+### One Lock, shared — but two runs
 
 The FPL action locks at the Gameweek deadline, the same instant the Match track uses
-(ADR-0006). One run can serve both tracks, and verifying the Lock held remains a single query.
+(ADR-0006), and verifying the Lock held remains a single query.
+
+ADR-0006 also says one run can serve both tracks, and the FPL track does not take it up. The
+Lock the two share is the deadline, not the run. The FPL prompt is several times the Match
+prompt's size, so an FPL Gameweek that ran long or failed inside the Match scheduler would hold
+up Predictions that were ready to write — and both tracks must reach one deadline, not queue at
+it. So the FPL action run has its own ledger (`fpl_runs`), its own advisory lock and its own
+poll, on the same six-hour lead as the Match track's main run.
+
+There is no FPL equivalent of the Match track's fill run. A fill exists there because
+Predictions are insert-only and a Gap can only be closed by asking again; an FPL run already
+skips every Entrant that holds the Gameweek, so re-running *is* the fill. That is what the
+ledger's retry performs: a failed run keeps `completed_at` null, and the next poll calls only
+the Entrants that produced nothing.
+
+Which seats are which track's is read off the Prompt Version. Both tracks mark a competitor with
+`role = 'entrant'` in one `models` table, so the role alone stopped telling them apart the moment
+the FPL track had seats.
 
 Context is stored and hashed exactly as the Match track's is, so what an Entrant saw is
 reconstructible.
