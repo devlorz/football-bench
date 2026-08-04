@@ -22,26 +22,35 @@ export interface DailyFetchJobConfig {
   footballDataSeason: string;
 }
 
-export interface ScheduledPredictJobConfig {
+/**
+ * What any scheduled run that calls Entrants needs: a database, a Season, a
+ * key to call with, and a bound on how many are called at once. It belongs to
+ * neither track — both have Entrants, and both resolve their Gameweek from the
+ * stored deadlines rather than from the environment, so neither reads one.
+ *
+ * The two track names below stay, because which job reads a config is worth
+ * saying at every call site. What they must not be is one defined in terms of
+ * the other: the shared reader returning `ScheduledPredictJobConfig` made the
+ * FPL track's configuration a kind of the Match track's, which is a
+ * relationship neither has to the other.
+ */
+export interface ScheduledEntrantJobConfig {
   databaseUrl: string;
   season: string;
   concurrency: number;
   openRouterApiKey: string;
 }
 
-export interface PredictJobConfig extends ScheduledPredictJobConfig {
+export type ScheduledPredictJobConfig = ScheduledEntrantJobConfig;
+
+export interface PredictJobConfig extends ScheduledEntrantJobConfig {
   gameweek: number;
   trigger: AttemptTrigger;
 }
 
-export interface ScheduledFplJobConfig {
-  databaseUrl: string;
-  season: string;
-  concurrency: number;
-  openRouterApiKey: string;
-}
+export type ScheduledFplJobConfig = ScheduledEntrantJobConfig;
 
-export interface FplStartJobConfig extends ScheduledFplJobConfig {
+export interface FplStartJobConfig extends ScheduledEntrantJobConfig {
   gameweek: number;
 }
 
@@ -132,21 +141,19 @@ export function readPredictJobConfig(
 }
 
 /**
- * What both tracks' scheduled runs need: a database, a Season, an API key and
- * a bound on how many Entrants are called at once. They resolve their Gameweek
- * from the stored deadlines rather than from the environment, so neither reads
- * one.
+ * Reads a `ScheduledEntrantJobConfig` for whichever track asks for one.
  *
  * The concurrency variable is a parameter because the two must stay separate:
  * the tracks share a deadline (ADR-0006) and nothing else, and the FPL prompt
  * is several times the Match prompt's size, so one number for both would tie
- * two costs that have no reason to move together.
+ * two costs that have no reason to move together. It is the only thing that
+ * differs, which is why everything else is read once here.
  */
 function readScheduledJobConfig(
   environment: NodeJS.ProcessEnv,
   concurrencyVariable: string,
   concurrencyDefault: number
-): ScheduledPredictJobConfig {
+): ScheduledEntrantJobConfig {
   const concurrency = Number(
     environment[concurrencyVariable]?.trim() || String(concurrencyDefault)
   );
