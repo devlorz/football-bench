@@ -22,6 +22,7 @@ import {
   storeManagerState
 } from "./manager-state-store.js";
 import { SEASON_ROSTER_SIZE } from "../season-roster.js";
+import { eachBounded } from "../bounded-concurrency.js";
 
 type Database = Pick<Client, "query">;
 
@@ -144,59 +145,39 @@ export async function startFplTrack({
   // Nine conversations at once, up to the operator's limit. Each Entrant's
   // own Repairs stay in its own conversation, so the only thing concurrency
   // shares is the wait — which is the point, with one Lock to finish inside.
-  let nextSeat = 0;
-  async function worker(): Promise<void> {
-    for (;;) {
-      const entrant = entrants[nextSeat];
-      nextSeat += 1;
-      if (entrant === undefined) {
-        return;
-      }
-      // Stored before the Entrant is called, and the stored text is what it is
-      // handed: a second attempt at the same opening gives back the row on
-      // record rather than a rebuilt one, so a snapshot that moved in between
-      // cannot price a Squad from a text nobody was shown.
-      const body = await storeFplContext(
-        database,
-        season,
-        gameweek,
-        entrant.id,
-        opening
-      );
-      const outcome = await askForGameweekAction({
-        database,
-        season,
-        gameweek,
-        entrant,
-        body,
-        previous,
-        pool: parseFplTrackContextPool(body),
-        deadline,
-        apiKey,
-        http,
-        now
+  await eachBounded(entrants, concurrency, async (entrant) => {
+    // Stored before the Entrant is called, and the stored text is what it is
+    // handed: a second attempt at the same opening gives back the row on
+    // record rather than a rebuilt one, so a snapshot that moved in between
+    // cannot price a Squad from a text nobody was shown.
+    const body = await storeFplContext(
+      database,
+      season,
+      gameweek,
+      entrant.id,
+      opening
+    );
+    const outcome = await askForGameweekAction({
+      database,
+      season,
+      gameweek,
+      entrant,
+      body,
+      previous,
+      pool: parseFplTrackContextPool(body),
+      deadline,
+      apiKey,
+      http,
+      now
+    });
+    if (outcome.kind === "action") {
+      openings.set(entrant.id, {
+        state: outcome.state,
+        repairsUsed: outcome.repairsUsed,
+        receivedAt: outcome.receivedAt
       });
-      if (outcome.kind === "action") {
-        openings.set(entrant.id, {
-          state: outcome.state,
-          repairsUsed: outcome.repairsUsed,
-          receivedAt: outcome.receivedAt
-        });
-      }
     }
-  }
-  // Settled rather than raced: a worker whose database write failed must not
-  // leave its peers writing into a call that has already returned.
-  const finished = await Promise.allSettled(
-    Array.from(
-      { length: Math.min(concurrency, entrants.length) },
-      () => worker()
-    )
-  );
-  const failed = finished.find((result) => result.status === "rejected");
-  if (failed !== undefined) {
-    throw failed.reason;
-  }
+  });
 
   const missing = entrants
     .map(({ id }) => id)

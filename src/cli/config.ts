@@ -131,14 +131,27 @@ export function readPredictJobConfig(
   };
 }
 
-export function readScheduledPredictJobConfig(
-  environment: NodeJS.ProcessEnv
+/**
+ * What both tracks' scheduled runs need: a database, a Season, an API key and
+ * a bound on how many Entrants are called at once. They resolve their Gameweek
+ * from the stored deadlines rather than from the environment, so neither reads
+ * one.
+ *
+ * The concurrency variable is a parameter because the two must stay separate:
+ * the tracks share a deadline (ADR-0006) and nothing else, and the FPL prompt
+ * is several times the Match prompt's size, so one number for both would tie
+ * two costs that have no reason to move together.
+ */
+function readScheduledJobConfig(
+  environment: NodeJS.ProcessEnv,
+  concurrencyVariable: string,
+  concurrencyDefault: number
 ): ScheduledPredictJobConfig {
   const concurrency = Number(
-    environment.PREDICT_CONCURRENCY?.trim() || "9"
+    environment[concurrencyVariable]?.trim() || String(concurrencyDefault)
   );
   if (!Number.isInteger(concurrency) || concurrency < 1) {
-    throw new Error("PREDICT_CONCURRENCY must be a positive integer");
+    throw new Error(`${concurrencyVariable} must be a positive integer`);
   }
 
   return {
@@ -147,6 +160,12 @@ export function readScheduledPredictJobConfig(
     concurrency,
     openRouterApiKey: required(environment, "OPENROUTER_API_KEY")
   };
+}
+
+export function readScheduledPredictJobConfig(
+  environment: NodeJS.ProcessEnv
+): ScheduledPredictJobConfig {
+  return readScheduledJobConfig(environment, "PREDICT_CONCURRENCY", 9);
 }
 
 /**
@@ -161,19 +180,11 @@ export function readScheduledPredictJobConfig(
 export function readScheduledFplJobConfig(
   environment: NodeJS.ProcessEnv
 ): ScheduledFplJobConfig {
-  const concurrency = Number(
-    environment.FPL_CONCURRENCY?.trim() || String(SEASON_ROSTER_SIZE)
+  return readScheduledJobConfig(
+    environment,
+    "FPL_CONCURRENCY",
+    SEASON_ROSTER_SIZE
   );
-  if (!Number.isInteger(concurrency) || concurrency < 1) {
-    throw new Error("FPL_CONCURRENCY must be a positive integer");
-  }
-
-  return {
-    databaseUrl: required(environment, "DATABASE_URL"),
-    season: requiredSeason(environment),
-    concurrency,
-    openRouterApiKey: required(environment, "OPENROUTER_API_KEY")
-  };
 }
 
 /**

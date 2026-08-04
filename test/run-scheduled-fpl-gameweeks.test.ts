@@ -361,7 +361,61 @@ describe("scheduled FPL Gameweek runs", () => {
     expect(ledger.rows).toEqual([{ count: 0 }]);
   });
 
-  test("still retries a started run whose Lock has since passed", async () => {
+  test("keeps an incomplete run open for the next poll to fill", async () => {
+    await openTheTrack();
+    const down = BASE_MODELS[0]!;
+
+    // One provider fails and the other eight play. Nothing throws — a provider
+    // that never answered is an Entrant that produced nothing, not a broken
+    // run — so a rule that closed the ledger on a clean return would close
+    // this Gameweek with a Gap in it, and no poll would ever ask again.
+    const first = await schedule({
+      at: "2026-08-28T11:30:00Z",
+      http: async (_url, options) => {
+        const { model } = JSON.parse(options?.body ?? "{}") as {
+          model: string;
+        };
+        return model === down
+          ? { status: 503, body: "provider unavailable" }
+          : { status: 200, body: openRouterBody(STAND_PAT) };
+      }
+    });
+    expect(first[0]!.outcome).toMatchObject({ missing: [seatId(down)] });
+
+    const open = await client.query<{
+      completed: boolean;
+      last_error: string | null;
+    }>(
+      `select completed_at is not null as completed, last_error
+         from fpl_runs where gw = 2`
+    );
+    expect(open.rows).toEqual([{ completed: false, last_error: null }]);
+
+    // The next poll, still before the Lock, asks only the Entrant that
+    // produced nothing — which is what a fill is, reached by re-running rather
+    // than by a second scheduled trigger.
+    const retry = answering(STAND_PAT);
+    const second = await schedule({
+      at: "2026-08-28T12:00:00Z",
+      http: retry.http
+    });
+
+    expect(retry.calls()).toBe(1);
+    expect(second[0]!.outcome).toMatchObject({
+      played: [seatId(down)],
+      missing: []
+    });
+    const closed = await client.query<{
+      attempt_count: number;
+      completed: boolean;
+    }>(
+      `select attempt_count, completed_at is not null as completed
+         from fpl_runs where gw = 2`
+    );
+    expect(closed.rows).toEqual([{ attempt_count: 2, completed: true }]);
+  });
+
+  test("closes an incomplete run once its Lock has passed", async () => {
     await openTheTrack();
     await client.query(
       `insert into fpl_runs (season, gw, scheduled_for, started_at)
@@ -372,20 +426,25 @@ describe("scheduled FPL Gameweek runs", () => {
     const script = answering(STAND_PAT);
 
     // A run that started before the Lock and never completed is picked up
-    // again even afterwards. What it finds may all be late, but an operator
-    // reading `last_error` needs the ledger to close rather than to sit open
-    // for ever on a Gameweek nothing will touch again.
+    // afterwards so the ledger closes rather than sitting open for ever. But
+    // every answer it could collect would be refused by the Lock, so it spends
+    // no calls collecting them: the Gameweek is decided, and what the Entrants
+    // did is already in the attempts the first run recorded.
     const runs = await schedule({
       at: "2026-08-28T18:00:00Z",
       http: script.http
     });
 
-    expect(runs.map(({ gameweek }) => gameweek)).toEqual([2]);
-    expect(runs[0]!.outcome).toMatchObject({
-      kind: "played",
-      played: [],
-      missing: BASE_MODELS.map(seatId)
-    });
+    expect(runs).toEqual([{
+      gameweek: 2,
+      outcome: { kind: "locked", gameweek: 2 }
+    }]);
+    expect(script.calls()).toBe(0);
+    const ledger = await client.query<{ gw: number; completed: boolean }>(
+      `select gw, completed_at is not null as completed
+         from fpl_runs order by gw`
+    );
+    expect(ledger.rows).toEqual([{ gw: 2, completed: true }]);
   });
 
   test("returns without running when another process holds the lock", async () => {

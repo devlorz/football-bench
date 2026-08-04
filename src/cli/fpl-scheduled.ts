@@ -23,6 +23,13 @@ try {
         console.log(`Gameweek ${gameweek}: the FPL track is not active`);
         return;
       }
+      if (outcome.kind === "locked") {
+        console.log(
+          `Gameweek ${gameweek}: the Lock has passed; the run is closed `
+          + "without asking again"
+        );
+        return;
+      }
       // Every Entrant is named in exactly one of the three, so an operator
       // reading this can tell a Gameweek that got the whole roster through
       // from one that did not — and the second is worth a fill before the

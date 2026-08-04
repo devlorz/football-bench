@@ -1,4 +1,5 @@
 import type { Client } from "pg";
+import { whileHoldingLock } from "../db/advisory-lock.js";
 import { errorText } from "../error-text.js";
 import type { HttpFetcher } from "../http.js";
 import { loadStartingGameweek } from "./manager-state-store.js";
@@ -9,6 +10,7 @@ type Database = Pick<Client, "query">;
 interface DueRun {
   gw: number;
   scheduled_for: Date;
+  deadline_at: Date;
 }
 
 export interface RunScheduledFplGameweeksOptions {
@@ -21,9 +23,22 @@ export interface RunScheduledFplGameweeksOptions {
   onCompletedRun?: (run: CompletedFplRun) => void;
 }
 
+/**
+ * What a scheduled run came to. Everything `runFplGameweek` can return, plus
+ * the one outcome only the scheduler produces: a Gameweek picked up after its
+ * Lock, whose ledger is closed without a call being spent on answers that
+ * would all be refused on arrival.
+ *
+ * `locked` is deliberately not `played` with three empty lists. That reads as
+ * a Gameweek every Entrant got through, which is the opposite of what it is.
+ */
+export type FplRunOutcome =
+  | FplGameweekRun
+  | { kind: "locked"; gameweek: number };
+
 export interface CompletedFplRun {
   gameweek: number;
-  outcome: FplGameweekRun;
+  outcome: FplRunOutcome;
 }
 
 /**
@@ -48,6 +63,16 @@ const FPL_RUN_LEAD_TIME = "6 hours";
 /**
  * Runs whichever FPL Gameweeks are due, at most one process at a time.
  *
+ * The shape below is the Match scheduler's — poll for what is due, mark it
+ * started, run it, close it or record why it did not close — and the advisory
+ * lock the two share is extracted. The ledger writes are not, and deliberately.
+ * They are three literal statements naming `fpl_runs`, and the only way to
+ * share them is to interpolate a table name into SQL, which nothing in this
+ * repository does; passing the three statements in as arguments would move the
+ * duplication rather than remove it. The two ledgers have also stopped being
+ * the same rule: this one closes a run only when every Entrant holds the
+ * Gameweek or the Lock has passed, which the Match track has no equivalent of.
+ *
  * The track joins the Season at a Gameweek and runs forward (ADR-0003), so
  * the starting Gameweek is read first and Gameweeks before it are never
  * scheduled at all. Recording them as completed runs would be worse than
@@ -63,15 +88,7 @@ export async function runScheduledFplGameweeks({
   now,
   onCompletedRun
 }: RunScheduledFplGameweeksOptions): Promise<CompletedFplRun[]> {
-  const lock = await database.query<{ acquired: boolean }>(
-    "select pg_try_advisory_lock($1) as acquired",
-    [FPL_SCHEDULER_LOCK_KEY]
-  );
-  if (lock.rows[0]?.acquired !== true) {
-    return [];
-  }
-
-  try {
+  return whileHoldingLock(database, FPL_SCHEDULER_LOCK_KEY, async () => {
     const startedAt = await loadStartingGameweek(database, season);
     if (startedAt === null) {
       return [];
@@ -81,7 +98,8 @@ export async function runScheduledFplGameweeks({
     const due = await database.query<DueRun>(
       `select
          g.gw,
-         g.deadline_at - $3::interval as scheduled_for
+         g.deadline_at - $3::interval as scheduled_for,
+         g.deadline_at
          from gameweeks g
          left join fpl_runs existing
            on existing.season = g.season
@@ -112,23 +130,41 @@ export async function runScheduledFplGameweeks({
                last_error = null`,
         [season, run.gw, run.scheduled_for, observedAt]
       );
+      const locked = observedAt.getTime() >= run.deadline_at.getTime();
       let completedRun: CompletedFplRun;
       try {
-        const outcome = await runFplGameweek({
-          database,
-          season,
-          gameweek: run.gw,
-          concurrency,
-          apiKey,
-          http,
-          now
-        });
+        // Past the Lock there is nothing left to collect: every answer would
+        // be refused on arrival, and what the Entrants did is already in the
+        // attempts the run that straddled the Lock recorded. The Gameweek is
+        // still walked so the ledger closes rather than sitting open for ever,
+        // but it is walked without spending a call on it.
+        const outcome: FplRunOutcome = locked
+          ? { kind: "locked", gameweek: run.gw }
+          : await runFplGameweek({
+            database,
+            season,
+            gameweek: run.gw,
+            concurrency,
+            apiKey,
+            http,
+            now
+          });
+        // A run is finished when every Entrant holds the Gameweek, or when the
+        // Lock has passed and no further attempt could succeed. An Entrant
+        // that produced nothing does not throw — a provider that never
+        // answered is an Entrant with a Gap, not a broken run — so closing the
+        // ledger on a clean return would close a Gameweek with a Gap in it and
+        // no poll would ever ask again. One Gap takes the Gameweek from
+        // everyone (ADR-0011), which is exactly what the remaining polls
+        // before the Lock exist to prevent.
+        const finished = outcome.kind !== "played"
+          || outcome.missing.length === 0;
         await database.query(
           `update fpl_runs
               set completed_at = $3,
                   last_error = null
             where season = $1 and gw = $2`,
-          [season, run.gw, now()]
+          [season, run.gw, finished ? now() : null]
         );
         completedRun = { gameweek: run.gw, outcome };
       } catch (error) {
@@ -149,9 +185,5 @@ export async function runScheduledFplGameweeks({
     }
 
     return completed;
-  } finally {
-    await database.query("select pg_advisory_unlock($1)", [
-      FPL_SCHEDULER_LOCK_KEY
-    ]);
-  }
+  });
 }
