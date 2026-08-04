@@ -1,4 +1,5 @@
 import { resolveDryRunInstant } from "../dry-run/dry-run-clock.js";
+import { SEASON_ROSTER_SIZE } from "../season-roster.js";
 import {
   parseAttemptTrigger,
   type AttemptTrigger
@@ -31,6 +32,17 @@ export interface ScheduledPredictJobConfig {
 export interface PredictJobConfig extends ScheduledPredictJobConfig {
   gameweek: number;
   trigger: AttemptTrigger;
+}
+
+export interface ScheduledFplJobConfig {
+  databaseUrl: string;
+  season: string;
+  concurrency: number;
+  openRouterApiKey: string;
+}
+
+export interface FplStartJobConfig extends ScheduledFplJobConfig {
+  gameweek: number;
 }
 
 export interface PreviewJobConfig extends DailyFetchJobConfig {
@@ -134,6 +146,47 @@ export function readScheduledPredictJobConfig(
     season: requiredSeason(environment),
     concurrency,
     openRouterApiKey: required(environment, "OPENROUTER_API_KEY")
+  };
+}
+
+/**
+ * The FPL action run's configuration, which resolves its Gameweek from the
+ * stored deadlines exactly as the scheduled Prediction run does.
+ *
+ * Its own concurrency knob rather than `PREDICT_CONCURRENCY`. The two runs
+ * share a deadline (ADR-0006) and are scheduled apart on purpose, and the FPL
+ * prompt is several times the Match prompt's size — one number for both would
+ * tie two costs that have no reason to move together.
+ */
+export function readScheduledFplJobConfig(
+  environment: NodeJS.ProcessEnv
+): ScheduledFplJobConfig {
+  const concurrency = Number(
+    environment.FPL_CONCURRENCY?.trim() || String(SEASON_ROSTER_SIZE)
+  );
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new Error("FPL_CONCURRENCY must be a positive integer");
+  }
+
+  return {
+    databaseUrl: required(environment, "DATABASE_URL"),
+    season: requiredSeason(environment),
+    concurrency,
+    openRouterApiKey: required(environment, "OPENROUTER_API_KEY")
+  };
+}
+
+/**
+ * The same, plus the Gameweek the operator chooses to start the track at.
+ * That Gameweek is never inferred (ADR-0003): the track joins the Season
+ * where the operator says and runs forward from there.
+ */
+export function readFplStartJobConfig(
+  environment: NodeJS.ProcessEnv
+): FplStartJobConfig {
+  return {
+    ...readScheduledFplJobConfig(environment),
+    gameweek: readFetchJobConfig(environment).gameweek
   };
 }
 
