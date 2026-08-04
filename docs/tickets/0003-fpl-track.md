@@ -252,16 +252,28 @@ feeds the deterministic scorer once FPL points settle.
 
 **Blocked by:** Write the FPL demonstration record.
 
-- [ ] The FPL action runner derives eligibility from the stored Gameweek deadline shared with the Match track
-- [ ] Every active Entrant sees its own prior Manager State and the same locked player pool for that Gameweek
-- [ ] The FPL context is stored once per Gameweek with its body and hash before actions are committed
-- [ ] A pre-Lock run writes at most one Manager State per Entrant and Gameweek; repeated runs cannot replace an existing state
-- [ ] An action completed at or after the Lock is refused entry and the late attempt remains recorded
-- [ ] The existing schedule can run the FPL action path without changing Match-track Predictions or delaying their write path
-- [ ] The track remains inactive before its explicit starting Gameweek and joins without back-filling missed Gameweeks
-- [ ] Once player points become checked, the scoring path can be rerun independently of the action path
-- [ ] Production configuration follows the existing pinned-provider, concurrency and database conventions
-- [ ] Runner and configuration tests use injected HTTP and clock seams and never contact the live database
+Two migrations. **0013** widens `contexts_identity` to `(season, gw, track,
+fpl_id, model_id)` so a Gameweek can hold one FPL context per Entrant, which is
+what lets the whole roster play a Gameweek at all: from the second Gameweek
+onwards every context carries its own Entrant's Squad, and the old key had room
+for one of them. **0014** adds `fpl_runs`, the FPL scheduler's own ledger.
+
+The two tracks share the `models` table and mark a competitor with
+`role = 'entrant'` in both, so three Match-track queries had to start telling
+them apart by Prompt Version. Until they did, seeding the nine FPL seats would
+have stopped `predictGameweek` outright and reported every one of them as an
+unexplained Gap.
+
+- [x] The FPL action runner derives eligibility from the stored Gameweek deadline shared with the Match track
+- [x] Every active Entrant sees its own prior Manager State and the same locked player pool for that Gameweek
+- [x] The FPL context is stored once per Entrant per Gameweek with its body and hash before actions are committed — one row per Gameweek was this criterion's original wording and is sound only at an opening, where every Entrant is seeded from the same empty Squad
+- [x] A pre-Lock run writes at most one Manager State per Entrant and Gameweek; repeated runs cannot replace an existing state
+- [x] An action completed at or after the Lock is refused entry and the late attempt remains recorded
+- [x] The existing schedule can run the FPL action path without changing Match-track Predictions or delaying their write path
+- [x] The track remains inactive before its explicit starting Gameweek and joins without back-filling missed Gameweeks
+- [x] Once player points become checked, the scoring path can be rerun independently of the action path
+- [x] Production configuration follows the existing pinned-provider, concurrency and database conventions
+- [x] Runner and configuration tests use injected HTTP and clock seams and never contact the live database
 
 ---
 

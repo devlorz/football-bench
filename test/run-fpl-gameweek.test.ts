@@ -7,6 +7,8 @@ import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
 import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
 import type { HttpFetcher } from "../src/http.js";
 import { FPL_POOL, type FixturePlayer } from "./fpl-pool-fixture.js";
+import { EVERYONE_PLAYED } from "./fpl-points-fixture.js";
+import { scoreFplGameweek } from "../src/fpl/score-fpl-gameweek.js";
 
 const { Client } = pg;
 
@@ -127,7 +129,7 @@ describe("running a Gameweek for the whole FPL roster", () => {
     await client.query(
       `truncate
          predictions, contexts, fixtures, manager_states, attempts, models,
-         gameweeks, fpl_players
+         gameweeks, fpl_players, fpl_player_points, scores
        restart identity cascade`
     );
     await client.query(
@@ -567,6 +569,72 @@ describe("running a Gameweek for the whole FPL roster", () => {
     );
     expect(stored.rows[0]!.count).toBeGreaterThan(0);
     expect(stored.rows[0]!.count).toBeLessThan(BASE_MODELS.length);
+  });
+
+  test("scores a settled Gameweek without the action path's seams", async () => {
+    await openTheTrack();
+    await run();
+    for (const gameweek of [1, 2]) {
+      for (const player of EVERYONE_PLAYED) {
+        await client.query(
+          `insert into fpl_player_points (
+             season, gw, fpl_id, minutes, total_points
+           ) values ('2026-27', $1, $2, $3, $4)`,
+          [gameweek, player.fplId, player.minutes, player.totalPoints]
+        );
+      }
+    }
+
+    // No `http` and no `now`: the options this takes have neither, so the
+    // scorer cannot reach a provider or a clock even by accident. Once the
+    // points are checked, what a Gameweek scored is a pure function of rows
+    // already stored, and the run that asks for it needs nothing the run that
+    // produced them needed.
+    await scoreFplGameweek({ database: client, season: "2026-27", gameweek: 1 });
+    await scoreFplGameweek({ database: client, season: "2026-27", gameweek: 2 });
+    const scored = await client.query<{
+      model_id: string;
+      gw: number;
+      metric: string;
+      value: number;
+    }>(
+      `select model_id, gw, metric, value::int as value
+         from scores
+        where metric in ('fpl_points', 'fpl_points_season_to_date')
+        order by gw, model_id, metric`
+    );
+    // The opening eleven score 49, the captain adds his 9 again, and neither
+    // Gameweek takes a Hit — 58 apiece, and 116 across the two.
+    expect(scored.rows).toHaveLength(BASE_MODELS.length * 4);
+    expect(scored.rows.filter(({ gw, metric }) =>
+      gw === 2 && metric === "fpl_points_season_to_date")).toEqual(
+      BASE_MODELS.map((baseModel) => ({
+        model_id: seatId(baseModel),
+        gw: 2,
+        metric: "fpl_points_season_to_date",
+        value: 116
+      }))
+    );
+
+    // The action path runs again and changes nothing — every Entrant already
+    // holds Gameweek 2 — and the scoring path run again upserts the same rows.
+    // Neither path can disturb the other's result.
+    const { calls } = await run({ responses: [] });
+    expect(calls).toEqual([]);
+    await scoreFplGameweek({ database: client, season: "2026-27", gameweek: 1 });
+    await scoreFplGameweek({ database: client, season: "2026-27", gameweek: 2 });
+    const rescored = await client.query<{
+      model_id: string;
+      gw: number;
+      metric: string;
+      value: number;
+    }>(
+      `select model_id, gw, metric, value::int as value
+         from scores
+        where metric in ('fpl_points', 'fpl_points_season_to_date')
+        order by gw, model_id, metric`
+    );
+    expect(rescored.rows).toEqual(scored.rows);
   });
 
   test("refuses an invalid concurrency before issuing a call", async () => {
