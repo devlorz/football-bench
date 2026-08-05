@@ -57,6 +57,18 @@ The readable score for one Fixture — 5 for an exact Predicted Score, 3 for the
 difference, 2 for the right outcome, 0 otherwise. Tiers are exclusive. Ranks the public
 leaderboard but supports no claim on its own.
 
+**Bet Slip**:
+The five markets implied by one Predicted Score — the match result, over/under 2.5, 3.5
+and 4.5 goals, and both teams to score. Entrants are never asked these markets; the slip is
+read off the scoreline they committed.
+
+**Bet Points**:
+The readable betting score for one Fixture — one point per Bet Slip market that settles in
+the Entrant's favour, zero to five. Ranks a second leaderboard by season-to-date total but,
+like Match Points, supports no claim on its own.
+_Avoid_: prediction ranking (overloads Prediction and does not say how it differs from the
+Match Points ranking)
+
 **Coherence**:
 Whether an Entrant's most likely outcome under its probabilities matches the outcome its
 Predicted Score implies. Saying Home is likeliest and then naming a 1-2 scoreline is
