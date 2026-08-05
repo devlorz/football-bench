@@ -285,13 +285,13 @@ persistence, recovery and scoring before any real Squad is managed.
 
 **Blocked by:** Run the FPL track under the shared Lock.
 
-- [ ] The rehearsal builds a throwaway database through the production migration path and never opens the configured live database for writes
-- [ ] Archived FPL bodies satisfy the existing HTTP seam, and any unrecognised request is refused rather than reaching the network
-- [ ] All nine Entrants begin atomically at the same chosen Gameweek
-- [ ] The rehearsed sequence includes inaction, a paid Transfer, Selling Price, every Chip, a successful Repair and a Roll Over
-- [ ] At least one auto-substitution is constrained by formation and one absent captain promotes the vice-captain
-- [ ] Fabricated points are marked checked and produce hand-computed Gameweek and cumulative totals
-- [ ] The final output contains all nine Manager State paths, FPL points, Repairs, Roll Overs and violation profiles with the demonstration qualification
-- [ ] The rehearsal asserts expected rows and values rather than succeeding on completion alone
-- [ ] Repeating the rehearsal with identical inputs produces identical states, score values and details
-- [ ] The throwaway cluster is removed after success or failure, and the command exits non-zero on any incomplete path
+- [x] The rehearsal builds a throwaway database through the production migration path and never opens the configured live database for writes
+- [x] Archived FPL bodies satisfy the existing HTTP seam, and any unrecognised request is refused rather than reaching the network
+- [x] All nine Entrants begin atomically at the same chosen Gameweek
+- [x] The rehearsed sequence includes inaction, a paid Transfer, Selling Price, every Chip, a successful Repair and a Roll Over
+- [x] At least one auto-substitution is constrained by formation and one absent captain promotes the vice-captain
+- [x] Fabricated points are marked checked and produce hand-computed Gameweek and cumulative totals
+- [x] The final output contains all nine Manager State paths, FPL points, Repairs, Roll Overs and violation profiles with the demonstration qualification
+- [x] The rehearsal asserts expected rows and values rather than succeeding on completion alone
+- [x] Repeating the rehearsal with identical inputs produces identical states, score values and details
+- [x] The throwaway cluster is removed after success or failure, and the command exits non-zero on any incomplete path
