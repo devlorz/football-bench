@@ -22,7 +22,7 @@ export interface StoredManagerState extends ManagerStateKey {
   predictedAt: Date;
 }
 
-interface ManagerStateRow {
+export interface ManagerStateRow {
   squad: SquadEnvelope;
   team_sheet: TeamSheet;
   bank: number;
@@ -72,21 +72,29 @@ export async function storeManagerState(
   );
 }
 
-function managerState(row: ManagerStateRow | undefined): ManagerState | null {
-  return row === undefined
-    ? null
-    : {
-      squad: row.squad,
-      teamSheet: row.team_sheet,
-      bankTenths: row.bank,
-      freeTransfers: row.free_transfers,
-      hits: row.hits,
-      chipsUsed: row.chips_used,
-      chipActive: row.chip_active
-    };
+/**
+ * One stored row as the Manager State it is. Exported because anything reading
+ * these rows wants the domain value and not the column names — a second
+ * mapping elsewhere would be a second place for `bank` and `bankTenths` to
+ * drift apart.
+ */
+export function managerStateFromRow(row: ManagerStateRow): ManagerState {
+  return {
+    squad: row.squad,
+    teamSheet: row.team_sheet,
+    bankTenths: row.bank,
+    freeTransfers: row.free_transfers,
+    hits: row.hits,
+    chipsUsed: row.chips_used,
+    chipActive: row.chip_active
+  };
 }
 
-const MANAGER_STATE_COLUMNS =
+function managerState(row: ManagerStateRow | undefined): ManagerState | null {
+  return row === undefined ? null : managerStateFromRow(row);
+}
+
+export const MANAGER_STATE_COLUMNS =
   "squad, team_sheet, bank, free_transfers, hits, chips_used, chip_active";
 
 /**
