@@ -18,6 +18,20 @@ const KEEPER_BENCHED_THIRD: TeamSheet = {
 };
 
 /**
+ * A 1-3-4-3 whose outfield bench begins with a midfielder and keeps its two
+ * defenders behind him. Three at the back leaves no defender to spare, so an
+ * absent one can only be replaced by a defender — and the man ahead of them in
+ * the queue is eligible in every other way, which is what makes the formation
+ * the only thing that can turn him down.
+ */
+const MIDFIELDER_AHEAD_OF_THE_DEFENDERS: TeamSheet = {
+  starters: [1, 3, 4, 5, 8, 9, 10, 11, 13, 14, 15],
+  bench: [2, 12, 6, 7],
+  captain: 8,
+  viceCaptain: 13
+};
+
+/**
  * The same fifteen in a 1-3-4-3. Three at the back is what makes an absent
  * defender's place load-bearing: lose it and the formation is illegal, so the
  * eleven can only stay legal if he keeps it.
@@ -230,6 +244,31 @@ describe("Substituting a starter who did not play", () => {
   });
 
   /**
+   * Saliba missed from a 1-3-4-3, where the three at the back leave no defender
+   * to spare, and Alcaraz heads the outfield bench. He played and he is no
+   * goalkeeper, so nothing about him is ineligible — but a midfielder in a
+   * defender's place is a back two, and the formation refuses it. Ajer comes on
+   * from behind him instead.
+   *
+   * This is the case the formation rule alone decides. The two below it are
+   * decided by the goalkeeping rule, which blocks its man for a different
+   * reason, and neither of them moves if the formation check is removed
+   * entirely.
+   *
+   * The ten who played score 6+5+1+9+3+7+2+4+8+12 = 57, Ajer adds 2 for 59, and
+   * Palmer captains for 9 more. Had Alcaraz come on it would be 77.
+   */
+  test("skips a substitute whose position the formation forbids", () => {
+    expect(scoreTeamSheet({
+      teamSheet: MIDFIELDER_AHEAD_OF_THE_DEFENDERS,
+      positions: POSITIONS,
+      points: absent([3]),
+      hits: 0,
+      chip: null
+    })).toMatchObject({ points: 68 });
+  });
+
+  /**
    * Collins and Ajer both missed, leaving two defenders where three are
    * required and two places to fill. Kelleher heads the bench and played, but
    * a second goalkeeper is no formation at all, so he is skipped for Cucurella
@@ -237,7 +276,7 @@ describe("Substituting a starter who did not play", () => {
    * 6+2+5+9+3+7+2+4+8 = 46, the two substitutes add 9+11 = 20 for 66, and
    * Palmer captains for 9 more.
    */
-  test("skips a bench player the formation blocks and takes the next", () => {
+  test("skips a bench player the goalkeeping rule blocks and takes the next", () => {
     expect(scoreTeamSheet({
       teamSheet: OPENING.teamSheet,
       positions: POSITIONS,

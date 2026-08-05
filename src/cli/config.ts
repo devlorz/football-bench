@@ -43,6 +43,13 @@ export interface ScheduledEntrantJobConfig {
 
 export type ScheduledPredictJobConfig = ScheduledEntrantJobConfig;
 
+/** What the FPL rehearsal reads. It calls no provider, so it needs no key. */
+export interface FplRehearsalJobConfig {
+  databaseUrl: string;
+  season: string;
+  concurrency: number;
+}
+
 export interface PredictJobConfig extends ScheduledEntrantJobConfig {
   gameweek: number;
   trigger: AttemptTrigger;
@@ -149,17 +156,33 @@ export function readPredictJobConfig(
  * two costs that have no reason to move together. It is the only thing that
  * differs, which is why everything else is read once here.
  */
+/**
+ * How many Entrants a job may call at once. Shared because every job that
+ * reads one rejects the same values for the same reason, and names its own
+ * variable when it does.
+ */
+function readConcurrency(
+  environment: NodeJS.ProcessEnv,
+  variable: string,
+  fallback: number
+): number {
+  const concurrency = Number(environment[variable]?.trim() || String(fallback));
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new Error(`${variable} must be a positive integer`);
+  }
+  return concurrency;
+}
+
 function readScheduledJobConfig(
   environment: NodeJS.ProcessEnv,
   concurrencyVariable: string,
   concurrencyDefault: number
 ): ScheduledEntrantJobConfig {
-  const concurrency = Number(
-    environment[concurrencyVariable]?.trim() || String(concurrencyDefault)
+  const concurrency = readConcurrency(
+    environment,
+    concurrencyVariable,
+    concurrencyDefault
   );
-  if (!Number.isInteger(concurrency) || concurrency < 1) {
-    throw new Error(`${concurrencyVariable} must be a positive integer`);
-  }
 
   return {
     databaseUrl: required(environment, "DATABASE_URL"),
@@ -205,6 +228,28 @@ export function readFplStartJobConfig(
   return {
     ...readScheduledFplJobConfig(environment),
     gameweek: readFetchJobConfig(environment).gameweek
+  };
+}
+
+/**
+ * What a rehearsal needs: the database holding the archive it replays, the
+ * Season it plays as, and how many Entrants it may call at once.
+ *
+ * No OpenRouter key, unlike every other job that calls Entrants — a rehearsal
+ * answers its own calls from a script, and asking for a key it cannot spend
+ * would invite an operator to hand it a real one.
+ */
+export function readFplRehearsalJobConfig(
+  environment: NodeJS.ProcessEnv
+): FplRehearsalJobConfig {
+  return {
+    databaseUrl: required(environment, "DATABASE_URL"),
+    season: requiredSeason(environment),
+    concurrency: readConcurrency(
+      environment,
+      "FPL_CONCURRENCY",
+      SEASON_ROSTER_SIZE
+    )
   };
 }
 
