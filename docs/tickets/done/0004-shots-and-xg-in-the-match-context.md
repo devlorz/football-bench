@@ -2,10 +2,10 @@
 
 Four tracer-bullet slices that put per-match shots and xG on the last-five form lines and
 freeze the result as `match/2026-27-v2` before the Season's first Lock. Source:
-[spec 0004](../specs/0004-shots-and-xg-in-the-match-context.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0001–0020](../adr/), especially
-[ADR 0018](../adr/0018-raw-signals-only-in-the-entrant-context.md) and
-[ADR 0019](../adr/0019-per-match-shots-and-xg-join-the-context-for-2026-27-v2.md).
+[spec 0004](../../specs/0004-shots-and-xg-in-the-match-context.md). Vocabulary:
+[CONTEXT.md](../../../CONTEXT.md). Decisions: [ADR 0001–0020](../../adr/), especially
+[ADR 0018](../../adr/0018-raw-signals-only-in-the-entrant-context.md) and
+[ADR 0019](../../adr/0019-per-match-shots-and-xg-join-the-context-for-2026-27-v2.md).
 
 Work the **frontier**: the first two tickets are independent and can run in parallel; the
 context ticket needs both; the freeze ticket comes last and gates going live.
@@ -188,7 +188,7 @@ xG.
 - [x] Pre-flight is re-run against the enriched context for every Entrant and its verdict
       recorded, with the prior season's xG ingested first so the contexts match opening
       day — **run 2026-07-31, 9/9 parseable**; verdict in
-      [the pre-flight report](../reports/2026-07-31-shots-xg-context-preflight.md), which
+      [the pre-flight report](../../reports/2026-07-31-shots-xg-context-preflight.md), which
       also records the one open watch item (promoted-side Understat aliases)
 - [x] No digested forecast — odds, Elo, strength ratings, lambdas — appears anywhere in
       the emitted context

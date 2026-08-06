@@ -2,8 +2,8 @@
 
 Eleven tracer-bullet slices that let all nine Base Models manage persistent Fantasy Premier
 League Squads under the complete 2026/27 rules and produce a demonstration ranking with
-behavioural evidence. Source: [spec 0003](../specs/0003-fpl-track.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0001–0017](../adr/).
+behavioural evidence. Source: [spec 0003](../../specs/0003-fpl-track.md). Vocabulary:
+[CONTEXT.md](../../../CONTEXT.md). Decisions: [ADR 0001–0017](../../adr/).
 
 Work the **frontier**: any ticket whose blockers are all done. Player-points ingestion and the
 first legal Manager State can begin independently; after that, work follows the state path

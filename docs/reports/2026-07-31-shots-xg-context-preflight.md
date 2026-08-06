@@ -1,6 +1,6 @@
 # Base Model pre-flight, shots-and-xG context — 2026-07-31
 
-Ticket: **Freeze match/2026-27-v2 and re-run pre-flight** ([tickets 0004](../tickets/0004-shots-and-xg-in-the-match-context.md), [spec 0004](../specs/0004-shots-and-xg-in-the-match-context.md))
+Ticket: **Freeze match/2026-27-v2 and re-run pre-flight** ([tickets 0004](../tickets/done/0004-shots-and-xg-in-the-match-context.md), [spec 0004](../specs/0004-shots-and-xg-in-the-match-context.md))
 
 Enriching the last-five form lines with shots, shots on target and per-match xG changed the
 frozen bytes, so the roster moved to Prompt Version `match/2026-27-v2` (pinned SHA-256
