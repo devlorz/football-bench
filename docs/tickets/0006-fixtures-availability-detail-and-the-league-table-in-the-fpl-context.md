@@ -83,12 +83,24 @@ stored body carrying the new fields still prices transfers.
 
 **Blocked by:** Spec 0005's opening ticket.
 
-- [ ] A flagged player carries percentage and news; an unflagged player carries neither
+- [x] A flagged player carries percentage and news; an unflagged player carries neither
       field at all
-- [ ] A flagged player whose percentage is null carries news alone
-- [ ] The legend defines both fields exactly once
-- [ ] No invented availability verdict appears — the fields are the snapshot's, verbatim
-- [ ] The pool readback prices transfers from a body carrying the new fields while still
+- [x] A flagged player whose percentage is null carries news alone
+- [x] The legend defines both fields exactly once
+- [x] No invented availability verdict appears — the fields are the snapshot's, verbatim
+- [x] The pool readback prices transfers from a body carrying the new fields while still
       validating the fields it prices from
-- [ ] Rendering and omission are tested pure; the round-trip is asserted on a stored v2
+- [x] Rendering and omission are tested pure; the round-trip is asserted on a stored v2
       body at the `openFplGameweek` seam
+
+**Note — the two keys are omitted apart, and "unflagged" is FPL's silence.** FPL sends news
+with no percentage often and a percentage with no news whenever a player recovers, so each
+key stands on its own emptiness rather than on the other's: `chance` is dropped only when
+FPL publishes none, `news` only when it is blank. A chance of 0 is kept — it is FPL saying
+the player will not play, which is a statement and not an absence.
+
+The first criterion's "unflagged" therefore means *FPL published neither field*, not
+`status = 'a'`. A recovered player whose row still carries `chance = 100` shows it
+(`test/build-fpl-track-context.test.ts:808`); suppressing it would be a rule of this
+context's own invention rather than FPL's, which ADR 0018 rules out. The legend follows the
+same line and disappears when no line below carries either key (`:801`).
