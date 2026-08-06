@@ -172,7 +172,13 @@ export async function playFplGameweek({
       season,
       gameweek,
       state: previous,
-      pool: contextPool
+      pool: contextPool,
+      // Nothing yet: reading the two windows out of `fpl_player_points` is the
+      // "Opening a Gameweek hands the Entrant the performance record" ticket's
+      // job. Until it lands, this Gameweek's pool carries no stat block and
+      // says so, which is true of Gameweek 1 and of nothing else.
+      performance: [],
+      settledThrough: null
     })
   );
 

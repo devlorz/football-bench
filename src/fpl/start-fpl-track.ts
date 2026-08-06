@@ -134,7 +134,13 @@ export async function startFplTrack({
     season,
     gameweek,
     state: previous,
-    pool: contextPool
+    pool: contextPool,
+    // A Season opens with nothing Settled behind it, so there is no window to
+    // carry and the context says so. A track started mid-Season would be the
+    // one opening with something to show; the ticket that reads the windows
+    // out of `fpl_player_points` covers this call too.
+    performance: [],
+    settledThrough: null
   });
 
   const openings = new Map<string, {
