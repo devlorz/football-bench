@@ -281,6 +281,16 @@ describe("starting the FPL track for all nine Entrants", () => {
   });
 
   test("stores one opening context per Entrant, every body the same", async () => {
+    // The opening Season's world state, whole: Fixtures are scheduled before a
+    // ball is kicked, so Gameweek 1's body carries a full schedule next to the
+    // empty table it announces — spec 0006's story 25, in the one case it names.
+    await client.query(
+      `insert into fixtures (
+         season, fpl_id, gw, home_team, away_team, kickoff_at
+       ) values
+         ('2026-27', 101, 1, 'Arsenal', 'Chelsea', '2026-08-22T14:00:00Z'),
+         ('2026-27', 102, 2, 'Everton', 'Fulham', '2026-08-30T16:30:00Z')`
+    );
     const { calls } = await open();
 
     // One row per seat. At an opening the text says nothing about who is
@@ -327,6 +337,13 @@ describe("starting the FPL track for all nine Entrants", () => {
     // rather than dropped: an opening Season really has played nothing.
     expect(context!.body).toContain(
       "Premier League table: no result has been played yet this Season."
+    );
+    expect(context!.body).toContain(
+      "Fixtures, this Gameweek and the five ahead:\n"
+      + "Gameweek 1\n"
+      + "- Arsenal v Chelsea | 2026-08-22\n"
+      + "Gameweek 2\n"
+      + "- Everton v Fulham | 2026-08-30"
     );
     expect(context!.body).toContain(
       '{"id":8,"name":"Palmer","club":"Chelsea","position":"MID",'

@@ -1595,6 +1595,80 @@ describe("opening the FPL track for a Gameweek", () => {
     expect(active.map(({ fplId }) => fplId)).not.toContain(15);
   });
 
+  test("stores one body carrying every v2 section at once", async () => {
+    // Spec 0006's closing promise is not four sections in four tests but one
+    // stored text: the schedule ahead, the table so far, the windows behind
+    // and the pool's flags, under the one hash the Entrant was judged on.
+    await seedSettledSeason();
+    await seedSchedule();
+    for (const result of PLAYED_RESULTS) {
+      await storeResult("2026-27", "Premier League", result);
+    }
+    await client.query(
+      `update fpl_players
+          set status = 'd', chance_of_playing_next_round = 25,
+              news = 'Knee injury - expected back 21 Sep'
+        where season = '2026-27' and gw = 8 and fpl_id = 8`
+    );
+    await seedStandingManagerState(7);
+    await play({
+      gameweek: 8,
+      at: "2026-10-20T11:30:00Z",
+      responses: [STAND_PAT]
+    });
+
+    const stored = await client.query<{ body: string; hash: string }>(
+      "select body, hash from contexts where gw = 8 and track = 'fpl'"
+    );
+    const body = stored.rows[0]!.body;
+    expect(stored.rows[0]!.hash).toBe(
+      createHash("sha256").update(body).digest("hex")
+    );
+    // Each section, by the line only it carries.
+    expect(body).toContain(
+      "Fixtures, this Gameweek and the five ahead:\n"
+      + "Gameweek 8\n"
+      + "- Fulham v Chelsea | 2026-10-24"
+    );
+    expect(body).toContain(
+      "Premier League table, from results through 2026-08-29:"
+    );
+    expect(body).toContain(
+      "Performance below runs through Settled Gameweek 7."
+    );
+    // And the one pool line that crosses every slice: Palmer flagged and
+    // windowed on the same line the reducer prices from.
+    expect(body).toContain(JSON.stringify({
+      id: 8,
+      name: "Palmer",
+      club: "Chelsea",
+      position: "MID",
+      price: "£12.0m",
+      price_tenths: 120,
+      status: "doubtful",
+      chance: 25,
+      news: "Knee injury - expected back 21 Sep",
+      season: {
+        pts: 36, min: 510, app: 5, g: 4, a: 3, cs: 1, b: 5, yc: 1,
+        xg: "2.40", xa: "1.60", xgc: "4.00"
+      },
+      last5: {
+        pts: 27, min: 420, app: 4, g: 3, a: 2, cs: 1, b: 3, yc: 1,
+        xg: "1.90", xa: "1.30", xgc: "3.00"
+      }
+    }));
+    // The body carrying everything still prices: the readback sees the same
+    // pool it always did.
+    expect(parseFplTrackContextPool(body)).toEqual(
+      FPL_POOL.map(({ fplId, club, position, priceTenths }) => ({
+        fplId,
+        club,
+        position,
+        priceTenths
+      }))
+    );
+  });
+
   test("hands every Entrant of the Gameweek the same windows", async () => {
     await client.query(
       `insert into models (
