@@ -120,7 +120,9 @@ export async function playFplGameweek({
   season,
   gameweek,
   entrant,
-  locked: { deadline, pool: contextPool, performance, settledThrough },
+  // The windows travel as the pair the builder takes them as, so the Gameweek
+  // hands them on rather than restating them.
+  locked: { deadline, pool: contextPool, ...windows },
   apiKey,
   http,
   now
@@ -173,10 +175,7 @@ export async function playFplGameweek({
       gameweek,
       state: previous,
       pool: contextPool,
-      // Read with the Lock and the pool, so every Entrant of this Gameweek is
-      // handed one set of windows rather than one apiece.
-      performance,
-      settledThrough
+      ...windows
     })
   );
 
@@ -234,6 +233,15 @@ export async function playFplGameweek({
  * those once and hands them to every Entrant. This is the same Gameweek for
  * one Entrant — what an operator reaches for to carry a single seat forward,
  * and what the per-Entrant behaviour is tested through.
+ *
+ * Reading them per call is what makes this the operator's tool rather than
+ * the roster's: a pre-deadline fetch landing between two of these calls moves
+ * the pool for the second Entrant, and a settled-points fetch landing there
+ * moves its performance windows too. One Gameweek would then hold two
+ * different texts, and Paired Differences over them would be measuring the
+ * fetch rather than the Base Models (ADR-0008). Carrying seats forward one at
+ * a time is therefore a thing to finish before the next fetch runs;
+ * `runFplGameweek` is what the schedule calls, and it reads once.
  */
 export async function openFplGameweek({
   database,

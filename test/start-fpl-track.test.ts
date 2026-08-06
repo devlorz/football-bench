@@ -11,6 +11,7 @@ import { GAMEWEEK_RULES } from "../src/fpl/apply-gameweek-action.js";
 import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
 import type { HttpFetcher } from "../src/http.js";
 import { FPL_POOL, type FixturePlayer } from "./fpl-pool-fixture.js";
+import { storePlayerPoints } from "./fpl-points-fixture.js";
 import { STORED_OPENING_STATE } from "./fpl-state-fixture.js";
 
 const { Client } = pg;
@@ -337,6 +338,48 @@ describe("starting the FPL track for all nine Entrants", () => {
         priceTenths
       }))
     );
+  });
+
+  test("opens mid-Season on the windows the Settled Gameweeks behind it hold", async () => {
+    // A track opened at Gameweek 2 has a Settled Gameweek behind it, and the
+    // opening context is the one place a Season that joins late can say so.
+    // Every seat is seeded from the same empty Squad, so the windows are the
+    // only thing in the nine bodies that could have differed.
+    await storePlayerPoints(client, {
+      gameweek: 1,
+      fplId: 8,
+      minutes: 90,
+      total_points: 9,
+      goals_scored: 1,
+      expected_goals: 0.5
+    });
+
+    await open({ gameweek: 2, at: "2026-08-28T11:30:00Z" });
+
+    const contexts = await client.query<{ body: string }>(
+      "select body from contexts order by model_id"
+    );
+    expect(contexts.rows).toHaveLength(BASE_MODELS.length);
+    const [context] = contexts.rows;
+    expect(context!.body).toContain(
+      "Performance below runs through Settled Gameweek 1."
+    );
+    // One Settled Gameweek, so both windows are that Gameweek — and the stats
+    // he did not record are left out of both.
+    expect(context!.body).toContain(JSON.stringify({
+      id: 8,
+      name: "Palmer",
+      club: "Chelsea",
+      position: "MID",
+      price: "£12.0m",
+      price_tenths: 120,
+      status: "available",
+      season: { pts: 9, min: 90, app: 1, g: 1, xg: "0.50" },
+      last5: { pts: 9, min: 90, app: 1, g: 1, xg: "0.50" }
+    }));
+    for (const row of contexts.rows) {
+      expect(row.body).toBe(context!.body);
+    }
   });
 
   test("does not start when the Lock passes before every opening is legal", async () => {
