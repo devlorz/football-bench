@@ -11,6 +11,7 @@ import {
   type PoolPlayer,
   type Position
 } from "../fpl/apply-gameweek-action.js";
+import type { LeagueTableRow } from "./build-historical-context.js";
 
 /** Frozen (prompt template + context builder) pair for the FPL track. */
 export const FPL_PROMPT_VERSION = "fpl/2026-27-v2";
@@ -80,6 +81,21 @@ export interface FplFixture {
   kickoff: Date;
 }
 
+/**
+ * The current Season's Premier League table and the date of the latest result
+ * summed into it, or null before any result is stored — Gameweek 1's normal
+ * case, which the context announces rather than leaving the section out.
+ *
+ * The two travel together because neither is true without the other: a table
+ * whose coverage is unstated is a table that goes quietly stale, and the
+ * results are read from the Match track's own store (ADR-0021), which this
+ * track does not control the freshness of.
+ */
+export interface FplLeagueTable {
+  through: Date;
+  rows: LeagueTableRow[];
+}
+
 export interface BuildFplTrackContextOptions {
   season: string;
   gameweek: number;
@@ -91,6 +107,12 @@ export interface BuildFplTrackContextOptions {
    * flow's, as the stat windows are; the builder groups what it is handed.
    */
   schedule: FplFixture[];
+  /**
+   * The current Season's table, summed and ordered by the opening flow, or
+   * null when no result is stored yet. As with the schedule, the builder
+   * renders what it is handed and orders nothing itself.
+   */
+  league: FplLeagueTable | null;
   /**
    * The two windows per player, for however many players have a Settled
    * Gameweek to their name. A player absent from this list carries no window
@@ -321,6 +343,31 @@ function fixturesSection(schedule: FplFixture[]): string[] {
   return lines;
 }
 
+/**
+ * The current Season's table, one line per side that has played, in the
+ * competition's order with its rank spelled out — an Entrant reads position
+ * off the line rather than counting down the section.
+ *
+ * The heading dates the table by its latest result, because the results come
+ * from the Match track's fetch rather than this track's: a table a day behind
+ * is honest about being a day behind, and one that never arrived says so
+ * outright rather than being missing (ADR-0021).
+ */
+function leagueSection(league: FplLeagueTable | null): string[] {
+  if (league === null) {
+    return ["Premier League table: no result has been played yet this Season."];
+  }
+  return [
+    "Premier League table, from results through "
+    + `${league.through.toISOString().slice(0, 10)}:`,
+    ...league.rows.map((row, index) =>
+      `- ${index + 1} ${row.club} | ${row.played} played, `
+      + `${row.wins}W ${row.draws}D ${row.losses}L, `
+      + `GF ${row.goalsFor}, GA ${row.goalsAgainst}, ${row.points} pts`
+    )
+  ];
+}
+
 function squadSection(state: ManagerState): string[] {
   if (state.squad.active.length === 0) {
     return ["Squad: none yet — this is your opening Squad."];
@@ -339,6 +386,7 @@ export function buildFplTrackContext({
   state: stored,
   pool,
   schedule,
+  league,
   performance,
   settledThrough
 }: BuildFplTrackContextOptions): string {
@@ -365,6 +413,8 @@ export function buildFplTrackContext({
     ...chipsSection(state, gameweek),
     "",
     ...fixturesSection(schedule),
+    "",
+    ...leagueSection(league),
     "",
     ...performanceHeading(settledThrough),
     POOL_HEADING,

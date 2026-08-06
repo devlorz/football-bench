@@ -3,10 +3,15 @@ import type { Client } from "pg";
 import {
   SCHEDULE_GAMEWEEKS,
   type FplFixture,
+  type FplLeagueTable,
   type FplPerformanceWindow,
   type FplPlayerPerformance,
   type FplTrackPlayer
 } from "../context/build-fpl-track-context.js";
+import {
+  leagueTable,
+  type HistoricalMatch
+} from "../context/build-historical-context.js";
 import type { Position } from "./apply-gameweek-action.js";
 
 type Database = Pick<Client, "query">;
@@ -21,13 +26,14 @@ interface PoolRow {
 }
 
 /**
- * A Gameweek's Lock, the pool as its Lock found it, the schedule ahead of it
- * and the two windows behind it.
+ * A Gameweek's Lock, the pool as its Lock found it, the schedule ahead of it,
+ * the Season's table so far and the two windows behind it.
  */
 export interface LockedGameweek {
   deadline: Date;
   pool: FplTrackPlayer[];
   schedule: FplFixture[];
+  league: FplLeagueTable | null;
   performance: FplPlayerPerformance[];
   settledThrough: number | null;
 }
@@ -202,6 +208,35 @@ async function schedule(
 }
 
 /**
+ * The current Season's Premier League table, summed from the final results the
+ * Match track's fetch stores — the cross-track read ADR-0021 accepts, rather
+ * than a second summation of scores the FPL feed also carries.
+ *
+ * The summation and the ordering are the Match track's own function, so the
+ * two contexts cannot come to disagree about who is second. Nothing is cut off
+ * at the deadline: `historical_matches` holds matches that have been played,
+ * and the announced date of the latest one is what states the coverage — a
+ * cutoff mapped onto Gameweeks would lag every midweek round (ADR-0021).
+ */
+async function currentSeasonTable(
+  database: Database,
+  season: string
+): Promise<FplLeagueTable | null> {
+  const results = await database.query<HistoricalMatch>(
+    `select season, division, played_on, home_team, away_team,
+            home_goals, away_goals
+       from historical_matches
+      where season = $1 and division = 'Premier League'
+      order by played_on`,
+    [season]
+  );
+  const latest = results.rows.at(-1);
+  return latest === undefined
+    ? null
+    : { through: latest.played_on, rows: leagueTable(results.rows) };
+}
+
+/**
  * What a Gameweek offers every Entrant that plays it: one deadline shared with
  * the Match track (ADR-0006), one snapshot of the pool, one schedule of the
  * Gameweeks ahead and one set of performance windows. All are read before any
@@ -230,15 +265,17 @@ export async function loadLockedGameweek(
       order by fpl_id`,
     [season, gameweek]
   );
-  // Behind the Gameweek and ahead of it: two reads with nothing to say to each
-  // other, so neither waits on the other.
-  const [windows, ahead] = await Promise.all([
+  // Behind the Gameweek and ahead of it: three reads with nothing to say to
+  // each other, so none waits on the others.
+  const [windows, ahead, league] = await Promise.all([
     settledPerformance(database, season, gameweek),
-    schedule(database, season, gameweek)
+    schedule(database, season, gameweek),
+    currentSeasonTable(database, season)
   ]);
   return {
     ...windows,
     schedule: ahead,
+    league,
     deadline: gameweekRow.deadline_at,
     pool: players.rows.map((row) => ({
       fplId: row.fpl_id,

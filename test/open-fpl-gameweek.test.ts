@@ -194,7 +194,7 @@ describe("opening the FPL track for a Gameweek", () => {
     await client.query(
       `truncate
          predictions, contexts, fixtures, manager_states, attempts, models,
-         gameweeks, fpl_players
+         gameweeks, fpl_players, historical_matches
        restart identity cascade`
     );
     await client.query(
@@ -1162,6 +1162,128 @@ describe("opening the FPL track for a Gameweek", () => {
     // Gameweek 1 is played and gone, and Gameweek 8 is a Gameweek too far.
     expect(body).not.toContain("2026-08-22");
     expect(body).not.toContain("2026-10-24");
+  });
+
+  /**
+   * A scripted opening month of the Season, hand-summed into the table the
+   * context must show. Six clubs, four rounds, every club playing once a
+   * round, with Wolves and Chelsea meeting home and away and drawing both.
+   *
+   * Both ties the ordering rule exists for are built in, and both are placed
+   * where no other rule would produce the same order. Everton finishes above
+   * Brentford on goal difference (+4 against +3) while scoring fewer goals
+   * than it and following it alphabetically; Wolves finishes above Chelsea on
+   * goals scored (4 against 3) while matching it on points and goal difference
+   * and following it alphabetically. Either tiebreak dropped, and the table
+   * comes out in a different order rather than the same one by luck.
+   */
+  const PLAYED_RESULTS: {
+    on: string;
+    home: string;
+    away: string;
+    goals: [number, number];
+  }[] = [
+    { on: "2026-08-15T14:00:00Z", home: "Arsenal", away: "Everton", goals: [2, 0] },
+    { on: "2026-08-15T14:00:00Z", home: "Brentford", away: "Fulham", goals: [4, 1] },
+    { on: "2026-08-15T16:30:00Z", home: "Wolves", away: "Chelsea", goals: [1, 1] },
+    { on: "2026-08-22T14:00:00Z", home: "Arsenal", away: "Brentford", goals: [3, 0] },
+    { on: "2026-08-22T14:00:00Z", home: "Everton", away: "Fulham", goals: [3, 0] },
+    { on: "2026-08-22T16:30:00Z", home: "Chelsea", away: "Wolves", goals: [1, 1] },
+    { on: "2026-08-25T19:00:00Z", home: "Everton", away: "Wolves", goals: [1, 0] },
+    { on: "2026-08-25T19:00:00Z", home: "Fulham", away: "Brentford", goals: [1, 3] },
+    { on: "2026-08-25T19:45:00Z", home: "Arsenal", away: "Chelsea", goals: [2, 1] },
+    { on: "2026-08-29T14:00:00Z", home: "Arsenal", away: "Wolves", goals: [3, 2] },
+    { on: "2026-08-29T14:00:00Z", home: "Fulham", away: "Everton", goals: [0, 2] },
+    { on: "2026-08-29T16:30:00Z", home: "Brentford", away: "Chelsea", goals: [1, 0] }
+  ];
+
+  async function storeResult(
+    season: string,
+    division: string,
+    result: { on: string; home: string; away: string; goals: [number, number] }
+  ): Promise<void> {
+    await client.query(
+      `insert into historical_matches (
+         season, division, played_on, home_team, away_team,
+         home_goals, away_goals
+       ) values ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        season,
+        division,
+        result.on,
+        result.home,
+        result.away,
+        result.goals[0],
+        result.goals[1]
+      ]
+    );
+  }
+
+  test("sums the current Season's results into the table it stores", async () => {
+    await seedSchedule();
+    for (const result of PLAYED_RESULTS) {
+      await storeResult("2026-27", "Premier League", result);
+    }
+    // Neither of these may reach the table. Last Season's rout would put three
+    // more goals on Arsenal and a fourth match on its record; the Championship
+    // result is the latest stored of all, so a division boundary that leaked
+    // would show in the coverage date as well as in two clubs that have played
+    // no Premier League match at all.
+    await storeResult("2025-26", "Premier League", {
+      on: "2026-05-10T15:00:00Z", home: "Arsenal", away: "Chelsea", goals: [5, 0]
+    });
+    await storeResult("2026-27", "Championship", {
+      on: "2026-09-05T14:00:00Z", home: "Coventry", away: "Hull", goals: [2, 1]
+    });
+    // Two clubs the same context shows on the schedule ahead, with nothing
+    // played behind them — the opening Fixture postponed, or a Gameweek 1 they
+    // both blanked. A side joins the table when it has a stored result, not
+    // when it has been scheduled, so neither may reach it.
+    await client.query(
+      `insert into fixtures (
+         season, fpl_id, gw, home_team, away_team, kickoff_at
+       ) values ('2026-27', 201, 3, 'Sunderland', 'Leeds', $1)`,
+      ["2026-09-19T16:30:00Z"]
+    );
+    await seedStandingManagerState();
+    await play({ responses: [STAND_PAT] });
+
+    const stored = await client.query<{ body: string; hash: string }>(
+      "select body, hash from contexts where gw = 2 and track = 'fpl'"
+    );
+    const body = stored.rows[0]!.body;
+    expect(stored.rows[0]!.hash).toBe(
+      createHash("sha256").update(body).digest("hex")
+    );
+    expect(body).toContain([
+      "Premier League table, from results through 2026-08-29:",
+      "- 1 Arsenal | 4 played, 4W 0D 0L, GF 10, GA 3, 12 pts",
+      "- 2 Everton | 4 played, 3W 0D 1L, GF 6, GA 2, 9 pts",
+      "- 3 Brentford | 4 played, 3W 0D 1L, GF 8, GA 5, 9 pts",
+      "- 4 Wolves | 4 played, 0W 2D 2L, GF 4, GA 6, 2 pts",
+      "- 5 Chelsea | 4 played, 0W 2D 2L, GF 3, GA 5, 2 pts",
+      "- 6 Fulham | 4 played, 0W 0D 4L, GF 2, GA 12, 0 pts",
+      ""
+    ].join("\n"));
+    expect(body).not.toContain("Coventry");
+    expect(body).not.toContain("Hull");
+    // The table above closes on Fulham's line and a blank, so it has six rows
+    // and no seventh. These two are in the same body, on the schedule ahead —
+    // scheduled, unplayed, and off the table.
+    expect(body).toContain("- Sunderland v Leeds | 2026-09-19");
+  });
+
+  test("announces the empty table a Season with no result has", async () => {
+    await seedSchedule();
+    await seedStandingManagerState();
+    await play({ responses: [STAND_PAT] });
+
+    const stored = await client.query<{ body: string }>(
+      "select body from contexts where gw = 2 and track = 'fpl'"
+    );
+    expect(stored.rows[0]!.body).toContain(
+      "Premier League table: no result has been played yet this Season."
+    );
   });
 
   test("shows what is left of the window at the calendar's end", async () => {

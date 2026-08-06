@@ -323,6 +323,11 @@ describe("starting the FPL track for all nine Entrants", () => {
     expect(context!.body)
       .toContain("Squad: none yet — this is your opening Squad.");
     expect(context!.body).toContain("£100.0m");
+    // Gameweek 1's normal case, and the reason the empty table is announced
+    // rather than dropped: an opening Season really has played nothing.
+    expect(context!.body).toContain(
+      "Premier League table: no result has been played yet this Season."
+    );
     expect(context!.body).toContain(
       '{"id":8,"name":"Palmer","club":"Chelsea","position":"MID",'
       + '"price":"£12.0m","price_tenths":120,"status":"available"}'

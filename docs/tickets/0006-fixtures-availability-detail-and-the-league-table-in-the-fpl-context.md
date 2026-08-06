@@ -55,15 +55,24 @@ the latest result included, and stating plainly when no result exists yet.
 
 **Blocked by:** Spec 0005's opening ticket.
 
-- [ ] The table matches a hand-computed one, including a tie broken by goal difference
+- [x] The table matches a hand-computed one, including a tie broken by goal difference
       and one broken by goals scored
-- [ ] Only current-Season Premier League results contribute; a side appears once it has a
+- [x] Only current-Season Premier League results contribute; a side appears once it has a
       stored result
-- [ ] The coverage line names the latest included result's date
-- [ ] With no stored result the table is replaced by a plain announcement — Gameweek 1's
+- [x] The coverage line names the latest included result's date
+- [x] With no stored result the table is replaced by a plain announcement — Gameweek 1's
       normal case, tested end to end
-- [ ] The summation and the current-Season boundary are tested against a real Postgres
-- [ ] The stored, hashed body carries the table — asserted at the `openFplGameweek` seam
+- [x] The summation and the current-Season boundary are tested against a real Postgres
+- [x] The stored, hashed body carries the table — asserted at the `openFplGameweek` seam
+
+**Known limitation — the two tracks spell some clubs differently.** The table's club names
+are football-data's, because they are the names `historical_matches` stores; the Fixtures
+section and the pool carry FPL's, because those are the names `fixtures` and `fpl_players`
+store. Where the two feeds disagree — Spurs against Tottenham, Man Utd against Man United —
+one club reads as two names in one context. Only the FPL-to-football-data direction is
+mapped (`src/football-data/team-identity.ts`), so rendering the table in the pool's names
+would need the reverse map, which is a decision about club identity across both tracks
+rather than a rendering detail of this slice.
 
 ## Availability detail rides the pool lines
 

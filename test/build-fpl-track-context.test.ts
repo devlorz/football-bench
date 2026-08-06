@@ -4,6 +4,7 @@ import {
   parseFplTrackContextPool,
   type BuildFplTrackContextOptions,
   type FplFixture,
+  type FplLeagueTable,
   type FplPlayerPerformance
 } from "../src/context/build-fpl-track-context.js";
 import {
@@ -29,9 +30,9 @@ const POOL = [...FPL_POOL, ...FPL_POOL_ALTERNATES].map(
 
 /**
  * A context a Gameweek into the Season, with everything a test is not about
- * left at its quietest: the opening Squad, nothing scheduled ahead and nothing
- * Settled behind. Each test overrides the one input it is about, so what it is
- * asserting is what it names.
+ * left at its quietest: the opening Squad, nothing scheduled ahead, no result
+ * played and nothing Settled behind. Each test overrides the one input it is
+ * about, so what it is asserting is what it names.
  */
 function context(
   overrides: Partial<BuildFplTrackContextOptions> = {}
@@ -42,6 +43,7 @@ function context(
     state: openingManagerState(),
     pool: POOL,
     schedule: [],
+    league: null,
     performance: [],
     settledThrough: null,
     ...overrides
@@ -191,12 +193,41 @@ const SCHEDULE: FplFixture[] = [
   }
 ];
 
-/** The context's Fixtures section, from its heading to the blank line. */
-function fixturesShown(body: string): string[] {
+/**
+ * The current Season's table as the opening flow hands it over: summed,
+ * ordered by the competition's rule, and dated by the latest result in it.
+ * The same table `test/open-fpl-gameweek.test.ts` sums out of Postgres, so
+ * what the builder renders and what the flow computes are one table.
+ *
+ * Both ties the rule exists for are in it, and both are placed so that no
+ * other rule would produce the same order. Everton is above Brentford on goal
+ * difference (+4 against +3) while trailing it on goals scored and following
+ * it alphabetically; Wolves is above Chelsea on goals scored (4 against 3)
+ * while matching it on points and goal difference and following it
+ * alphabetically.
+ */
+const LEAGUE: FplLeagueTable = {
+  through: new Date("2026-08-29T16:30:00Z"),
+  rows: [
+    { club: "Arsenal", played: 4, wins: 4, draws: 0, losses: 0, goalsFor: 10, goalsAgainst: 3, points: 12 },
+    { club: "Everton", played: 4, wins: 3, draws: 0, losses: 1, goalsFor: 6, goalsAgainst: 2, points: 9 },
+    { club: "Brentford", played: 4, wins: 3, draws: 0, losses: 1, goalsFor: 8, goalsAgainst: 5, points: 9 },
+    { club: "Wolves", played: 4, wins: 0, draws: 2, losses: 2, goalsFor: 4, goalsAgainst: 6, points: 2 },
+    { club: "Chelsea", played: 4, wins: 0, draws: 2, losses: 2, goalsFor: 3, goalsAgainst: 5, points: 2 },
+    { club: "Fulham", played: 4, wins: 0, draws: 0, losses: 4, goalsFor: 2, goalsAgainst: 12, points: 0 }
+  ]
+};
+
+/**
+ * One section of the context, from the line that opens it to the blank line
+ * that closes it. The sections are separated by blank lines and nothing else,
+ * so finding one is finding where it starts.
+ */
+function sectionShown(body: string, heading: string): string[] {
   const lines = body.split("\n");
-  const start = lines.findIndex((at) => at.startsWith("Fixtures"));
+  const start = lines.findIndex((at) => at.startsWith(heading));
   if (start === -1) {
-    throw new Error("the context has no Fixtures section");
+    throw new Error(`the context has no "${heading}" section`);
   }
   return lines.slice(start, lines.indexOf("", start));
 }
@@ -393,7 +424,7 @@ describe("The Fixtures the FPL context lists", () => {
   test("groups six Gameweeks of raw lines, home side first", () => {
     // A Double is Chelsea twice in Gameweek 9 and a Blank is Chelsea nowhere in
     // Gameweek 10 — repetition and absence, with nothing said about either.
-    expect(fixturesShown(context({ schedule: SCHEDULE }))).toEqual([
+    expect(sectionShown(context({ schedule: SCHEDULE }), "Fixtures")).toEqual([
       "Fixtures, this Gameweek and the five ahead:",
       "Gameweek 8",
       "- Arsenal v Chelsea | 2026-10-24",
@@ -419,9 +450,9 @@ describe("The Fixtures the FPL context lists", () => {
     // Three Gameweeks from the end of a Season: the window is what the schedule
     // holds, and a shorter horizon is a fact of the calendar rather than
     // something to announce.
-    expect(fixturesShown(context({
+    expect(sectionShown(context({
       schedule: SCHEDULE.filter(({ gameweek }) => gameweek < 11)
-    }))).toEqual([
+    }), "Fixtures")).toEqual([
       "Fixtures, this Gameweek and the five ahead:",
       "Gameweek 8",
       "- Arsenal v Chelsea | 2026-10-24",
@@ -437,8 +468,10 @@ describe("The Fixtures the FPL context lists", () => {
   test("marks no Fixture as hard, easy or anything else", () => {
     // ADR-0018 and ADR-0021: FPL's Fixture Difficulty Rating and team strength
     // are the digested versions of the schedule, and their absence is what
-    // leaves the reading of a Fixture to the Entrant.
-    const body = context({ schedule: SCHEDULE });
+    // leaves the reading of a Fixture to the Entrant. The table is in the body
+    // too, because it is the other half of the same temptation: summing
+    // results is allowed, rating the sides is not.
+    const body = context({ schedule: SCHEDULE, league: LEAGUE });
 
     for (const digested of [
       /difficulty/i,
@@ -450,6 +483,33 @@ describe("The Fixtures the FPL context lists", () => {
       expect(body).not.toMatch(digested);
     }
   });
+});
+
+describe("The league table the FPL context carries", () => {
+  test("shows each side's record in rule order, dated by its latest result", () => {
+    expect(
+      sectionShown(context({ league: LEAGUE }), "Premier League table")
+    ).toEqual([
+      "Premier League table, from results through 2026-08-29:",
+      "- 1 Arsenal | 4 played, 4W 0D 0L, GF 10, GA 3, 12 pts",
+      "- 2 Everton | 4 played, 3W 0D 1L, GF 6, GA 2, 9 pts",
+      "- 3 Brentford | 4 played, 3W 0D 1L, GF 8, GA 5, 9 pts",
+      "- 4 Wolves | 4 played, 0W 2D 2L, GF 4, GA 6, 2 pts",
+      "- 5 Chelsea | 4 played, 0W 2D 2L, GF 3, GA 5, 2 pts",
+      "- 6 Fulham | 4 played, 0W 0D 4L, GF 2, GA 12, 0 pts"
+    ]);
+  });
+
+  test("announces an empty table rather than leaving it out", () => {
+    // Gameweek 1's normal case. A section that simply vanished would leave an
+    // Entrant unable to tell "nothing has been played" from "nobody told me".
+    expect(
+      sectionShown(context({ league: null }), "Premier League table")
+    ).toEqual([
+      "Premier League table: no result has been played yet this Season."
+    ]);
+  });
+
 });
 
 describe("The performance windows the FPL pool carries", () => {
@@ -649,10 +709,11 @@ describe("The performance windows the FPL pool carries", () => {
 
   test("reads the priced pool back out of a v2 body, stat blocks and all", () => {
     // The stored body is what an action is priced from, so a body carrying
-    // everything v2 shows — a schedule ahead of the pool and stats on its
-    // lines — has to come back as the same priced players it always was.
+    // everything v2 shows — a schedule and a table ahead of the pool and stats
+    // on its lines — has to come back as the same priced players it always was.
     const body = context({
       schedule: SCHEDULE,
+      league: LEAGUE,
       performance: [PALMER],
       settledThrough: 7
     });

@@ -42,8 +42,13 @@ interface TeamRecord {
   goalsAgainst: number;
 }
 
-interface TableRecord extends TeamRecord {
-  team: string;
+/**
+ * One side's summed record and its points. `club` rather than `team`, which in
+ * this vocabulary is a Squad or a Team Sheet (CONTEXT.md); the row is read by
+ * the FPL track's context as well as this one.
+ */
+export interface LeagueTableRow extends TeamRecord {
+  club: string;
   points: number;
 }
 
@@ -102,16 +107,22 @@ function teamRecord(matches: HistoricalMatch[], team: string): TeamRecord {
   return record;
 }
 
-function leagueTable(matches: HistoricalMatch[]): TableRecord[] {
-  const teams = new Set<string>();
+/**
+ * Every side with a stored result among `matches`, summed and put in the
+ * competition's own order: points, then goal difference, then goals scored.
+ * Club name breaks a tie all three leave, so the order is a function of the
+ * results alone and the same results always render the same text.
+ */
+export function leagueTable(matches: HistoricalMatch[]): LeagueTableRow[] {
+  const clubs = new Set<string>();
   for (const match of matches) {
-    teams.add(footballDataTeamName(match.home_team));
-    teams.add(footballDataTeamName(match.away_team));
+    clubs.add(footballDataTeamName(match.home_team));
+    clubs.add(footballDataTeamName(match.away_team));
   }
-  return [...teams].map((team) => {
-    const record = teamRecord(matches, team);
+  return [...clubs].map((club) => {
+    const record = teamRecord(matches, club);
     return {
-      team,
+      club,
       ...record,
       points: record.wins * 3 + record.draws
     };
@@ -120,7 +131,7 @@ function leagueTable(matches: HistoricalMatch[]): TableRecord[] {
     || (right.goalsFor - right.goalsAgainst)
       - (left.goalsFor - left.goalsAgainst)
     || right.goalsFor - left.goalsFor
-    || left.team.localeCompare(right.team)
+    || left.club.localeCompare(right.club)
   );
 }
 
@@ -143,8 +154,8 @@ function ordinal(position: number): string {
 
 function positionIn(matches: HistoricalMatch[], team: string): number | undefined {
   const canonical = footballDataTeamName(team);
-  const index = leagueTable(matches).findIndex(({ team: rowTeam }) =>
-    rowTeam === canonical
+  const index = leagueTable(matches).findIndex(({ club }) =>
+    club === canonical
   );
   return index < 0 ? undefined : index + 1;
 }
