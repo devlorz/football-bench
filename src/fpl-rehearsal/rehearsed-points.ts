@@ -1,3 +1,5 @@
+import { NO_LIVE_STATS } from "../fpl/fetch-player-points.js";
+
 export interface RehearsedPointsOptions {
   /** The archived bootstrap body, which names every player a Gameweek has. */
   archived: string;
@@ -38,7 +40,16 @@ export function rehearsedPoints({
   return JSON.stringify({
     elements: elements.map(({ id }) => ({
       id,
+      // The stat set migration 0015 stores feeds the context's performance
+      // windows, not the scoring the rehearsal exists to prove, and this
+      // script has no opinion on how a rehearsed total was earned. Zeros
+      // rather than invented events: the body has to pass the same boundary
+      // the live one does, and nothing downstream of the rehearsal reads them
+      // yet. A rehearsal whose contexts carry stat windows will have to script
+      // these, because a zeroed block is the "played and did nothing" reading
+      // migration 0015 exists to refuse.
       stats: {
+        ...NO_LIVE_STATS,
         minutes: scored[id]?.minutes ?? 0,
         total_points: scored[id]?.totalPoints ?? 0
       }

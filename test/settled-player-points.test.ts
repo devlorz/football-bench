@@ -1,6 +1,7 @@
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { runDailyFetch } from "../src/fetch/daily-fetch.js";
+import { NO_LIVE_STATS } from "../src/fpl/fetch-player-points.js";
 import { storeManagerState } from "../src/fpl/manager-state-store.js";
 import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
 import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
@@ -61,13 +62,27 @@ async function bootstrapWithSettledGameweekOne(): Promise<string> {
   return JSON.stringify(bootstrap);
 }
 
-function liveBody(
-  players: { id: number; minutes: number; totalPoints: number }[]
-): string {
+/**
+ * A live stat block a test can damage one field of. The block it starts from
+ * is the boundary's own, so a widening the fetch learns about reaches these
+ * scripted bodies without being retyped here.
+ */
+function statsWith(overrides: Record<string, unknown> = {}) {
+  return { ...NO_LIVE_STATS, ...overrides };
+}
+
+interface LivePlayer {
+  id: number;
+  minutes: number;
+  totalPoints: number;
+  stats?: Record<string, unknown>;
+}
+
+function liveBody(players: LivePlayer[]): string {
   return JSON.stringify({
-    elements: players.map(({ id, minutes, totalPoints }) => ({
+    elements: players.map(({ id, minutes, totalPoints, stats }) => ({
       id,
-      stats: { minutes, total_points: totalPoints },
+      stats: statsWith({ minutes, total_points: totalPoints, ...stats }),
       explain: []
     }))
   });
@@ -157,6 +172,152 @@ describe("collecting settled player Gameweek points", () => {
         minutes: 0,
         total_points: 0
       }
+    ]);
+  });
+
+  test("stores every stat the live endpoint sends for a player", async () => {
+    // A striker who scored twice, set one up and was booked; a keeper who kept
+    // the sheet, made six saves and was booked too. Values are picked so that
+    // no two columns carry the same pair down the two rows -- a column that
+    // reads the same as its neighbour is one a swapped wiring could hide in.
+    await runWith(await sources(
+      await bootstrapWithSettledGameweekOne(),
+      liveBody([
+        {
+          id: 1,
+          minutes: 88,
+          totalPoints: 15,
+          stats: {
+            goals_scored: 2,
+            assists: 1,
+            clean_sheets: 0,
+            bonus: 3,
+            yellow_cards: 1,
+            red_cards: 0,
+            saves: 0,
+            expected_goals: "1.27",
+            expected_assists: "0.43",
+            expected_goals_conceded: "1.88"
+          }
+        },
+        {
+          id: 5,
+          minutes: 90,
+          totalPoints: 9,
+          stats: {
+            goals_scored: 0,
+            assists: 0,
+            clean_sheets: 1,
+            bonus: 2,
+            yellow_cards: 1,
+            red_cards: 0,
+            saves: 6,
+            expected_goals: "0.00",
+            expected_assists: "0.05",
+            expected_goals_conceded: "0.61"
+          }
+        }
+      ])
+    ));
+
+    const points = await client.query(
+      `select
+         fpl_id, minutes, total_points, goals_scored, assists, clean_sheets,
+         bonus, yellow_cards, red_cards, saves, expected_goals,
+         expected_assists, expected_goals_conceded
+         from fpl_player_points
+        where season = '2026-27' and gw = 1
+        order by fpl_id`
+    );
+    expect(points.rows).toEqual([
+      {
+        fpl_id: 1,
+        minutes: 88,
+        total_points: 15,
+        goals_scored: 2,
+        assists: 1,
+        clean_sheets: 0,
+        bonus: 3,
+        yellow_cards: 1,
+        red_cards: 0,
+        saves: 0,
+        // Fixed-point, so the source's two decimals come back as they went in.
+        expected_goals: "1.27",
+        expected_assists: "0.43",
+        expected_goals_conceded: "1.88"
+      },
+      {
+        fpl_id: 5,
+        minutes: 90,
+        total_points: 9,
+        goals_scored: 0,
+        assists: 0,
+        clean_sheets: 1,
+        bonus: 2,
+        yellow_cards: 1,
+        red_cards: 0,
+        saves: 6,
+        expected_goals: "0.00",
+        expected_assists: "0.05",
+        expected_goals_conceded: "0.61"
+      }
+    ]);
+  });
+
+  test("archives a body whose stat is malformed and stores no row from it", async () => {
+    // A third decimal cannot be stored at the schema's precision without being
+    // rounded, which would leave a stat that disagrees with the bytes it is
+    // supposed to trace back to.
+    const damaged = liveBody([
+      { id: 1, minutes: 90, totalPoints: 6, stats: { expected_goals: "0.427" } },
+      { id: 5, minutes: 90, totalPoints: 2, stats: { saves: -1 } },
+      // Beyond what numeric(5, 2) holds. Refused here, naming its field,
+      // rather than reaching Postgres as an overflow with no player attached.
+      { id: 9, minutes: 90, totalPoints: 1, stats: { expected_assists: "1000" } }
+    ]);
+
+    await expect(runWith(await sources(
+      await bootstrapWithSettledGameweekOne(),
+      damaged
+    ))).rejects.toThrow(
+      /fpl_live\.elements\.0\.stats\.expected_goals:.*fpl_live\.elements\.1\.stats\.saves:.*fpl_live\.elements\.2\.stats\.expected_assists:/s
+    );
+
+    const archived = await client.query(
+      "select body from raw_snapshots where source = 'fpl_live:2026-27:1'"
+    );
+    expect(archived.rows).toEqual([{ body: damaged }]);
+    const points = await client.query(
+      "select count(*)::int as stored from fpl_player_points"
+    );
+    expect(points.rows).toEqual([{ stored: 0 }]);
+  });
+
+  test("follows a corrected stat as it follows a corrected total", async () => {
+    const withBonus = (bonus: number, expectedGoals: string): string =>
+      liveBody([{
+        id: 1,
+        minutes: 90,
+        totalPoints: 6,
+        stats: { goals_scored: 1, bonus, expected_goals: expectedGoals }
+      }]);
+
+    await runWith(await sources(
+      await bootstrapWithSettledGameweekOne(),
+      withBonus(1, "0.52")
+    ));
+    // FPL revised the bonus and restated the xG after checking the Gameweek.
+    await runWith(await sources(
+      await bootstrapWithSettledGameweekOne(),
+      withBonus(3, "0.66")
+    ));
+
+    const corrected = await client.query(
+      `select fpl_id, goals_scored, bonus, expected_goals
+         from fpl_player_points`
+    );
+    expect(corrected.rows).toEqual([
+      { fpl_id: 1, goals_scored: 1, bonus: 3, expected_goals: "0.66" }
     ]);
   });
 
@@ -270,7 +431,7 @@ describe("collecting settled player Gameweek points", () => {
 
   test("archives the live body byte-for-byte and writes no row it cannot read", async () => {
     const damaged = JSON.stringify({
-      elements: [{ id: 1, stats: { minutes: "ninety", total_points: 7 } }]
+      elements: [{ id: 1, stats: statsWith({ minutes: "ninety", total_points: 7 }) }]
     });
 
     await expect(runWith(await sources(
@@ -291,8 +452,8 @@ describe("collecting settled player Gameweek points", () => {
   test("names every field it rejects, not just the first", async () => {
     const damaged = JSON.stringify({
       elements: [
-        { id: 1, stats: { minutes: 90, total_points: null } },
-        { id: 5, stats: { minutes: -1, total_points: 2 } }
+        { id: 1, stats: statsWith({ minutes: 90, total_points: null }) },
+        { id: 5, stats: statsWith({ minutes: -1, total_points: 2 }) }
       ]
     });
 

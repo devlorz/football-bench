@@ -1,6 +1,10 @@
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
+import {
+  storePlayerPoints,
+  type PlayerPointsStat
+} from "./fpl-points-fixture.js";
 
 const { Client } = pg;
 
@@ -20,10 +24,19 @@ describe("the benchmark database", () => {
     await client.query(
       `truncate
          predictions, contexts, fixtures, manager_states, attempts, scores,
-         models, gameweeks, raw_snapshots, historical_matches, fpl_players
+         models, gameweeks, raw_snapshots, historical_matches, fpl_players,
+         fpl_player_points
        restart identity cascade`
     );
   });
+
+  /** A Settled Gameweek to hang a player's points on. */
+  async function storeGameweek(): Promise<void> {
+    await client.query(
+      `insert into gameweeks (season, gw, deadline_at)
+       values ('2026-27', 1, '2026-08-21T17:30:00Z')`
+    );
+  }
 
   test("builds every table in the write-path schema", async () => {
     const result = await client.query<{ table_name: string }>(
@@ -113,6 +126,73 @@ describe("the benchmark database", () => {
          )`
       )).rejects.toMatchObject({ code: "23514" });
     }
+  });
+
+  test("refuses a negative stat on a player's Settled Gameweek", async () => {
+    await storeGameweek();
+
+    // `total_points` is deliberately absent: it goes negative on a red card or
+    // an own goal, and it is the one number here that legitimately can.
+    const nonNegative: PlayerPointsStat[] = [
+      "minutes",
+      "goals_scored",
+      "assists",
+      "clean_sheets",
+      "bonus",
+      "yellow_cards",
+      "red_cards",
+      "saves",
+      "expected_goals",
+      "expected_assists",
+      "expected_goals_conceded"
+    ];
+
+    for (const stat of nonNegative) {
+      await expect(storePlayerPoints(client, {
+        gameweek: 1,
+        fplId: 1,
+        [stat]: -1
+      })).rejects.toMatchObject({ code: "23514" });
+    }
+  });
+
+  test("refuses a player's Gameweek points that carry no stat set", async () => {
+    await storeGameweek();
+
+    // The narrow shape migration 0015 widened away from. Accepting it would
+    // let a row exist that says a player took seven points off a Gameweek with
+    // nothing on record about how -- which is exactly what the guard in that
+    // migration refuses to invent for the rows that already existed.
+    await expect(client.query(
+      `insert into fpl_player_points (season, gw, fpl_id, minutes, total_points)
+       values ('2026-27', 1, 1, 90, 7)`
+    )).rejects.toMatchObject({ code: "23502" });
+  });
+
+  test("keeps a player's expected-goals family at the source's two decimals", async () => {
+    await storeGameweek();
+    await storePlayerPoints(client, {
+      gameweek: 1,
+      fplId: 1,
+      minutes: 90,
+      total_points: 8,
+      goals_scored: 1,
+      expected_goals: 0.5,
+      expected_assists: 0.25,
+      expected_goals_conceded: 1.5
+    });
+
+    // Fixed-point, so a stat reads back as the source spelled it rather than
+    // as the nearest float to it.
+    const stored = await client.query(
+      `select expected_goals, expected_assists, expected_goals_conceded
+         from fpl_player_points`
+    );
+    expect(stored.rows).toEqual([{
+      expected_goals: "0.50",
+      expected_assists: "0.25",
+      expected_goals_conceded: "1.50"
+    }]);
   });
 
   test("keeps Fixtures with the same FPL id in different Seasons", async () => {

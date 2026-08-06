@@ -22,7 +22,10 @@ import {
   OPENING_ACTION,
   STAND_PAT
 } from "./fpl-action-fixture.js";
-import { EVERYONE_PLAYED } from "./fpl-points-fixture.js";
+import {
+  EVERYONE_PLAYED,
+  storeSettledPoints
+} from "./fpl-points-fixture.js";
 import { FPL_POOL } from "./fpl-pool-fixture.js";
 import { legalStateFrom } from "./fpl-replay.js";
 
@@ -118,13 +121,7 @@ describe("the FPL demonstration record", () => {
     gameweek: number,
     points: readonly PlayerGameweekPoints[] = EVERYONE_PLAYED
   ): Promise<void> {
-    for (const player of points) {
-      await client.query(
-        `insert into fpl_player_points (season, gw, fpl_id, minutes, total_points)
-         values ('2026-27', $1, $2, $3, $4)`,
-        [gameweek, player.fplId, player.minutes, player.totalPoints]
-      );
-    }
+    await storeSettledPoints(client, gameweek, points);
   }
 
   /**
