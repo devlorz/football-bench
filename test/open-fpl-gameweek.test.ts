@@ -52,6 +52,23 @@ const STAND_PAT = JSON.stringify({
 });
 
 /**
+ * The one legal Transfer these tests price: Wilson out and Evanilson in, both
+ * £6.0m at their opening prices, with Evanilson taking the bench place Wilson
+ * leaves. What is being proved by it is always the body the price came off,
+ * so the action itself is written once.
+ */
+const SELL_WILSON_BUY_EVANILSON_JSON = JSON.stringify({
+  transfers_in: [19],
+  transfers_out: [15],
+  chip: null,
+  team_sheet: {
+    ...(JSON.parse(STAND_PAT) as { team_sheet: { bench: number[] } })
+      .team_sheet,
+    bench: [2, 7, 12, 19]
+  }
+});
+
+/**
  * The same action with the armband on a substitute. One rule broken and only
  * one, so what the Entrant is sent back is a sentence about captaincy rather
  * than whichever other rule a changed Squad happened to break as well.
@@ -1491,20 +1508,10 @@ describe("opening the FPL track for a Gameweek", () => {
     await lockPool(8, FPL_POOL_ALTERNATES.filter(({ fplId }) => fplId === 19));
     await seedStandingManagerState(7);
 
-    const sellWilsonBuyEvanilson = JSON.stringify({
-      transfers_in: [19],
-      transfers_out: [15],
-      chip: null,
-      team_sheet: {
-        ...(JSON.parse(STAND_PAT) as { team_sheet: { bench: number[] } })
-          .team_sheet,
-        bench: [2, 7, 12, 19]
-      }
-    });
     await play({
       gameweek: 8,
       at: "2026-10-20T11:30:00Z",
-      responses: [sellWilsonBuyEvanilson]
+      responses: [SELL_WILSON_BUY_EVANILSON_JSON]
     });
 
     // The readback that prices this action reads a v2 body — every line
@@ -1514,6 +1521,75 @@ describe("opening the FPL track for a Gameweek", () => {
     const states = await client.query<{
       squad: { active: { fplId: number; purchasePriceTenths: number }[] };
     }>("select squad from manager_states where gw = 8");
+    const active = states.rows[0]!.squad.active;
+    expect(active).toContainEqual({ fplId: 19, purchasePriceTenths: 60 });
+    expect(active.map(({ fplId }) => fplId)).not.toContain(15);
+  });
+
+  test("prices a Transfer from a body carrying the pool's flags", async () => {
+    // Evanilson joins the Gameweek's pool because the Transfer buys him.
+    await lockPool(2, FPL_POOL_ALTERNATES.filter(({ fplId }) => fplId === 19));
+    // The two shapes FPL's feed sends: a percentage against Palmer, and a flag
+    // on Wilson with none. Everyone else is left as the fetch locked them —
+    // status 'a', no percentage, empty news.
+    await client.query(
+      `update fpl_players
+          set status = 'd', chance_of_playing_next_round = 25,
+              news = 'Knee injury - expected back 21 Sep'
+        where season = '2026-27' and gw = 2 and fpl_id = 8`
+    );
+    await client.query(
+      `update fpl_players
+          set status = 'd', chance_of_playing_next_round = null,
+              news = 'Knock - assessed ahead of Saturday'
+        where season = '2026-27' and gw = 2 and fpl_id = 15`
+    );
+    await seedStandingManagerState();
+
+    await play({ responses: [SELL_WILSON_BUY_EVANILSON_JSON] });
+
+    const stored = await client.query<{ body: string }>(
+      "select body from contexts where gw = 2 and track = 'fpl'"
+    );
+    const body = stored.rows[0]!.body;
+    expect(body).toContain("Availability keys: chance = ");
+    expect(body).toContain(JSON.stringify({
+      id: 8,
+      name: "Palmer",
+      club: "Chelsea",
+      position: "MID",
+      price: "£12.0m",
+      price_tenths: 120,
+      status: "doubtful",
+      chance: 25,
+      news: "Knee injury - expected back 21 Sep"
+    }));
+    expect(body).toContain(JSON.stringify({
+      id: 15,
+      name: "Wilson",
+      club: "Fulham",
+      position: "FWD",
+      price: "£6.0m",
+      price_tenths: 60,
+      status: "doubtful",
+      news: "Knock - assessed ahead of Saturday"
+    }));
+    // And a player with nothing flagged is on the line he has always been on.
+    expect(body).toContain(JSON.stringify({
+      id: 2,
+      name: "Kelleher",
+      club: "Brentford",
+      position: "GKP",
+      price: "£4.0m",
+      price_tenths: 40,
+      status: "available"
+    }));
+    // The readback priced this Transfer off that same body: a parser that
+    // refused the new keys would have thrown before Evanilson was bought, and
+    // the flagged player sold is the one the pricing turned on.
+    const states = await client.query<{
+      squad: { active: { fplId: number; purchasePriceTenths: number }[] };
+    }>("select squad from manager_states where gw = 2");
     const active = states.rows[0]!.squad.active;
     expect(active).toContainEqual({ fplId: 19, purchasePriceTenths: 60 });
     expect(active.map(({ fplId }) => fplId)).not.toContain(15);

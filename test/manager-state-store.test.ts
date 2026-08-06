@@ -11,7 +11,11 @@ import {
   buildFplTrackContext,
   parseFplTrackContextPool
 } from "../src/context/build-fpl-track-context.js";
-import { FPL_POOL, LOCKED_POOL as POOL } from "./fpl-pool-fixture.js";
+import {
+  FPL_POOL,
+  LOCKED_POOL as POOL,
+  trackPool
+} from "./fpl-pool-fixture.js";
 import { legalStateFrom } from "./fpl-replay.js";
 import {
   FREE_HIT_REBUILD,
@@ -128,7 +132,7 @@ describe("storing and reloading Manager State", () => {
       season: "2026-27",
       gameweek: 3,
       state: reloaded!,
-      pool: FPL_POOL.map((player) => ({ ...player, status: "a" })),
+      pool: trackPool(FPL_POOL),
       schedule: [],
       league: null,
       performance: [],

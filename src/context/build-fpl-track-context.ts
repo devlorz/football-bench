@@ -23,6 +23,14 @@ export interface FplTrackPlayer {
   position: Position;
   priceTenths: number;
   status: string;
+  /**
+   * FPL's own percentage chance of the player playing the next round, or null
+   * when it publishes none — which is most of the pool most weeks. Zero is a
+   * statement rather than an absence: it is FPL saying he will not play.
+   */
+  chanceOfPlaying: number | null;
+  /** FPL's own note behind a flag, empty when there is nothing to report. */
+  news: string;
 }
 
 /**
@@ -227,6 +235,14 @@ function playerLine(
     price: money(player.priceTenths),
     price_tenths: player.priceTenths,
     status,
+    // Each key stands on its own emptiness rather than on the other's: FPL
+    // sends news with no percentage often, so either can appear without the
+    // other and each is dropped on its own — which is what leaves a line with
+    // neither exactly as it was.
+    ...(player.chanceOfPlaying === null
+      ? {}
+      : { chance: player.chanceOfPlaying }),
+    ...(player.news.trim() === "" ? {} : { news: player.news }),
     ...(season === undefined ? {} : { season }),
     ...(lastFive === undefined ? {} : { last5: lastFive })
   });
@@ -239,6 +255,33 @@ function playerLine(
  * prices that context showed it, not whatever the latest snapshot holds.
  */
 const POOL_HEADING = "Player pool for this Gameweek, one player per line:";
+
+/**
+ * What the two availability keys mean, once, above the pool that carries them
+ * — and nothing at all when no line below carries either, on the same rule the
+ * stat legend follows: keys nothing below uses would be a definition of
+ * nothing.
+ *
+ * It is a separate line from the stat legend because the two go quiet for
+ * different reasons. A Season that has settled nothing has no stat to define
+ * for anyone; a pool with nothing flagged is this week's pool, and next week's
+ * may carry a flag with no Gameweek settled behind it.
+ *
+ * Both keys are FPL's own number and text — no verdict is drawn from them
+ * here, so that any forecast in an Entrant's answer is the Entrant's own
+ * (ADR-0018).
+ */
+const AVAILABILITY_LEGEND =
+  "Availability keys: chance = FPL's own percentage chance of the player "
+  + "playing the next round, news = FPL's own note behind a flag, both "
+  + "verbatim. A player with nothing flagged carries neither key.";
+
+function availabilityLegend(pool: FplTrackPlayer[]): string[] {
+  const carried = pool.some(
+    (player) => player.chanceOfPlaying !== null || player.news.trim() !== ""
+  );
+  return carried ? [AVAILABILITY_LEGEND] : [];
+}
 
 /**
  * What the pool section says before its first line: which Gameweek the windows
@@ -417,6 +460,7 @@ export function buildFplTrackContext({
     ...leagueSection(league),
     "",
     ...performanceHeading(settledThrough),
+    ...availabilityLegend(pool),
     POOL_HEADING,
     ...pool.map((player) => playerLine(player, windows.get(player.fplId))),
     "",

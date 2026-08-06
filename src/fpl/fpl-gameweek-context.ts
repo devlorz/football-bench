@@ -23,6 +23,8 @@ interface PoolRow {
   position: Position;
   price_tenths: number;
   status: string;
+  chance_of_playing_next_round: number | null;
+  news: string;
 }
 
 /**
@@ -259,7 +261,8 @@ export async function loadLockedGameweek(
   }
 
   const players = await database.query<PoolRow>(
-    `select fpl_id, team_name, web_name, position, price_tenths, status
+    `select fpl_id, team_name, web_name, position, price_tenths, status,
+            chance_of_playing_next_round, news
        from fpl_players
       where season = $1 and gw = $2
       order by fpl_id`,
@@ -283,7 +286,9 @@ export async function loadLockedGameweek(
       club: row.team_name,
       position: row.position,
       priceTenths: row.price_tenths,
-      status: row.status
+      status: row.status,
+      chanceOfPlaying: row.chance_of_playing_next_round,
+      news: row.news
     }))
   };
 }

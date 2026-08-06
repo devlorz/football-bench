@@ -15,7 +15,8 @@ import {
 import {
   FPL_POOL,
   FPL_POOL_ALTERNATES,
-  LOCKED_POOL
+  LOCKED_POOL,
+  trackPool
 } from "./fpl-pool-fixture.js";
 import { legalStateFrom } from "./fpl-replay.js";
 import {
@@ -24,9 +25,7 @@ import {
   STAND_PAT
 } from "./fpl-action-fixture.js";
 
-const POOL = [...FPL_POOL, ...FPL_POOL_ALTERNATES].map(
-  (player) => ({ ...player, status: "a" })
-);
+const POOL = trackPool([...FPL_POOL, ...FPL_POOL_ALTERNATES]);
 
 /**
  * A context a Gameweek into the Season, with everything a test is not about
@@ -722,6 +721,169 @@ describe("The performance windows the FPL pool carries", () => {
     // And the fields it prices from are still checked: a price the reducer
     // cannot do arithmetic on is refused rather than tolerated alongside the
     // stats.
+    expect(() => parseFplTrackContextPool(
+      body.replace('"price_tenths":120', '"price_tenths":"120"')
+    )).toThrow("malformed player pool line");
+  });
+});
+
+/**
+ * The pool with two flags on it, in the two shapes FPL's own feed sends:
+ * Palmer doubtful with a percentage published against him, Wilson flagged with
+ * none. Everyone else is unflagged, which is most of a pool most weeks.
+ */
+const FLAGGED_POOL = POOL.map((player) => {
+  if (player.fplId === 8) {
+    return {
+      ...player,
+      status: "d",
+      chanceOfPlaying: 25,
+      news: "Knee injury - expected back 21 Sep"
+    };
+  }
+  if (player.fplId === 15) {
+    return {
+      ...player,
+      status: "d",
+      chanceOfPlaying: null,
+      news: "Knock - assessed ahead of Saturday"
+    };
+  }
+  return player;
+});
+
+describe("The availability detail the FPL pool carries", () => {
+  test("puts percentage and news on a flag, and neither key on none", () => {
+    const body = context({ pool: FLAGGED_POOL });
+
+    // 25% doubtful and 75% doubtful are the same word in `status` and
+    // different bets, which is the whole reason the percentage is here.
+    expect(poolLine(body, 8)).toEqual({
+      id: 8,
+      name: "Palmer",
+      club: "Chelsea",
+      position: "MID",
+      price: "£12.0m",
+      price_tenths: 120,
+      status: "doubtful",
+      chance: 25,
+      news: "Knee injury - expected back 21 Sep"
+    });
+    // And an unflagged player carries neither key rather than a pair of empty
+    // ones: absence keeps meaning "nothing to report", on six hundred lines.
+    expect(poolLine(body, 2)).toEqual({
+      id: 2,
+      name: "Kelleher",
+      club: "Brentford",
+      position: "GKP",
+      price: "£4.0m",
+      price_tenths: 40,
+      status: "available"
+    });
+  });
+
+  test("gives news alone to a flag FPL sends no percentage with", () => {
+    const body = context({ pool: FLAGGED_POOL });
+
+    expect(poolLine(body, 15)).toEqual({
+      id: 15,
+      name: "Wilson",
+      club: "Fulham",
+      position: "FWD",
+      price: "£6.0m",
+      price_tenths: 60,
+      status: "doubtful",
+      news: "Knock - assessed ahead of Saturday"
+    });
+    expect(poolLine(body, 15)).not.toHaveProperty("chance");
+  });
+
+  test("leaves the legend out of a pool with nothing flagged at all", () => {
+    // Most Gameweeks flag someone, so this is the quiet week rather than the
+    // normal one — and on it the keys define nothing, exactly as the stat
+    // legend defines nothing in a Season that has settled nothing.
+    expect(context()).not.toContain("Availability keys: ");
+  });
+
+  test("keeps a percentage FPL left on a recovered player as it stands", () => {
+    // FPL puts chance back to 100 when a player recovers and clears the news,
+    // and the snapshot keeps the number. Verbatim means the line keeps it:
+    // reading 100 as "nothing to report" would be this context's own verdict
+    // rather than FPL's (ADR-0018), and the legend appears because a line
+    // below does use a key.
+    const body = context({
+      pool: POOL.map((player) => player.fplId === 8
+        ? { ...player, chanceOfPlaying: 100 }
+        : player)
+    });
+
+    expect(poolLine(body, 8)).toEqual({
+      id: 8,
+      name: "Palmer",
+      club: "Chelsea",
+      position: "MID",
+      price: "£12.0m",
+      price_tenths: 120,
+      status: "available",
+      chance: 100
+    });
+    expect(poolLine(body, 8)).not.toHaveProperty("news");
+    expect(body).toContain("Availability keys: ");
+  });
+
+  test("defines both availability keys exactly once above the pool", () => {
+    // Nothing has settled, so the stat legend is not there to define them:
+    // availability is on the pool from Gameweek 1, and so is what it means.
+    const body = context({ pool: FLAGGED_POOL });
+    const lines = body.split("\n");
+    const defined = lines.filter((at) => at.startsWith("Availability keys: "));
+
+    expect(body).not.toContain("Stat keys: ");
+    expect(defined).toHaveLength(1);
+    expect(defined[0]).toContain("chance = ");
+    expect(defined[0]).toContain("news = ");
+    expect(lines.indexOf(defined[0]!)).toBeLessThan(
+      lines.findIndex((at) => at.startsWith("{\"id\":"))
+    );
+  });
+
+  test("prints the snapshot's own words, and a nil chance as a number", () => {
+    // Zero is FPL saying he will not play, not FPL saying nothing — a line
+    // that dropped it for being falsy would turn a ruled-out player into an
+    // unflagged one. The news goes through verbatim, quotes and all: no
+    // verdict of the context's own is anywhere on the line (ADR-0018).
+    const ruledOut = 'Ankle injury - "no return date", ruled out';
+    const body = context({
+      pool: POOL.map((player) => player.fplId === 8
+        ? { ...player, status: "i", chanceOfPlaying: 0, news: ruledOut }
+        : player)
+    });
+
+    expect(poolLine(body, 8)).toEqual({
+      id: 8,
+      name: "Palmer",
+      club: "Chelsea",
+      position: "MID",
+      price: "£12.0m",
+      price_tenths: 120,
+      status: "injured",
+      chance: 0,
+      news: ruledOut
+    });
+  });
+
+  test("reads the priced pool back out of a body carrying the flags", () => {
+    const body = context({
+      pool: FLAGGED_POOL,
+      schedule: SCHEDULE,
+      league: LEAGUE,
+      performance: [PALMER],
+      settledThrough: 7
+    });
+
+    expect(parseFplTrackContextPool(body)).toEqual(LOCKED_POOL);
+    // Tolerant of the new keys, strict about the ones it prices from: a price
+    // the reducer cannot do arithmetic on is still refused.
     expect(() => parseFplTrackContextPool(
       body.replace('"price_tenths":120', '"price_tenths":"120"')
     )).toThrow("malformed player pool line");

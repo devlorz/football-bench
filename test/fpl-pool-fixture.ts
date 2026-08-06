@@ -1,3 +1,4 @@
+import type { FplTrackPlayer } from "../src/context/build-fpl-track-context.js";
 import type { PoolPlayer } from "../src/fpl/apply-gameweek-action.js";
 import type { PlayerPosition } from "../src/fpl/score-team-sheet.js";
 
@@ -40,6 +41,23 @@ export const FPL_POOL_ALTERNATES: readonly FixturePlayer[] = [
   { fplId: 20, webName: "Dewsbury-Hall", club: "Everton", position: "MID", priceTenths: 170 },
   { fplId: 21, webName: "Branthwaite", club: "Everton", position: "DEF", priceTenths: 45 }
 ];
+
+/**
+ * The pool as a Gameweek's Lock hands it to the context builder: available,
+ * with nothing flagged and no percentage published — what the fetch writes for
+ * most of a pool most weeks. A test about a flag overrides the players it is
+ * about, so what it is asserting is what it names.
+ */
+export function trackPool(
+  players: readonly FixturePlayer[]
+): FplTrackPlayer[] {
+  return players.map((player) => ({
+    ...player,
+    status: "a",
+    chanceOfPlaying: null,
+    news: ""
+  }));
+}
 
 /** The reducer takes the pool without the names the context builder shows. */
 export function poolPlayers(
