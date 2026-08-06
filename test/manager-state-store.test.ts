@@ -128,7 +128,9 @@ describe("storing and reloading Manager State", () => {
       season: "2026-27",
       gameweek: 3,
       state: reloaded!,
-      pool: FPL_POOL.map((player) => ({ ...player, status: "a" }))
+      pool: FPL_POOL.map((player) => ({ ...player, status: "a" })),
+      performance: [],
+      settledThrough: null
     });
 
     expect(body).toContain("Bank: £4.5m");

@@ -44,20 +44,20 @@ Gameweek the windows run through.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] Each player with Settled minutes carries a season block and a last-five block of
+- [x] Each player with Settled minutes carries a season block and a last-five block of
       points, minutes, appearances and the raw event and expected-goals stats
-- [ ] Zero-valued fields are omitted from a block, and a player with no Settled minutes in
+- [x] Zero-valued fields are omitted from a block, and a player with no Settled minutes in
       a window carries no block for it at all
-- [ ] A legend above the pool defines every abbreviated key exactly once
-- [ ] The pool section announces the Settled Gameweek the windows run through, and states
+- [x] A legend above the pool defines every abbreviated key exactly once
+- [x] The pool section announces the Settled Gameweek the windows run through, and states
       plainly when no Gameweek has settled yet — Gameweek 1's normal case
-- [ ] No digested number — form, ICT, expected points, ownership — appears anywhere in the
+- [x] No digested number — form, ICT, expected points, ownership — appears anywhere in the
       context
-- [ ] The pool readback continues to price transfers from a v2 body, tolerating the stat
+- [x] The pool readback continues to price transfers from a v2 body, tolerating the stat
       fields while still validating the fields it prices from
-- [ ] The Prompt Version constant reads `fpl/2026-27-v2`; nothing recorded under v1 is
+- [x] The Prompt Version constant reads `fpl/2026-27-v2`; nothing recorded under v1 is
       touched
-- [ ] The builder is tested as the pure function it is, including hand-computed window
+- [x] The builder is tested as the pure function it is, including hand-computed window
       aggregates for a player whose form moved between the two windows
 
 ## Opening a Gameweek hands the Entrant the performance record

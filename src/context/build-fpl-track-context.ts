@@ -13,7 +13,7 @@ import {
 } from "../fpl/apply-gameweek-action.js";
 
 /** Frozen (prompt template + context builder) pair for the FPL track. */
-export const FPL_PROMPT_VERSION = "fpl/2026-27-v1";
+export const FPL_PROMPT_VERSION = "fpl/2026-27-v2";
 
 export interface FplTrackPlayer {
   fplId: number;
@@ -24,11 +24,56 @@ export interface FplTrackPlayer {
   status: string;
 }
 
+/**
+ * One window's aggregate of a player's Settled Gameweeks: raw events summed,
+ * never averaged or rated (ADR-0018). `appearances` is the count of Settled
+ * Gameweeks the player played minutes in, derived rather than stored.
+ *
+ * The expected-goals family keeps the fixed-point decimal spelling the live
+ * feed and the points table both use. Summing them is Postgres' job on a
+ * `numeric` column; parsing to a float here to render them would be a rounding
+ * step with nothing to gain.
+ */
+export interface FplPerformanceWindow {
+  points: number;
+  minutes: number;
+  appearances: number;
+  goals: number;
+  assists: number;
+  cleanSheets: number;
+  bonus: number;
+  yellowCards: number;
+  redCards: number;
+  saves: number;
+  expectedGoals: string;
+  expectedAssists: string;
+  expectedGoalsConceded: string;
+}
+
+/** One player's two windows, as the opening flow computes them. */
+export interface FplPlayerPerformance {
+  fplId: number;
+  season: FplPerformanceWindow;
+  lastFive: FplPerformanceWindow;
+}
+
 export interface BuildFplTrackContextOptions {
   season: string;
   gameweek: number;
   state: ManagerState;
   pool: FplTrackPlayer[];
+  /**
+   * The two windows per player, for however many players have a Settled
+   * Gameweek to their name. A player absent from this list carries no window
+   * at all, which is how the pool says "no Settled appearance".
+   */
+  performance: FplPlayerPerformance[];
+  /**
+   * The Settled Gameweek the windows run through, or null when none has
+   * settled — Gameweek 1's normal case. The context announces it either way,
+   * so the stored text never depends on when the fetch ran.
+   */
+  settledThrough: number | null;
 }
 
 const STATUS_LABELS: Readonly<Record<string, string>> = {
@@ -75,9 +120,54 @@ function money(tenths: number): string {
   return `£${(tenths / 10).toFixed(1)}m`;
 }
 
-function playerLine(player: FplTrackPlayer): string {
+/**
+ * One window as it goes on a pool line, or nothing at all when the window
+ * holds no Settled minutes — six hundred players over a Season is what makes
+ * every omitted key worth omitting, and an absent block is itself the
+ * statement "no Settled appearance in this window".
+ *
+ * A zero-valued key is dropped for the same reason: the legend says a missing
+ * key is a zero, so nothing is lost. `pts` survives at a negative, which a red
+ * card and an own goal both produce.
+ */
+function statBlock(
+  window: FplPerformanceWindow
+): Record<string, number | string> | undefined {
+  if (window.minutes === 0) {
+    return undefined;
+  }
+  const block: Record<string, number | string> = {
+    pts: window.points,
+    min: window.minutes,
+    app: window.appearances,
+    g: window.goals,
+    a: window.assists,
+    cs: window.cleanSheets,
+    b: window.bonus,
+    yc: window.yellowCards,
+    rc: window.redCards,
+    sv: window.saves,
+    xg: window.expectedGoals,
+    xa: window.expectedAssists,
+    xgc: window.expectedGoalsConceded
+  };
+  return Object.fromEntries(
+    Object.entries(block).filter(([, value]) => Number(value) !== 0)
+  );
+}
+
+function playerLine(
+  player: FplTrackPlayer,
+  performance: FplPlayerPerformance | undefined
+): string {
   const status = STATUS_LABELS[player.status]
     ?? `unrecognised (${player.status})`;
+  const season = performance === undefined
+    ? undefined
+    : statBlock(performance.season);
+  const lastFive = performance === undefined
+    ? undefined
+    : statBlock(performance.lastFive);
   return JSON.stringify({
     id: player.fplId,
     name: player.webName,
@@ -85,7 +175,9 @@ function playerLine(player: FplTrackPlayer): string {
     position: player.position,
     price: money(player.priceTenths),
     price_tenths: player.priceTenths,
-    status
+    status,
+    ...(season === undefined ? {} : { season }),
+    ...(lastFive === undefined ? {} : { last5: lastFive })
   });
 }
 
@@ -97,7 +189,42 @@ function playerLine(player: FplTrackPlayer): string {
  */
 const POOL_HEADING = "Player pool for this Gameweek, one player per line:";
 
-const poolLineSchema = z.strictObject({
+/**
+ * What the pool section says before its first line: which Gameweek the windows
+ * run through, and what the abbreviated keys mean.
+ *
+ * The Gameweek is named rather than left to be inferred from the Gameweek
+ * being played, because a Gameweek FPL has not settled is announced as absent
+ * rather than estimated — so the stored text never depends on the minute the
+ * fetch ran. A Season that has settled nothing says so outright and carries no
+ * legend: keys nothing below uses would be a definition of nothing.
+ */
+function performanceHeading(settledThrough: number | null): string[] {
+  if (settledThrough === null) {
+    return [
+      "No Gameweek has settled yet, so no player performance appears below."
+    ];
+  }
+  return [
+    `Performance below runs through Settled Gameweek ${settledThrough}.`,
+    "Stat keys: pts = points, min = minutes, app = appearances, g = goals, "
+    + "a = assists, cs = clean sheets, b = bonus, yc = yellow cards, "
+    + "rc = red cards, sv = saves, xg = expected goals, "
+    + "xa = expected assists, xgc = expected goals conceded.",
+    "A player's season block covers every Settled Gameweek of the Season and "
+    + "last5 the five most recent. A key a block leaves out is zero; a window "
+    + "a player played no Settled minutes in carries no block at all."
+  ];
+}
+
+/**
+ * Loose where it once was strict: a v2 line carries two stat blocks this
+ * parser has no use for, and describing them here would be the frozen stat set
+ * written down a second place to drift from. What it prices from is still
+ * checked to the letter — the reducer does arithmetic on these fields, and a
+ * body it cannot price is refused rather than half-read.
+ */
+const poolLineSchema = z.object({
   id: z.number().int().positive(),
   name: z.string(),
   club: z.string().min(1),
@@ -153,8 +280,13 @@ export function buildFplTrackContext({
   season,
   gameweek,
   state: stored,
-  pool
+  pool,
+  performance,
+  settledThrough
 }: BuildFplTrackContextOptions): string {
+  const windows = new Map(
+    performance.map((player) => [player.fplId, player])
+  );
   // The same reversion the reducer performs on the same stored row, so what
   // the Entrant is shown is what its action will be judged against. Taking the
   // row as it stands would show a Free Hit's borrowed Squad and borrowed bank
@@ -174,8 +306,9 @@ export function buildFplTrackContext({
     `Free Transfers: ${state.freeTransfers}`,
     ...chipsSection(state, gameweek),
     "",
+    ...performanceHeading(settledThrough),
     POOL_HEADING,
-    ...pool.map(playerLine),
+    ...pool.map((player) => playerLine(player, windows.get(player.fplId))),
     "",
     "The rules your action must satisfy",
     ...GAMEWEEK_RULES.map((rule) => `- ${rule}`),
