@@ -139,6 +139,12 @@ annotated in the context — an Entrant reads it off the raw Fixture list.
 A Gameweek in which a club plays no Fixture, so its players cannot score. Like a Double,
 a fact of the schedule read off the raw Fixture list, never annotated.
 
+**Unscheduled**:
+A Fixture FPL has withdrawn from the calendar without naming a new date — postponed, with
+no Gameweek to belong to until FPL restores it. Distinct from a Fixture moved to another
+Gameweek, which stays scheduled; an Unscheduled Fixture is the usual way a Blank is born.
+_Avoid_: cancelled, removed
+
 **Settled**:
 A Gameweek whose per-player points FPL has declared final. Read from the feed, never
 inferred from the clock. Only Settled Gameweeks are scored, and only Settled Gameweeks
