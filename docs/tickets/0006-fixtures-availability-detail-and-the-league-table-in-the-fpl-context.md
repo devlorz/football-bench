@@ -25,13 +25,26 @@ nowhere; neither is annotated.
 
 **Blocked by:** Spec 0005's opening ticket.
 
-- [ ] Each of the six Gameweeks lists its Fixtures in kickoff order, home side first
-- [ ] A scripted schedule with a Double and a Blank renders as repetition and absence,
+- [x] Each of the six Gameweeks lists its Fixtures in kickoff order, home side first
+- [x] A scripted schedule with a Double and a Blank renders as repetition and absence,
       with no annotation of either
-- [ ] The window truncates silently at the season's final Gameweek
-- [ ] No difficulty rating or strength marking appears anywhere in the section
-- [ ] The builder is tested pure; the six-Gameweek read is tested against a real Postgres
-- [ ] The stored, hashed body carries the section — asserted at the `openFplGameweek` seam
+- [x] The window truncates silently at the season's final Gameweek
+- [x] No difficulty rating or strength marking appears anywhere in the section
+- [x] The builder is tested pure; the six-Gameweek read is tested against a real Postgres
+- [x] The stored, hashed body carries the section — asserted at the `openFplGameweek` seam
+
+**Known limitation — the Blank is only as honest as the fetch.** A Fixture FPL removes
+from the calendar (`event = null`) keeps its stored `gw` and kickoff, so the section still
+lists it under a Gameweek it will not be played in, and the Blank it creates never appears.
+Neither half is fixable where the schedule is read: a Fixture that was never Locked is left
+untouched by the fetch and is indistinguishable from a scheduled one, and `deferred` cannot
+stand in for "unscheduled" — it is monotone and also marks a Fixture that legitimately moved
+to a new Gameweek, so filtering on it would hide the rearranged Fixture that *creates* a
+Double, for the rest of the Season (`test/fetch-fpl-gameweek.test.ts:292` and `:378`). The
+fix belongs to the FPL fetch — drop the never-Locked rows FPL has unscheduled, and mark the
+Locked ones as unscheduled rather than leaving `deferred` to mean two things — which spec
+0006 rules out here ("nothing new is fetched, nothing new is stored"). It needs its own
+spec, and must land before the first FPL Lock for stories 3 and 4 to hold.
 
 ## The league table joins the context
 
