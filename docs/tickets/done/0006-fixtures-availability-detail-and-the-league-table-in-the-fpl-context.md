@@ -45,6 +45,9 @@ fix belongs to the FPL fetch — drop the never-Locked rows FPL has unscheduled,
 Locked ones as unscheduled rather than leaving `deferred` to mean two things — which spec
 0006 rules out here ("nothing new is fetched, nothing new is stored"). It needs its own
 spec, and must land before the first FPL Lock for stories 3 and 4 to hold.
+[Spec 0009](../specs/0009-unscheduled-fixtures-leave-the-schedule.md) and
+[ADR 0024](../adr/0024-an-unscheduled-fixture-leaves-the-stored-schedule.md) now own the
+fix; its [ticket](./0009-unscheduled-fixtures-leave-the-schedule.md) closes this note.
 
 ## The league table joins the context
 
