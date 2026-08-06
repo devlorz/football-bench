@@ -60,6 +60,14 @@ Gameweek the windows run through.
 - [x] The builder is tested as the pure function it is, including hand-computed window
       aggregates for a player whose form moved between the two windows
 
+**What the last criterion does and does not claim.** The builder is handed windows; it
+never sees a per-Gameweek row. Its test states Palmer's seven Gameweeks as a table and
+hands the builder the totals, so what is proven is that two windows that disagree are
+rendered as two blocks under the right keys. The summation itself, the choice of which
+Gameweeks a window covers, and what a Double Gameweek contributes are unproven by it —
+they belong to the flow that reads the points table, and are acceptance of the ticket
+below.
+
 ## Opening a Gameweek hands the Entrant the performance record
 
 **What to build:** Opening an FPL Gameweek computes the two Settled windows from the stored
@@ -71,6 +79,15 @@ lines carry two Settled windows.
 
 - [ ] The opening flow derives the Settled-through Gameweek and both windows from the
       points table alone — a Gameweek without stored points rows contributes nothing
+- [ ] The season window sums every Settled Gameweek's stored rows and the last-five window
+      the five most recent Settled Gameweeks only, checked against totals computed by hand
+      from per-Gameweek rows a test writes — the summation the builder slice could only
+      render
+- [ ] The five are the five most recent Settled Gameweeks, not the five most recent the
+      player appeared in and not the last five by row order, proven by a player who missed
+      a Gameweek inside the window
+- [ ] Appearances count Settled Gameweeks the player played minutes in, so a Double
+      Gameweek is one appearance and fills one of the five however many Fixtures it held
 - [ ] The stored, hashed context body carries the stat blocks, the legend and the
       announcement line, verified end to end through the HTTP and Postgres seams
 - [ ] Opening the track's first Gameweek — nothing Settled — produces a context with no
