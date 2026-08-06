@@ -44,10 +44,10 @@ export function rehearsedPoints({
       // windows, not the scoring the rehearsal exists to prove, and this
       // script has no opinion on how a rehearsed total was earned. Zeros
       // rather than invented events: the body has to pass the same boundary
-      // the live one does, and nothing downstream of the rehearsal reads them
-      // yet. A rehearsal whose contexts carry stat windows will have to script
-      // these, because a zeroed block is the "played and did nothing" reading
-      // migration 0015 exists to refuse.
+      // the live one does. A rehearsed Gameweek's windows therefore carry
+      // points, minutes and appearances and nothing else — which is a
+      // rehearsal of the pipeline, not of a Season. A rehearsal that wants to
+      // read the events back has to script them here.
       stats: {
         ...NO_LIVE_STATS,
         minutes: scored[id]?.minutes ?? 0,

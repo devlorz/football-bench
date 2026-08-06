@@ -86,7 +86,7 @@ export async function startFplTrack({
     );
   }
 
-  const { deadline, pool: contextPool } =
+  const { deadline, pool: contextPool, performance, settledThrough } =
     await loadLockedGameweek(database, season, gameweek);
 
   const entrantResult = await database.query<GameweekEntrant>(
@@ -135,12 +135,11 @@ export async function startFplTrack({
     gameweek,
     state: previous,
     pool: contextPool,
-    // A Season opens with nothing Settled behind it, so there is no window to
-    // carry and the context says so. A track started mid-Season would be the
-    // one opening with something to show; the ticket that reads the windows
-    // out of `fpl_player_points` covers this call too.
-    performance: [],
-    settledThrough: null
+    // A Season opened at its first Gameweek has nothing Settled behind it and
+    // the context says so. A track opened mid-Season is the one with windows
+    // to show, and it shows the same ones the Lock read for every seat.
+    performance,
+    settledThrough
   });
 
   const openings = new Map<string, {

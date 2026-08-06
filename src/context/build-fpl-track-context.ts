@@ -50,11 +50,15 @@ export interface FplPerformanceWindow {
   expectedGoalsConceded: string;
 }
 
-/** One player's two windows, as the opening flow computes them. */
+/**
+ * One player's two windows, as the opening flow computes them. `lastFive` is
+ * absent for a player whose Settled minutes all fall outside the five most
+ * recent Gameweeks, which is the same statement an empty window would make.
+ */
 export interface FplPlayerPerformance {
   fplId: number;
   season: FplPerformanceWindow;
-  lastFive: FplPerformanceWindow;
+  lastFive?: FplPerformanceWindow;
 }
 
 export interface BuildFplTrackContextOptions {
@@ -165,7 +169,7 @@ function playerLine(
   const season = performance === undefined
     ? undefined
     : statBlock(performance.season);
-  const lastFive = performance === undefined
+  const lastFive = performance?.lastFive === undefined
     ? undefined
     : statBlock(performance.lastFive);
   return JSON.stringify({
