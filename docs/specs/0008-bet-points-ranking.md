@@ -1,8 +1,8 @@
-# Spec 0007 — Bet Points ranking
+# Spec 0008 — Bet Points ranking
 
 **Status:** ready-for-agent
 **Scope:** a second readable ranking on the match track, reading each Prediction as a Bet Slip
-**Vocabulary:** [CONTEXT.md](../../CONTEXT.md) · **Decisions:** [ADR 0001–0022](../adr/)
+**Vocabulary:** [CONTEXT.md](../../CONTEXT.md) · **Decisions:** [ADR 0001–0023](../adr/)
 **Predecessor:** [spec 0002](./0002-match-track-scoring.md) — results ingestion, the `score`
 job, and every convention this spec inherits
 
@@ -33,7 +33,7 @@ Every leg of the slip, including the result leg, derives from the one scoreline 
 committed. Stakes are flat and oddsless. The ranked figure is the season-to-date total, exactly
 as with Match Points, with a hit rate alongside showing how the total was earned.
 
-The ranking is readable-only (ADR-0022). It publishes no declared intervals of its own — the
+The ranking is readable-only (ADR-0023). It publishes no declared intervals of its own — the
 benchmark's evidence remains the probability layer of spec 0002 — and it is labelled as ranking,
 never as evidence. Like everything downstream of the write path, it is a pure function of stored
 rows: re-running produces identical output, and the first run back-fills every settled Fixture
@@ -144,7 +144,7 @@ For a Prediction with Predicted Score `h`–`a` and a settled result with goals 
 | BTTS | `h > 0 and a > 0` | matches `H > 0 and A > 0` |
 
 Goal totals are integers and every line is a half, so no leg can push. Bet Points for the
-Fixture is the count of winning legs, 0–5. The result leg never reads `probs` (ADR-0022);
+Fixture is the count of winning legs, 0–5. The result leg never reads `probs` (ADR-0023);
 `probs` plays no part anywhere in this spec.
 
 ### One ranking convention, inherited whole
@@ -170,7 +170,7 @@ so promoting one to a row later needs no migration — it should not be done spe
 
 ### What is deliberately absent
 
-- **No odds.** Flat stakes are the recorded decision (ADR-0022); odds-weighted payouts wait
+- **No odds.** Flat stakes are the recorded decision (ADR-0023); odds-weighted payouts wait
   on odds ingestion that does not exist and would be post-Lock information besides.
 - **No declared intervals.** Bet Points derive from the same Predicted Scores as Match
   Points; a second declared set would multiply comparisons without adding information
@@ -222,12 +222,12 @@ belong beside the other metric tests, not in a new shape.
 ## Out of Scope
 
 - **Odds-weighted payouts** and any odds ingestion. Recorded as the rejected alternative in
-  ADR-0022; becomes its own work if `reference-odds` ever lands.
+  ADR-0023; becomes its own work if `reference-odds` ever lands.
 - **The leaderboard, dashboard and read API.** This spec writes `scores`; nothing renders them.
 - **Any change to spec 0002's metrics, comparisons or job shape.** Bet Points join the run;
   they alter nothing already in it.
 - **Any change to the write path.** No new fields, no new markets asked of Entrants.
-- **Declared comparison intervals on Bet Points**, per ADR-0016 and ADR-0022.
+- **Declared comparison intervals on Bet Points**, per ADR-0016 and ADR-0023.
 - **The FPL track.**
 
 ---
@@ -242,7 +242,7 @@ either.
 
 **The conservative-slip bias is real and published, not corrected.** Under 4.5 lands in
 roughly nine Fixtures of ten; an Entrant that always names 1-0 farms the high lines. The
-flat-stake decision accepts this and says it out loud (ADR-0022). The correction — prices —
+flat-stake decision accepts this and says it out loud (ADR-0023). The correction — prices —
 is exactly the deferred odds work.
 
 **The rehearsal data suggests the slips will separate less than the tiers do.** Spec 0002's
