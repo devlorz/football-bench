@@ -61,11 +61,36 @@ export interface FplPlayerPerformance {
   lastFive?: FplPerformanceWindow;
 }
 
+/** This Gameweek and the five after it: the planning window (ADR-0021). */
+export const SCHEDULE_GAMEWEEKS = 6;
+
+/**
+ * One Fixture of the schedule window: who plays whom, in which Gameweek, and
+ * when. Kickoff carries the instant the row holds and the section shows the
+ * date alone — the schedule informs selection, not travel plans (ADR-0021).
+ *
+ * Clubs rather than teams, as the pool line's `club` is: a team in this
+ * vocabulary is a Squad or a Team Sheet (CONTEXT.md), and the column these
+ * come out of is named from FPL's feed rather than from the domain.
+ */
+export interface FplFixture {
+  gameweek: number;
+  homeClub: string;
+  awayClub: string;
+  kickoff: Date;
+}
+
 export interface BuildFplTrackContextOptions {
   season: string;
   gameweek: number;
   state: ManagerState;
   pool: FplTrackPlayer[];
+  /**
+   * This Gameweek's Fixtures and the five Gameweeks after it, ordered by
+   * Gameweek and then by kickoff. Ordering and windowing are the opening
+   * flow's, as the stat windows are; the builder groups what it is handed.
+   */
+  schedule: FplFixture[];
   /**
    * The two windows per player, for however many players have a Settled
    * Gameweek to their name. A player absent from this list carries no window
@@ -268,6 +293,34 @@ export function parseFplTrackContextPool(body: string): PoolPlayer[] {
   return pool;
 }
 
+/**
+ * The schedule, one raw line per Fixture under the Gameweek it belongs to.
+ *
+ * Nothing is annotated: a club with two lines in a Gameweek has a Double and a
+ * club with none has a Blank, and both are read off the list rather than
+ * pointed at (ADR-0021). A window the calendar has run out of simply carries
+ * fewer Gameweeks.
+ */
+function fixturesSection(schedule: FplFixture[]): string[] {
+  // The heading spells out the window `SCHEDULE_GAMEWEEKS` sets, in words
+  // rather than from the constant: this text is half of a frozen Prompt
+  // Version, and a sentence that rewrote itself when a later ADR widened the
+  // window would change a frozen pair without anyone deciding to.
+  const lines = ["Fixtures, this Gameweek and the five ahead:"];
+  let headed: number | undefined;
+  for (const fixture of schedule) {
+    if (fixture.gameweek !== headed) {
+      headed = fixture.gameweek;
+      lines.push(`Gameweek ${headed}`);
+    }
+    lines.push(
+      `- ${fixture.homeClub} v ${fixture.awayClub} | `
+      + fixture.kickoff.toISOString().slice(0, 10)
+    );
+  }
+  return lines;
+}
+
 function squadSection(state: ManagerState): string[] {
   if (state.squad.active.length === 0) {
     return ["Squad: none yet — this is your opening Squad."];
@@ -285,6 +338,7 @@ export function buildFplTrackContext({
   gameweek,
   state: stored,
   pool,
+  schedule,
   performance,
   settledThrough
 }: BuildFplTrackContextOptions): string {
@@ -309,6 +363,8 @@ export function buildFplTrackContext({
     `Bank: ${money(state.bankTenths)}`,
     `Free Transfers: ${state.freeTransfers}`,
     ...chipsSection(state, gameweek),
+    "",
+    ...fixturesSection(schedule),
     "",
     ...performanceHeading(settledThrough),
     POOL_HEADING,

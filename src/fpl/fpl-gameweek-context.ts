@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
 import type { Client } from "pg";
-import type {
-  FplPerformanceWindow,
-  FplPlayerPerformance,
-  FplTrackPlayer
+import {
+  SCHEDULE_GAMEWEEKS,
+  type FplFixture,
+  type FplPerformanceWindow,
+  type FplPlayerPerformance,
+  type FplTrackPlayer
 } from "../context/build-fpl-track-context.js";
 import type { Position } from "./apply-gameweek-action.js";
 
@@ -18,10 +20,14 @@ interface PoolRow {
   status: string;
 }
 
-/** A Gameweek's Lock, the pool as its Lock found it, and the two windows. */
+/**
+ * A Gameweek's Lock, the pool as its Lock found it, the schedule ahead of it
+ * and the two windows behind it.
+ */
 export interface LockedGameweek {
   deadline: Date;
   pool: FplTrackPlayer[];
+  schedule: FplFixture[];
   performance: FplPlayerPerformance[];
   settledThrough: number | null;
 }
@@ -152,12 +158,56 @@ async function settledPerformance(
   };
 }
 
+interface FixtureRow {
+  gw: number;
+  home_team: string;
+  away_team: string;
+  kickoff_at: Date;
+}
+
+/**
+ * The Fixtures of this Gameweek and the five after it, ordered as the section
+ * renders them. `gw` is read rather than `locked_in_gw`, which is the Match
+ * track's record of where a Prediction was priced: a Fixture FPL has moved to
+ * another Gameweek belongs to the Gameweek it has moved to, and the fetch
+ * writes that move onto `gw`.
+ *
+ * The window is whatever the calendar holds: near the season's end there are
+ * simply fewer rows, and the section is shorter without saying why.
+ *
+ * `gw` is stale, though, for a Fixture FPL removes from the calendar outright
+ * (`event = null`): the fetch leaves that row where it was, so it is still
+ * listed under a Gameweek it will not be played in and the Blank it creates
+ * never shows. Nothing readable here tells the two apart — see the limitation
+ * recorded on ticket 0006's schedule slice, whose fix belongs to the fetch.
+ */
+async function schedule(
+  database: Database,
+  season: string,
+  gameweek: number
+): Promise<FplFixture[]> {
+  const ahead = await database.query<FixtureRow>(
+    `select gw, home_team, away_team, kickoff_at
+       from fixtures
+      where season = $1 and gw between $2 and $3
+      order by gw, kickoff_at, fpl_id`,
+    [season, gameweek, gameweek + SCHEDULE_GAMEWEEKS - 1]
+  );
+  return ahead.rows.map((row) => ({
+    gameweek: row.gw,
+    homeClub: row.home_team,
+    awayClub: row.away_team,
+    kickoff: row.kickoff_at
+  }));
+}
+
 /**
  * What a Gameweek offers every Entrant that plays it: one deadline shared with
- * the Match track (ADR-0006), one snapshot of the pool, and one set of
- * performance windows. All are read before any Entrant is called, because all
- * belong to the Gameweek rather than to whoever is reading it — which is also
- * what leaves the nine Entrants nothing to differ over.
+ * the Match track (ADR-0006), one snapshot of the pool, one schedule of the
+ * Gameweeks ahead and one set of performance windows. All are read before any
+ * Entrant is called, because all belong to the Gameweek rather than to whoever
+ * is reading it — which is also what leaves the nine Entrants nothing to
+ * differ over.
  */
 export async function loadLockedGameweek(
   database: Database,
@@ -180,8 +230,15 @@ export async function loadLockedGameweek(
       order by fpl_id`,
     [season, gameweek]
   );
+  // Behind the Gameweek and ahead of it: two reads with nothing to say to each
+  // other, so neither waits on the other.
+  const [windows, ahead] = await Promise.all([
+    settledPerformance(database, season, gameweek),
+    schedule(database, season, gameweek)
+  ]);
   return {
-    ...await settledPerformance(database, season, gameweek),
+    ...windows,
+    schedule: ahead,
     deadline: gameweekRow.deadline_at,
     pool: players.rows.map((row) => ({
       fplId: row.fpl_id,
