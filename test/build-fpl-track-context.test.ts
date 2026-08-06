@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest";
 import {
   buildFplTrackContext,
   parseFplTrackContextPool,
+  type BuildFplTrackContextOptions,
+  type FplFixture,
   type FplPlayerPerformance
 } from "../src/context/build-fpl-track-context.js";
 import {
@@ -25,16 +27,30 @@ const POOL = [...FPL_POOL, ...FPL_POOL_ALTERNATES].map(
   (player) => ({ ...player, status: "a" })
 );
 
-function contextFor(chipsUsed: ChipsUsed, gameweek = 2): string {
-  const state: ManagerState = { ...openingManagerState(), chipsUsed };
+/**
+ * A context a Gameweek into the Season, with everything a test is not about
+ * left at its quietest: the opening Squad, nothing scheduled ahead and nothing
+ * Settled behind. Each test overrides the one input it is about, so what it is
+ * asserting is what it names.
+ */
+function context(
+  overrides: Partial<BuildFplTrackContextOptions> = {}
+): string {
   return buildFplTrackContext({
     season: "2026-27",
-    gameweek,
-    state,
+    gameweek: 8,
+    state: openingManagerState(),
     pool: POOL,
+    schedule: [],
     performance: [],
-    settledThrough: null
+    settledThrough: null,
+    ...overrides
   });
+}
+
+function contextFor(chipsUsed: ChipsUsed, gameweek = 2): string {
+  const state: ManagerState = { ...openingManagerState(), chipsUsed };
+  return context({ gameweek, state });
 }
 
 /**
@@ -98,19 +114,91 @@ function poolLine(body: string, fplId: number): Record<string, unknown> {
   return JSON.parse(line) as Record<string, unknown>;
 }
 
-/** The pool as an Entrant is handed it a Gameweek into the Season. */
-function contextWith(
-  performance: FplPlayerPerformance[],
-  settledThrough: number | null
-): string {
-  return buildFplTrackContext({
-    season: "2026-27",
+/**
+ * Six Gameweeks of a scripted four-club schedule, in the order the opening
+ * flow reads it out of `fixtures`: by Gameweek, then by kickoff.
+ *
+ * Gameweek 9 is Chelsea's Double — two lines in one Gameweek — and Gameweek 10
+ * its Blank, where the club appears nowhere. Neither is written down; both are
+ * read off the list.
+ */
+const SCHEDULE: FplFixture[] = [
+  {
     gameweek: 8,
-    state: openingManagerState(),
-    pool: POOL,
-    performance,
-    settledThrough
-  });
+    homeClub: "Arsenal",
+    awayClub: "Chelsea",
+    kickoff: new Date("2026-10-24T11:30:00Z")
+  },
+  {
+    gameweek: 8,
+    homeClub: "Brentford",
+    awayClub: "Everton",
+    kickoff: new Date("2026-10-25T14:00:00Z")
+  },
+  {
+    gameweek: 9,
+    homeClub: "Chelsea",
+    awayClub: "Brentford",
+    kickoff: new Date("2026-10-31T14:00:00Z")
+  },
+  {
+    gameweek: 9,
+    homeClub: "Everton",
+    awayClub: "Chelsea",
+    kickoff: new Date("2026-11-01T16:30:00Z")
+  },
+  {
+    gameweek: 10,
+    homeClub: "Arsenal",
+    awayClub: "Everton",
+    kickoff: new Date("2026-11-07T14:00:00Z")
+  },
+  {
+    gameweek: 11,
+    homeClub: "Arsenal",
+    awayClub: "Brentford",
+    kickoff: new Date("2026-11-21T14:00:00Z")
+  },
+  {
+    gameweek: 11,
+    homeClub: "Chelsea",
+    awayClub: "Everton",
+    kickoff: new Date("2026-11-22T16:30:00Z")
+  },
+  {
+    gameweek: 12,
+    homeClub: "Brentford",
+    awayClub: "Chelsea",
+    kickoff: new Date("2026-11-28T14:00:00Z")
+  },
+  {
+    gameweek: 12,
+    homeClub: "Everton",
+    awayClub: "Arsenal",
+    kickoff: new Date("2026-11-29T16:30:00Z")
+  },
+  {
+    gameweek: 13,
+    homeClub: "Arsenal",
+    awayClub: "Chelsea",
+    kickoff: new Date("2026-12-05T14:00:00Z")
+  },
+  {
+    gameweek: 13,
+    homeClub: "Brentford",
+    awayClub: "Everton",
+    kickoff: new Date("2026-12-06T16:30:00Z")
+  }
+];
+
+/** The context's Fixtures section, from its heading to the blank line. */
+function fixturesShown(body: string): string[] {
+  const lines = body.split("\n");
+  const start = lines.findIndex((at) => at.startsWith("Fixtures"));
+  if (start === -1) {
+    throw new Error("the context has no Fixtures section");
+  }
+  return lines.slice(start, lines.indexOf("", start));
 }
 
 /** The one line of the context that reports a half-Season's Chip set. */
@@ -133,13 +221,9 @@ describe("The Manager State the FPL context reports", () => {
     const opened = legalStateFrom(OPENING_ACTION, openingManagerState(), 1);
     const onFreeHit = legalStateFrom(FREE_HIT_REBUILD, opened, 2);
 
-    const body = buildFplTrackContext({
-      season: "2026-27",
+    const body = context({
       gameweek: 3,
-      state: onFreeHit,
-      pool: POOL,
-      performance: [],
-      settledThrough: null
+      state: onFreeHit
     });
 
     expect(body).toContain("Bank: £4.5m");
@@ -178,13 +262,9 @@ describe("The Chips the FPL context says can be played now", () => {
     const opened = legalStateFrom(OPENING_ACTION, openingManagerState(), 18);
     const onFreeHit = legalStateFrom(FREE_HIT_REBUILD, opened, 19);
 
-    const body = buildFplTrackContext({
-      season: "2026-27",
+    const body = context({
       gameweek: 20,
-      state: onFreeHit,
-      pool: POOL,
-      performance: [],
-      settledThrough: null
+      state: onFreeHit
     });
 
     expect(playableLine(body)).toBe(
@@ -203,13 +283,9 @@ describe("The Chips the FPL context says can be played now", () => {
     const onFreeHit = legalStateFrom(FREE_HIT_REBUILD, opened, 19);
     const afterwards = legalStateFrom(STAND_PAT, onFreeHit, 20);
 
-    expect(playableLine(buildFplTrackContext({
-      season: "2026-27",
+    expect(playableLine(context({
       gameweek: 21,
-      state: afterwards,
-      pool: POOL,
-      performance: [],
-      settledThrough: null
+      state: afterwards
     }))).toBe(
       "Chips you can play this Gameweek: wildcard, free_hit, "
       + "triple_captain, bench_boost"
@@ -219,16 +295,12 @@ describe("The Chips the FPL context says can be played now", () => {
   test("drops a Chip this half of the Season has already spent", () => {
     const opened = legalStateFrom(OPENING_ACTION, openingManagerState(), 1);
 
-    expect(playableLine(buildFplTrackContext({
-      season: "2026-27",
+    expect(playableLine(context({
       gameweek: 5,
       state: {
         ...opened,
         chipsUsed: { firstHalf: ["wildcard"], secondHalf: [] }
-      },
-      pool: POOL,
-      performance: [],
-      settledThrough: null
+      }
     }))).toBe(
       "Chips you can play this Gameweek: free_hit, triple_captain, bench_boost"
     );
@@ -238,13 +310,9 @@ describe("The Chips the FPL context says can be played now", () => {
     // The transfer Chips are barred there and these two are not, so the line
     // that asks the rules rather than restating them says so without anyone
     // having written this Gameweek down anywhere.
-    const body = buildFplTrackContext({
-      season: "2026-27",
+    const body = context({
       gameweek: 1,
-      state: openingManagerState(),
-      pool: POOL,
-      performance: [],
-      settledThrough: null
+      state: openingManagerState()
     });
 
     expect(playableLine(body)).toBe(
@@ -261,8 +329,7 @@ describe("The Chips the FPL context says can be played now", () => {
     // empty list after a colon reads as an omission rather than as an answer.
     const opened = legalStateFrom(OPENING_ACTION, openingManagerState(), 1);
 
-    expect(playableLine(buildFplTrackContext({
-      season: "2026-27",
+    expect(playableLine(context({
       gameweek: 5,
       state: {
         ...opened,
@@ -270,10 +337,7 @@ describe("The Chips the FPL context says can be played now", () => {
           firstHalf: ["wildcard", "free_hit", "triple_captain", "bench_boost"],
           secondHalf: []
         }
-      },
-      pool: POOL,
-      performance: [],
-      settledThrough: null
+      }
     }))).toBe("Chips you can play this Gameweek: none");
   });
 });
@@ -325,9 +389,72 @@ describe("The Chips the FPL context reports", () => {
   });
 });
 
+describe("The Fixtures the FPL context lists", () => {
+  test("groups six Gameweeks of raw lines, home side first", () => {
+    // A Double is Chelsea twice in Gameweek 9 and a Blank is Chelsea nowhere in
+    // Gameweek 10 — repetition and absence, with nothing said about either.
+    expect(fixturesShown(context({ schedule: SCHEDULE }))).toEqual([
+      "Fixtures, this Gameweek and the five ahead:",
+      "Gameweek 8",
+      "- Arsenal v Chelsea | 2026-10-24",
+      "- Brentford v Everton | 2026-10-25",
+      "Gameweek 9",
+      "- Chelsea v Brentford | 2026-10-31",
+      "- Everton v Chelsea | 2026-11-01",
+      "Gameweek 10",
+      "- Arsenal v Everton | 2026-11-07",
+      "Gameweek 11",
+      "- Arsenal v Brentford | 2026-11-21",
+      "- Chelsea v Everton | 2026-11-22",
+      "Gameweek 12",
+      "- Brentford v Chelsea | 2026-11-28",
+      "- Everton v Arsenal | 2026-11-29",
+      "Gameweek 13",
+      "- Arsenal v Chelsea | 2026-12-05",
+      "- Brentford v Everton | 2026-12-06"
+    ]);
+  });
+
+  test("stops at the last Gameweek the calendar has, saying nothing", () => {
+    // Three Gameweeks from the end of a Season: the window is what the schedule
+    // holds, and a shorter horizon is a fact of the calendar rather than
+    // something to announce.
+    expect(fixturesShown(context({
+      schedule: SCHEDULE.filter(({ gameweek }) => gameweek < 11)
+    }))).toEqual([
+      "Fixtures, this Gameweek and the five ahead:",
+      "Gameweek 8",
+      "- Arsenal v Chelsea | 2026-10-24",
+      "- Brentford v Everton | 2026-10-25",
+      "Gameweek 9",
+      "- Chelsea v Brentford | 2026-10-31",
+      "- Everton v Chelsea | 2026-11-01",
+      "Gameweek 10",
+      "- Arsenal v Everton | 2026-11-07"
+    ]);
+  });
+
+  test("marks no Fixture as hard, easy or anything else", () => {
+    // ADR-0018 and ADR-0021: FPL's Fixture Difficulty Rating and team strength
+    // are the digested versions of the schedule, and their absence is what
+    // leaves the reading of a Fixture to the Entrant.
+    const body = context({ schedule: SCHEDULE });
+
+    for (const digested of [
+      /difficulty/i,
+      /\bfdr\b/i,
+      /strength/i,
+      /\belo\b/i,
+      /\brating\b/i
+    ]) {
+      expect(body).not.toMatch(digested);
+    }
+  });
+});
+
 describe("The performance windows the FPL pool carries", () => {
   test("gives a player with Settled minutes a season and a last-five block", () => {
-    const body = contextWith([PALMER], 7);
+    const body = context({ performance: [PALMER], settledThrough: 7 });
 
     expect(poolLine(body, 8).season).toEqual({
       pts: 32,
@@ -390,7 +517,7 @@ describe("The performance windows the FPL pool carries", () => {
       }
     };
 
-    const body = contextWith([wilson], 7);
+    const body = context({ performance: [wilson], settledThrough: 7 });
 
     expect(poolLine(body, 15).season).toEqual({
       pts: 14,
@@ -456,7 +583,7 @@ describe("The performance windows the FPL pool carries", () => {
       }
     };
 
-    const body = contextWith([PALMER, raya], 7);
+    const body = context({ performance: [PALMER, raya], settledThrough: 7 });
     const lines = body.split("\n");
     const legend = lines.find((at) => at.startsWith("Stat keys: "));
     if (legend === undefined) {
@@ -482,7 +609,7 @@ describe("The performance windows the FPL pool carries", () => {
   });
 
   test("announces the Settled Gameweek the windows run through", () => {
-    expect(contextWith([PALMER], 7)).toContain(
+    expect(context({ performance: [PALMER], settledThrough: 7 })).toContain(
       "Performance below runs through Settled Gameweek 7."
     );
   });
@@ -491,7 +618,7 @@ describe("The performance windows the FPL pool carries", () => {
     // Gameweek 1's normal case, and the track's first context: no window to
     // show, and a line saying so rather than a pool that is quietly bare. The
     // legend goes with it — keys nothing below uses define nothing.
-    const body = contextWith([], null);
+    const body = context({ performance: [], settledThrough: null });
 
     expect(body).toContain(
       "No Gameweek has settled yet, so no player performance appears below."
@@ -505,7 +632,7 @@ describe("The performance windows the FPL pool carries", () => {
     // ADR-0018: form, ICT, expected points and ownership are FPL's own
     // ratings, forecasts and crowd wisdom. Their absence is the feature — any
     // forecast in the answer has to be the Entrant's own.
-    const body = contextWith([PALMER], 7);
+    const body = context({ performance: [PALMER], settledThrough: 7 });
 
     for (const digested of [
       /\bform\b/i,
@@ -521,9 +648,14 @@ describe("The performance windows the FPL pool carries", () => {
   });
 
   test("reads the priced pool back out of a v2 body, stat blocks and all", () => {
-    // The stored body is what an action is priced from, so a line carrying
-    // stats has to come back as the same priced player it always was.
-    const body = contextWith([PALMER], 7);
+    // The stored body is what an action is priced from, so a body carrying
+    // everything v2 shows — a schedule ahead of the pool and stats on its
+    // lines — has to come back as the same priced players it always was.
+    const body = context({
+      schedule: SCHEDULE,
+      performance: [PALMER],
+      settledThrough: 7
+    });
 
     expect(parseFplTrackContextPool(body)).toEqual(LOCKED_POOL);
     // And the fields it prices from are still checked: a price the reducer

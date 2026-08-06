@@ -129,6 +129,7 @@ describe("storing and reloading Manager State", () => {
       gameweek: 3,
       state: reloaded!,
       pool: FPL_POOL.map((player) => ({ ...player, status: "a" })),
+      schedule: [],
       performance: [],
       settledThrough: null
     });

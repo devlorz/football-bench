@@ -1092,6 +1092,106 @@ describe("opening the FPL track for a Gameweek", () => {
   });
 
   /**
+   * One Fixture in every Gameweek from 1 to 8, so both edges of the window a
+   * Gameweek 2 context reads are real rows: Gameweek 1 is behind it, and
+   * Gameweek 8 is one past the fifth Gameweek ahead of it.
+   *
+   * Gameweek 2's pair is stored latest kickoff first, so the order the section
+   * renders in is the schedule's rather than the order the table was filled in.
+   */
+  const SCHEDULED_FIXTURES = [
+    { fplId: 101, gw: 1, home: "Arsenal", away: "Chelsea", at: "2026-08-22T14:00:00Z" },
+    { fplId: 102, gw: 2, home: "Everton", away: "Fulham", at: "2026-08-30T16:30:00Z" },
+    { fplId: 103, gw: 2, home: "Chelsea", away: "Brentford", at: "2026-08-29T14:00:00Z" },
+    { fplId: 104, gw: 3, home: "Fulham", away: "Arsenal", at: "2026-09-19T14:00:00Z" },
+    { fplId: 105, gw: 4, home: "Brentford", away: "Everton", at: "2026-09-26T14:00:00Z" },
+    { fplId: 106, gw: 5, home: "Arsenal", away: "Fulham", at: "2026-10-03T14:00:00Z" },
+    { fplId: 107, gw: 6, home: "Chelsea", away: "Everton", at: "2026-10-10T14:00:00Z" },
+    { fplId: 108, gw: 7, home: "Everton", away: "Arsenal", at: "2026-10-17T14:00:00Z" },
+    { fplId: 109, gw: 8, home: "Fulham", away: "Chelsea", at: "2026-10-24T14:00:00Z" }
+  ];
+
+  /** Gameweeks 3 to 8 scheduled, and the Fixtures above stored against them. */
+  async function seedSchedule(): Promise<void> {
+    await client.query(
+      `insert into gameweeks (season, gw, deadline_at)
+       select '2026-27', gw,
+              timestamptz '2026-08-28T17:30:00Z' + (gw * interval '7 days')
+         from generate_series(3, 8) as gw
+       on conflict do nothing`
+    );
+    for (const fixture of SCHEDULED_FIXTURES) {
+      await client.query(
+        `insert into fixtures (
+           season, fpl_id, gw, home_team, away_team, kickoff_at
+         ) values ('2026-27', $1, $2, $3, $4, $5)`,
+        [fixture.fplId, fixture.gw, fixture.home, fixture.away, fixture.at]
+      );
+    }
+  }
+
+  test("carries this Gameweek and the five ahead on the body it stores", async () => {
+    await seedSchedule();
+    await seedStandingManagerState();
+    await play({ responses: [STAND_PAT] });
+
+    const stored = await client.query<{ body: string; hash: string }>(
+      "select body, hash from contexts where gw = 2 and track = 'fpl'"
+    );
+    const body = stored.rows[0]!.body;
+    expect(stored.rows[0]!.hash).toBe(
+      createHash("sha256").update(body).digest("hex")
+    );
+    expect(body).toContain([
+      "Fixtures, this Gameweek and the five ahead:",
+      "Gameweek 2",
+      "- Chelsea v Brentford | 2026-08-29",
+      "- Everton v Fulham | 2026-08-30",
+      "Gameweek 3",
+      "- Fulham v Arsenal | 2026-09-19",
+      "Gameweek 4",
+      "- Brentford v Everton | 2026-09-26",
+      "Gameweek 5",
+      "- Arsenal v Fulham | 2026-10-03",
+      "Gameweek 6",
+      "- Chelsea v Everton | 2026-10-10",
+      "Gameweek 7",
+      "- Everton v Arsenal | 2026-10-17"
+    ].join("\n"));
+    // The window's two edges, named by the one thing each Fixture holds alone:
+    // Gameweek 1 is played and gone, and Gameweek 8 is a Gameweek too far.
+    expect(body).not.toContain("2026-08-22");
+    expect(body).not.toContain("2026-10-24");
+  });
+
+  test("shows what is left of the window at the calendar's end", async () => {
+    // Gameweek 7 with a calendar that ends at 8: the five Gameweeks ahead are
+    // one Gameweek and then nothing, and the section is simply shorter. A
+    // window that announced its own truncation would be inventing a fact about
+    // the season that the schedule already states by stopping.
+    await seedSchedule();
+    await lockPool(7, FPL_POOL);
+    await seedStandingManagerState(6);
+    await play({
+      gameweek: 7,
+      at: "2026-10-15T11:30:00Z",
+      responses: [STAND_PAT]
+    });
+
+    const stored = await client.query<{ body: string }>(
+      "select body from contexts where gw = 7 and track = 'fpl'"
+    );
+    expect(stored.rows[0]!.body).toContain([
+      "Fixtures, this Gameweek and the five ahead:",
+      "Gameweek 7",
+      "- Everton v Arsenal | 2026-10-17",
+      "Gameweek 8",
+      "- Fulham v Chelsea | 2026-10-24",
+      ""
+    ].join("\n"));
+  });
+
+  /**
    * Palmer's Settled Gameweeks behind Gameweek 8, as a table the expected
    * totals below are computed from by hand.
    *
