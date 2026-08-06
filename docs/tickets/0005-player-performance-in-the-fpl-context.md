@@ -22,17 +22,17 @@ truth every stored stat traces back to.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] A migration widens the per-player points table with typed, non-negative stat columns,
+- [x] A migration widens the per-player points table with typed, non-negative stat columns,
       the expected-goals family stored as fixed-point matching the source's two decimals
-- [ ] A table already holding narrow rows refuses the widening with an error naming the
+- [x] A table already holding narrow rows refuses the widening with an error naming the
       backfill, so old rows cannot silently read as "played and did nothing"
-- [ ] Running the fetch on a live body stores every stat for every player, verified against
+- [x] Running the fetch on a live body stores every stat for every player, verified against
       hand-picked values from a scripted response
-- [ ] A live body with a malformed stat is archived, then fails validation at the boundary
+- [x] A live body with a malformed stat is archived, then fails validation at the boundary
       and stores no rows
-- [ ] The migration number is the next free one at merge time — migration work is in flight
+- [x] The migration number is the next free one at merge time — migration work is in flight
       in a parallel working tree
-- [ ] Tests drive the outbound-HTTP seam against a real Postgres, following the
+- [x] Tests drive the outbound-HTTP seam against a real Postgres, following the
       settled-points prior art
 
 ## The pool lines carry two Settled windows
