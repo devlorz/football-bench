@@ -18,7 +18,8 @@ import {
 import {
   EVERYONE_PLAYED,
   FREE_HIT_GAMEWEEK,
-  absent
+  absent,
+  storeSettledPoints
 } from "./fpl-points-fixture.js";
 import type { PlayerGameweekPoints } from "../src/fpl/score-team-sheet.js";
 
@@ -96,13 +97,7 @@ describe("scoring a Gameweek from what is stored", () => {
     points: readonly PlayerGameweekPoints[],
     gameweek = 1
   ): Promise<void> {
-    for (const player of points) {
-      await client.query(
-        `insert into fpl_player_points (season, gw, fpl_id, minutes, total_points)
-         values ('2026-27', $1, $2, $3, $4)`,
-        [gameweek, player.fplId, player.minutes, player.totalPoints]
-      );
-    }
+    await storeSettledPoints(client, gameweek, points);
   }
 
   /** Every score row there is, for the Gameweeks that must write none. */

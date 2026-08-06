@@ -7,7 +7,10 @@ import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
 import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
 import type { HttpFetcher } from "../src/http.js";
 import { FPL_POOL, type FixturePlayer } from "./fpl-pool-fixture.js";
-import { EVERYONE_PLAYED } from "./fpl-points-fixture.js";
+import {
+  EVERYONE_PLAYED,
+  storeSettledPoints
+} from "./fpl-points-fixture.js";
 import { scoreFplGameweek } from "../src/fpl/score-fpl-gameweek.js";
 
 const { Client } = pg;
@@ -575,14 +578,7 @@ describe("running a Gameweek for the whole FPL roster", () => {
     await openTheTrack();
     await run();
     for (const gameweek of [1, 2]) {
-      for (const player of EVERYONE_PLAYED) {
-        await client.query(
-          `insert into fpl_player_points (
-             season, gw, fpl_id, minutes, total_points
-           ) values ('2026-27', $1, $2, $3, $4)`,
-          [gameweek, player.fplId, player.minutes, player.totalPoints]
-        );
-      }
+      await storeSettledPoints(client, gameweek, EVERYONE_PLAYED);
     }
 
     // No `http` and no `now`: the options this takes have neither, so the

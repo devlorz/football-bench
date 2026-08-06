@@ -1,3 +1,4 @@
+import type { Client } from "pg";
 import type { PlayerGameweekPoints } from "../src/fpl/score-team-sheet.js";
 
 /**
@@ -46,4 +47,76 @@ export function absent(fplIds: readonly number[]): PlayerGameweekPoints[] {
   return EVERYONE_PLAYED.map((player) => fplIds.includes(player.fplId)
     ? { ...player, minutes: 0, totalPoints: 0 }
     : player);
+}
+
+/**
+ * Every stat column migration 0015 requires, as a player who did nothing.
+ * The stored counterpart of `NO_LIVE_STATS`: this one is a database row, so
+ * the expected-goals family is numeric rather than the source's strings.
+ */
+export const NO_PERFORMANCE = {
+  minutes: 0,
+  total_points: 0,
+  goals_scored: 0,
+  assists: 0,
+  clean_sheets: 0,
+  bonus: 0,
+  yellow_cards: 0,
+  red_cards: 0,
+  saves: 0,
+  expected_goals: 0,
+  expected_assists: 0,
+  expected_goals_conceded: 0
+};
+
+export type PlayerPointsStat = keyof typeof NO_PERFORMANCE;
+
+export interface StorePlayerPointsRow extends Partial<Record<PlayerPointsStat, number>> {
+  season?: string;
+  gameweek: number;
+  fplId: number;
+}
+
+/**
+ * Stores one row, defaulting every stat the caller has no opinion about. The
+ * column list is `NO_PERFORMANCE`'s own keys, so a suite naming one stat does
+ * not have to restate the other eleven.
+ */
+export async function storePlayerPoints(
+  database: Pick<Client, "query">,
+  { season = "2026-27", gameweek, fplId, ...overrides }: StorePlayerPointsRow
+): Promise<void> {
+  const stats: Record<string, number> = { ...NO_PERFORMANCE, ...overrides };
+  const columns = Object.keys(stats);
+  await database.query(
+    `insert into fpl_player_points (season, gw, fpl_id, ${columns.join(", ")})
+     values (
+       $1, $2, $3,
+       ${columns.map((_, index) => `$${index + 4}`).join(", ")}
+     )`,
+    [season, gameweek, fplId, ...Object.values(stats)]
+  );
+}
+
+/**
+ * Stores a Settled Gameweek's rows for a suite whose subject is what scoring
+ * does with minutes and points. Migration 0015 widened the table with the raw
+ * event stats the context windows read; a scoring suite has no opinion on
+ * them, so they stay zero. A suite that *is* about the stat set names it.
+ */
+export async function storeSettledPoints(
+  database: Pick<Client, "query">,
+  gameweek: number,
+  points: readonly PlayerGameweekPoints[],
+  season = "2026-27"
+): Promise<void> {
+  for (const player of points) {
+    await storePlayerPoints(database, {
+      season,
+      gameweek,
+      fplId: player.fplId,
+      minutes: player.minutes,
+      total_points: player.totalPoints
+    });
+  }
 }
