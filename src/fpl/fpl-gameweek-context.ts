@@ -56,6 +56,9 @@ interface WindowRow {
  * table is keyed by Gameweek: a Double Gameweek is one row, and one
  * appearance.
  */
+/** Below every Gameweek number a Season has: a window floored at nothing. */
+const SEASON_START = 0;
+
 async function performanceWindow(
   database: Database,
   season: string,
@@ -118,7 +121,7 @@ async function settledPerformance(
   season: string,
   gameweek: number
 ): Promise<Pick<LockedGameweek, "performance" | "settledThrough">> {
-  const recent = await database.query<{ gw: number }>(
+  const mostRecent = await database.query<{ gw: number }>(
     `select distinct gw
        from fpl_player_points
       where season = $1 and gw < $2
@@ -126,13 +129,13 @@ async function settledPerformance(
       limit 5`,
     [season, gameweek]
   );
-  const settled = recent.rows.map((row) => row.gw);
+  const settled = mostRecent.rows.map((row) => row.gw);
   if (settled.length === 0) {
     return { performance: [], settledThrough: null };
   }
 
   const [wholeSeason, lastFive] = await Promise.all([
-    performanceWindow(database, season, gameweek, 0),
+    performanceWindow(database, season, gameweek, SEASON_START),
     performanceWindow(database, season, gameweek, settled[settled.length - 1]!)
   ]);
   return {
