@@ -120,7 +120,7 @@ export async function playFplGameweek({
   season,
   gameweek,
   entrant,
-  locked: { deadline, pool: contextPool },
+  locked: { deadline, pool: contextPool, performance, settledThrough },
   apiKey,
   http,
   now
@@ -173,12 +173,10 @@ export async function playFplGameweek({
       gameweek,
       state: previous,
       pool: contextPool,
-      // Nothing yet: reading the two windows out of `fpl_player_points` is the
-      // "Opening a Gameweek hands the Entrant the performance record" ticket's
-      // job. Until it lands, this Gameweek's pool carries no stat block and
-      // says so, which is true of Gameweek 1 and of nothing else.
-      performance: [],
-      settledThrough: null
+      // Read with the Lock and the pool, so every Entrant of this Gameweek is
+      // handed one set of windows rather than one apiece.
+      performance,
+      settledThrough
     })
   );
 

@@ -77,22 +77,22 @@ read back for pricing exactly as v1 was.
 **Blocked by:** The full stat set rides the settled-points fetch into the record · The pool
 lines carry two Settled windows.
 
-- [ ] The opening flow derives the Settled-through Gameweek and both windows from the
+- [x] The opening flow derives the Settled-through Gameweek and both windows from the
       points table alone — a Gameweek without stored points rows contributes nothing
-- [ ] The season window sums every Settled Gameweek's stored rows and the last-five window
+- [x] The season window sums every Settled Gameweek's stored rows and the last-five window
       the five most recent Settled Gameweeks only, checked against totals computed by hand
       from per-Gameweek rows a test writes — the summation the builder slice could only
       render
-- [ ] The five are the five most recent Settled Gameweeks, not the five most recent the
+- [x] The five are the five most recent Settled Gameweeks, not the five most recent the
       player appeared in and not the last five by row order, proven by a player who missed
       a Gameweek inside the window
-- [ ] Appearances count Settled Gameweeks the player played minutes in, so a Double
+- [x] Appearances count Settled Gameweeks the player played minutes in, so a Double
       Gameweek is one appearance and fills one of the five however many Fixtures it held
-- [ ] The stored, hashed context body carries the stat blocks, the legend and the
+- [x] The stored, hashed context body carries the stat blocks, the legend and the
       announcement line, verified end to end through the HTTP and Postgres seams
-- [ ] Opening the track's first Gameweek — nothing Settled — produces a context with no
+- [x] Opening the track's first Gameweek — nothing Settled — produces a context with no
       stat blocks and the announcement saying so, as a first-class path
-- [ ] A transfer in the returned action is priced from the stored v2 body, never from a
+- [x] A transfer in the returned action is priced from the stored v2 body, never from a
       snapshot that may have moved since
-- [ ] Every Entrant of the Gameweek is handed the identical stored text, so the windows
+- [x] Every Entrant of the Gameweek is handed the identical stored text, so the windows
       introduce no information asymmetry

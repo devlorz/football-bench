@@ -23,6 +23,7 @@ import {
   OPENING_ACTION,
   SELL_WILSON_BUY_EVANILSON
 } from "./fpl-action-fixture.js";
+import { storePlayerPoints } from "./fpl-points-fixture.js";
 import { legalStateFrom } from "./fpl-replay.js";
 import { storedState } from "./fpl-state-fixture.js";
 
@@ -1088,5 +1089,250 @@ describe("opening the FPL track for a Gameweek", () => {
       { model_id: "entrant/v1" },
       { model_id: "entrant/v2" }
     ]);
+  });
+
+  /**
+   * Palmer's Settled Gameweeks behind Gameweek 8, as a table the expected
+   * totals below are computed from by hand.
+   *
+   * Gameweek 4 is absent on purpose: no stored rows is what an unsettled
+   * Gameweek looks like, so it contributes to neither window and the five most
+   * recent Settled Gameweeks are 2, 3, 5, 6 and 7 — which leaves Gameweek 1 in
+   * the Season's window and out of the last five, where its goal, its two
+   * bonus points and its clean sheet would show if the boundary slipped.
+   *
+   * Gameweek 5 he missed, with a stored zero row. Gameweek 6 was a Double, and
+   * the table is keyed by Gameweek, so its two Fixtures arrive as one row of
+   * 180 minutes: one appearance, filling one of the five.
+   */
+  const PALMER_GAMEWEEKS = [
+    {
+      gameweek: 1, minutes: 90, total_points: 9, goals_scored: 1, assists: 1,
+      bonus: 2, expected_goals: 0.5, expected_assists: 0.3,
+      expected_goals_conceded: 1
+    },
+    {
+      gameweek: 2, minutes: 90, total_points: 2, expected_goals: 0.1,
+      expected_assists: 0.2, expected_goals_conceded: 2
+    },
+    {
+      gameweek: 3, minutes: 60, total_points: 5, goals_scored: 1,
+      yellow_cards: 1, expected_goals: 0.4, expected_assists: 0.1,
+      expected_goals_conceded: 1
+    },
+    { gameweek: 5 },
+    {
+      gameweek: 6, minutes: 180, total_points: 14, goals_scored: 2, assists: 1,
+      bonus: 3, expected_goals: 1.2, expected_assists: 0.4
+    },
+    {
+      gameweek: 7, minutes: 90, total_points: 6, assists: 1, clean_sheets: 1,
+      expected_goals: 0.2, expected_assists: 0.6
+    }
+  ];
+
+  /** Gameweeks 3 to 8 scheduled, and the Settled points table above stored. */
+  async function seedSettledSeason(): Promise<void> {
+    await client.query(
+      `insert into gameweeks (season, gw, deadline_at)
+       select '2026-27', gw,
+              timestamptz '2026-08-28T17:30:00Z' + (gw * interval '7 days')
+         from generate_series(3, 8) as gw`
+    );
+    await lockPool(8, FPL_POOL);
+    for (const gameweek of PALMER_GAMEWEEKS) {
+      await storePlayerPoints(client, { fplId: 8, ...gameweek });
+    }
+    // Gameweek 5 is Settled whether or not Palmer played it, and Raya's row is
+    // what says so. Left to Palmer's own zero row, a window that took the five
+    // most recent Gameweeks the *player* appeared in would look right here.
+    await storePlayerPoints(client, {
+      gameweek: 5,
+      fplId: 1,
+      minutes: 90,
+      total_points: 2
+    });
+    // Wilson played the Season's first Gameweek and nothing since: every
+    // Settled minute he has falls outside the five most recent, so he carries
+    // a season block and no last5 block at all.
+    await storePlayerPoints(client, {
+      gameweek: 1,
+      fplId: 15,
+      minutes: 90,
+      total_points: 3
+    });
+  }
+
+  test("carries both Settled windows on every pool line it stores", async () => {
+    await seedSettledSeason();
+    await seedStandingManagerState(7);
+    await play({
+      gameweek: 8,
+      at: "2026-10-20T11:30:00Z",
+      responses: [STAND_PAT]
+    });
+
+    const stored = await client.query<{ body: string; hash: string }>(
+      "select body, hash from contexts where gw = 8 and track = 'fpl'"
+    );
+    const body = stored.rows[0]!.body;
+    // Everything below is asserted against the row on record, and the hash is
+    // what makes that row the text the Entrant was judged on.
+    expect(stored.rows[0]!.hash).toBe(
+      createHash("sha256").update(body).digest("hex")
+    );
+    // The Gameweek the windows run through is named rather than inferred: the
+    // Gameweek being played is 8, and 7 is the last one FPL settled.
+    expect(body).toContain(
+      "Performance below runs through Settled Gameweek 7."
+    );
+    expect(body).toContain("Stat keys: pts = points, min = minutes,");
+    // Summed from the table above: the Season over six Settled Gameweeks, the
+    // last five over 2, 3, 5, 6 and 7. Five appearances against four is
+    // Gameweek 5, and 510 minutes against 420 is Gameweek 1.
+    expect(body).toContain(JSON.stringify({
+      id: 8,
+      name: "Palmer",
+      club: "Chelsea",
+      position: "MID",
+      price: "£12.0m",
+      price_tenths: 120,
+      status: "available",
+      season: {
+        pts: 36, min: 510, app: 5, g: 4, a: 3, cs: 1, b: 5, yc: 1,
+        xg: "2.40", xa: "1.60", xgc: "4.00"
+      },
+      last5: {
+        pts: 27, min: 420, app: 4, g: 3, a: 2, cs: 1, b: 3, yc: 1,
+        xg: "1.90", xa: "1.30", xgc: "3.00"
+      }
+    }));
+    // One Settled Gameweek inside the last five, so both windows are the same
+    // Gameweek — and every stat he did not record is left out of both.
+    expect(body).toContain(JSON.stringify({
+      id: 1,
+      name: "Raya",
+      club: "Arsenal",
+      position: "GKP",
+      price: "£4.5m",
+      price_tenths: 45,
+      status: "available",
+      season: { pts: 2, min: 90, app: 1 },
+      last5: { pts: 2, min: 90, app: 1 }
+    }));
+    // Settled minutes in the Season and none in the last five: one block, and
+    // the absent one is the statement that he has not played since.
+    expect(body).toContain(JSON.stringify({
+      id: 15,
+      name: "Wilson",
+      club: "Fulham",
+      position: "FWD",
+      price: "£6.0m",
+      price_tenths: 60,
+      status: "available",
+      season: { pts: 3, min: 90, app: 1 }
+    }));
+    // A player the points table has never heard of carries no block at all.
+    expect(body).toContain(JSON.stringify({
+      id: 3,
+      name: "Saliba",
+      club: "Arsenal",
+      position: "DEF",
+      price: "£6.0m",
+      price_tenths: 60,
+      status: "available"
+    }));
+  });
+
+  test("says so plainly when no Gameweek has settled yet", async () => {
+    await seedStandingManagerState();
+    await play({ responses: [STAND_PAT] });
+
+    const stored = await client.query<{ body: string }>(
+      "select body from contexts where gw = 2 and track = 'fpl'"
+    );
+    const body = stored.rows[0]!.body;
+    // Gameweek 1's normal case, and the track's opening one: the points table
+    // is empty, so the pool carries no block and the Entrant is told why
+    // rather than left to wonder what the missing numbers meant.
+    expect(body).toContain(
+      "No Gameweek has settled yet, so no player performance appears below."
+    );
+    expect(body).not.toContain('"season":{');
+    expect(body).not.toContain('"last5":{');
+  });
+
+  test("prices a Transfer from the stat blocks' own context body", async () => {
+    await seedSettledSeason();
+    // Evanilson joins Gameweek 8's pool because the Transfer buys him, and a
+    // player the pool does not carry cannot be bought at any price.
+    await lockPool(8, FPL_POOL_ALTERNATES.filter(({ fplId }) => fplId === 19));
+    await seedStandingManagerState(7);
+
+    const sellWilsonBuyEvanilson = JSON.stringify({
+      transfers_in: [19],
+      transfers_out: [15],
+      chip: null,
+      team_sheet: {
+        ...(JSON.parse(STAND_PAT) as { team_sheet: { bench: number[] } })
+          .team_sheet,
+        bench: [2, 7, 12, 19]
+      }
+    });
+    await play({
+      gameweek: 8,
+      at: "2026-10-20T11:30:00Z",
+      responses: [sellWilsonBuyEvanilson]
+    });
+
+    // The readback that prices this action reads a v2 body — every line
+    // carrying stat blocks it has no use for. Evanilson bought at the £6.0m
+    // that body pinned is the whole proof: a parser that refused the new
+    // fields would have thrown before any Transfer was priced.
+    const states = await client.query<{
+      squad: { active: { fplId: number; purchasePriceTenths: number }[] };
+    }>("select squad from manager_states where gw = 8");
+    const active = states.rows[0]!.squad.active;
+    expect(active).toContainEqual({ fplId: 19, purchasePriceTenths: 60 });
+    expect(active.map(({ fplId }) => fplId)).not.toContain(15);
+  });
+
+  test("hands every Entrant of the Gameweek the same windows", async () => {
+    await client.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values (
+         'entrant/v2', 'Second Entrant', 'anthropic/claude-opus-5', 'anthropic',
+         'fpl/2026-27-v1', 'entrant'
+       )`
+    );
+    await seedSettledSeason();
+    await seedStandingManagerState(7);
+    await seedStandingManagerState(7, "entrant/v2");
+
+    await play({
+      gameweek: 8,
+      at: "2026-10-20T11:30:00Z",
+      responses: [STAND_PAT]
+    });
+    await play({
+      gameweek: 8,
+      entrantId: "entrant/v2",
+      at: "2026-10-20T11:30:00Z",
+      responses: [STAND_PAT]
+    });
+
+    // Two Entrants on the same Squad, so the only thing that could differ
+    // between their contexts is the performance record — and Paired
+    // Differences measure Base Models only while it does not.
+    const stored = await client.query<{ body: string }>(
+      `select body
+         from contexts
+        where gw = 8 and track = 'fpl'
+        order by model_id`
+    );
+    const [first, second] = stored.rows;
+    expect(first!.body).toContain('"season":{"pts":36,"min":510,"app":5');
+    expect(second!.body).toBe(first!.body);
   });
 });
