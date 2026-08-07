@@ -1,7 +1,7 @@
 # Tickets: Season aggregates and the league table in the match context
 
 Three tracer-bullet slices delivering
-[spec 0007](../specs/0007-season-aggregates-and-the-league-table-in-the-match-context.md):
+[spec 0007](../../specs/0007-season-aggregates-and-the-league-table-in-the-match-context.md):
 season-to-date team performance and the full league table inside `match/2026-27-v2`,
 before the 2026/27 Season's first Lock.
 
@@ -74,10 +74,11 @@ the position ordinal.
 
 - [x] Pre-flight re-run passes for all nine Entrants against a context carrying the
       season aggregates and the league table together — **run 2026-08-07, 9/9 parseable
-      twice**: once against the live opening-day context and once against a dense
-      mid-Season context in a throwaway Postgres; verdict in
-      [the pre-flight report](../reports/2026-08-07-season-aggregates-league-table-preflight.md),
-      which also records one blocking finding outside this ticket
+      three times**: against the live opening-day context, against a dense mid-Season
+      context in a throwaway Postgres, and against the live context again once the shot
+      backfill landed; verdict in
+      [the pre-flight report](../../reports/2026-08-07-season-aggregates-league-table-preflight.md),
+      which also records a shot-coverage finding, closed outside this ticket
 - [x] The run happens before the first Lock; if the Lock arrives first, the additions
       ship as `match/2026-27-v3` instead — a frozen pair is never edited after use
       — **verified against stored data, not assumed**: `contexts`, `predictions` and
@@ -89,14 +90,9 @@ the position ordinal.
       the only change outside the builder and its tests is the pinned
       `MATCH_PROMPT_SHA256`
 
-**The live shot coverage was missing, and is now restored and durable.** Runs 1 and 2
-found all 932 rows in the live `historical_matches` carrying null shot columns, so every
-form line and every new aggregate pair read as absent — deploy lag, not a code defect:
-`.github/workflows/fetch.yml` checks out the default branch, and `origin/main` did not yet
-contain `0a9dfd5 Carry shots and shots on target into the historical record`. A local
-`fetch-history` for 2025-26 restored 380/380 and 552/552, and a third pre-flight run
-confirmed 9/9 against the repaired context. `main` was then pushed, moving `origin/main`
-to `e11eeb8`, and a hand-triggered `Daily fetch` on that head succeeded with coverage
-intact through a full delete-and-reload — so the daily wipe is closed, proven rather than
-assumed. Every wiping run had reported success; the workflow has no check that fails on
-coverage loss, which is left standing as outside this ticket.
+**A shot-coverage finding surfaced during the runs and is closed.** The deployed fetch
+had been wiping live shot data every morning; the backfill, the deploy that ended the
+wipe, and the hand-triggered run that proved it are all recorded in
+[the pre-flight report](../../reports/2026-08-07-season-aggregates-league-table-preflight.md).
+Still standing, outside this ticket: the fetch has no assertion that fails on coverage
+loss.

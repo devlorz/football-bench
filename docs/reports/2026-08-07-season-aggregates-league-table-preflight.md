@@ -1,6 +1,6 @@
 # Base Model pre-flight, season aggregates and league table — 2026-08-07
 
-Ticket: **Freeze verification: pre-flight on the extended v2** ([tickets 0007](../tickets/0007-season-aggregates-and-the-league-table-in-the-match-context.md), [spec 0007](../specs/0007-season-aggregates-and-the-league-table-in-the-match-context.md))
+Ticket: **Freeze verification: pre-flight on the extended v2** ([tickets 0007](../tickets/done/0007-season-aggregates-and-the-league-table-in-the-match-context.md), [spec 0007](../specs/0007-season-aggregates-and-the-league-table-in-the-match-context.md))
 
 Season-to-date shots, on-target and xG now ride the three record lines, and the full
 Premier League table replaces the `Current-Season league position` ordinal. Both landed
@@ -47,7 +47,7 @@ Current-Season home split: no home matches played.
 Current-Season away split: no away matches played.
 ```
 
-The `Current-Season league position` line is absent from both team sections; the
+The `Current-Season league position` line is absent from both club sections; the
 prior-Season final position line is kept. Inspected offline through the shared
 `buildMatchContext` path before any outbound call.
 
@@ -59,8 +59,8 @@ routing metadata.
 The opening-day context exercises only the empty path, so a second run put both sections
 in their populated form. A throwaway Postgres — `startTemporaryPostgres`, the same
 mechanism the dry run and preview use — was seeded by replaying the archived 2025-26
-football-data CSVs through the current parser, then shifting eight rounds of that record
-forward a year to stand as the current Season. Every figure below is a real result, not an
+football-data CSVs through the current parser, then shifting the first eight Gameweeks
+of that record forward a year to stand as the current Season. Every figure below is a real result, not an
 invented one. The live database was read only, and was never a write target for this run.
 
 Fixture: Arsenal v Liverpool, Gameweek 8, deadline 2026-10-30 18:30 UTC.
@@ -142,10 +142,14 @@ runs 1 and 2. Run 2 is not repeated: its throwaway cluster was seeded by replayi
 archived CSVs through the current parser, so its context already carried full shot
 coverage and the backfill does not change it.
 
+Run 3's responses were archived on the live database beside run 1's: each of the nine
+`openrouter-preflight:<base-model>` sources now holds ten bodies, two of them from
+today's runs.
+
 The freeze counts were re-read afterwards and are still zero across `contexts`,
 `predictions` and `attempts`.
 
-## Finding — fixed in the data, still live in the deploy
+## Finding — the deployed fetch wiped shot coverage; closed and proven
 
 At the time of runs 1 and 2, all 932 rows in the live `historical_matches` carried
 `home_shots`, `away_shots`, `home_shots_on_target` and `away_shots_on_target` as null, so
