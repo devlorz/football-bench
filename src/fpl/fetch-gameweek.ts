@@ -1,5 +1,6 @@
 import type { Client } from "pg";
 import { z } from "zod";
+import { outcomeOf, type FixtureResult } from "../fixture-result.js";
 import type { HttpFetcher } from "../http.js";
 import { storeRawSnapshots } from "../snapshots/store-raw-snapshots.js";
 
@@ -83,11 +84,12 @@ function settledResult(
   if (!finished || home === null || away === null) {
     return null;
   }
-  return JSON.stringify({
+  const result: FixtureResult = {
     home_goals: home,
     away_goals: away,
-    outcome: home > away ? "H" : home < away ? "A" : "D"
-  });
+    outcome: outcomeOf(home, away)
+  };
+  return JSON.stringify(result);
 }
 
 export interface FetchFplGameweekOptions {

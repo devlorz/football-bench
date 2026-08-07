@@ -45,17 +45,17 @@ season to date. The stored breakdown makes every aggregate auditable and recompu
 
 **Blocked by:** Store settled and corrected Fixture results.
 
-- [ ] Exact Predicted Scores earn 5 Match Points, correct goal differences with a different score earn 3, correct outcomes with a different goal difference earn 2, and misses earn 0
-- [ ] The four exclusive Match Points cases are verified against values computed by hand rather than by restating the implementation
-- [ ] Every Entrant receives Match Points, Score % and Outcome % for each scoreable Gameweek under the base metric names
-- [ ] Each Gameweek also stores cumulative snapshots through that Gameweek under explicit `_season_to_date` metric names, so per-Gameweek and cumulative rows coexist without a sentinel Gameweek or migration
-- [ ] Every aggregate carries its Fixture count and a per-Fixture breakdown sufficient to explain the value without recomputing it
-- [ ] A Fixture with no settled result contributes nothing; a Gameweek with no settled results produces no zero-valued scoring rows
-- [ ] A deferred Fixture contributes to `locked_in_gw`, not the Gameweek in which it was eventually played
-- [ ] A result correction changes the affected Gameweek and recomputes `_season_to_date` snapshots from that locked Gameweek through the latest scored Gameweek
-- [ ] Re-running upserts the same logical rows without duplicates, while the injected clock affects only `scored_at`
-- [ ] Stored rows name the Season, Gameweek, Entrant, Match track and metric, and identify Match Points as the ranking layer rather than statistical evidence
-- [ ] The scorer reads stored database rows only and makes no outbound network call
+- [x] Exact Predicted Scores earn 5 Match Points, correct goal differences with a different score earn 3, correct outcomes with a different goal difference earn 2, and misses earn 0
+- [x] The four exclusive Match Points cases are verified against values computed by hand rather than by restating the implementation
+- [x] Every Entrant receives Match Points, Score % and Outcome % for each scoreable Gameweek under the base metric names
+- [x] Each Gameweek also stores cumulative snapshots through that Gameweek under explicit `_season_to_date` metric names, so per-Gameweek and cumulative rows coexist without a sentinel Gameweek or migration
+- [x] Every aggregate carries its Fixture count and a per-Fixture breakdown sufficient to explain the value without recomputing it
+- [x] A Fixture with no settled result contributes nothing; a Gameweek with no settled results produces no zero-valued scoring rows
+- [x] A deferred Fixture contributes to `locked_in_gw`, not the Gameweek in which it was eventually played
+- [x] A result correction changes the affected Gameweek and recomputes `_season_to_date` snapshots from that locked Gameweek through the latest scored Gameweek
+- [x] Re-running upserts the same logical rows without duplicates, while the injected clock affects only `scored_at`
+- [x] Stored rows name the Season, Gameweek, Entrant, Match track and metric, and identify Match Points as the ranking layer rather than statistical evidence
+- [x] The scorer reads stored database rows only and makes no outbound network call
 
 ---
 
