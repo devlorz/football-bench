@@ -169,15 +169,31 @@ So the scheduled fetch reloads the whole historical record every morning using c
 predates the shot columns, wiping the coverage the 2026-07-31 report recorded. That report
 observed 380/380 and 552/552 immediately after a local run; nothing had held since.
 
-**Half fixed.** A local `fetch-history` run for 2025-26 restored full shot coverage, which
-is what run 3 above verifies. But the deploy has not moved: `origin/main` is still
-`9204e8a`, last pushed 2026-07-30, and `git merge-base --is-ancestor 0a9dfd5 origin/main`
-still answers no. The workflow that overwrites the record therefore still runs pre-shots
-code, and the next 06:00 UTC fetch will wipe the backfill again exactly as it did the
-2026-07-31 one. The backfill buys a day at a time; only a push makes it hold, and there
-are fourteen 06:00 UTC fetches between now and the first Lock.
+**Fixed, and the fix is proven rather than assumed.** Two steps, in order:
 
-That push deploys 103 commits at once against a database whose schema is already ahead of
-the deployed code, so it is an operator decision rather than a step this ticket takes.
-Until it happens, treat live shot coverage as re-verified on the day, never assumed —
-which is the same trap the 2026-07-31 report fell into.
+1. A local `fetch-history` run for 2025-26 restored full shot coverage — what run 3 above
+   verifies.
+2. The deploy caught up: `origin/main` moved from `9204e8a` (2026-07-30) to `e11eeb8`,
+   `git rev-list --count origin/main..main` is 0, and
+   `git merge-base --is-ancestor 0a9dfd5 origin/main` now answers yes.
+
+Step 1 alone would not have held — the 06:00 UTC workflow would have wiped it the next
+morning, as it had wiped the 2026-07-31 coverage. So the surviving question was whether
+the newly deployed code preserves shots through the delete-and-reload it performs on every
+run, and that was settled by triggering `Daily fetch` by hand rather than waiting:
+
+| | Observed |
+|---|---|
+| Run | `workflow_dispatch`, head `e11eeb8`, conclusion **success** |
+| Coverage after | 380/380 Premier League, 552/552 Championship, shots and on target |
+| `historical_matches` | `n_tup_ins` 12116 → 13980, exactly two more full 932-row cycles |
+
+The whole record was deleted and reloaded by the deployed code, and the shot columns
+survived. The daily wipe is closed.
+
+One thing this leaves standing: every wiping run reported **success**. The workflow only
+fails when a source fetch fails, never when it silently stores less than it used to, so
+six days of loss produced no signal at all. Nothing here adds such a check — it is outside
+tickets 0007 — but the gap is real, and the lesson generalises: treat live data coverage
+as re-queried on the day, never as recorded by a past report. That is the trap the
+2026-07-31 report fell into and this one nearly repeated.

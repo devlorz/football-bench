@@ -89,13 +89,14 @@ the position ordinal.
       the only change outside the builder and its tests is the pinned
       `MATCH_PROMPT_SHA256`
 
-**The live shot coverage is restored but not yet durable.** Runs 1 and 2 found all 932
-rows in the live `historical_matches` carrying null shot columns, so every form line and
-every new aggregate pair read as absent. A local `fetch-history` for 2025-26 restored
-380/380 and 552/552, and a third pre-flight run on 2026-08-07 confirmed 9/9 against the
-repaired context. The underlying cause is untouched: `.github/workflows/fetch.yml` checks
-out the default branch, `origin/main` is still `9204e8a` from 2026-07-30, and it does not
-contain `0a9dfd5 Carry shots and shots on target into the historical record`. The 06:00
-UTC fetch will reload the record with pre-shots code again and wipe the backfill. Deploy
-lag, not a code defect; the fix is an operator decision, since pushing `main` deploys 103
-commits at once against a database whose schema is already ahead of the deployed code.
+**The live shot coverage was missing, and is now restored and durable.** Runs 1 and 2
+found all 932 rows in the live `historical_matches` carrying null shot columns, so every
+form line and every new aggregate pair read as absent — deploy lag, not a code defect:
+`.github/workflows/fetch.yml` checks out the default branch, and `origin/main` did not yet
+contain `0a9dfd5 Carry shots and shots on target into the historical record`. A local
+`fetch-history` for 2025-26 restored 380/380 and 552/552, and a third pre-flight run
+confirmed 9/9 against the repaired context. `main` was then pushed, moving `origin/main`
+to `e11eeb8`, and a hand-triggered `Daily fetch` on that head succeeded with coverage
+intact through a full delete-and-reload — so the daily wipe is closed, proven rather than
+assumed. Every wiping run had reported success; the workflow has no check that fails on
+coverage loss, which is left standing as outside this ticket.
