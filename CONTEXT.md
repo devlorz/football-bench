@@ -153,6 +153,13 @@ silently absent and never filled with provisional numbers.
 
 ### Scoring
 
+**Ranked Probability Score**:
+The evidential score for one Prediction's probabilities, over the ordered outcomes Home,
+Draw, Away. Lower is better, range [0, 1]. It respects the ordering — calling an Away win
+when Home settled is punished harder than calling a Draw — which is why it, not Match
+Points, carries every claim the benchmark makes.
+_Abbreviate_: RPS
+
 **Paired Difference**:
 For one Fixture, the difference between two Entrants' scores on that same Fixture. The unit
 of comparison on the leaderboard — it cancels out how hard the Fixture was and leaves only

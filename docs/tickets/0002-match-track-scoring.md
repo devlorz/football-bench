@@ -67,15 +67,15 @@ the forecast's probability information and internal consistency.
 
 **Blocked by:** Score the readable Match Points layer.
 
-- [ ] Ranked Probability Score is computed over ordered Home, Draw and Away outcomes and is verified against hand-computed examples
-- [ ] Brier is the pinned unnormalised three-outcome sum with range `[0, 2]`, including a hand-computed test that would fail if it were silently halved
-- [ ] Accuracy compares the probability argmax with the settled outcome
-- [ ] Coherence compares that argmax with the outcome implied by the Entrant's Predicted Score
-- [ ] Accuracy and Coherence resolve tied maxima by the first outcome in canonical `H`, `D`, `A` order, including `0.40 / 0.40 / 0.20` resolving to Home
-- [ ] RPS, Brier, accuracy and Coherence are stored under base per-Gameweek metrics and `_season_to_date` cumulative metrics with `n` and auditable per-Fixture detail
-- [ ] Unsettled Fixtures are absent from outcome-dependent metrics without being counted as failures
-- [ ] Deferred attribution, result correction and idempotent recomputation behave exactly as they do for Match Points
-- [ ] Metric functions are deterministic pure functions and introduce no clock, network or random-number seam
+- [x] Ranked Probability Score is computed over ordered Home, Draw and Away outcomes and is verified against hand-computed examples
+- [x] Brier is the pinned unnormalised three-outcome sum with range `[0, 2]`, including a hand-computed test that would fail if it were silently halved
+- [x] Accuracy compares the probability argmax with the settled outcome
+- [x] Coherence compares that argmax with the outcome implied by the Entrant's Predicted Score. Coherence needs no result, so it is reported over every Prediction the Gameweek's Lock owns and carries its own `n`
+- [x] Accuracy and Coherence resolve tied maxima by the first outcome in canonical `H`, `D`, `A` order, including `0.40 / 0.40 / 0.20` resolving to Home
+- [x] RPS, Brier, accuracy and Coherence are stored under base per-Gameweek metrics and `_season_to_date` cumulative metrics with `n` and auditable per-Fixture detail
+- [x] Unsettled Fixtures are absent from outcome-dependent metrics without being counted as failures
+- [x] Deferred attribution, result correction and idempotent recomputation behave exactly as they do for Match Points
+- [x] Metric functions are deterministic pure functions and introduce no clock, network or random-number seam
 
 ---
 

@@ -1,13 +1,25 @@
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
-import { outcomeOf, type FixtureResult } from "../src/fixture-result.js";
 import {
+  outcomeOf,
+  type FixtureResult,
+  type Probs
+} from "../src/fixture-result.js";
+import {
+  ACCURACY_METRIC,
+  ACCURACY_SEASON_TO_DATE_METRIC,
+  BRIER_METRIC,
+  BRIER_SEASON_TO_DATE_METRIC,
+  COHERENCE_METRIC,
+  COHERENCE_SEASON_TO_DATE_METRIC,
   MATCH_POINTS_METRIC,
   MATCH_POINTS_QUALIFICATION,
   MATCH_POINTS_SEASON_TO_DATE_METRIC,
   OUTCOME_PCT_METRIC,
   OUTCOME_PCT_SEASON_TO_DATE_METRIC,
+  RPS_METRIC,
+  RPS_SEASON_TO_DATE_METRIC,
   SCORE_PCT_METRIC,
   SCORE_PCT_SEASON_TO_DATE_METRIC,
   scoreMatchGameweek
@@ -105,17 +117,18 @@ describe("scoring the readable Match Points layer", () => {
     entrantId: string,
     fplId: number,
     home: number,
-    away: number
+    away: number,
+    probs: Probs = { H: 0.5, D: 0.3, A: 0.2 }
   ): Promise<void> => {
     await client.query(
       `insert into predictions (
          model_id, season, fpl_id, probs, pred_home, pred_away, context_id,
          attempts_used
        )
-       select $1, $2, $3, '{"H":0.5,"D":0.3,"A":0.2}', $4, $5, c.id, 0
+       select $1, $2, $3, $6, $4, $5, c.id, 0
          from contexts c
         where c.season = $2 and c.track = 'match' and c.fpl_id = $3`,
-      [entrantId, SEASON, fplId, home, away]
+      [entrantId, SEASON, fplId, home, away, JSON.stringify(probs)]
     );
   };
 
@@ -235,14 +248,20 @@ describe("scoring the readable Match Points layer", () => {
     )).toBeNull();
   });
 
-  test("writes no row for a Gameweek with no settled result", async () => {
+  test("reports only Coherence for a Gameweek with no settled result", async () => {
     await storeFixture(1, 1);
     await predict("entrant/a", 1, 2, 1);
 
     await score(1);
 
-    const stored = await client.query("select 1 from scores");
-    expect(stored.rowCount).toBe(0);
+    // Nothing that needs an outcome is written, so an unplayed Gameweek cannot
+    // be mistaken for a badly forecast one. Coherence needs only the Prediction
+    // and is answerable the moment the Lock passes, so it is written.
+    const stored = await client.query<{ metric: string }>(
+      "select metric from scores order by metric"
+    );
+    expect(stored.rows.map(({ metric }) => metric))
+      .toEqual([COHERENCE_METRIC, COHERENCE_SEASON_TO_DATE_METRIC]);
   });
 
   test("attributes a deferred Fixture to the Gameweek that locked it", async () => {
@@ -400,5 +419,236 @@ describe("scoring the readable Match Points layer", () => {
     // `scored_at` included: an upsert that touched it would make every re-run
     // look like a new result.
     expect(second.rows).toEqual(first.rows);
+  });
+
+  /**
+   * One distribution used across the probability tests, so every expected
+   * figure below can be checked against it by hand.
+   */
+  const PROBS: Probs = { H: 0.6, D: 0.25, A: 0.15 };
+
+  test("computes RPS and Brier against hand-computed values", async () => {
+    await storeFixture(1, 1);
+    await storeFixture(2, 1);
+    await settle(1, 2, 1);
+    await settle(2, 0, 1);
+    await predict("entrant/a", 1, 2, 1, PROBS);
+    await predict("entrant/a", 2, 2, 1, PROBS);
+
+    await score(1);
+
+    // Home win, so the outcome vector is [1, 0, 0].
+    //   Brier = 0.4² + 0.25² + 0.15²                     = 0.245
+    //   RPS   = ((0.6 − 1)² + (0.85 − 1)²) / 2           = 0.09125
+    // Away win, so it is [0, 0, 1].
+    //   Brier = 0.6² + 0.25² + 0.85²                     = 1.145
+    //   RPS   = ((0.6 − 0)² + (0.85 − 0)²) / 2           = 0.54125
+    // Both means over the two Fixtures.
+    expect((await storedValue("entrant/a", 1, RPS_METRIC))?.value)
+      .toBeCloseTo(0.31625, 12);
+    expect((await storedValue("entrant/a", 1, BRIER_METRIC))?.value)
+      .toBeCloseTo(0.695, 12);
+    expect(await storedValue("entrant/a", 1, RPS_METRIC))
+      .toMatchObject({ n: 2 });
+  });
+
+  test("stores Brier unnormalised, so halving it would fail", async () => {
+    await storeFixture(1, 1);
+    await settle(1, 2, 1);
+    await predict("entrant/a", 1, 2, 1, PROBS);
+
+    await score(1);
+
+    // The pinned convention is Σ(p − o)² over all three outcomes, range [0, 2].
+    // The common halved variant would store 0.1225 here.
+    expect((await storedValue("entrant/a", 1, BRIER_METRIC))?.value)
+      .toBeCloseTo(0.245, 12);
+  });
+
+  test("reads accuracy off the probability argmax", async () => {
+    await storeFixture(1, 1);
+    await storeFixture(2, 1);
+    await settle(1, 2, 1);
+    await settle(2, 0, 1);
+    await predict("entrant/a", 1, 2, 1, PROBS);
+    await predict("entrant/a", 2, 2, 1, PROBS);
+
+    await score(1);
+
+    // Home is likeliest on both; the Home win agrees and the Away win does not.
+    expect(await storedValue("entrant/a", 1, ACCURACY_METRIC))
+      .toMatchObject({ value: 0.5, n: 2 });
+    // The distribution and the outcome it called likeliest travel with the
+    // row: nothing else stored says why a Fixture fell on the side it did.
+    expect((await storedValue("entrant/a", 1, ACCURACY_METRIC))?.detail)
+      .toEqual({
+        hits: [{ fplId: 1, probs: PROBS, likeliest: "H", outcome: "H" }],
+        misses: [{ fplId: 2, probs: PROBS, likeliest: "H", outcome: "A" }]
+      });
+  });
+
+  test("reads Coherence off the Predicted Score, not the result", async () => {
+    await storeFixture(1, 1);
+    await storeFixture(2, 1);
+    await settle(1, 0, 1);
+    await settle(2, 0, 1);
+    // Home is likeliest on both. The first names a Home scoreline and agrees
+    // with itself; the second names an Away one and does not. Both lost to the
+    // same Away win, which Coherence has no opinion about.
+    await predict("entrant/a", 1, 2, 1, PROBS);
+    await predict("entrant/a", 2, 1, 2, PROBS);
+
+    await score(1);
+
+    expect(await storedValue("entrant/a", 1, COHERENCE_METRIC))
+      .toMatchObject({ value: 0.5, n: 2 });
+    // The Predicted Score travels with it rather than the outcome, because
+    // that is the half of the comparison Coherence actually made.
+    expect((await storedValue("entrant/a", 1, COHERENCE_METRIC))?.detail)
+      .toEqual({
+        hits: [{ fplId: 1, probs: PROBS, likeliest: "H", predicted: [2, 1] }],
+        misses: [{ fplId: 2, probs: PROBS, likeliest: "H", predicted: [1, 2] }]
+      });
+  });
+
+  test("breaks a tied maximum by canonical H, D, A order", async () => {
+    await storeFixture(1, 1);
+    await settle(1, 2, 1);
+    // 0.40 / 0.40 / 0.20 is Home, not Draw: the rule is arbitrary and pinned,
+    // so a Home win is a hit and a 1-1 Predicted Score is incoherent.
+    await predict("entrant/a", 1, 1, 1, { H: 0.4, D: 0.4, A: 0.2 });
+
+    await score(1);
+
+    expect(await storedValue("entrant/a", 1, ACCURACY_METRIC))
+      .toMatchObject({ value: 1, n: 1 });
+    expect(await storedValue("entrant/a", 1, COHERENCE_METRIC))
+      .toMatchObject({ value: 0, n: 1 });
+  });
+
+  test("counts an unsettled Fixture in Coherence but no outcome metric", async () => {
+    await storeFixture(1, 1);
+    await storeFixture(2, 1);
+    await settle(1, 2, 1);
+    await predict("entrant/a", 1, 2, 1, PROBS);
+    await predict("entrant/a", 2, 1, 2, PROBS);
+
+    await score(1);
+
+    // RPS, Brier and accuracy need an outcome, so the unplayed Fixture is
+    // absent from them rather than counted as a failure. Coherence needs only
+    // the Prediction, so it reads both — and the incoherent one is a miss.
+    expect(await storedValue("entrant/a", 1, RPS_METRIC))
+      .toMatchObject({ n: 1 });
+    expect(await storedValue("entrant/a", 1, ACCURACY_METRIC))
+      .toMatchObject({ value: 1, n: 1 });
+    expect(await storedValue("entrant/a", 1, COHERENCE_METRIC))
+      .toMatchObject({ value: 0.5, n: 2 });
+  });
+
+  test("stores per-Fixture probability detail beside every aggregate", async () => {
+    await storeFixture(1, 1);
+    await settle(1, 2, 1);
+    await predict("entrant/a", 1, 2, 1, PROBS);
+
+    await score(1);
+
+    expect((await storedValue("entrant/a", 1, RPS_METRIC))?.detail).toEqual({
+      fixtures: [
+        { fplId: 1, probs: PROBS, outcome: "H", rps: expect.closeTo(0.09125, 12) }
+      ]
+    });
+    expect((await storedValue("entrant/a", 1, BRIER_METRIC))?.detail).toEqual({
+      fixtures: [
+        { fplId: 1, probs: PROBS, outcome: "H", brier: expect.closeTo(0.245, 12) }
+      ]
+    });
+  });
+
+  test("stores probability snapshots through the same Gameweek", async () => {
+    await storeFixture(1, 1);
+    await storeFixture(2, 2);
+    await settle(1, 2, 1);
+    await settle(2, 0, 1);
+    await predict("entrant/a", 1, 2, 1, PROBS);
+    await predict("entrant/a", 2, 1, 2, PROBS);
+
+    await score(1);
+    await score(2);
+
+    // Gameweek 2's own Brier is the Away win's 1.145; the snapshot beside it is
+    // the mean of that and Gameweek 1's 0.245.
+    expect((await storedValue("entrant/a", 2, BRIER_METRIC))?.value)
+      .toBeCloseTo(1.145, 12);
+    expect((await storedValue(
+      "entrant/a", 2, BRIER_SEASON_TO_DATE_METRIC
+    ))?.value).toBeCloseTo(0.695, 12);
+    expect((await storedValue(
+      "entrant/a", 2, RPS_SEASON_TO_DATE_METRIC
+    ))?.value).toBeCloseTo(0.31625, 12);
+    // Home was likeliest on both, and only the Home win settled.
+    expect(await storedValue("entrant/a", 2, ACCURACY_SEASON_TO_DATE_METRIC))
+      .toMatchObject({ value: 0.5, n: 2 });
+    // The Away-win Fixture was named 1-2 under a Home-likeliest distribution,
+    // so one of the Season's two Predictions is coherent.
+    expect(await storedValue("entrant/a", 2, COHERENCE_SEASON_TO_DATE_METRIC))
+      .toMatchObject({ value: 0.5, n: 2 });
+    expect((await storedValue(
+      "entrant/a", 2, RPS_SEASON_TO_DATE_METRIC
+    ))?.detail).toEqual({
+      gameweeks: [
+        {
+          gw: 1,
+          n: 1,
+          mean: expect.closeTo(0.09125, 12),
+          fixtures: [
+            {
+              fplId: 1,
+              probs: PROBS,
+              outcome: "H",
+              rps: expect.closeTo(0.09125, 12)
+            }
+          ]
+        },
+        {
+          gw: 2,
+          n: 1,
+          mean: expect.closeTo(0.54125, 12),
+          fixtures: [
+            {
+              fplId: 2,
+              probs: PROBS,
+              outcome: "A",
+              rps: expect.closeTo(0.54125, 12)
+            }
+          ]
+        }
+      ]
+    });
+  });
+
+  test("recomputes probability snapshots when a result is corrected", async () => {
+    await storeFixture(1, 1);
+    await storeFixture(2, 2);
+    await settle(1, 2, 1);
+    await settle(2, 0, 1);
+    await predict("entrant/a", 1, 2, 1, PROBS);
+    await predict("entrant/a", 2, 1, 2, PROBS);
+    await score(1);
+    await score(2);
+
+    // Gameweek 1's Home win is overturned to an Away win, so both Fixtures now
+    // score the Away 0.54125 and the snapshot moves with them.
+    await settle(1, 0, 1);
+    await score(1, CORRECTED_AT);
+
+    expect((await storedValue("entrant/a", 1, RPS_METRIC))?.value)
+      .toBeCloseTo(0.54125, 12);
+    expect((await storedValue(
+      "entrant/a", 2, RPS_SEASON_TO_DATE_METRIC
+    ))?.value).toBeCloseTo(0.54125, 12);
+    // Coherence reads the Prediction, so a corrected result cannot move it.
+    expect(await storedValue("entrant/a", 2, COHERENCE_SEASON_TO_DATE_METRIC))
+      .toMatchObject({ value: 0.5, n: 2, scoredAt: SCORED_AT });
   });
 });

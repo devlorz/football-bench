@@ -201,6 +201,10 @@ implies the goal difference implies the outcome — so cumulative scoring would 
 Brier is pinned as `Σ_i (p_i − o_i)²` over the three outcomes, unnormalised, range [0, 2].
 Published variants differ by a factor of two; this one is fixed so figures are comparable.
 
+RPS is pinned as the mean squared error of the cumulative distribution over ordered `H`, `D`,
+`A` — divided by the two cumulative terms, range [0, 1]. This is the football-forecasting
+convention the 0.201 figure in ADR-0012 is quoted under.
+
 Accuracy and Coherence use the same deterministic argmax convention: when probabilities tie,
 the first maximum in canonical `H`, `D`, `A` order wins. The rule is arbitrary but pinned; a
 database or runtime iteration order must never decide it.
