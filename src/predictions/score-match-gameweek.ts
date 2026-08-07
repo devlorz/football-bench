@@ -8,6 +8,7 @@ import {
   type Outcome,
   type Probs
 } from "../fixture-result.js";
+import { MATCH_PROMPT_VERSION } from "./openrouter-entrant.js";
 
 type Database = Pick<Client, "query">;
 
@@ -764,12 +765,20 @@ export async function scoreMatchGameweek({
   // carries the same stamp however long the pass takes.
   const scoredAt = now();
 
-  // The Season roster is every Entrant `models` holds; no exclusion is
+  // The Season roster is every Match Entrant `models` holds; no exclusion is
   // representable and removing one would need its own decision (CONTEXT.md).
   // Reference Lines are not in it, and so neither empty a complete case nor
   // stand as a Comparison Anchor.
+  //
+  // An FPL seat holds the same `entrant` role and is told apart by its Prompt
+  // Version, here as in every other place that asks who was asked to answer.
+  // The role alone would carry the whole FPL roster into a Match complete case
+  // and empty it, since an FPL seat writes no Match Prediction.
   const roster = (await database.query<{ id: string }>(
-    "select id from models where role = 'entrant' order by id"
+    `select id from models
+      where role = 'entrant' and prompt_version = $1
+      order by id`,
+    [MATCH_PROMPT_VERSION]
   )).rows.map(({ id }) => id);
 
   await database.query("begin");

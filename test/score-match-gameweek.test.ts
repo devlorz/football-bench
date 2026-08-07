@@ -27,6 +27,8 @@ import {
   scoreMatchGameweek,
   type PairedDifferenceDetail
 } from "../src/predictions/score-match-gameweek.js";
+import { MATCH_PROMPT_VERSION } from "../src/predictions/openrouter-entrant.js";
+import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
 
 const { Client } = pg;
 
@@ -65,9 +67,8 @@ describe("scoring the readable Match Points layer", () => {
       await client.query(
         `insert into models (
            id, name, base_model, provider, prompt_version, role
-         ) values ($1, $1, 'provider/base-model', 'provider', 'match/v1',
-                   'entrant')`,
-        [id]
+         ) values ($1, $1, 'provider/base-model', 'provider', $2, 'entrant')`,
+        [id, MATCH_PROMPT_VERSION]
       );
     }
   });
@@ -812,8 +813,9 @@ describe("scoring the readable Match Points layer", () => {
     // published rows would no longer mean what they say.
     await client.query(
       `insert into models (id, name, base_model, provider, prompt_version, role)
-       values ('entrant/e', 'E', 'provider/base-model', 'provider', 'match/v1',
-               'entrant')`
+       values ('entrant/e', 'E', 'provider/base-model', 'provider', $1,
+               'entrant')`,
+      [MATCH_PROMPT_VERSION]
     );
     await score(1, CORRECTED_AT);
 
@@ -823,8 +825,8 @@ describe("scoring the readable Match Points layer", () => {
   test("keeps a Reference Line out of the complete-case intersection", async () => {
     await client.query(
       `insert into models (id, name, base_model, provider, prompt_version, role)
-       values ('reference-home', 'Home', 'home', 'none', 'match/v1',
-               'reference')`
+       values ('reference-home', 'Home', 'home', 'none', $1, 'reference')`,
+      [MATCH_PROMPT_VERSION]
     );
     await seedComparisons();
 
@@ -837,6 +839,28 @@ describe("scoring the readable Match Points layer", () => {
     )).toMatchObject({ n: 2 });
     expect(await storedValue(
       "reference-home", 1, RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC
+    )).toBeNull();
+  });
+
+  test("keeps an FPL seat out of the complete-case intersection", async () => {
+    await client.query(
+      `insert into models (id, name, base_model, provider, prompt_version, role)
+       values ('fpl/a', 'A', 'provider/base-model', 'provider', $1, 'entrant')`,
+      [FPL_PROMPT_VERSION]
+    );
+    await seedComparisons();
+
+    await score(1);
+
+    // An FPL seat holds the `entrant` role and writes no Match Prediction, so a
+    // roster read off the role alone would carry nine of them and empty every
+    // complete case the Season has. What separates the two tracks' seats is the
+    // Prompt Version, here as it is everywhere else that asks who was asked.
+    expect(await storedValue(
+      "entrant/b", 1, RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC
+    )).toMatchObject({ n: 2 });
+    expect(await storedValue(
+      "fpl/a", 1, RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC
     )).toBeNull();
   });
 

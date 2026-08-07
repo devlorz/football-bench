@@ -27,9 +27,10 @@ for orientation. Reference Lines are not ranked and cannot win.
 _Avoid_: baseline as a competitor (a Reference Line never competes)
 
 **Season Roster**:
-The Entrants included in Season-wide comparisons. Today this is every `models` row with
-`role = 'entrant'`; no exclusion is representable. Removing an Entrant would require a new
-recorded decision, ADR and storage representation.
+The Entrants included in Season-wide comparisons. One per track: every `models` row with
+`role = 'entrant'` carrying that track's Prompt Version, since a seat is entered for a track
+and both tracks' seats hold the same role. No exclusion within a track is representable.
+Removing an Entrant would require a new recorded decision, ADR and storage representation.
 
 ### Forecasting
 
