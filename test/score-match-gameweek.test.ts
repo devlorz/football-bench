@@ -16,13 +16,16 @@ import {
   MATCH_POINTS_METRIC,
   MATCH_POINTS_QUALIFICATION,
   MATCH_POINTS_SEASON_TO_DATE_METRIC,
+  NO_POSITIVE_CONTROL_QUALIFICATION,
   OUTCOME_PCT_METRIC,
   OUTCOME_PCT_SEASON_TO_DATE_METRIC,
   RPS_METRIC,
+  RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC,
   RPS_SEASON_TO_DATE_METRIC,
   SCORE_PCT_METRIC,
   SCORE_PCT_SEASON_TO_DATE_METRIC,
-  scoreMatchGameweek
+  scoreMatchGameweek,
+  type PairedDifferenceDetail
 } from "../src/predictions/score-match-gameweek.js";
 
 const { Client } = pg;
@@ -650,5 +653,327 @@ describe("scoring the readable Match Points layer", () => {
     // Coherence reads the Prediction, so a corrected result cannot move it.
     expect(await storedValue("entrant/a", 2, COHERENCE_SEASON_TO_DATE_METRIC))
       .toMatchObject({ value: 0.5, n: 2, scoredAt: SCORED_AT });
+  });
+
+  /** One Entrant's Predicted Score and probabilities for one Fixture. */
+  type Prediction = [home: number, away: number, probs: Probs];
+
+  /**
+   * Two settled Gameweek 1 Fixtures every Entrant predicted — a 2-1 Home win
+   * and a 0-0 draw — with every figure below computed by hand from these.
+   *
+   * The normalised RPS is the mean of its two cumulative terms, so a Home
+   * result scores `((H − 1)² + A²) / 2` and a Draw `(H² + A²) / 2`, which is
+   * all the arithmetic any of these expectations needs:
+   *
+   * | Entrant | points | RPS F1 | RPS F2 | difference F1 | difference F2 |
+   * |---|---|---|---|---|---|
+   * | a | 10 | 0.10  | 0.04   | anchor  | anchor   |
+   * | b | 6  | 0.20  | 0.065  | 0.10    | 0.025    |
+   * | c | 0  | 0.50  | 0.20   | 0.40    | 0.16     |
+   * | d | 5  | 0.145 | 0.0625 | 0.045   | 0.0225   |
+   */
+  const COMPARISON_SCENARIO: Record<string, [Prediction, Prediction]> = {
+    "entrant/a": [
+      [2, 1, { H: 0.6, D: 0.2, A: 0.2 }],
+      [0, 0, { H: 0.2, D: 0.6, A: 0.2 }]
+    ],
+    "entrant/b": [
+      [1, 0, { H: 0.4, D: 0.4, A: 0.2 }],
+      [1, 1, { H: 0.3, D: 0.5, A: 0.2 }]
+    ],
+    "entrant/c": [
+      [0, 1, { H: 0.2, D: 0.2, A: 0.6 }],
+      [2, 0, { H: 0.6, D: 0.2, A: 0.2 }]
+    ],
+    "entrant/d": [
+      [3, 1, { H: 0.5, D: 0.3, A: 0.2 }],
+      [1, 1, { H: 0.25, D: 0.5, A: 0.25 }]
+    ]
+  };
+
+  const seedComparisons = async (
+    scenario: Record<string, [Prediction, Prediction]> = COMPARISON_SCENARIO
+  ): Promise<void> => {
+    await storeFixture(1, 1);
+    // Deferred: locked in Gameweek 1 and played in Gameweek 2, so every figure
+    // below is also a statement that a comparison follows the Lock rather than
+    // the calendar. Nothing in the arithmetic moves, which is the point.
+    await storeFixture(2, 1, 2);
+    await settle(1, 2, 1);
+    await settle(2, 0, 0);
+    for (const [entrantId, named] of Object.entries(scenario)) {
+      for (const [index, [home, away, probs]] of named.entries()) {
+        await predict(entrantId, index + 1, home, away, probs);
+      }
+    }
+  };
+
+  const comparisons = async (
+    gameweek: number
+  ): Promise<{ model_id: string; detail: PairedDifferenceDetail }[]> => {
+    const stored = await client.query<{
+      model_id: string;
+      detail: PairedDifferenceDetail;
+    }>(
+      `select model_id, detail from scores
+        where season = $1 and gw = $2 and track = 'match' and metric = $3
+        order by model_id`,
+      [SEASON, gameweek, RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC]
+    );
+    return stored.rows;
+  };
+
+  test("publishes a hand-computed Paired Difference against the anchor", async () => {
+    await seedComparisons();
+
+    await score(1);
+
+    // Entrant a leads on Match Points with 10, so it is the anchor and has no
+    // row of its own; every other Entrant of the Season roster has one.
+    expect((await comparisons(1)).map(({ model_id }) => model_id))
+      .toEqual(["entrant/b", "entrant/c", "entrant/d"]);
+
+    const stored = await storedValue(
+      "entrant/b", 1, RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC
+    );
+    // The mean of the two Fixture-by-Fixture differences, not the difference of
+    // the two means — they coincide on a complete case, but the detail below is
+    // what says which one was formed.
+    expect(stored?.value).toBeCloseTo(0.0625, 12);
+    expect(stored?.n).toBe(2);
+    expect(stored?.detail).toMatchObject({
+      anchor: "entrant/a",
+      entrant: "entrant/b",
+      fixtures: [
+        {
+          gw: 1,
+          fplId: 1,
+          anchorRps: expect.closeTo(0.1, 12),
+          entrantRps: expect.closeTo(0.2, 12),
+          difference: expect.closeTo(0.1, 12)
+        },
+        {
+          gw: 1,
+          fplId: 2,
+          anchorRps: expect.closeTo(0.04, 12),
+          entrantRps: expect.closeTo(0.065, 12),
+          difference: expect.closeTo(0.025, 12)
+        }
+      ]
+    });
+
+    // Positive is the Entrant scoring worse than the anchor: RPS is a loss, so
+    // the sign says the anchor forecast these two Fixtures better.
+    expect((await storedValue(
+      "entrant/c", 1, RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC
+    ))?.value).toBeCloseTo(0.28, 12);
+    expect((await storedValue(
+      "entrant/d", 1, RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC
+    ))?.value).toBeCloseTo(0.03375, 12);
+  });
+
+  test("drops a Fixture one retained Entrant Gapped from every comparison", async () => {
+    await seedComparisons();
+    // A third Fixture that a, b and c all predicted, and predicted wildly
+    // differently — 0.9 against the result would move any comparison including
+    // it. Entrant d Gapped it, so the complete case is the first two Fixtures
+    // and no published comparison may use it, not even one between Entrants
+    // that both answered.
+    await storeFixture(3, 1);
+    await settle(3, 5, 0);
+    await predict("entrant/a", 3, 5, 0, { H: 0.9, D: 0.05, A: 0.05 });
+    await predict("entrant/b", 3, 0, 5, { H: 0.05, D: 0.05, A: 0.9 });
+    await predict("entrant/c", 3, 1, 1, { H: 0.05, D: 0.9, A: 0.05 });
+
+    await score(1);
+
+    const stored = await storedValue(
+      "entrant/b", 1, RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC
+    );
+    expect(stored?.value).toBeCloseTo(0.0625, 12);
+    expect(stored?.n).toBe(2);
+    // Every published comparison, not only the one that happens to be read
+    // first: the Fixture leaves the complete case, so it leaves all of them.
+    for (const { detail } of await comparisons(1)) {
+      expect(detail.fixtures.map(({ fplId }) => fplId)).toEqual([1, 2]);
+    }
+  });
+
+  test("publishes nothing when a retained Entrant predicted nothing", async () => {
+    await seedComparisons();
+    await score(1);
+    expect(await comparisons(1)).toHaveLength(3);
+
+    // A ninth Entrant joins the roster having answered nothing. The complete
+    // case is now empty, so the whole declared set goes rather than being
+    // republished over the Fixtures the silent Entrant happens not to have
+    // touched — that would be the pairwise deletion ADR-0011 rejects, and the
+    // published rows would no longer mean what they say.
+    await client.query(
+      `insert into models (id, name, base_model, provider, prompt_version, role)
+       values ('entrant/e', 'E', 'provider/base-model', 'provider', 'match/v1',
+               'entrant')`
+    );
+    await score(1, CORRECTED_AT);
+
+    expect(await comparisons(1)).toEqual([]);
+  });
+
+  test("keeps a Reference Line out of the complete-case intersection", async () => {
+    await client.query(
+      `insert into models (id, name, base_model, provider, prompt_version, role)
+       values ('reference-home', 'Home', 'home', 'none', 'match/v1',
+               'reference')`
+    );
+    await seedComparisons();
+
+    await score(1);
+
+    // A Reference Line writes no Prediction, so requiring one of every `models`
+    // row would empty every complete case the Season ever has.
+    expect(await storedValue(
+      "entrant/b", 1, RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC
+    )).toMatchObject({ n: 2 });
+    expect(await storedValue(
+      "reference-home", 1, RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC
+    )).toBeNull();
+  });
+
+  test("leaves no row against a former anchor when the anchor changes", async () => {
+    await seedComparisons();
+    await score(1);
+    expect((await comparisons(1)).map(({ model_id }) => model_id))
+      .toEqual(["entrant/b", "entrant/c", "entrant/d"]);
+
+    // The Home win is corrected to a 0-1 Away win. Entrant a's exact scoreline
+    // becomes a miss and c's becomes exact: both hold 5 Match Points, and c
+    // takes the anchor on the lower RPS through Gameweek 1 — 0.15 against a's
+    // 0.27.
+    await settle(1, 0, 1);
+    await score(1, CORRECTED_AT);
+
+    const republished = await comparisons(1);
+    expect(republished.map(({ model_id }) => model_id))
+      .toEqual(["entrant/a", "entrant/b", "entrant/d"]);
+    // Every surviving row names the new anchor: a set in which one row still
+    // pointed at the old one would be three comparisons against two references
+    // rather than the one declared set the snapshot publishes.
+    expect(republished.map(({ detail }) => detail.anchor))
+      .toEqual(["entrant/c", "entrant/c", "entrant/c"]);
+    const stored = await storedValue(
+      "entrant/a", 1, RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC
+    );
+    // a is now worse on the corrected Fixture by 0.40 and better on the drawn
+    // one by 0.16, so the mean stays positive at 0.12.
+    expect(stored?.value).toBeCloseTo(0.12, 12);
+  });
+
+  test("selects each snapshot's anchor from its own Gameweeks alone", async () => {
+    await seedComparisons();
+    // Two Gameweek 2 Fixtures that entrant/d wins outright, taking it to 15
+    // Match Points against entrant/a's 10. Everyone predicts both, so the
+    // Gameweek 2 complete case is all four Fixtures.
+    for (const fplId of [3, 4]) {
+      await storeFixture(fplId, 2);
+      await settle(fplId, 1, 0);
+      await predict("entrant/a", fplId, 3, 3);
+      await predict("entrant/b", fplId, 0, 2);
+      await predict("entrant/c", fplId, 0, 2);
+      await predict("entrant/d", fplId, 1, 0);
+    }
+
+    await score(1);
+    await score(2);
+
+    // The Gameweek 1 snapshot keeps the anchor its own Fixtures chose. A later
+    // Gameweek is not evidence about what the Season looked like through this
+    // one, and a snapshot that moved with it would stop being a snapshot.
+    expect((await comparisons(1)).map(({ model_id }) => model_id))
+      .toEqual(["entrant/b", "entrant/c", "entrant/d"]);
+    expect(await storedValue(
+      "entrant/b", 1, RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC
+    )).toMatchObject({ n: 2 });
+
+    // Through Gameweek 2 the anchor is entrant/d, and every Entrant is paired
+    // with it over all four Fixtures. All four Gameweek 2 Predictions share one
+    // distribution, so they contribute nothing to any difference: entrant/a's
+    // mean is the two Gameweek 1 differences of −0.045 and −0.0225 over four
+    // Fixtures — better than the anchor on the evidence while behind it on the
+    // readable rank, which is the separation the two layers exist to keep.
+    const stored = await storedValue(
+      "entrant/a", 2, RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC
+    );
+    expect(stored?.detail).toMatchObject({ anchor: "entrant/d" });
+    expect(stored?.n).toBe(4);
+    expect(stored?.value).toBeCloseTo(-0.016875, 12);
+    expect(await storedValue(
+      "entrant/d", 2, RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC
+    )).toBeNull();
+  });
+
+  test("stores an interval spanning zero as a qualified result", async () => {
+    await seedComparisons({
+      ...COMPARISON_SCENARIO,
+      // Better than the anchor on the Home win by 0.075 and worse on the draw
+      // by 0.105: the two differences straddle zero, so the percentile interval
+      // must too.
+      "entrant/b": [
+        [1, 0, { H: 0.8, D: 0.1, A: 0.1 }],
+        [1, 1, { H: 0.5, D: 0.3, A: 0.2 }]
+      ]
+    });
+
+    await score(1);
+
+    const stored = await storedValue(
+      "entrant/b", 1, RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC
+    );
+    expect(stored?.value).toBeCloseTo(0.015, 12);
+    const detail = stored?.detail as PairedDifferenceDetail;
+    expect(detail.interval.low).toBeLessThan(0);
+    expect(detail.interval.high).toBeGreaterThan(0);
+    // Not a failure and not an omission: the row is stored, marked, and carries
+    // the reminder that no Positive Control exists to tell a genuinely close
+    // pair from a setup that resolves nothing.
+    expect(detail.qualification).toBe(NO_POSITIVE_CONTROL_QUALIFICATION);
+  });
+
+  test("bounds the interval by the resampled differences", async () => {
+    await seedComparisons();
+
+    await score(1);
+
+    const detail = (await storedValue(
+      "entrant/b", 1, RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC
+    ))?.detail as PairedDifferenceDetail;
+    // Every resample's mean lies between the smallest and the largest of the
+    // Fixture differences, so a percentile interval that escaped them would be
+    // reading something other than its own inputs.
+    expect(detail.interval.low).toBeGreaterThan(0.024);
+    expect(detail.interval.high).toBeLessThan(0.101);
+    expect(detail.interval).toMatchObject({
+      level: 0.95,
+      resamples: 10_000,
+      method: "percentile"
+    });
+    // Wholly above zero, so it carries no qualification: the reminder belongs
+    // to an interval that spans it, not to every comparison published.
+    expect(detail.qualification).toBeUndefined();
+  });
+
+  test("produces a byte-identical interval on a separate invocation", async () => {
+    await seedComparisons();
+    await score(1);
+    const first = await comparisons(1);
+
+    // Not a re-run over stored rows — the rows are gone and the whole
+    // comparison is computed again from the Predictions. The seed comes from
+    // the differences themselves, so no injected generator decides this.
+    await client.query("delete from scores");
+    await score(1, CORRECTED_AT);
+
+    expect((await comparisons(1)).map(({ detail }) => JSON.stringify(detail)))
+      .toEqual(first.map(({ detail }) => JSON.stringify(detail)));
   });
 });

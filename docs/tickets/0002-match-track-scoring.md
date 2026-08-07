@@ -88,18 +88,19 @@ it.
 
 **Blocked by:** Score probability accuracy and Coherence.
 
-- [ ] A comparison includes only Fixtures on which every Entrant retained in the Season roster produced a Prediction, so one retained Entrant's Gap removes that Fixture from every published comparison
-- [ ] Reference Lines do not participate in the complete-case Entrant intersection
-- [ ] Paired Differences are formed Fixture by Fixture on the shared set before they are aggregated
-- [ ] The Comparison Anchor for the snapshot at Gameweek N is selected using only scoreable Fixtures whose `locked_in_gw` is at most N: highest Match Points, then lower RPS and Entrant id for a tie; a later-settled deferred Fixture may update that snapshot, but Gameweek N+1 data never can
-- [ ] The published set contains one comparison against the snapshot's Comparison Anchor for every other Entrant retained in the Season roster — eight with the current nine-Entrant roster; any other requested pair is marked exploratory
-- [ ] One scoring transaction removes or invalidates comparisons outside the new declared set for every cumulative Gameweek snapshot it recomputes, leaving one row per non-anchor Season-roster Entrant and no stale row
-- [ ] A test recomputes the same snapshot after the Comparison Anchor changes and proves the former anchor's stale comparison row is gone
-- [ ] Every comparison stores its mean Paired Difference, Fixture count, 95% interval and enough detail to identify both Entrants and the Fixtures used
-- [ ] The interval uses 10,000 percentile-bootstrap resamples and a seed derived from a hash of the ordered comparison inputs
-- [ ] Separate invocations over identical inputs produce byte-identical interval values and details without an injected random-number generator
-- [ ] A comparison whose interval spans zero is stored as a valid result and carries the no-Positive-Control qualification rather than being treated as a scoring failure
-- [ ] Hand-computed Paired Differences and a deliberately gapped complete-case example verify the selection and sign convention
+- [x] A comparison includes only Fixtures on which every Entrant retained in the Season roster produced a Prediction, so one retained Entrant's Gap removes that Fixture from every published comparison
+- [x] Reference Lines do not participate in the complete-case Entrant intersection
+- [x] Paired Differences are formed Fixture by Fixture on the shared set before they are aggregated
+- [x] The Comparison Anchor for the snapshot at Gameweek N is selected using only scoreable Fixtures whose `locked_in_gw` is at most N: highest Match Points, then lower RPS and Entrant id for a tie; a later-settled deferred Fixture may update that snapshot, but Gameweek N+1 data never can
+- [x] The published set contains one comparison against the snapshot's Comparison Anchor for every other Entrant retained in the Season roster — eight with the current nine-Entrant roster
+- [ ] Any other requested pair is marked exploratory — nothing can request one yet, so nothing computes or labels one; this waits for whatever first asks
+- [x] One scoring transaction removes or invalidates comparisons outside the new declared set for every cumulative Gameweek snapshot it recomputes, leaving one row per non-anchor Season-roster Entrant and no stale row
+- [x] A test recomputes the same snapshot after the Comparison Anchor changes and proves the former anchor's stale comparison row is gone
+- [x] Every comparison stores its mean Paired Difference, Fixture count, 95% interval and enough detail to identify both Entrants and the Fixtures used
+- [x] The interval uses 10,000 percentile-bootstrap resamples and a seed derived from a hash of the ordered comparison inputs
+- [x] Separate invocations over identical inputs produce byte-identical interval values and details without an injected random-number generator
+- [x] A comparison whose interval spans zero is stored as a valid result and carries the no-Positive-Control qualification rather than being treated as a scoring failure
+- [x] Hand-computed Paired Differences and a deliberately gapped complete-case example verify the selection and sign convention
 
 ---
 

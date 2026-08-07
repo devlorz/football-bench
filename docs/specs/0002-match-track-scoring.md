@@ -258,6 +258,13 @@ jobs provide this ordering; the score workflow created by this work must establi
 `match_points`, `score_pct`, `outcome_pct`, `rps`, `brier`, `accuracy`, `coherence`,
 `gap_rate`. Per-Fixture breakdowns live in `detail` so an aggregate can be drilled into.
 
+A published comparison is one such row, stored under
+`rps_paired_difference_season_to_date` against the non-anchor Entrant's `model_id`, with the
+anchor named in `detail`. It has no per-Gameweek counterpart: a comparison is a statement
+about the Season through a Gameweek, and one Gameweek's ten Fixtures cannot support one. The
+Paired Difference is signed as the Entrant's RPS less the anchor's, so — RPS being a loss —
+a positive value is the anchor forecasting better.
+
 The base metric name stores that Gameweek's value. A cumulative snapshot through that
 Gameweek uses the explicit `_season_to_date` suffix — for example `match_points` and
 `match_points_season_to_date` coexist at the same `gw`. This avoids a sentinel Gameweek and

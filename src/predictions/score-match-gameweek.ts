@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Client } from "pg";
 import {
   argmaxOutcome,
@@ -61,6 +62,35 @@ export const COHERENCE_METRIC = "coherence";
 export const COHERENCE_SEASON_TO_DATE_METRIC = "coherence_season_to_date";
 
 /**
+ * The mean Paired Difference in RPS between one Entrant and its snapshot's
+ * Comparison Anchor.
+ *
+ * Cumulative only, and so named without a per-Gameweek counterpart: a
+ * comparison is a statement about the Season through a Gameweek, and ten
+ * Fixtures of one Gameweek are far too few to make one (ADR-0012, ADR-0016).
+ */
+export const RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC =
+  "rps_paired_difference_season_to_date";
+
+/**
+ * Why an interval spanning zero is published rather than suppressed, stored in
+ * the detail of the rows it applies to for the same reason the Match Points
+ * qualification is: a reader must not be able to reach the figure without it.
+ *
+ * ADR-0009 omitted the Positive Control deliberately, and this sentence is what
+ * that omission costs at the point it is felt.
+ */
+export const NO_POSITIVE_CONTROL_QUALIFICATION =
+  "This interval spans zero, which is a result and not a scoring failure. No "
+  + "Positive Control is entered, so a spanning interval cannot distinguish "
+  + "two Base Models that are genuinely close from a setup that resolves "
+  + "nothing at all.";
+
+/** The resampling spec 0002 pins: 10,000 draws, 95%, percentile method. */
+const BOOTSTRAP_RESAMPLES = 10_000;
+const BOOTSTRAP_LEVEL = 0.95;
+
+/**
  * Ranked Probability Score for one Prediction, over the ordered outcomes
  * `H`, `D`, `A`: the mean squared error of the cumulative distribution against
  * the cumulative outcome, so calling an Away win when Home settled is punished
@@ -98,6 +128,84 @@ export function brierScore(probs: Probs, outcome: Outcome): number {
     (total, each) => total + (probs[each] - (each === outcome ? 1 : 0)) ** 2,
     0
   );
+}
+
+/**
+ * A uniform generator over `[0, 1)` from one 32-bit seed — mulberry32, chosen
+ * because it is short enough to read and has no state a caller can disturb.
+ *
+ * The resampling needs an arbitrary but fixed order, not cryptographic quality:
+ * what a reader checks is that the same inputs give the same interval, and that
+ * is a property of seeding it from those inputs rather than of the generator.
+ */
+function uniformFrom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let mixed = Math.imul(state ^ (state >>> 15), state | 1);
+    mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
+    return ((mixed ^ (mixed >>> 14)) >>> 0) / 2 ** 32;
+  };
+}
+
+/** An interval and everything a reader needs to reproduce it. */
+export interface BootstrapInterval {
+  low: number;
+  high: number;
+  level: number;
+  resamples: number;
+  method: "percentile";
+  seed: number;
+}
+
+/**
+ * The 95% percentile-bootstrap interval of the mean of `differences`, seeded
+ * from the differences themselves.
+ *
+ * No random-number generator is injected, so determinism is a property of this
+ * function rather than of how a caller wires it: the same Paired Differences in
+ * the same order always produce the same interval, which is what makes
+ * ADR-0005's claim that scoring can be re-run and back-filled true rather than
+ * aspirational.
+ *
+ * The seed is the leading 32 bits of the SHA-256 of the ordered differences.
+ * Reading them as text keeps the seed a function of the numbers themselves and
+ * not of how they happen to be laid out in memory.
+ */
+export function bootstrapInterval(differences: number[]): BootstrapInterval {
+  const seed = createHash("sha256")
+    .update(differences.join(","))
+    .digest()
+    .readUInt32BE(0);
+  const random = uniformFrom(seed);
+
+  // ponytail: 10,000 resamples per comparison per recomputed snapshot, which a
+  // full Season recomputation multiplies by eight Entrants and every published
+  // Gameweek. It is the pinned figure and it is fast enough at Season scale; if
+  // a back-fill ever drags, cache the interval on the unchanged snapshots
+  // rather than resampling fewer times.
+  const means: number[] = [];
+  for (let resample = 0; resample < BOOTSTRAP_RESAMPLES; resample += 1) {
+    let total = 0;
+    for (let draw = 0; draw < differences.length; draw += 1) {
+      total += differences[Math.floor(random() * differences.length)]!;
+    }
+    means.push(total / differences.length);
+  }
+  means.sort((one, other) => one - other);
+
+  // The percentile method reads the resampled means at the tails directly. Both
+  // ends are pinned to a stated index rather than interpolated, so the interval
+  // is a value the resamples actually produced.
+  const tail = (1 - BOOTSTRAP_LEVEL) / 2;
+  return {
+    low: means[Math.floor(tail * BOOTSTRAP_RESAMPLES)]!,
+    high: means[Math.ceil((1 - tail) * BOOTSTRAP_RESAMPLES) - 1]!,
+    level: BOOTSTRAP_LEVEL,
+    resamples: BOOTSTRAP_RESAMPLES,
+    method: "percentile",
+    seed
+  };
 }
 
 /**
@@ -155,6 +263,21 @@ const settledOf = (fixtures: PredictedFixture[]): SettledFixture[] =>
   fixtures.filter((fixture): fixture is SettledFixture =>
     fixture.settled !== null
   );
+
+const totalPoints = (fixtures: SettledFixture[]): number =>
+  fixtures.reduce((total, { settled }) => total + settled.points, 0);
+
+/**
+ * RPS and Brier aggregate as the mean of their per-Fixture values, so a
+ * Gameweek of three Fixtures and a Season of thirty are on one scale — and so
+ * the figure a comparison ranks Entrants by is the figure their own rows carry.
+ */
+const meanOf = (
+  fixtures: SettledFixture[],
+  key: "rps" | "brier"
+): number =>
+  fixtures.reduce((total, { settled }) => total + settled[key], 0)
+    / fixtures.length;
 
 interface PredictedRow {
   gw: number;
@@ -319,9 +442,6 @@ async function writeRows(
         points: result.points
       }))
     });
-    const totalPoints = (scoped: SettledFixture[]) =>
-      scoped.reduce((total, { settled: result }) => total + result.points, 0);
-
     await store(
       cumulative ? MATCH_POINTS_SEASON_TO_DATE_METRIC : MATCH_POINTS_METRIC,
       totalPoints(settled),
@@ -339,15 +459,11 @@ async function writeRows(
       }
     );
 
-    // RPS and Brier aggregate as the mean of their per-Fixture values, so a
-    // Gameweek of three Fixtures and a Season of thirty are on one scale.
     for (const [metric, cumulativeMetric, key] of [
       [RPS_METRIC, RPS_SEASON_TO_DATE_METRIC, "rps"],
       [BRIER_METRIC, BRIER_SEASON_TO_DATE_METRIC, "brier"]
     ] as const) {
-      const mean = (scoped: SettledFixture[]) =>
-        scoped.reduce((total, fixture) => total + fixture.settled[key], 0)
-          / scoped.length;
+      const mean = (scoped: SettledFixture[]) => meanOf(scoped, key);
       const detail = (scoped: SettledFixture[]) => ({
         fixtures: scoped.map((fixture) => ({
           fplId: fixture.fplId,
@@ -430,6 +546,155 @@ async function writeRows(
   }
 }
 
+/** What one published comparison stores beside its mean and its `n`. */
+export interface PairedDifferenceDetail {
+  anchor: string;
+  entrant: string;
+  fixtures: {
+    gw: number;
+    fplId: number;
+    anchorRps: number;
+    entrantRps: number;
+    /**
+     * The Entrant's RPS less the Comparison Anchor's. RPS is a loss, so a
+     * positive difference is the anchor forecasting that Fixture better.
+     */
+    difference: number;
+  }[];
+  interval: BootstrapInterval;
+  /**
+   * Present only when the interval spans zero, which is a result rather than a
+   * scoring failure.
+   */
+  qualification?: string;
+}
+
+/**
+ * The declared comparison set for one cumulative Gameweek snapshot: one
+ * complete-case RPS comparison against the snapshot's Comparison Anchor for
+ * every other Entrant retained in the Season roster (ADR-0016).
+ *
+ * The Comparison Anchor is chosen over each candidate's own scoreable Fixtures
+ * through this Gameweek — highest Match Points, then lower RPS, then Entrant
+ * id — which is the same data the snapshot's own rows are computed from. It
+ * selects a reference and does not break the Match Points tie itself.
+ *
+ * The comparison is then complete-case (ADR-0011): only Fixtures every retained
+ * Entrant predicted, so one Entrant's Gap removes that Fixture from every
+ * published comparison and not merely from its own. Pairwise deletion would let
+ * the published set contradict itself. Reference Lines write no Prediction, so
+ * requiring one of every `models` row rather than of the roster would empty
+ * every complete case the Season has.
+ *
+ * The declared set is replaced rather than merely upserted: the rows are keyed
+ * by the Entrant they belong to, so a leader change would otherwise leave the
+ * former anchor's row in place beside the new anchor's set, naming an anchor
+ * the snapshot no longer has. Rows outside the set go; the ones inside it are
+ * upserted, so an unchanged comparison keeps the `scored_at` of the run that
+ * computed it.
+ */
+async function writeComparisons(
+  database: Database,
+  season: string,
+  gameweek: number,
+  roster: string[],
+  byEntrant: Map<string, PredictedFixture[]>,
+  scoredAt: Date
+): Promise<void> {
+  const through = new Map(roster.map((entrantId) => [
+    entrantId,
+    settledOf(byEntrant.get(entrantId) ?? []).filter(({ gw }) => gw <= gameweek)
+  ]));
+
+  // The last tie-break compares Entrant ids by code point rather than by
+  // `localeCompare`, whose order depends on the ICU data the machine happens to
+  // carry. Two Entrants level on Match Points and on RPS to the last bit would
+  // otherwise be separated differently on different machines, which is the one
+  // thing the pinned rule exists to stop.
+  const [anchor] = [...through]
+    .filter(([, fixtures]) => fixtures.length > 0)
+    .map(([entrantId, fixtures]) => ({
+      entrantId,
+      fixtures,
+      points: totalPoints(fixtures),
+      rps: meanOf(fixtures, "rps")
+    }))
+    .sort((one, other) =>
+      other.points - one.points
+      || one.rps - other.rps
+      || (one.entrantId < other.entrantId ? -1 : 1));
+
+  // The Fixtures the anchor predicted that every other retained Entrant also
+  // predicted, in the Gameweek-then-Fixture order they were read in.
+  //
+  // One retained Entrant that predicted nothing at all leaves this empty and so
+  // publishes no comparison for the snapshot, removing any it had published
+  // before. That is complete-case pairing meaning what it says (ADR-0011): the
+  // shared Fixture set really is empty, and a published interval that quietly
+  // dropped the silent Entrant would be the pairwise deletion the ADR rejects.
+  const shared = anchor?.fixtures.filter((fixture) =>
+    roster.every((entrantId) =>
+      through.get(entrantId)?.some(({ fplId }) => fplId === fixture.fplId)))
+    ?? [];
+
+  const declared: string[] = [];
+  if (anchor !== undefined && shared.length > 0) {
+    for (const entrantId of roster.filter((id) => id !== anchor.entrantId)) {
+      // Every shared Fixture is one this Entrant predicted, by the definition
+      // of the intersection above.
+      const own = through.get(entrantId) ?? [];
+      const fixtures = shared.map((anchorFixture) => {
+        const entrantFixture = own.find(
+          ({ fplId }) => fplId === anchorFixture.fplId
+        )!;
+        return {
+          gw: anchorFixture.gw,
+          fplId: anchorFixture.fplId,
+          anchorRps: anchorFixture.settled.rps,
+          entrantRps: entrantFixture.settled.rps,
+          difference: entrantFixture.settled.rps - anchorFixture.settled.rps
+        };
+      });
+      // Paired Fixture by Fixture before it is aggregated, which is what
+      // cancels out how hard each Fixture was and leaves only which Entrant
+      // forecast it better.
+      const differences = fixtures.map(({ difference }) => difference);
+      const interval = bootstrapInterval(differences);
+      const detail: PairedDifferenceDetail = {
+        anchor: anchor.entrantId,
+        entrant: entrantId,
+        fixtures,
+        interval,
+        // The qualification's presence is what marks an interval spanning
+        // zero. A stored flag saying the same thing could drift from the
+        // bounds sitting beside it.
+        ...interval.low <= 0 && interval.high >= 0
+          ? { qualification: NO_POSITIVE_CONTROL_QUALIFICATION }
+          : {}
+      };
+      await storeMetric(database, {
+        entrantId,
+        season,
+        gameweek,
+        metric: RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC,
+        value: differences.reduce((total, each) => total + each, 0)
+          / differences.length,
+        n: differences.length,
+        detail,
+        scoredAt
+      });
+      declared.push(entrantId);
+    }
+  }
+
+  await database.query(
+    `delete from scores
+      where season = $1 and gw = $2 and track = 'match' and metric = $3
+        and model_id <> all ($4::text[])`,
+    [season, gameweek, RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC, declared]
+  );
+}
+
 /**
  * Which Gameweeks this run rewrites: the one asked for, and every later
  * Gameweek already published.
@@ -499,6 +764,14 @@ export async function scoreMatchGameweek({
   // carries the same stamp however long the pass takes.
   const scoredAt = now();
 
+  // The Season roster is every Entrant `models` holds; no exclusion is
+  // representable and removing one would need its own decision (CONTEXT.md).
+  // Reference Lines are not in it, and so neither empty a complete case nor
+  // stand as a Comparison Anchor.
+  const roster = (await database.query<{ id: string }>(
+    "select id from models where role = 'entrant' order by id"
+  )).rows.map(({ id }) => id);
+
   await database.query("begin");
   try {
     for (const target of await targetGameweeks(database, season, gameweek)) {
@@ -516,6 +789,9 @@ export async function scoreMatchGameweek({
           );
         }
       }
+      await writeComparisons(
+        database, season, target, roster, byEntrant, scoredAt
+      );
     }
     await database.query("commit");
   } catch (error) {
