@@ -72,9 +72,30 @@ This is the same freeze-verification move spec 0004 made for v2's first shape an
 **Blocked by:** Season aggregates ride the record lines · The league table replaces
 the position ordinal.
 
-- [ ] Pre-flight re-run passes for all nine Entrants against a context carrying the
-      season aggregates and the league table together
-- [ ] The run happens before the first Lock; if the Lock arrives first, the additions
+- [x] Pre-flight re-run passes for all nine Entrants against a context carrying the
+      season aggregates and the league table together — **run 2026-08-07, 9/9 parseable
+      twice**: once against the live opening-day context and once against a dense
+      mid-Season context in a throwaway Postgres; verdict in
+      [the pre-flight report](../reports/2026-08-07-season-aggregates-league-table-preflight.md),
+      which also records one blocking finding outside this ticket
+- [x] The run happens before the first Lock; if the Lock arrives first, the additions
       ship as `match/2026-27-v3` instead — a frozen pair is never edited after use
-- [ ] Context storage and hashing mechanisms are unchanged, and nothing recorded under
-      any earlier hash is touched
+      — **verified against stored data, not assumed**: `contexts`, `predictions` and
+      `attempts` were all empty before and after the runs, and the 2026-27 Gameweek 1
+      deadline is 2026-08-21T17:30Z, so v2 is still frozen-but-unused and the edit stands
+- [x] Context storage and hashing mechanisms are unchanged, and nothing recorded under
+      any earlier hash is touched — `src/predictions/predict-gameweek.ts`, where a
+      context is hashed and stored, is byte-identical across `ca320b2` and `d2e270f`;
+      the only change outside the builder and its tests is the pinned
+      `MATCH_PROMPT_SHA256`
+
+**The live context ships without shots, and this ticket does not fix it.** All 932 rows
+in the live `historical_matches` carry null shot columns, so every form line and every
+new aggregate pair reads as absent. The archived CSVs carry the columns and the current
+parser reads them correctly — but `.github/workflows/fetch.yml` checks out the default
+branch, and `origin/main` is 102 commits behind local `main`, well behind
+`0a9dfd5 Carry shots and shots on target into the historical record`. The 06:00 UTC fetch
+therefore reloads the whole record daily with pre-shots code. Deploy lag, not a code
+defect; the evidence is in the report and the fix is an operator decision, since pushing
+`main` deploys 102 commits at once against a database whose schema is already ahead of
+the deployed code.
