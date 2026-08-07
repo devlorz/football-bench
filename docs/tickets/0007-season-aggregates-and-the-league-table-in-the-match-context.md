@@ -22,15 +22,15 @@ builder; nothing new is fetched or stored.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] All three record lines carry shots, on target and xG pairs, ordered
+- [x] All three record lines carry shots, on target and xG pairs, ordered
       this-team-first, summed over current-Season Premier League matches only
-- [ ] Aggregates verified against hand-computed sums by exact-string assertions at the
+- [x] Aggregates verified against hand-computed sums by exact-string assertions at the
       pure context-builder seam, per the existing historical-context test prior art
-- [ ] A line whose matches include one without an xG row announces coverage on the xG
+- [x] A line whose matches include one without an xG row announces coverage on the xG
       pair; a team with no xG rows renders `unavailable`; complete coverage renders no
       announcement
-- [ ] The empty-record text is unchanged and carries no aggregates
-- [ ] No query, migration or fetch changes; no aggregate is stored anywhere
+- [x] The empty-record text is unchanged and carries no aggregates
+- [x] No query, migration or fetch changes; no aggregate is stored anywhere
 
 ## The league table replaces the position ordinal
 

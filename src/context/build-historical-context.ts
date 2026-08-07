@@ -160,12 +160,79 @@ function positionIn(matches: HistoricalMatch[], team: string): number | undefine
   return index < 0 ? undefined : index + 1;
 }
 
-function formatRecord(record: TeamRecord, emptyText: string): string {
+interface StatSpec {
+  label: string;
+  home: (match: HistoricalMatch) => number | null | undefined;
+  away: (match: HistoricalMatch) => number | null | undefined;
+  decimals: number;
+}
+
+const STAT_SPECS: StatSpec[] = [
+  {
+    label: "shots",
+    home: (match) => match.home_shots,
+    away: (match) => match.away_shots,
+    decimals: 0
+  },
+  {
+    label: "on target",
+    home: (match) => match.home_shots_on_target,
+    away: (match) => match.away_shots_on_target,
+    decimals: 0
+  },
+  { label: "xG", home: (match) => match.home_xg, away: (match) => match.away_xg, decimals: 2 }
+];
+
+/**
+ * One stat pair summed over a record line's matches, this-team-first. A match
+ * counts only when it carries both sides' figure, the same both-or-nothing rule
+ * the form lines use; a pair covering fewer matches than the line announces it,
+ * and a pair with no covered matches reads `unavailable` rather than a silent
+ * zero.
+ */
+function statSegment(
+  matches: HistoricalMatch[],
+  canonical: string,
+  spec: StatSpec
+): string {
+  let forSum = 0;
+  let againstSum = 0;
+  let covered = 0;
+  for (const match of matches) {
+    const home = footballDataTeamName(match.home_team) === canonical;
+    const teamValue = home ? spec.home(match) : spec.away(match);
+    const oppValue = home ? spec.away(match) : spec.home(match);
+    if (typeof teamValue === "number" && typeof oppValue === "number") {
+      forSum += teamValue;
+      againstSum += oppValue;
+      covered += 1;
+    }
+  }
+  if (covered === 0) {
+    return `${spec.label} unavailable`;
+  }
+  const pair = `${forSum.toFixed(spec.decimals)}-${againstSum.toFixed(spec.decimals)}`;
+  const coverage = covered < matches.length
+    ? ` (over ${covered} of ${matches.length} matches)`
+    : "";
+  return `${spec.label} ${pair}${coverage}`;
+}
+
+function formatRecord(
+  matches: HistoricalMatch[],
+  canonical: string,
+  emptyText: string
+): string {
+  const record = teamRecord(matches, canonical);
   if (record.played === 0) {
     return emptyText;
   }
+  const aggregates = STAT_SPECS
+    .map((spec) => statSegment(matches, canonical, spec))
+    .join(", ");
   return `${record.played} played, ${record.wins}W ${record.draws}D `
-    + `${record.losses}L, GF ${record.goalsFor}, GA ${record.goalsAgainst}.`;
+    + `${record.losses}L, GF ${record.goalsFor}, GA ${record.goalsAgainst}, `
+    + `${aggregates}.`;
 }
 
 function outcome(match: HistoricalMatch, team: string): "W" | "D" | "L" {
@@ -314,15 +381,18 @@ function teamSection(
   }
   lines.push(
     `Current-Season overall: ${formatRecord(
-      teamRecord(currentTeamMatches, canonical),
+      currentTeamMatches,
+      canonical,
       "no matches played."
     )}`,
     `Current-Season home split: ${formatRecord(
-      teamRecord(homeMatches, canonical),
+      homeMatches,
+      canonical,
       "no home matches played."
     )}`,
     `Current-Season away split: ${formatRecord(
-      teamRecord(awayMatches, canonical),
+      awayMatches,
+      canonical,
       "no away matches played."
     )}`
   );

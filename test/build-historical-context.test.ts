@@ -54,9 +54,11 @@ describe("building historical Match context", () => {
       "Arsenal",
       "Current-Season league position: 1st in Premier League.",
       "Prior-Season final position: 1st in 2025-26 Premier League; promoted: no.",
-      "Current-Season overall: 1 played, 1W 0D 0L, GF 2, GA 0.",
+      "Current-Season overall: 1 played, 1W 0D 0L, GF 2, GA 0, "
+        + "shots unavailable, on target unavailable, xG unavailable.",
       "Current-Season home split: no home matches played.",
-      "Current-Season away split: 1 played, 1W 0D 0L, GF 2, GA 0.",
+      "Current-Season away split: 1 played, 1W 0D 0L, GF 2, GA 0, "
+        + "shots unavailable, on target unavailable, xG unavailable.",
       "Last five matches played:",
       "- 2026-27 Premier League | 2026-08-10 | Fulham 0-2 Arsenal | W"
         + " | xG unavailable",
@@ -244,6 +246,87 @@ describe("building historical Match context", () => {
     );
     expect(context).not.toContain("shots for");
     expect(context).not.toContain("total xG");
+  });
+
+  test("sums shots, on target and xG this-team-first on all three record lines", () => {
+    const context = buildHistoricalContext({
+      season: "2026-27",
+      asOf: new Date("2026-08-21T17:30:00.000Z"),
+      homeTeam: "Arsenal",
+      awayTeam: "Everton",
+      matches: [
+        // Home: won and drew.
+        match("2026-27", "Premier League", "2026-08-10", "Arsenal", "Chelsea", 3, 1, {
+          home_shots: 15, away_shots: 8,
+          home_shots_on_target: 7, away_shots_on_target: 3,
+          home_xg: 2.1, away_xg: 0.85
+        }),
+        match("2026-27", "Premier League", "2026-08-12", "Arsenal", "Everton", 2, 2, {
+          home_shots: 12, away_shots: 10,
+          home_shots_on_target: 5, away_shots_on_target: 4,
+          home_xg: 1.5, away_xg: 1.2
+        }),
+        // Away: won, then a draw whose xG row is missing.
+        match("2026-27", "Premier League", "2026-08-14", "Liverpool", "Arsenal", 0, 2, {
+          home_shots: 9, away_shots: 14,
+          home_shots_on_target: 3, away_shots_on_target: 6,
+          home_xg: 1.0, away_xg: 1.8
+        }),
+        match("2026-27", "Premier League", "2026-08-16", "Tottenham", "Arsenal", 1, 1, {
+          home_shots: 11, away_shots: 7,
+          home_shots_on_target: 4, away_shots_on_target: 2
+        }),
+        // Distractors: neither may enter the sums. A current-Season Championship
+        // match (wrong division) and a prior-Season Premier League match (wrong
+        // Season), both carrying shot data loud enough to shift the totals.
+        match("2026-27", "Championship", "2026-08-11", "Arsenal", "Hull", 5, 0, {
+          home_shots: 99, away_shots: 99,
+          home_shots_on_target: 99, away_shots_on_target: 99,
+          home_xg: 9.9, away_xg: 9.9
+        }),
+        match("2025-26", "Premier League", "2026-05-01", "Arsenal", "Chelsea", 5, 0, {
+          home_shots: 99, away_shots: 99,
+          home_shots_on_target: 99, away_shots_on_target: 99,
+          home_xg: 9.9, away_xg: 9.9
+        })
+      ]
+    });
+
+    // Overall: xG covers 3 of 4 (the Tottenham match has no xG row).
+    expect(context).toContain(
+      "Current-Season overall: 4 played, 2W 2D 0L, GF 8, GA 4, "
+        + "shots 48-38, on target 20-14, xG 5.40-3.05 (over 3 of 4 matches)."
+    );
+    // Home split: full xG coverage, so no announcement.
+    expect(context).toContain(
+      "Current-Season home split: 2 played, 1W 1D 0L, GF 5, GA 3, "
+        + "shots 27-18, on target 12-7, xG 3.60-2.05."
+    );
+    // Away split: xG covers 1 of 2.
+    expect(context).toContain(
+      "Current-Season away split: 2 played, 1W 1D 0L, GF 3, GA 1, "
+        + "shots 21-20, on target 8-7, xG 1.80-1.00 (over 1 of 2 matches)."
+    );
+  });
+
+  test("renders a stat with no covered matches as unavailable", () => {
+    const context = buildHistoricalContext({
+      season: "2026-27",
+      asOf: new Date("2026-08-21T17:30:00.000Z"),
+      homeTeam: "Arsenal",
+      awayTeam: "Everton",
+      matches: [
+        match("2026-27", "Premier League", "2026-08-10", "Arsenal", "Chelsea", 2, 0, {
+          home_shots: 10, away_shots: 5,
+          home_shots_on_target: 4, away_shots_on_target: 2
+        })
+      ]
+    });
+
+    expect(context).toContain(
+      "Current-Season overall: 1 played, 1W 0D 0L, GF 2, GA 0, "
+        + "shots 10-5, on target 4-2, xG unavailable."
+    );
   });
 
   test("makes an unresolved Fixture team name visible", () => {
