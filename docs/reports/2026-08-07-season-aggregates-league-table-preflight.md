@@ -120,16 +120,36 @@ Every HTTP-successful response from run 1 was archived byte-for-byte on the live
 under `openrouter-preflight:<base-model>`, nine sources now holding nine bodies each. Run
 2's bodies were archived in the throwaway cluster and went with it.
 
-## Blocking finding — the deployed daily fetch predates the shot columns
+## Run 3 — live database, after the shot backfill
 
-**This is not a pre-flight failure, and it is not caused by this ticket. It is the reason
-the live run's context carries no shots at all, and it will still be true on opening day
-unless someone acts.**
+Runs 1 and 2 were followed by a backfill of the 2025-26 record (see the finding below),
+after which the live `historical_matches` carries shots on 380/380 Premier League and
+552/552 Championship rows. Pre-flight was re-run on the live database against the same
+Fixture 1, so the recorded verdict stands against the bytes an Entrant will actually
+receive rather than against a context missing a signal.
 
-All 932 rows in the live `historical_matches` carry `home_shots`, `away_shots`,
-`home_shots_on_target` and `away_shots_on_target` as null. Consequently the live
-opening-day context has no shot segment on any form line, and once results start arriving
-the new aggregate lines will read `shots unavailable, on target unavailable`.
+The two new sections are unchanged from run 1 — no 2026-27 result exists, so the table is
+still a single announcement and the record lines still read `no matches played`. What
+changed is the form lines, which now carry the shot segment:
+
+```
+- 2025-26 Premier League | 2026-05-24 | Crystal Palace 1-2 Arsenal | W | shots 8-17, on target 3-7, xG 1.00-3.91
+- 2025-26 Championship   | 2026-05-02 | Watford 0-4 Coventry      | W | shots 13-18, on target 4-7, xG unavailable
+```
+
+**Result: 9/9 parseable, `ok: true`.** Same nine resolved providers and dated models as
+runs 1 and 2. Run 2 is not repeated: its throwaway cluster was seeded by replaying the
+archived CSVs through the current parser, so its context already carried full shot
+coverage and the backfill does not change it.
+
+The freeze counts were re-read afterwards and are still zero across `contexts`,
+`predictions` and `attempts`.
+
+## Finding — fixed in the data, still live in the deploy
+
+At the time of runs 1 and 2, all 932 rows in the live `historical_matches` carried
+`home_shots`, `away_shots`, `home_shots_on_target` and `away_shots_on_target` as null, so
+the live context had no shot segment on any form line.
 
 The cause is deploy lag, not a bug in this repo's code:
 
@@ -147,9 +167,17 @@ The cause is deploy lag, not a bug in this repo's code:
 
 So the scheduled fetch reloads the whole historical record every morning using code that
 predates the shot columns, wiping the coverage the 2026-07-31 report recorded. That report
-observed 380/380 and 552/552 immediately after a local run; nothing has held since.
+observed 380/380 and 552/552 immediately after a local run; nothing had held since.
 
-Nothing in tickets 0007 addresses this, and it is left as-is here rather than fixed
-silently. Whoever picks it up should note that pushing `main` also deploys 102 commits'
-worth of other change, and that the live database's schema is already ahead of the
-deployed code.
+**Half fixed.** A local `fetch-history` run for 2025-26 restored full shot coverage, which
+is what run 3 above verifies. But the deploy has not moved: `origin/main` is still
+`9204e8a`, last pushed 2026-07-30, and `git merge-base --is-ancestor 0a9dfd5 origin/main`
+still answers no. The workflow that overwrites the record therefore still runs pre-shots
+code, and the next 06:00 UTC fetch will wipe the backfill again exactly as it did the
+2026-07-31 one. The backfill buys a day at a time; only a push makes it hold, and there
+are fourteen 06:00 UTC fetches between now and the first Lock.
+
+That push deploys 103 commits at once against a database whose schema is already ahead of
+the deployed code, so it is an operator decision rather than a step this ticket takes.
+Until it happens, treat live shot coverage as re-verified on the day, never assumed —
+which is the same trap the 2026-07-31 report fell into.

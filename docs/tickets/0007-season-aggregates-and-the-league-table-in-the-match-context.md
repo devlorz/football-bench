@@ -89,13 +89,13 @@ the position ordinal.
       the only change outside the builder and its tests is the pinned
       `MATCH_PROMPT_SHA256`
 
-**The live context ships without shots, and this ticket does not fix it.** All 932 rows
-in the live `historical_matches` carry null shot columns, so every form line and every
-new aggregate pair reads as absent. The archived CSVs carry the columns and the current
-parser reads them correctly — but `.github/workflows/fetch.yml` checks out the default
-branch, and `origin/main` is 102 commits behind local `main`, well behind
-`0a9dfd5 Carry shots and shots on target into the historical record`. The 06:00 UTC fetch
-therefore reloads the whole record daily with pre-shots code. Deploy lag, not a code
-defect; the evidence is in the report and the fix is an operator decision, since pushing
-`main` deploys 102 commits at once against a database whose schema is already ahead of
-the deployed code.
+**The live shot coverage is restored but not yet durable.** Runs 1 and 2 found all 932
+rows in the live `historical_matches` carrying null shot columns, so every form line and
+every new aggregate pair read as absent. A local `fetch-history` for 2025-26 restored
+380/380 and 552/552, and a third pre-flight run on 2026-08-07 confirmed 9/9 against the
+repaired context. The underlying cause is untouched: `.github/workflows/fetch.yml` checks
+out the default branch, `origin/main` is still `9204e8a` from 2026-07-30, and it does not
+contain `0a9dfd5 Carry shots and shots on target into the historical record`. The 06:00
+UTC fetch will reload the record with pre-shots code again and wipe the backfill. Deploy
+lag, not a code defect; the fix is an operator decision, since pushing `main` deploys 103
+commits at once against a database whose schema is already ahead of the deployed code.
