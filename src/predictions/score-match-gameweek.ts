@@ -649,7 +649,7 @@ interface AttemptSummary {
 }
 
 const attemptKey = (entrantId: string, fplId: number): string =>
-  `${entrantId} ${fplId}`;
+  `${entrantId}\u0000${fplId}`;
 
 /**
  * How many times each Entrant was asked for each Fixture, and what the last
