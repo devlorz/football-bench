@@ -20,6 +20,10 @@ const SEASON = "2026-27";
 /** The four Entrants exist to hold the four exclusive Match Points cases. */
 const ENTRANTS = ["entrant/a", "entrant/b", "entrant/c", "entrant/d"];
 
+/** When a scoring run happened. Stated, so a stamp can be asserted. */
+const SCORED_AT = new Date("2026-08-24T10:00:00Z");
+const CORRECTED_AT = new Date("2026-09-07T10:00:00Z");
+
 describe("scoring the readable Match Points layer", () => {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
 
@@ -115,6 +119,14 @@ describe("scoring the readable Match Points layer", () => {
     );
   };
 
+  const score = (gameweek: number, at = SCORED_AT): Promise<void> =>
+    scoreMatchGameweek({
+      database: client,
+      season: SEASON,
+      gameweek,
+      now: () => at
+    });
+
   const storedValue = async (
     entrantId: string,
     gameweek: number,
@@ -156,7 +168,7 @@ describe("scoring the readable Match Points layer", () => {
     await predict("entrant/c", 1, 3, 0);
     await predict("entrant/d", 1, 1, 1);
 
-    await scoreMatchGameweek({ database: client, season: SEASON, gameweek: 1 });
+    await score(1);
 
     expect((await storedValue("entrant/a", 1, MATCH_POINTS_METRIC))?.value)
       .toBe(5);
@@ -178,7 +190,7 @@ describe("scoring the readable Match Points layer", () => {
     await predict("entrant/a", 1, 2, 1);
     await predict("entrant/a", 2, 1, 1);
 
-    await scoreMatchGameweek({ database: client, season: SEASON, gameweek: 1 });
+    await score(1);
 
     expect(await storedValue("entrant/a", 1, MATCH_POINTS_METRIC))
       .toMatchObject({ value: 8, n: 2 });
@@ -195,7 +207,7 @@ describe("scoring the readable Match Points layer", () => {
     await predict("entrant/a", 1, 2, 1);
     await predict("entrant/a", 2, 4, 0);
 
-    await scoreMatchGameweek({ database: client, season: SEASON, gameweek: 1 });
+    await score(1);
 
     // The unplayed Fixture is absent rather than a miss: five points from one
     // Fixture, not five from two.
@@ -210,7 +222,7 @@ describe("scoring the readable Match Points layer", () => {
     await settle(1, 2, 1);
     await predict("entrant/a", 1, 2, 1);
 
-    await scoreMatchGameweek({ database: client, season: SEASON, gameweek: 1 });
+    await score(1);
 
     // Nothing settled is not nothing scored. Storing Score % of 0 for an
     // Entrant that never answered would read as a forecast that got everything
@@ -227,7 +239,7 @@ describe("scoring the readable Match Points layer", () => {
     await storeFixture(1, 1);
     await predict("entrant/a", 1, 2, 1);
 
-    await scoreMatchGameweek({ database: client, season: SEASON, gameweek: 1 });
+    await score(1);
 
     const stored = await client.query("select 1 from scores");
     expect(stored.rowCount).toBe(0);
@@ -241,7 +253,7 @@ describe("scoring the readable Match Points layer", () => {
     await predict("entrant/a", 1, 2, 1);
     await predict("entrant/a", 2, 1, 0);
 
-    await scoreMatchGameweek({ database: client, season: SEASON, gameweek: 1 });
+    await score(1);
 
     // Both are Gameweek 1's, because Gameweek 1's Lock is what its Entrants
     // committed under — the Gameweek it was eventually played in says nothing
@@ -256,7 +268,7 @@ describe("scoring the readable Match Points layer", () => {
     await settle(1, 2, 1);
     await predict("entrant/b", 1, 3, 2);
 
-    await scoreMatchGameweek({ database: client, season: SEASON, gameweek: 1 });
+    await score(1);
 
     expect((await storedValue("entrant/b", 1, MATCH_POINTS_METRIC))?.detail)
       .toEqual({
@@ -271,10 +283,12 @@ describe("scoring the readable Match Points layer", () => {
           }
         ]
       });
+    // Both sides of each fraction, so the row says which Fixture was in its
+    // denominator rather than only how many were.
     expect((await storedValue("entrant/b", 1, SCORE_PCT_METRIC))?.detail)
-      .toEqual({ hits: [] });
+      .toEqual({ hits: [], misses: [1] });
     expect((await storedValue("entrant/b", 1, OUTCOME_PCT_METRIC))?.detail)
-      .toEqual({ hits: [1] });
+      .toEqual({ hits: [1], misses: [] });
   });
 
   test("stores the Season through the same Gameweek beside it", async () => {
@@ -285,8 +299,8 @@ describe("scoring the readable Match Points layer", () => {
     await predict("entrant/a", 1, 2, 1);
     await predict("entrant/a", 2, 1, 1);
 
-    await scoreMatchGameweek({ database: client, season: SEASON, gameweek: 1 });
-    await scoreMatchGameweek({ database: client, season: SEASON, gameweek: 2 });
+    await score(1);
+    await score(2);
 
     // Gameweek 2's own row is the 3 it earned; the snapshot beside it is the
     // Season's 8 over both Fixtures.
@@ -329,8 +343,8 @@ describe("scoring the readable Match Points layer", () => {
       "entrant/a", 2, SCORE_PCT_SEASON_TO_DATE_METRIC
     ))?.detail).toEqual({
       gameweeks: [
-        { gw: 1, n: 1, hits: [1] },
-        { gw: 2, n: 1, hits: [] }
+        { gw: 1, n: 1, hits: [1], misses: [] },
+        { gw: 2, n: 1, hits: [], misses: [2] }
       ]
     });
   });
@@ -342,15 +356,14 @@ describe("scoring the readable Match Points layer", () => {
     await settle(2, 0, 0);
     await predict("entrant/a", 1, 2, 1);
     await predict("entrant/a", 2, 1, 1);
-    await scoreMatchGameweek({ database: client, season: SEASON, gameweek: 1 });
-    await scoreMatchGameweek({ database: client, season: SEASON, gameweek: 2 });
-    const before = await storedValue("entrant/a", 1, MATCH_POINTS_METRIC);
+    await score(1);
+    await score(2);
 
     // The Home win is overturned to a 1-1 draw: the exact 2-1 becomes a miss,
     // so Gameweek 1 falls to 0 and the Season through Gameweek 2 to the 3 the
     // second Fixture earned.
     await settle(1, 1, 1);
-    await scoreMatchGameweek({ database: client, season: SEASON, gameweek: 1 });
+    await score(1, CORRECTED_AT);
 
     expect(await storedValue("entrant/a", 1, MATCH_POINTS_METRIC))
       .toMatchObject({ value: 0, n: 1 });
@@ -360,11 +373,12 @@ describe("scoring the readable Match Points layer", () => {
       .toMatchObject({ value: 0, n: 2 });
 
     // The corrected figure carries when it was arrived at, not when the figure
-    // it replaced was.
-    const after = await storedValue("entrant/a", 1, MATCH_POINTS_METRIC);
-    expect(after?.scoredAt.getTime()).toBeGreaterThan(
-      before?.scoredAt.getTime() ?? Infinity
-    );
+    // it replaced was — and the Gameweek 2 row the correction did not move
+    // still carries the run that did compute it.
+    expect((await storedValue("entrant/a", 1, MATCH_POINTS_METRIC))?.scoredAt)
+      .toEqual(CORRECTED_AT);
+    expect((await storedValue("entrant/a", 2, MATCH_POINTS_METRIC))?.scoredAt)
+      .toEqual(SCORED_AT);
   });
 
   test("re-running over the same stored rows changes nothing", async () => {
@@ -373,12 +387,12 @@ describe("scoring the readable Match Points layer", () => {
     for (const id of ENTRANTS) {
       await predict(id, 1, 2, 1);
     }
-    await scoreMatchGameweek({ database: client, season: SEASON, gameweek: 1 });
+    await score(1);
     const first = await client.query(
       "select * from scores order by model_id, metric"
     );
 
-    await scoreMatchGameweek({ database: client, season: SEASON, gameweek: 1 });
+    await score(1);
 
     const second = await client.query(
       "select * from scores order by model_id, metric"

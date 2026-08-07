@@ -47,7 +47,7 @@ season to date. The stored breakdown makes every aggregate auditable and recompu
 
 - [x] Exact Predicted Scores earn 5 Match Points, correct goal differences with a different score earn 3, correct outcomes with a different goal difference earn 2, and misses earn 0
 - [x] The four exclusive Match Points cases are verified against values computed by hand rather than by restating the implementation
-- [x] Every Entrant receives Match Points, Score % and Outcome % for each scoreable Gameweek under the base metric names
+- [x] Every Entrant with a Prediction on a settled Fixture receives Match Points, Score % and Outcome % for that Gameweek under the base metric names. An Entrant that Gapped every scoreable Fixture of a Gameweek receives none of the three: Score % over no Fixtures is not zero, and a stored zero would read as a forecast that got everything wrong — which is the distinction `gap_rate` exists to keep
 - [x] Each Gameweek also stores cumulative snapshots through that Gameweek under explicit `_season_to_date` metric names, so per-Gameweek and cumulative rows coexist without a sentinel Gameweek or migration
 - [x] Every aggregate carries its Fixture count and a per-Fixture breakdown sufficient to explain the value without recomputing it
 - [x] A Fixture with no settled result contributes nothing; a Gameweek with no settled results produces no zero-valued scoring rows

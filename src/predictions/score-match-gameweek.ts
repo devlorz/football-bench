@@ -125,27 +125,36 @@ interface StoredMetric {
   value: number;
   n: number;
   detail: unknown;
+  scoredAt: Date;
 }
 
 async function storeMetric(
   database: Database,
-  { entrantId, season, gameweek, metric, value, n, detail }: StoredMetric
+  { entrantId, season, gameweek, metric, value, n, detail, scoredAt }:
+    StoredMetric
 ): Promise<void> {
   // A row the run did not change is not written at all, so `scored_at` keeps
   // saying when the figure it stamps was arrived at: a re-run over unchanged
   // inputs leaves the row byte for byte as it was, and a correction that moves
   // the value moves the stamp with it rather than backdating the new figure to
   // when the old one was computed.
+  //
+  // The stamp is the injected clock's, not the database's, so it is the one
+  // seam this scorer has and a test can state it rather than read it back.
   await database.query(
-    `insert into scores (model_id, season, gw, track, metric, value, n, detail)
-     values ($1, $2, $3, 'match', $4, $5, $6, $7)
+    `insert into scores (
+       model_id, season, gw, track, metric, value, n, detail, scored_at
+     ) values ($1, $2, $3, 'match', $4, $5, $6, $7, $8)
      on conflict (model_id, season, gw, track, metric)
      do update set value = excluded.value, n = excluded.n,
-                   detail = excluded.detail, scored_at = now()
+                   detail = excluded.detail, scored_at = excluded.scored_at
               where scores.value is distinct from excluded.value
                  or scores.n is distinct from excluded.n
                  or scores.detail is distinct from excluded.detail`,
-    [entrantId, season, gameweek, metric, value, n, JSON.stringify(detail)]
+    [
+      entrantId, season, gameweek, metric, value, n, JSON.stringify(detail),
+      scoredAt
+    ]
   );
 }
 
@@ -161,7 +170,8 @@ async function writeReadableRows(
   gameweek: number,
   entrantId: string,
   fixtures: ScoredFixture[],
-  cumulative: boolean
+  cumulative: boolean,
+  scoredAt: Date
 ): Promise<void> {
   const n = fixtures.length;
 
@@ -184,7 +194,7 @@ async function writeReadableRows(
 
   const store = (metric: string, value: number, detail: unknown) =>
     storeMetric(database, {
-      entrantId, season, gameweek, metric, value, n, detail
+      entrantId, season, gameweek, metric, value, n, detail, scoredAt
     });
 
   await store(
@@ -218,16 +228,20 @@ async function writeReadableRows(
       ({ points }: ScoredFixture) => points >= 2
     ]
   ] as const) {
-    // The Fixtures it hit name the value: their count over `n` is the share,
-    // so the row explains itself without the Fixtures it missed.
-    const hits = (scored: ScoredFixture[]) =>
-      scored.filter(hit).map(({ fplId }) => fplId);
+    // Both sides of the fraction are named, not only the numerator: the hits
+    // over the hits and misses together is the value, so the row is auditable
+    // without the Gameweek's Fixture list to say what the denominator was.
+    const split = (scored: ScoredFixture[]) => ({
+      hits: scored.filter(hit).map(({ fplId }) => fplId),
+      misses: scored.filter((fixture) => !hit(fixture))
+        .map(({ fplId }) => fplId)
+    });
     await store(
       cumulative ? cumulativeMetric : metric,
-      hits(fixtures).length / n,
+      split(fixtures).hits.length / n,
       cumulative
-        ? { gameweeks: perGameweek((scored) => ({ hits: hits(scored) })) }
-        : { hits: hits(fixtures) }
+        ? { gameweeks: perGameweek(split) }
+        : split(fixtures)
     );
   }
 }
@@ -261,16 +275,19 @@ export interface ScoreMatchGameweekOptions {
   database: Database;
   season: string;
   gameweek: number;
+  /** Stamps `scored_at` and decides nothing else. */
+  now: () => Date;
 }
 
 /**
  * Writes the readable Match Points record for one Gameweek: what each Entrant
  * scored on it, and what the Season has come to through the same Gameweek.
  *
- * Reads stored Fixtures and Predictions and nothing else — no network call and
- * no clock, since scoreability is `fixtures.result` being present rather than
- * anything about when the job ran — so running it twice over the same rows
- * produces the same rows.
+ * Reads stored Fixtures and Predictions and nothing else — no network call, and
+ * no reading of the clock beyond stamping the rows, since scoreability is
+ * `fixtures.result` being present rather than anything about when the job ran.
+ * Running it twice over the same rows therefore leaves the same rows, stamp
+ * included.
  *
  * A Gameweek with nothing settled writes nothing rather than a record of zeros:
  * an unplayed Gameweek and a badly forecast one must not look alike.
@@ -278,7 +295,8 @@ export interface ScoreMatchGameweekOptions {
 export async function scoreMatchGameweek({
   database,
   season,
-  gameweek
+  gameweek,
+  now
 }: ScoreMatchGameweekOptions): Promise<void> {
   const byEntrant = await scoredFixtures(database, season);
   if (![...byEntrant.values()].some((scored) =>
@@ -287,6 +305,10 @@ export async function scoreMatchGameweek({
     return;
   }
 
+  // One reading for the whole run, so every row a single scoring pass writes
+  // carries the same stamp however long the pass takes.
+  const scoredAt = now();
+
   await database.query("begin");
   try {
     for (const target of await targetGameweeks(database, season, gameweek)) {
@@ -294,13 +316,13 @@ export async function scoreMatchGameweek({
         const own = scored.filter(({ gw }) => gw === target);
         if (own.length > 0) {
           await writeReadableRows(
-            database, season, target, entrantId, own, false
+            database, season, target, entrantId, own, false, scoredAt
           );
         }
         const through = scored.filter(({ gw }) => gw <= target);
         if (through.length > 0) {
           await writeReadableRows(
-            database, season, target, entrantId, through, true
+            database, season, target, entrantId, through, true, scoredAt
           );
         }
       }
