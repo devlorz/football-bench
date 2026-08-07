@@ -51,8 +51,11 @@ describe("building historical Match context", () => {
     })).toBe([
       "Historical context as of 2026-08-21T17:30:00.000Z",
       "",
+      "Premier League table (results through 2026-08-10):",
+      "1. Arsenal — Pld 1, W 1, D 0, L 0, GF 2, GA 0, Pts 3",
+      "2. Fulham — Pld 1, W 0, D 0, L 1, GF 0, GA 2, Pts 0",
+      "",
       "Arsenal",
-      "Current-Season league position: 1st in Premier League.",
       "Prior-Season final position: 1st in 2025-26 Premier League; promoted: no.",
       "Current-Season overall: 1 played, 1W 0D 0L, GF 2, GA 0, "
         + "shots unavailable, on target unavailable, xG unavailable.",
@@ -72,7 +75,6 @@ describe("building historical Match context", () => {
         + " | xG unavailable",
       "",
       "Coventry City",
-      "Current-Season league position: no current-Season table yet.",
       "Prior-Season final position: 1st in 2025-26 Championship; promoted: yes.",
       "Premier League history: none in stored data; promoted from the Championship.",
       "Current-Season overall: no matches played.",
@@ -329,6 +331,77 @@ describe("building historical Match context", () => {
     );
   });
 
+  test("renders the table in rule order, dated by its latest result", () => {
+    const round = (playedOn: string, ...results: [string, number, number, string][]) =>
+      results.map(([home, homeGoals, awayGoals, away]) =>
+        match("2026-27", "Premier League", playedOn, home, away, homeGoals, awayGoals)
+      );
+
+    expect(buildHistoricalContext({
+      season: "2026-27",
+      asOf: new Date("2026-08-31T17:30:00.000Z"),
+      homeTeam: "Arsenal",
+      awayTeam: "Everton",
+      matches: [
+        ...round("2026-08-10",
+          ["Arsenal", 3, 1, "Chelsea"],
+          ["Everton", 2, 0, "Fulham"],
+          ["Liverpool", 1, 2, "Tottenham"]),
+        ...round("2026-08-17",
+          ["Chelsea", 2, 0, "Everton"],
+          ["Fulham", 1, 1, "Liverpool"],
+          ["Tottenham", 0, 3, "Arsenal"]),
+        ...round("2026-08-24",
+          ["Arsenal", 1, 1, "Everton"],
+          ["Chelsea", 2, 2, "Liverpool"],
+          ["Fulham", 1, 1, "Tottenham"]),
+        // Distractors: the wrong division and the wrong Season. Neither may
+        // enter a row, and the later-dated one may not move the coverage date.
+        match("2026-27", "Championship", "2026-08-26", "Hull", "Stoke", 9, 0),
+        match("2025-26", "Premier League", "2026-05-01", "Arsenal", "Hull", 9, 0)
+      ]
+    })).toContain([
+      "Historical context as of 2026-08-31T17:30:00.000Z",
+      "",
+      "Premier League table (results through 2026-08-24):",
+      "1. Arsenal — Pld 3, W 2, D 1, L 0, GF 7, GA 2, Pts 7",
+      // Chelsea and Everton are level on points and goal difference; Chelsea's
+      // goals scored break it. Tottenham trails both on goal difference.
+      "2. Chelsea — Pld 3, W 1, D 1, L 1, GF 5, GA 5, Pts 4",
+      "3. Everton — Pld 3, W 1, D 1, L 1, GF 3, GA 3, Pts 4",
+      "4. Tottenham — Pld 3, W 1, D 1, L 1, GF 3, GA 5, Pts 4",
+      // Level on points; goal difference separates them.
+      "5. Liverpool — Pld 3, W 0, D 2, L 1, GF 4, GA 5, Pts 2",
+      "6. Fulham — Pld 3, W 0, D 2, L 1, GF 2, GA 4, Pts 2",
+      "",
+      "Arsenal"
+    ].join("\n"));
+  });
+
+  test("announces an empty table rather than leaving it out", () => {
+    // Gameweek 1's normal case, with the prior-Season line still the only
+    // position an Entrant is given.
+    const context = buildHistoricalContext({
+      season: "2026-27",
+      asOf: new Date("2026-08-21T17:30:00.000Z"),
+      homeTeam: "Arsenal",
+      awayTeam: "Everton",
+      matches: [
+        match("2025-26", "Premier League", "2026-05-01", "Arsenal", "Everton", 1, 0)
+      ]
+    });
+
+    expect(context).toContain([
+      "Historical context as of 2026-08-21T17:30:00.000Z",
+      "",
+      "Premier League table: no result has been played yet this Season.",
+      "",
+      "Arsenal",
+      "Prior-Season final position: 1st in 2025-26 Premier League; promoted: no."
+    ].join("\n"));
+    expect(context).not.toContain("Current-Season league position");
+  });
+
   test("makes an unresolved Fixture team name visible", () => {
     expect(buildHistoricalContext({
       season: "2026-27",
@@ -339,7 +412,6 @@ describe("building historical Match context", () => {
     })).toContain([
       "New Club",
       "Historical data status: team name did not resolve against stored results.",
-      "Current-Season league position: no current-Season table yet.",
       "Prior-Season final position: no 2025-26 league data.",
       "Premier League history: none in stored data.",
       "Current-Season overall: no matches played.",

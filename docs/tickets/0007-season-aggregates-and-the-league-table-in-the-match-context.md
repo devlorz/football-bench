@@ -47,17 +47,17 @@ already receives; nothing new is fetched or stored.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] The table renders once per context, in rule order — points, then goal
+- [x] The table renders once per context, in rule order — points, then goal
       difference, then goals scored — verified against a hand-computed table including
       one tie broken by goal difference and one broken by goals scored
-- [ ] Rows are verbose with no legend; goal difference is not a column
-- [ ] The coverage line names the date of the latest included result
-- [ ] Before any current-Season result exists, the section is a single announcement
+- [x] Rows are verbose with no legend; goal difference is not a column
+- [x] The coverage line names the date of the latest included result
+- [x] Before any current-Season result exists, the section is a single announcement
       line, asserted as the Gameweek 1 first-class path
-- [ ] The current-Season position line is absent from both team sections; the
+- [x] The current-Season position line is absent from both team sections; the
       prior-Season final position line is kept
-- [ ] Only current-Season Premier League results contribute
-- [ ] Exact-string assertions at the pure context-builder seam, per the existing
+- [x] Only current-Season Premier League results contribute
+- [x] Exact-string assertions at the pure context-builder seam, per the existing
       historical-context test prior art
 
 ## Freeze verification: pre-flight on the extended v2

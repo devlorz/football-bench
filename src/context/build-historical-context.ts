@@ -325,7 +325,8 @@ function priorSeasonLine(
 function teamSection(
   options: BuildHistoricalContextOptions,
   team: string,
-  eligibleMatches: HistoricalMatch[]
+  eligibleMatches: HistoricalMatch[],
+  currentMatches: HistoricalMatch[]
 ): string[] {
   const exactStoredIdentity = eligibleMatches.some((match) =>
     match.home_team === team || match.away_team === team
@@ -333,10 +334,6 @@ function teamSection(
   const resolvedTeam = resolveFootballDataTeamName(team)
     ?? (exactStoredIdentity ? team : undefined);
   const canonical = resolvedTeam ?? team;
-  const currentMatches = eligibleMatches.filter((match) =>
-    match.season === options.season
-    && match.division === "Premier League"
-  );
   const currentTeamMatches = currentMatches.filter((match) =>
     includesTeam(match, canonical)
   );
@@ -358,18 +355,13 @@ function teamSection(
     .filter((match) => includesTeam(match, canonical))
     .sort((left, right) => right.played_on.getTime() - left.played_on.getTime())
     .slice(0, 5);
-  const currentPosition = currentTeamMatches.length === 0
-    ? undefined
-    : positionIn(currentMatches, canonical);
-
+  // No current-Season position line: the table above the sections shows it,
+  // and ADR-0022 forbids pre-computing what the context already carries.
   const lines = [
     team,
     ...(resolvedTeam === undefined
       ? ["Historical data status: team name did not resolve against stored results."]
       : []),
-    currentPosition === undefined
-      ? "Current-Season league position: no current-Season table yet."
-      : `Current-Season league position: ${ordinal(currentPosition)} in Premier League.`,
     prior.line
   ];
   if (!hasPremierLeagueHistory) {
@@ -407,6 +399,31 @@ function teamSection(
   return lines;
 }
 
+/**
+ * The current Season's table, once per context and ahead of both team
+ * sections, verbose enough to read without a legend. Goal difference is not a
+ * column: it orders the rows but an Entrant can subtract. The heading dates
+ * the table by its latest included result, the same coverage statement the FPL
+ * track makes (ADR-0021), and an empty table says so rather than vanishing.
+ */
+function tableSection(currentMatches: HistoricalMatch[]): string[] {
+  if (currentMatches.length === 0) {
+    return ["Premier League table: no result has been played yet this Season."];
+  }
+  const through = Math.max(
+    ...currentMatches.map((match) => match.played_on.getTime())
+  );
+  return [
+    "Premier League table (results through "
+    + `${new Date(through).toISOString().slice(0, 10)}):`,
+    ...leagueTable(currentMatches).map((row, index) =>
+      `${index + 1}. ${row.club} — Pld ${row.played}, W ${row.wins}, `
+      + `D ${row.draws}, L ${row.losses}, GF ${row.goalsFor}, `
+      + `GA ${row.goalsAgainst}, Pts ${row.points}`
+    )
+  ];
+}
+
 export function buildHistoricalContext(
   options: BuildHistoricalContextOptions
 ): string {
@@ -421,12 +438,21 @@ export function buildHistoricalContext(
     .sort((left, right) => right.played_on.getTime() - left.played_on.getTime())
     .slice(0, 5);
 
+  // The one filter both the table and the record lines are built on, applied
+  // once: the current Season's Premier League, and nothing else.
+  const currentMatches = eligibleMatches.filter((match) =>
+    match.season === options.season
+    && match.division === "Premier League"
+  );
+
   return [
     `Historical context as of ${options.asOf.toISOString()}`,
     "",
-    ...teamSection(options, options.homeTeam, eligibleMatches),
+    ...tableSection(currentMatches),
     "",
-    ...teamSection(options, options.awayTeam, eligibleMatches),
+    ...teamSection(options, options.homeTeam, eligibleMatches, currentMatches),
+    "",
+    ...teamSection(options, options.awayTeam, eligibleMatches, currentMatches),
     "",
     "Head-to-head history:",
     ...(headToHead.length === 0
