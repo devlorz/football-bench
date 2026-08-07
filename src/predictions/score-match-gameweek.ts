@@ -289,37 +289,56 @@ export function matchPoints(
 }
 
 /**
- * One Fixture as one Entrant predicted it. Everything a result decides is null
- * until the Fixture settles, so an unsettled Fixture is present for the metrics
- * that read the Prediction alone and absent from the ones that need an outcome.
+ * One Fixture as one forecaster saw it, whether that forecaster is an Entrant
+ * or a Reference Line. Everything a result decides is null until the Fixture
+ * settles, so an unsettled Fixture is present for the metrics that read the
+ * forecast alone and absent from the ones that need an outcome.
  */
-interface PredictedFixture {
+interface ForecastFixture {
   gw: number;
   fplId: number;
-  predicted: [number, number];
   probs: Probs;
   /** The Outcome the probabilities call likeliest, ties broken canonically. */
   likeliest: Outcome;
-  coherent: boolean;
-  /** The Repairs this Prediction cost before it was valid. */
-  repairs: number;
-  /** Everything the result decides, set together or not at all. */
-  settled: SettledDetail | null;
+  settled: ForecastSettled | null;
 }
 
-interface SettledDetail {
+interface ForecastSettled {
   result: [number, number];
   outcome: Outcome;
-  points: number;
   rps: number;
   brier: number;
   accurate: boolean;
 }
 
-type SettledFixture = PredictedFixture & { settled: SettledDetail };
+/**
+ * One Fixture as one Entrant predicted it: a forecast with the Predicted Score
+ * beside it, and everything only a named scoreline can be scored on.
+ *
+ * A Reference Line names none, which is why the two are separate types rather
+ * than one with nullable fields — the scoreline rows are not written for it and
+ * a null would have to be checked at each of them.
+ */
+interface PredictedFixture extends ForecastFixture {
+  predicted: [number, number];
+  coherent: boolean;
+  /** The Repairs this Prediction cost before it was valid. */
+  repairs: number;
+  settled: SettledDetail | null;
+}
 
-const settledOf = (fixtures: PredictedFixture[]): SettledFixture[] =>
-  fixtures.filter((fixture): fixture is SettledFixture =>
+interface SettledDetail extends ForecastSettled {
+  points: number;
+}
+
+type Settled<F extends ForecastFixture> =
+  F & { settled: NonNullable<F["settled"]> };
+
+type SettledForecast = Settled<ForecastFixture>;
+type SettledFixture = Settled<PredictedFixture>;
+
+const settledOf = <F extends ForecastFixture>(fixtures: F[]): Settled<F>[] =>
+  fixtures.filter((fixture): fixture is Settled<F> =>
     fixture.settled !== null
   );
 
@@ -332,7 +351,7 @@ const totalPoints = (fixtures: SettledFixture[]): number =>
  * the figure a comparison ranks Entrants by is the figure their own rows carry.
  */
 const meanOf = (
-  fixtures: SettledFixture[],
+  fixtures: SettledForecast[],
   key: "rps" | "brier"
 ): number =>
   fixtures.reduce((total, { settled }) => total + settled[key], 0)
@@ -466,6 +485,125 @@ async function storeMetric(
   );
 }
 
+/** One row for whoever the caller is writing, under the name it asks for. */
+type StoreRow = (
+  metric: string,
+  value: number,
+  n: number,
+  detail: unknown
+) => Promise<void>;
+
+/**
+ * `forecasterId` rather than an Entrant id: a Reference Line writes rows
+ * through here too, and it is not an Entrant (CONTEXT.md). The column beneath
+ * is `model_id`, which is what both are a row of.
+ */
+const storeRow = (
+  database: Database,
+  season: string,
+  gameweek: number,
+  forecasterId: string,
+  scoredAt: Date
+): StoreRow =>
+  (metric, value, n, detail) =>
+    storeMetric(database, {
+      entrantId: forecasterId,
+      season,
+      gameweek,
+      metric,
+      value,
+      n,
+      detail,
+      scoredAt
+    });
+
+/**
+ * One share of the Fixtures given, with both sides of the fraction named — the
+ * hits over the hits and misses together is the value, so the row is auditable
+ * without the Gameweek's Fixture list to say what the denominator was.
+ */
+async function writeShare<F extends { gw: number }>(
+  store: StoreRow,
+  metric: string,
+  fixtures: F[],
+  hit: (fixture: F) => boolean,
+  describe: (fixture: F) => unknown,
+  cumulative: boolean
+): Promise<void> {
+  if (fixtures.length === 0) {
+    return;
+  }
+  const split = (scoped: F[]) => ({
+    hits: scoped.filter(hit).map(describe),
+    misses: scoped.filter((fixture) => !hit(fixture)).map(describe)
+  });
+  await store(
+    metric,
+    split(fixtures).hits.length / fixtures.length,
+    fixtures.length,
+    cumulative ? { gameweeks: perGameweek(fixtures, split) } : split(fixtures)
+  );
+}
+
+/**
+ * The probability layer over the settled Fixtures given: RPS, Brier and
+ * accuracy.
+ *
+ * Everything a Reference Line is scored on, and the part of an Entrant's record
+ * that carries a claim (ADR-0012) — one function, so a line and an Entrant are
+ * measured by the same code and not merely by the same definition.
+ *
+ * A probability row names what it read — the distribution and the Outcome it
+ * called likeliest — because nothing else stored says why a Fixture fell on the
+ * side it did.
+ */
+async function writeProbabilityRows(
+  store: StoreRow,
+  settled: SettledForecast[],
+  cumulative: boolean
+): Promise<void> {
+  if (settled.length === 0) {
+    return;
+  }
+  for (const [metric, cumulativeMetric, key] of [
+    [RPS_METRIC, RPS_SEASON_TO_DATE_METRIC, "rps"],
+    [BRIER_METRIC, BRIER_SEASON_TO_DATE_METRIC, "brier"]
+  ] as const) {
+    const mean = (scoped: SettledForecast[]) => meanOf(scoped, key);
+    const detail = (scoped: SettledForecast[]) => ({
+      fixtures: scoped.map((fixture) => ({
+        fplId: fixture.fplId,
+        probs: fixture.probs,
+        outcome: fixture.settled.outcome,
+        [key]: fixture.settled[key]
+      }))
+    });
+    await store(
+      cumulative ? cumulativeMetric : metric,
+      mean(settled),
+      settled.length,
+      cumulative
+        ? {
+          gameweeks: perGameweek(settled, (scoped) => ({
+            mean: mean(scoped),
+            ...detail(scoped)
+          }))
+        }
+        : detail(settled)
+    );
+  }
+
+  await writeShare(
+    store,
+    cumulative ? ACCURACY_SEASON_TO_DATE_METRIC : ACCURACY_METRIC,
+    settled,
+    ({ settled: result }) => result.accurate,
+    ({ fplId, probs, likeliest, settled: result }) =>
+      ({ fplId, probs, likeliest, outcome: result.outcome }),
+    cumulative
+  );
+}
+
 /**
  * Every row for one Entrant over one set of Fixtures, under the metric names
  * the caller asks for — the same measures serve one Gameweek and the Season
@@ -487,16 +625,7 @@ async function writeRows(
   scoredAt: Date
 ): Promise<void> {
   const settled = settledOf(predicted);
-
-  const store = (
-    metric: string,
-    value: number,
-    n: number,
-    detail: unknown
-  ) =>
-    storeMetric(database, {
-      entrantId, season, gameweek, metric, value, n, detail, scoredAt
-    });
+  const store = storeRow(database, season, gameweek, entrantId, scoredAt);
 
   if (settled.length > 0) {
     const pointsDetail = (scoped: SettledFixture[]) => ({
@@ -524,44 +653,16 @@ async function writeRows(
           : pointsDetail(settled)
       }
     );
-
-    for (const [metric, cumulativeMetric, key] of [
-      [RPS_METRIC, RPS_SEASON_TO_DATE_METRIC, "rps"],
-      [BRIER_METRIC, BRIER_SEASON_TO_DATE_METRIC, "brier"]
-    ] as const) {
-      const mean = (scoped: SettledFixture[]) => meanOf(scoped, key);
-      const detail = (scoped: SettledFixture[]) => ({
-        fixtures: scoped.map((fixture) => ({
-          fplId: fixture.fplId,
-          probs: fixture.probs,
-          outcome: fixture.settled.outcome,
-          [key]: fixture.settled[key]
-        }))
-      });
-      await store(
-        cumulative ? cumulativeMetric : metric,
-        mean(settled),
-        settled.length,
-        cumulative
-          ? {
-            gameweeks: perGameweek(settled, (scoped) => ({
-              mean: mean(scoped),
-              ...detail(scoped)
-            }))
-          }
-          : detail(settled)
-      );
-    }
   }
+
+  await writeProbabilityRows(store, settled, cumulative);
 
   // The Match Points tiers nest, so both readable shares are read off the
   // points rather than recomputed: only an exact scoreline scores 5, and
   // everything from 2 up got the outcome right.
   //
   // A readable share names its Fixtures by id, because the Match Points row
-  // beside it already holds every scoreline. A probability share names what it
-  // read instead — the distribution and the outcome it called likeliest —
-  // because nothing else stored says why a Fixture fell on the side it did.
+  // beside it already holds every scoreline.
   const shares: [
     string,
     string,
@@ -580,12 +681,6 @@ async function writeRows(
       ({ fplId }) => fplId
     ],
     [
-      ACCURACY_METRIC, ACCURACY_SEASON_TO_DATE_METRIC, settled,
-      ({ settled: result }) => result?.accurate === true,
-      ({ fplId, probs, likeliest, settled: result }) =>
-        ({ fplId, probs, likeliest, outcome: result?.outcome })
-    ],
-    [
       COHERENCE_METRIC, COHERENCE_SEASON_TO_DATE_METRIC, predicted,
       ({ coherent }) => coherent,
       ({ fplId, probs, likeliest, predicted: named }) =>
@@ -593,21 +688,13 @@ async function writeRows(
     ]
   ];
   for (const [metric, cumulativeMetric, fixtures, hit, describe] of shares) {
-    if (fixtures.length === 0) {
-      continue;
-    }
-    // Both sides of the fraction are named, not only the numerator: the hits
-    // over the hits and misses together is the value, so the row is auditable
-    // without the Gameweek's Fixture list to say what the denominator was.
-    const split = (scoped: PredictedFixture[]) => ({
-      hits: scoped.filter(hit).map(describe),
-      misses: scoped.filter((fixture) => !hit(fixture)).map(describe)
-    });
-    await store(
+    await writeShare(
+      store,
       cumulative ? cumulativeMetric : metric,
-      split(fixtures).hits.length / fixtures.length,
-      fixtures.length,
-      cumulative ? { gameweeks: perGameweek(fixtures, split) } : split(fixtures)
+      fixtures,
+      hit,
+      describe,
+      cumulative
     );
   }
 }
@@ -616,29 +703,123 @@ async function writeRows(
 interface LockedFixture {
   gw: number;
   fplId: number;
+  result: FixtureResult | null;
 }
 
 /**
- * Every Fixture the Season's Locks own, which is the denominator every
- * behavioural metric is taken over.
+ * Every Fixture the Season's Locks own: the denominator every behavioural
+ * metric is taken over, and the Fixture list every Reference Line forecasts.
  *
  * Read from `fixtures` rather than from the Predictions, because a Fixture no
- * Entrant answered is exactly the one a Gap rate exists to report and it
- * appears in no Prediction by definition. `result` is not asked for: whether a
+ * Entrant answered is exactly the one a Gap rate exists to report and a
+ * Reference Line still forecasts, and it appears in no Prediction by
+ * definition. The behavioural metrics take no notice of `result`: whether a
  * Fixture has been played says nothing about whether it was answered.
  */
 async function lockedFixtures(
   database: Database,
   season: string
 ): Promise<LockedFixture[]> {
-  const rows = await database.query<{ gw: number; fpl_id: number }>(
-    `select locked_in_gw as gw, fpl_id
+  const rows = await database.query<{
+    gw: number;
+    fpl_id: number;
+    result: FixtureResult | null;
+  }>(
+    `select locked_in_gw as gw, fpl_id, result
        from fixtures
       where season = $1 and locked_in_gw is not null
       order by locked_in_gw, fpl_id`,
     [season]
   );
-  return rows.rows.map(({ gw, fpl_id }) => ({ gw, fplId: fpl_id }));
+  return rows.rows.map(({ gw, fpl_id, result }) =>
+    ({ gw, fplId: fpl_id, result }));
+}
+
+export const REFERENCE_HOME = "reference-home";
+export const REFERENCE_UNIFORM = "reference-uniform";
+
+/**
+ * The two trivial rules a reader orients by: the long-run Home advantage, and
+ * knowing nothing at all.
+ *
+ * The probabilities are pinned constants rather than anything fitted, which is
+ * what makes the lines deterministic across a back-fill: the same Fixture
+ * scores the same on the first run and on a recomputation a Season later. They
+ * name no scoreline and so are scored on the probability layer alone, never
+ * ranked and never able to win (CONTEXT.md, ADR-0012).
+ */
+const REFERENCE_LINES: { id: string; name: string; probs: Probs }[] = [
+  {
+    id: REFERENCE_HOME,
+    name: "Home Reference Line",
+    probs: { H: 0.44, D: 0.28, A: 0.28 }
+  },
+  {
+    id: REFERENCE_UNIFORM,
+    name: "Uniform Reference Line",
+    probs: { H: 1 / 3, D: 1 / 3, A: 1 / 3 }
+  }
+];
+
+/**
+ * One Reference Line's forecast of every Fixture given, computed in memory.
+ *
+ * No `predictions` row is written for it: a Reference Line answers nothing and
+ * is asked nothing, so a stored Prediction would put it in every query that
+ * asks who predicted a Fixture — the complete-case intersection first among
+ * them (ADR-0011). The forecast is a constant and re-deriving it costs nothing.
+ */
+const referenceForecast = (
+  probs: Probs,
+  fixtures: LockedFixture[]
+): ForecastFixture[] => {
+  const likeliest = argmaxOutcome(probs);
+  return fixtures.map(({ gw, fplId, result }) => ({
+    gw,
+    fplId,
+    probs,
+    likeliest,
+    settled: result === null
+      ? null
+      : {
+        result: [result.home_goals, result.away_goals],
+        outcome: result.outcome,
+        rps: rankedProbabilityScore(probs, result.outcome),
+        brier: brierScore(probs, result.outcome),
+        accurate: likeliest === result.outcome
+      }
+  }));
+};
+
+/**
+ * The `models` rows the Reference Lines' scores hang off, written here because
+ * this is the only thing that needs them and their definition is the constant
+ * above rather than anything a Season is set up with.
+ *
+ * They carry the Match track's Prompt Version, which is what says which track
+ * a seat is entered for — but the `reference` role keeps them out of every
+ * roster, so neither can stand as a Comparison Anchor or empty a complete case.
+ *
+ * The row is overwritten rather than left alone where one already exists: the
+ * definition above is the only one there is, and a row carrying `entrant` under
+ * one of these ids would put a constant probability vector on the leaderboard
+ * with nothing to say so. `base_model` is the line's own id because the column
+ * is not null and there is no underlying LLM to name.
+ */
+async function ensureReferenceLines(database: Database): Promise<void> {
+  for (const { id, name } of REFERENCE_LINES) {
+    await database.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values ($1, $2, $1, 'none', $3, 'reference')
+       on conflict (id) do update
+          set name = excluded.name, base_model = excluded.base_model,
+              provider = excluded.provider,
+              prompt_version = excluded.prompt_version,
+              role = excluded.role`,
+      [id, name, MATCH_PROMPT_VERSION]
+    );
+  }
 }
 
 /** What the attempt rows say one Entrant spent on one Fixture. */
@@ -1038,8 +1219,15 @@ export async function scoreMatchGameweek({
     [MATCH_PROMPT_VERSION]
   )).rows.map(({ id }) => id);
 
+  // Over every Fixture the Season's Locks own rather than only this Gameweek's,
+  // so scoring one Gameweek back-fills the lines across the Season the Entrants
+  // already cover.
+  const references = REFERENCE_LINES.map(({ id, probs }) =>
+    ({ id, forecast: referenceForecast(probs, locked) }));
+
   await database.query("begin");
   try {
+    await ensureReferenceLines(database);
     for (const target of await targetGameweeks(database, season, gameweek)) {
       for (const [entrantId, predicted] of byEntrant) {
         const own = predicted.filter(({ gw }) => gw === target);
@@ -1082,6 +1270,18 @@ export async function scoreMatchGameweek({
             cumulative, scoredAt
           );
         }
+      }
+      // The probability layer and nothing else: a Reference Line names no
+      // scoreline to earn Match Points on, and was never asked for a Prediction
+      // to Gap or Repair.
+      for (const { id, forecast } of references) {
+        const store = storeRow(database, season, target, id, scoredAt);
+        await writeProbabilityRows(
+          store, settledOf(forecast.filter(({ gw }) => gw === target)), false
+        );
+        await writeProbabilityRows(
+          store, settledOf(forecast.filter(({ gw }) => gw <= target)), true
+        );
       }
       await writeComparisons(
         database, season, target, roster, byEntrant, scoredAt

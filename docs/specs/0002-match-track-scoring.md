@@ -297,14 +297,19 @@ against a former Comparison Anchor cannot remain.
 
 ### Reference Lines
 
-`reference-home`, `reference-uniform` and `reference-elo` are seeded as `models` rows with
+`reference-home`, `reference-uniform` and `reference-elo` are `models` rows with
 `role = 'reference'` and produce probabilities from stored Fixtures alone. They are scored on
 the probability layer and excluded from the Match Points ranking, since they name no scoreline
-(ADR-0001, ADR-0012).
+(ADR-0001, ADR-0012). The scorer creates the rows it needs rather than a Season setting them
+up, because their definition is the constant in the scorer and nothing else reads them.
 
 Reference Line forecasts are computed in memory whenever scoring runs. They never create
-`predictions` rows and therefore do not depend on a Fixture having a Lock. Their per-Fixture
-probabilities and contributions live in `scores.detail`; the aggregate lives in `scores.value`.
+`predictions` rows. Their per-Fixture probabilities and contributions live in `scores.detail`;
+the aggregate lives in `scores.value`.
+
+They are forecast over the Fixtures the Season's Locks own, which is the Fixture list every
+other Match figure is taken over. A Fixture with no Lock is not scored for anyone: it belongs
+to no Gameweek yet, so there is no snapshot for a line's score of it to be written under.
 Running the scorer over old Fixtures is the back-fill path. Elo is replayed from stored history
 on every run, so a corrected earlier result deterministically changes every affected later
 forecast.

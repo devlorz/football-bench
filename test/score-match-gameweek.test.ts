@@ -23,6 +23,8 @@ import {
   NO_POSITIVE_CONTROL_QUALIFICATION,
   OUTCOME_PCT_METRIC,
   OUTCOME_PCT_SEASON_TO_DATE_METRIC,
+  REFERENCE_HOME,
+  REFERENCE_UNIFORM,
   RPS_METRIC,
   RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC,
   RPS_SEASON_TO_DATE_METRIC,
@@ -1264,6 +1266,154 @@ describe("scoring the readable Match Points layer", () => {
           }
         ]
       }
+    });
+  });
+
+  test("scores the Home Reference Line on a Fixture nobody predicted", async () => {
+    await storeFixture(1, 1);
+    await settle(1, 2, 1);
+
+    await score(1);
+
+    // `[0.44, 0.28, 0.28]` against a Home win. RPS counts the two cumulative
+    // terms: (0.44 − 1)² + (0.72 − 1)², over two.
+    expect(await storedValue(REFERENCE_HOME, 1, RPS_METRIC))
+      .toMatchObject({ value: expect.closeTo(0.196, 12), n: 1 });
+  });
+
+  test("scores both Reference Lines on the same Away win", async () => {
+    await storeFixture(1, 1);
+    await settle(1, 0, 1);
+
+    await score(1);
+
+    // Home: cumulative 0.44 and 0.72 against 0 and 0, so (0.1936 + 0.5184) / 2;
+    // Brier 0.44² + 0.28² + (0.28 − 1)².
+    expect(await storedValue(REFERENCE_HOME, 1, RPS_METRIC))
+      .toMatchObject({ value: expect.closeTo(0.356, 12), n: 1 });
+    expect(await storedValue(REFERENCE_HOME, 1, BRIER_METRIC))
+      .toMatchObject({ value: expect.closeTo(0.7904, 12), n: 1 });
+    // Uniform: (1/9 + 4/9) / 2, and 4/9 + 1/9 + 1/9 unnormalised.
+    expect(await storedValue(REFERENCE_UNIFORM, 1, RPS_METRIC))
+      .toMatchObject({ value: expect.closeTo(5 / 18, 12), n: 1 });
+    expect(await storedValue(REFERENCE_UNIFORM, 1, BRIER_METRIC))
+      .toMatchObject({ value: expect.closeTo(2 / 3, 12), n: 1 });
+    // Both call Home likeliest — the Uniform line by the pinned tie-break —
+    // and both got this Fixture wrong.
+    expect(await storedValue(REFERENCE_HOME, 1, ACCURACY_METRIC))
+      .toMatchObject({ value: 0, n: 1 });
+    expect(await storedValue(REFERENCE_UNIFORM, 1, ACCURACY_METRIC))
+      .toMatchObject({ value: 0, n: 1 });
+  });
+
+  test("writes no scoreline or behavioural row for a Reference Line", async () => {
+    await storeFixture(1, 1);
+    await settle(1, 2, 1);
+    await predict("entrant/a", 1, 2, 1);
+
+    await score(1);
+
+    // A Reference Line is not a competitor: it names no scoreline to be ranked
+    // on, and was never asked for a Prediction it could Gap or Repair.
+    for (const metric of [
+      MATCH_POINTS_METRIC,
+      SCORE_PCT_METRIC,
+      OUTCOME_PCT_METRIC,
+      COHERENCE_METRIC,
+      GAP_RATE_METRIC,
+      ATTEMPTS_TO_VALID_METRIC
+    ]) {
+      expect(await storedValue(REFERENCE_HOME, 1, metric)).toBeNull();
+    }
+
+    // Its forecast is retained in the score's detail and nowhere else. A stored
+    // Prediction would enter every query that asks who predicted a Fixture.
+    const written = await client.query(
+      "select 1 from predictions where model_id = $1", [REFERENCE_HOME]
+    );
+    expect(written.rowCount).toBe(0);
+    expect((await storedValue(REFERENCE_HOME, 1, RPS_METRIC))?.detail).toEqual({
+      fixtures: [
+        {
+          fplId: 1,
+          probs: { H: 0.44, D: 0.28, A: 0.28 },
+          outcome: "H",
+          rps: expect.closeTo(0.196, 12)
+        }
+      ]
+    });
+  });
+
+  /** Every row one Reference Line holds for one Gameweek, in a stable order. */
+  const referenceRows = async (gameweek: number): Promise<unknown[]> => (
+    await client.query(
+      `select metric, value, n, detail
+         from scores
+        where model_id = $1 and season = $2 and gw = $3 and track = 'match'
+        order by metric`,
+      [REFERENCE_HOME, SEASON, gameweek]
+    )
+  ).rows;
+
+  test("back-fills a Reference Line into the cumulative snapshot", async () => {
+    await storeFixture(1, 1);
+    await storeFixture(2, 2);
+    await settle(1, 2, 1);
+    await settle(2, 0, 1);
+
+    // The first Gameweek is never asked for, so the line covers it as back-fill
+    // off the stored Fixtures rather than off having been scored at the time.
+    await score(2);
+
+    expect(await storedValue(REFERENCE_HOME, 2, RPS_METRIC))
+      .toMatchObject({ value: expect.closeTo(0.356, 12), n: 1 });
+    // The mean of 0.196 on the Home win and 0.356 on the Away win.
+    expect(await storedValue(REFERENCE_HOME, 2, RPS_SEASON_TO_DATE_METRIC))
+      .toMatchObject({
+        value: expect.closeTo(0.276, 12),
+        n: 2,
+        detail: {
+          gameweeks: [
+            { gw: 1, n: 1, mean: expect.closeTo(0.196, 12) },
+            { gw: 2, n: 1, mean: expect.closeTo(0.356, 12) }
+          ]
+        }
+      });
+  });
+
+  test("scores a Reference Line the same in either batch shape", async () => {
+    await storeFixture(1, 1);
+    await storeFixture(2, 2);
+    await settle(1, 2, 1);
+    await settle(2, 0, 1);
+
+    await score(2);
+    const inOneRun = await referenceRows(2);
+
+    await client.query("truncate scores");
+    await score(1);
+    await score(2);
+
+    // A Gameweek at a time, which is how a live Season reaches them, against
+    // one run that finds both Fixtures already stored. The Reference Lines are
+    // a function of the Fixtures alone, so the two must not differ.
+    expect(await referenceRows(2)).toEqual(inOneRun);
+    expect(inOneRun).not.toHaveLength(0);
+  });
+
+  test("recomputes a Reference Line when a result is corrected", async () => {
+    await storeFixture(1, 1);
+    await settle(1, 2, 1);
+
+    await score(1);
+    // The Home win the line called was really an Away win: 0.196 becomes 0.356
+    // without anyone having predicted anything differently.
+    await settle(1, 0, 1);
+    await score(1, CORRECTED_AT);
+
+    expect(await storedValue(REFERENCE_HOME, 1, RPS_METRIC)).toMatchObject({
+      value: expect.closeTo(0.356, 12),
+      scoredAt: CORRECTED_AT
     });
   });
 });

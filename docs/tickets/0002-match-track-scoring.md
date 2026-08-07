@@ -124,20 +124,21 @@ before each valid Prediction.
 
 ## Add Home and Uniform Reference Lines
 
-**What to build:** Deterministic Home and Uniform Reference Lines are evaluated over stored
-Fixtures whenever scoring runs and scored on the same probability layer as Entrants, giving
-readers two trivial rules for orientation without turning either into a competitor.
+**What to build:** Deterministic Home and Uniform Reference Lines are evaluated over the
+Fixtures the Season's Locks own whenever scoring runs and scored on the same probability layer
+as Entrants, giving readers two trivial rules for orientation without turning either into a
+competitor.
 
 **Blocked by:** Score probability accuracy and Coherence.
 
-- [ ] `reference-home` and `reference-uniform` exist as Reference Line rows rather than Entrants
-- [ ] The Home line emits `[0.44, 0.28, 0.28]` and the Uniform line emits `[1/3, 1/3, 1/3]` deterministically for every stored Fixture
-- [ ] Both lines are evaluated in memory from stored Fixture fields whenever scoring needs their probabilities
-- [ ] Settled Fixtures contribute RPS, Brier and accuracy on the same outcome set used for Entrants, with `n` and per-Fixture detail
-- [ ] Reference Line probabilities and per-Fixture contributions are retained only in `scores.detail`; no `predictions` row is created
-- [ ] Reference Lines produce no Predicted Score, Match Points, leaderboard rank, Gap rate or attempts-to-valid
-- [ ] Running the scorer over old Fixtures or in a different batch shape produces identical Reference Line scores
-- [ ] Tests verify the probabilities and resulting metrics against hand-computed values
+- [x] `reference-home` and `reference-uniform` exist as Reference Line rows rather than Entrants
+- [x] The Home line emits `[0.44, 0.28, 0.28]` and the Uniform line emits `[1/3, 1/3, 1/3]` deterministically for every Fixture the Lock owns — a Fixture with no Lock belongs to no Gameweek and so has no snapshot to be scored under
+- [x] Both lines are evaluated in memory from stored Fixture fields whenever scoring needs their probabilities
+- [x] Settled Fixtures contribute RPS, Brier and accuracy on the same outcome set used for Entrants, with `n` and per-Fixture detail
+- [x] Reference Line probabilities and per-Fixture contributions are retained only in `scores.detail`; no `predictions` row is created
+- [x] Reference Lines produce no Predicted Score, Match Points, leaderboard rank, Gap rate or attempts-to-valid
+- [x] Running the scorer over old Fixtures or in a different batch shape produces identical Reference Line scores
+- [x] Tests verify the probabilities and resulting metrics against hand-computed values
 
 ---
 
