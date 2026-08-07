@@ -8,6 +8,8 @@ import {
   type Outcome,
   type Probs
 } from "../fixture-result.js";
+import { emptyRepairDistribution } from "../repairs.js";
+import { GAP_CAUSES, type GapCause } from "./gap-alert.js";
 import { MATCH_PROMPT_VERSION } from "./openrouter-entrant.js";
 
 type Database = Pick<Client, "query">;
@@ -61,6 +63,60 @@ export const ACCURACY_SEASON_TO_DATE_METRIC = "accuracy_season_to_date";
  */
 export const COHERENCE_METRIC = "coherence";
 export const COHERENCE_SEASON_TO_DATE_METRIC = "coherence_season_to_date";
+
+/**
+ * The share of the Fixtures a Lock owns that an Entrant produced no Prediction
+ * for, with the causes beneath it.
+ *
+ * The counterpart to every metric above: those are computed over what an
+ * Entrant answered and say nothing about what it did not, so an Entrant that
+ * is absent must not be indistinguishable from one that forecast badly. It is
+ * behavioural and so reads no result — a Fixture nobody has played is still a
+ * Fixture this Entrant either answered or did not.
+ */
+export const GAP_RATE_METRIC = "gap_rate";
+export const GAP_RATE_SEASON_TO_DATE_METRIC = "gap_rate_season_to_date";
+
+/**
+ * How many Repairs each Prediction cost before it was valid, as a distribution
+ * over the Fixtures the Lock owns, with the mean over the ones that reached a
+ * valid Prediction as its value.
+ *
+ * The mean alone cannot tell a Base Model that needs one Repair on every
+ * Fixture from one that answers three cleanly and then Gaps the fourth, and
+ * those are different Base Models — so the value is the mean and the detail is
+ * the shape, as the FPL track's `repairs` row is built.
+ *
+ * `n` is the Fixtures the distribution was taken over, which is the Lock's and
+ * not the mean's denominator: the mean is over `n` less the `failed` and
+ * `unattempted` buckets, since a Fixture that never reached a valid Prediction
+ * has no count of Repairs that did. Those two are kept apart here for the same
+ * reason the Gap profile keeps them apart — spending the whole allowance and
+ * never being asked are different failures, and only one is the Base Model's.
+ */
+export const ATTEMPTS_TO_VALID_METRIC = "attempts_to_valid";
+export const ATTEMPTS_TO_VALID_SEASON_TO_DATE_METRIC =
+  "attempts_to_valid_season_to_date";
+
+/**
+ * A Gap the attempt rows explain no further: nothing was ever asked of this
+ * Entrant on this Fixture.
+ *
+ * Its own bucket rather than folded into the causes, because a Base Model that
+ * refused four times and one the run never reached are different failures, and
+ * only one of them is the Base Model's.
+ */
+const UNATTEMPTED = "unattempted";
+
+/** How many Gaps each cause accounts for. */
+export type GapProfile = Record<GapCause | typeof UNATTEMPTED, number>;
+
+/** The breakdown before any Gap is counted: every cause at zero. */
+function emptyGapProfile(): GapProfile {
+  return Object.fromEntries(
+    [...GAP_CAUSES, UNATTEMPTED].map((cause) => [cause, 0])
+  ) as GapProfile;
+}
 
 /**
  * The mean Paired Difference in RPS between one Entrant and its snapshot's
@@ -245,6 +301,8 @@ interface PredictedFixture {
   /** The Outcome the probabilities call likeliest, ties broken canonically. */
   likeliest: Outcome;
   coherent: boolean;
+  /** The Repairs this Prediction cost before it was valid. */
+  repairs: number;
   /** Everything the result decides, set together or not at all. */
   settled: SettledDetail | null;
 }
@@ -287,6 +345,7 @@ interface PredictedRow {
   probs: Probs;
   pred_home: number;
   pred_away: number;
+  repairs: number;
   result: FixtureResult | null;
 }
 
@@ -307,7 +366,7 @@ async function predictedFixtures(
 ): Promise<Map<string, PredictedFixture[]>> {
   const rows = await database.query<PredictedRow>(
     `select f.locked_in_gw as gw, f.fpl_id, p.model_id, p.probs, p.pred_home,
-            p.pred_away, f.result
+            p.pred_away, p.attempts_used as repairs, f.result
        from fixtures f
        join predictions p on p.season = f.season and p.fpl_id = f.fpl_id
       where f.season = $1 and f.locked_in_gw is not null
@@ -326,6 +385,7 @@ async function predictedFixtures(
       probs: row.probs,
       likeliest,
       coherent: likeliest === outcomeOf(row.pred_home, row.pred_away),
+      repairs: row.repairs,
       settled: result === null
         ? null
         : {
@@ -343,6 +403,27 @@ async function predictedFixtures(
   }
   return byEntrant;
 }
+
+/**
+ * A cumulative row's detail is grouped by Gameweek and traced to the Fixture
+ * beneath it. The grouping is what a reader wants — a Season total is read as a
+ * shape over Gameweeks — and the Fixtures under it are what makes the row
+ * answer a surprising total on its own rather than by joining it back to the
+ * Gameweek rows that also hold them.
+ *
+ * Keyed on the `gw` alone, so the Fixtures an Entrant answered and the Fixtures
+ * its Lock owned are grouped by the one function.
+ */
+const perGameweek = <F extends { gw: number }, T>(
+  fixtures: F[],
+  summarise: (scoped: F[]) => T
+) =>
+  [...new Set(fixtures.map(({ gw }) => gw))]
+    .sort((one, other) => one - other)
+    .map((gw) => {
+      const scoped = fixtures.filter((fixture) => fixture.gw === gw);
+      return { gw, n: scoped.length, ...summarise(scoped) };
+    });
 
 interface StoredMetric {
   entrantId: string;
@@ -406,22 +487,6 @@ async function writeRows(
   scoredAt: Date
 ): Promise<void> {
   const settled = settledOf(predicted);
-
-  // A cumulative row's detail is grouped by Gameweek and traced to the Fixture
-  // beneath it. The grouping is what a reader wants — a Season total is read as
-  // a shape over Gameweeks — and the Fixtures under it are what makes the row
-  // answer a surprising total on its own rather than by joining it back to the
-  // Gameweek rows that also hold them.
-  const perGameweek = <F extends PredictedFixture, T>(
-    fixtures: F[],
-    summarise: (scoped: F[]) => T
-  ) =>
-    [...new Set(fixtures.map(({ gw }) => gw))]
-      .sort((one, other) => one - other)
-      .map((gw) => {
-        const scoped = fixtures.filter((fixture) => fixture.gw === gw);
-        return { gw, n: scoped.length, ...summarise(scoped) };
-      });
 
   const store = (
     metric: string,
@@ -545,6 +610,196 @@ async function writeRows(
       cumulative ? { gameweeks: perGameweek(fixtures, split) } : split(fixtures)
     );
   }
+}
+
+/** One Fixture a Lock owns, whoever answered it and whether or not it settled. */
+interface LockedFixture {
+  gw: number;
+  fplId: number;
+}
+
+/**
+ * Every Fixture the Season's Locks own, which is the denominator every
+ * behavioural metric is taken over.
+ *
+ * Read from `fixtures` rather than from the Predictions, because a Fixture no
+ * Entrant answered is exactly the one a Gap rate exists to report and it
+ * appears in no Prediction by definition. `result` is not asked for: whether a
+ * Fixture has been played says nothing about whether it was answered.
+ */
+async function lockedFixtures(
+  database: Database,
+  season: string
+): Promise<LockedFixture[]> {
+  const rows = await database.query<{ gw: number; fpl_id: number }>(
+    `select locked_in_gw as gw, fpl_id
+       from fixtures
+      where season = $1 and locked_in_gw is not null
+      order by locked_in_gw, fpl_id`,
+    [season]
+  );
+  return rows.rows.map(({ gw, fpl_id }) => ({ gw, fplId: fpl_id }));
+}
+
+/** What the attempt rows say one Entrant spent on one Fixture. */
+interface AttemptSummary {
+  attempts: number;
+  /** The kind the last failing attempt recorded, or null if none failed. */
+  cause: GapCause | null;
+}
+
+const attemptKey = (entrantId: string, fplId: number): string =>
+  `${entrantId} ${fplId}`;
+
+/**
+ * How many times each Entrant was asked for each Fixture, and what the last
+ * failure was.
+ *
+ * The last failure is the cause a Gap is reported under, which is the rule
+ * `readGapAlert` already reports live Gaps by: the Repairs before it are what
+ * the Gap survived on the way, and the row that finally left it missing is what
+ * it is down to. Both are counted, so a Base Model asked four times and one the
+ * run never reached are not read the same way.
+ */
+async function attemptsByFixture(
+  database: Database,
+  season: string
+): Promise<Map<string, AttemptSummary>> {
+  const rows = await database.query<{
+    model_id: string;
+    fpl_id: number;
+    attempts: number;
+    cause: GapCause | null;
+  }>(
+    `select model_id, fpl_id, count(*)::int as attempts,
+            (array_agg(error_kind order by attempted_at desc, id desc)
+               filter (where not ok))[1] as cause
+       from attempts
+      where season = $1 and track = 'match' and fpl_id is not null
+      group by model_id, fpl_id`,
+    [season]
+  );
+  return new Map(rows.rows.map((row) => [
+    attemptKey(row.model_id, row.fpl_id),
+    { attempts: row.attempts, cause: row.cause }
+  ]));
+}
+
+/**
+ * One Entrant's Gap rate over the Fixtures given, with every Gap traced to the
+ * attempts that failed to fill it.
+ *
+ * Written for every Entrant of the roster and not only for the ones that
+ * answered: an Entrant with no successful Prediction gets no readable row at
+ * all, since a share over no Fixture is not zero, and this is the row that says
+ * it was absent rather than wrong.
+ */
+async function writeGapRate(
+  database: Database,
+  season: string,
+  gameweek: number,
+  entrantId: string,
+  fixtures: LockedFixture[],
+  answered: Set<number>,
+  tried: Map<string, AttemptSummary>,
+  cumulative: boolean,
+  scoredAt: Date
+): Promise<void> {
+  const split = (scoped: LockedFixture[]) => {
+    const causes = emptyGapProfile();
+    const gaps = scoped
+      .filter(({ fplId }) => !answered.has(fplId))
+      .map(({ fplId }) => {
+        const summary = tried.get(attemptKey(entrantId, fplId));
+        const cause = summary?.cause ?? UNATTEMPTED;
+        causes[cause] += 1;
+        return { fplId, cause, attempts: summary?.attempts ?? 0 };
+      });
+    return { causes, gaps };
+  };
+  const whole = split(fixtures);
+
+  // The Fixtures answered are not named here. The denominator is `n`, and the
+  // `attempts_to_valid` row beside this one already names every Fixture that
+  // did produce a Prediction and what it cost.
+  await storeMetric(database, {
+    entrantId,
+    season,
+    gameweek,
+    metric: cumulative ? GAP_RATE_SEASON_TO_DATE_METRIC : GAP_RATE_METRIC,
+    value: whole.gaps.length / fixtures.length,
+    n: fixtures.length,
+    detail: cumulative ? { gameweeks: perGameweek(fixtures, split) } : whole,
+    scoredAt
+  });
+}
+
+/**
+ * One Entrant's attempts-to-valid over the Fixtures given.
+ *
+ * Nothing is written for an Entrant that reached no valid Prediction at all.
+ * A mean over none of them is not zero, and a stored zero would read as an
+ * Entrant that answered first time every time — the exact opposite of what
+ * happened. The Gap rate beside it is the row that reports the absence, as it
+ * is for every other measure taken over what an Entrant answered.
+ */
+async function writeAttemptsToValid(
+  database: Database,
+  season: string,
+  gameweek: number,
+  entrantId: string,
+  fixtures: LockedFixture[],
+  repairsBy: Map<number, number>,
+  tried: Map<string, AttemptSummary>,
+  cumulative: boolean,
+  scoredAt: Date
+): Promise<void> {
+  const valid = (scoped: LockedFixture[]) =>
+    scoped.flatMap(({ fplId }) => {
+      const repairs = repairsBy.get(fplId);
+      return repairs === undefined ? [] : [{ fplId, repairs }];
+    });
+  const own = valid(fixtures);
+  if (own.length === 0) {
+    return;
+  }
+
+  const split = (scoped: LockedFixture[], reached: typeof own) => {
+    const distribution: Record<string, number> = {
+      ...emptyRepairDistribution(),
+      [UNATTEMPTED]: 0
+    };
+    for (const { repairs } of reached) {
+      const bucket = String(repairs);
+      distribution[bucket] = (distribution[bucket] ?? 0) + 1;
+    }
+    // Everything the Lock owned that never reached a valid Prediction, split
+    // the way the Gap profile splits it: a Base Model that spent its Repairs
+    // and got nowhere is not a Fixture the run never asked it about, and a
+    // single `failed` bucket over both would make a `0.75` failure rate out of
+    // a Season the Entrant was only asked a quarter of.
+    const missing = scoped.filter(({ fplId }) => !repairsBy.has(fplId));
+    const unattempted = missing.filter(({ fplId }) =>
+      tried.get(attemptKey(entrantId, fplId)) === undefined).length;
+    distribution[UNATTEMPTED] = unattempted;
+    distribution["failed"] = missing.length - unattempted;
+    return { distribution, fixtures: reached };
+  };
+
+  await storeMetric(database, {
+    entrantId,
+    season,
+    gameweek,
+    metric: cumulative
+      ? ATTEMPTS_TO_VALID_SEASON_TO_DATE_METRIC
+      : ATTEMPTS_TO_VALID_METRIC,
+    value: own.reduce((total, { repairs }) => total + repairs, 0) / own.length,
+    n: fixtures.length,
+    detail: cumulative
+      ? { gameweeks: perGameweek(fixtures, (gw) => split(gw, valid(gw))) }
+      : split(fixtures, own),
+    scoredAt
+  });
 }
 
 /** What one published comparison stores beside its mean and its `n`. */
@@ -733,20 +988,22 @@ export interface ScoreMatchGameweekOptions {
  * Writes the Match track record for one Gameweek: what each Entrant scored on
  * it, and what the Season has come to through the same Gameweek.
  *
- * Reads stored Fixtures and Predictions and nothing else — no network call, and
- * no reading of the clock beyond stamping the rows, since scoreability is
- * `fixtures.result` being present rather than anything about when the job ran.
- * Running it twice over the same rows therefore leaves the same rows, stamp
+ * Reads stored Fixtures, Predictions and attempts and nothing else — no network
+ * call, and no reading of the clock beyond stamping the rows, since scoreability
+ * is `fixtures.result` being present rather than anything about when the job
+ * ran. Running it twice over the same rows therefore leaves the same rows, stamp
  * included.
  *
  * A Gameweek with nothing settled writes no outcome-dependent row rather than a
  * record of zeros: an unplayed Gameweek and a badly forecast one must not look
- * alike. Coherence is the exception, because it reads the Prediction against
- * itself: it is reported for every Prediction the Gameweek's Lock owns, which
- * is what makes it answerable the moment the Lock passes.
+ * alike. Coherence and the behavioural rows are the exceptions, because they
+ * read the Prediction against itself, or the absence of one against the Lock's
+ * Fixtures: they are answerable the moment the Lock passes.
  *
- * A Gameweek nobody predicted has nothing to say either way, so it returns
- * before opening a transaction.
+ * A Gameweek whose Lock owns no Fixture has nothing to say either way, so it
+ * returns before opening a transaction. A Gameweek nobody predicted is not that
+ * Gameweek: every Entrant Gapped every Fixture of it, and reporting that is what
+ * `gap_rate` is for.
  */
 export async function scoreMatchGameweek({
   database,
@@ -754,12 +1011,12 @@ export async function scoreMatchGameweek({
   gameweek,
   now
 }: ScoreMatchGameweekOptions): Promise<void> {
-  const byEntrant = await predictedFixtures(database, season);
-  if (![...byEntrant.values()].some((predicted) =>
-    predicted.some((fixture) => fixture.gw === gameweek)
-  )) {
+  const locked = await lockedFixtures(database, season);
+  if (!locked.some(({ gw }) => gw === gameweek)) {
     return;
   }
+  const byEntrant = await predictedFixtures(database, season);
+  const tried = await attemptsByFixture(database, season);
 
   // One reading for the whole run, so every row a single scoring pass writes
   // carries the same stamp however long the pass takes.
@@ -795,6 +1052,34 @@ export async function scoreMatchGameweek({
         if (through.length > 0) {
           await writeRows(
             database, season, target, entrantId, through, true, scoredAt
+          );
+        }
+      }
+      // Over the roster rather than over the Entrants that answered: the
+      // Entrant with nothing above is precisely the one a Gap rate reports.
+      for (const entrantId of roster) {
+        // Keyed by Fixture alone: a Fixture id is unique within a Season, and
+        // the Fixture lists below are already scoped to the Gameweeks in view.
+        const repairsBy = new Map(
+          (byEntrant.get(entrantId) ?? []).map(
+            ({ fplId, repairs }) => [fplId, repairs]
+          )
+        );
+        const answered = new Set(repairsBy.keys());
+        for (const [fixtures, cumulative] of [
+          [locked.filter(({ gw }) => gw === target), false],
+          [locked.filter(({ gw }) => gw <= target), true]
+        ] as const) {
+          if (fixtures.length === 0) {
+            continue;
+          }
+          await writeGapRate(
+            database, season, target, entrantId, fixtures, answered, tried,
+            cumulative, scoredAt
+          );
+          await writeAttemptsToValid(
+            database, season, target, entrantId, fixtures, repairsBy, tried,
+            cumulative, scoredAt
           );
         }
       }

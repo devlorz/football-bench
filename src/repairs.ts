@@ -10,3 +10,26 @@
  * chances precede it does not.
  */
 export const MAX_REPAIRS = 3;
+
+/**
+ * Every bucket a Repair count can land in: none used through all three, and
+ * then `failed` for the fourth invalid response that reached nothing valid.
+ *
+ * Counted off `MAX_REPAIRS` rather than written out, so the distribution gains
+ * a column if ADR-0010's allowance ever changes instead of quietly dropping the
+ * counts that no longer fit.
+ *
+ * `failed` is its own bucket and not the top of the count because an ask that
+ * used all three Repairs and reached a valid answer is not the ask that used
+ * all three and did not — they share a number and nothing else. Both tracks
+ * bucket the same way; what a failure is called is each track's own.
+ */
+export const REPAIR_BUCKETS: readonly string[] = [
+  ...Array.from({ length: MAX_REPAIRS + 1 }, (_, used) => String(used)),
+  "failed"
+];
+
+/** The distribution before anything is counted: every bucket at zero. */
+export function emptyRepairDistribution(): Record<string, number> {
+  return Object.fromEntries(REPAIR_BUCKETS.map((bucket) => [bucket, 0]));
+}

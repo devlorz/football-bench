@@ -1,6 +1,5 @@
 import {
   DEMONSTRATION_QUALIFICATION,
-  emptyRepairDistribution,
   FPL_DEMONSTRATION_METRICS,
   FPL_POINTS_METRIC,
   FPL_POINTS_SEASON_TO_DATE_METRIC,
@@ -12,6 +11,7 @@ import {
   VIOLATION_PROFILE_METRIC,
   VIOLATION_PROFILE_SEASON_TO_DATE_METRIC
 } from "../fpl/demonstration-record.js";
+import { emptyRepairDistribution } from "../repairs.js";
 import { SEASON_ROSTER_SIZE } from "../season-roster.js";
 import type { FplRehearsalReport } from "./rehearsal-report.js";
 import {

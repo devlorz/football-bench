@@ -3,14 +3,24 @@ import { MATCH_PROMPT_VERSION } from "./openrouter-entrant.js";
 
 type Database = Pick<Client, "query">;
 
-export type GapCause =
-  | "schema"
-  | "probs_sum"
-  | "refusal"
-  | "provider"
-  | "timeout"
-  | "rate_limit"
-  | "deadline";
+/**
+ * Every cause an attempt row can record for a Prediction that never arrived.
+ *
+ * A tuple rather than a bare union, so a reporter can count a Gap under each
+ * of them and store a breakdown whose columns are the causes that exist rather
+ * than the ones a Gameweek happened to produce.
+ */
+export const GAP_CAUSES = [
+  "schema",
+  "probs_sum",
+  "refusal",
+  "provider",
+  "timeout",
+  "rate_limit",
+  "deadline"
+] as const;
+
+export type GapCause = (typeof GAP_CAUSES)[number];
 
 export interface PredictionGap {
   entrantId: string;

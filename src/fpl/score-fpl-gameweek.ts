@@ -8,7 +8,6 @@ import {
 } from "./apply-gameweek-action.js";
 import {
   DEMONSTRATION_QUALIFICATION,
-  emptyRepairDistribution,
   repairBucket,
   FPL_POINTS_METRIC,
   FPL_POINTS_SEASON_TO_DATE_METRIC,
@@ -22,6 +21,7 @@ import {
   type FplDemonstrationMetric,
   type ViolationProfile
 } from "./demonstration-record.js";
+import { emptyRepairDistribution } from "../repairs.js";
 import {
   loadStartedRoster,
   loadStartingGameweek

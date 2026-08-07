@@ -256,7 +256,27 @@ jobs provide this ordering; the score workflow created by this work must establi
 `scores` already exists and needs no migration: `(model_id, season, gw, track, metric)` with
 `value`, `n`, `detail` and `scored_at`. Metric names are lower-case identifiers —
 `match_points`, `score_pct`, `outcome_pct`, `rps`, `brier`, `accuracy`, `coherence`,
-`gap_rate`. Per-Fixture breakdowns live in `detail` so an aggregate can be drilled into.
+`gap_rate`, `attempts_to_valid`. Per-Fixture breakdowns live in `detail` so an aggregate can
+be drilled into.
+
+The two behavioural rows are taken over the Fixtures their Lock owns rather than over the ones
+an Entrant answered, so `n` is the Lock's Fixture count and a Fixture nobody played still
+counts. Both are written for every Entrant of the roster, including one with no successful
+Prediction at all — that Entrant gets no readable row, and these are what say it was absent
+rather than wrong.
+
+A Gap is attributed to the cause the last failing attempt recorded, which is the rule the live
+Gap alert already reports by: the Repairs before it are what the Gap survived on the way, and
+the row that left it missing is what it is down to. A Gap with no attempt row at all is
+`unattempted` and not a cause, because a Base Model that refused four times and a run that
+never reached one are different failures and only one of them is the Base Model's. That
+distinction holds in both rows: `attempts_to_valid` carries the FPL track's `0`–`3`-and-
+`failed` distribution with `unattempted` beside it rather than folded into `failed`, since a
+single bucket over both would report a Base Model's failure rate as the share of Fixtures it
+was never asked about. Its value is the mean over the Predictions that reached valid, which is
+`n` less those two buckets; an Entrant that reached none of them gets no `attempts_to_valid`
+row, since a mean over nothing is not zero and a stored zero would read as an Entrant that
+answered first time every time.
 
 A published comparison is one such row, stored under
 `rps_paired_difference_season_to_date` against the non-anchor Entrant's `model_id`, with the

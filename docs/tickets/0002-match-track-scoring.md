@@ -112,13 +112,13 @@ before each valid Prediction.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] Gap rate is stored for every Entrant under `gap_rate` per Gameweek and `gap_rate_season_to_date` cumulatively through that Gameweek, including Entrants with no successful Prediction
-- [ ] Gap detail breaks missing Predictions down by the stored failure cause rather than reporting only a total
-- [ ] Attempts-to-valid is reported as the distribution of 0, 1, 2, 3 and failed Repairs using stored attempts and Predictions
-- [ ] Each aggregate retains the Fixture-level evidence needed to trace a Gap or Repair count to its attempts
-- [ ] Behavioural metrics are computed from all Fixtures owned by the relevant Lock and do not depend on whether a result has settled
-- [ ] A re-run over unchanged attempts and Predictions produces identical values and no duplicate rows
-- [ ] Tests cover a clean Entrant, a repaired Prediction, mixed failure causes and a Fixture that remains a Gap
+- [x] Gap rate is stored for every Entrant under `gap_rate` per Gameweek and `gap_rate_season_to_date` cumulatively through that Gameweek, including Entrants with no successful Prediction
+- [x] Gap detail breaks missing Predictions down by the stored failure cause rather than reporting only a total
+- [x] Attempts-to-valid is reported as the distribution of 0, 1, 2, 3 and failed Repairs using stored attempts and Predictions
+- [x] Each aggregate retains the Fixture-level evidence needed to trace a Gap or Repair count to its attempts
+- [x] Behavioural metrics are computed from all Fixtures owned by the relevant Lock and do not depend on whether a result has settled
+- [x] A re-run over unchanged attempts and Predictions produces identical values and no duplicate rows
+- [x] Tests cover a clean Entrant, a repaired Prediction, mixed failure causes and a Fixture that remains a Gap
 
 ---
 

@@ -13,6 +13,10 @@ import {
   BRIER_SEASON_TO_DATE_METRIC,
   COHERENCE_METRIC,
   COHERENCE_SEASON_TO_DATE_METRIC,
+  ATTEMPTS_TO_VALID_METRIC,
+  ATTEMPTS_TO_VALID_SEASON_TO_DATE_METRIC,
+  GAP_RATE_METRIC,
+  GAP_RATE_SEASON_TO_DATE_METRIC,
   MATCH_POINTS_METRIC,
   MATCH_POINTS_QUALIFICATION,
   MATCH_POINTS_SEASON_TO_DATE_METRIC,
@@ -122,17 +126,38 @@ describe("scoring the readable Match Points layer", () => {
     fplId: number,
     home: number,
     away: number,
-    probs: Probs = { H: 0.5, D: 0.3, A: 0.2 }
+    probs: Probs = { H: 0.5, D: 0.3, A: 0.2 },
+    /** The Repairs the valid Prediction cost, as `predict-gameweek` counts. */
+    repairs = 0
   ): Promise<void> => {
     await client.query(
       `insert into predictions (
          model_id, season, fpl_id, probs, pred_home, pred_away, context_id,
          attempts_used
        )
-       select $1, $2, $3, $6, $4, $5, c.id, 0
+       select $1, $2, $3, $6, $4, $5, c.id, $7
          from contexts c
         where c.season = $2 and c.track = 'match' and c.fpl_id = $3`,
-      [entrantId, SEASON, fplId, home, away, JSON.stringify(probs)]
+      [entrantId, SEASON, fplId, home, away, JSON.stringify(probs), repairs]
+    );
+  };
+
+  /**
+   * One attempt row, ok when `cause` is null. Rows land in call order, so the
+   * last failing one written is the one a Gap's cause is read off.
+   */
+  const attempt = async (
+    entrantId: string,
+    fplId: number,
+    lockedInGw: number,
+    cause: string | null
+  ): Promise<void> => {
+    await client.query(
+      `insert into attempts (
+         model_id, season, gw, track, fpl_id, attempt_no, ok, error_kind,
+         trigger
+       ) values ($1, $2, $3, 'match', $4, 0, $5, $6, 'main')`,
+      [entrantId, SEASON, lockedInGw, fplId, cause === null, cause]
     );
   };
 
@@ -252,20 +277,27 @@ describe("scoring the readable Match Points layer", () => {
     )).toBeNull();
   });
 
-  test("reports only Coherence for a Gameweek with no settled result", async () => {
+  test("writes nothing that needs an outcome for an unplayed Gameweek", async () => {
     await storeFixture(1, 1);
     await predict("entrant/a", 1, 2, 1);
 
     await score(1);
 
     // Nothing that needs an outcome is written, so an unplayed Gameweek cannot
-    // be mistaken for a badly forecast one. Coherence needs only the Prediction
-    // and is answerable the moment the Lock passes, so it is written.
+    // be mistaken for a badly forecast one. What is written reads the
+    // Prediction, or the absence of one, and nothing else: Coherence and the
+    // behavioural metrics are all answerable the moment the Lock passes.
     const stored = await client.query<{ metric: string }>(
-      "select metric from scores order by metric"
+      "select distinct metric from scores order by metric"
     );
-    expect(stored.rows.map(({ metric }) => metric))
-      .toEqual([COHERENCE_METRIC, COHERENCE_SEASON_TO_DATE_METRIC]);
+    expect(stored.rows.map(({ metric }) => metric)).toEqual([
+      ATTEMPTS_TO_VALID_METRIC,
+      ATTEMPTS_TO_VALID_SEASON_TO_DATE_METRIC,
+      COHERENCE_METRIC,
+      COHERENCE_SEASON_TO_DATE_METRIC,
+      GAP_RATE_METRIC,
+      GAP_RATE_SEASON_TO_DATE_METRIC
+    ]);
   });
 
   test("attributes a deferred Fixture to the Gameweek that locked it", async () => {
@@ -999,5 +1031,239 @@ describe("scoring the readable Match Points layer", () => {
 
     expect((await comparisons(1)).map(({ detail }) => JSON.stringify(detail)))
       .toEqual(first.map(({ detail }) => JSON.stringify(detail)));
+  });
+
+  /** No Gap of any cause: what a clean Entrant's breakdown looks like. */
+  const NO_GAPS = {
+    schema: 0,
+    probs_sum: 0,
+    refusal: 0,
+    provider: 0,
+    timeout: 0,
+    rate_limit: 0,
+    deadline: 0,
+    unattempted: 0
+  };
+
+  test("reports no Gap for an Entrant that answered every Fixture", async () => {
+    await storeFixture(1, 1);
+    await storeFixture(2, 1);
+    await predict("entrant/a", 1, 2, 1);
+    await predict("entrant/a", 2, 0, 0);
+
+    await score(1);
+
+    expect(await storedValue("entrant/a", 1, GAP_RATE_METRIC))
+      .toMatchObject({ value: 0, n: 2, detail: { causes: NO_GAPS, gaps: [] } });
+  });
+
+  test("counts each Gap under the cause its last failed attempt recorded", async () => {
+    await storeFixture(1, 1);
+    await storeFixture(2, 1);
+    await predict("entrant/a", 1, 2, 1);
+    // Two failures on the same Fixture. The Repair was asked for after the
+    // provider came back, so `schema` is what the Gap is finally down to and
+    // `provider` is what it survived on the way — the last failure is the
+    // cause, and both are attempts.
+    await attempt("entrant/a", 2, 1, "provider");
+    await attempt("entrant/a", 2, 1, "schema");
+
+    await score(1);
+
+    expect(await storedValue("entrant/a", 1, GAP_RATE_METRIC)).toMatchObject({
+      value: 0.5,
+      n: 2,
+      detail: {
+        causes: { ...NO_GAPS, schema: 1 },
+        gaps: [{ fplId: 2, cause: "schema", attempts: 2 }]
+      }
+    });
+  });
+
+  test("separates mixed causes within one Entrant's Gameweek", async () => {
+    await storeFixture(1, 1);
+    await storeFixture(2, 1);
+    await storeFixture(3, 1);
+    await attempt("entrant/a", 1, 1, "refusal");
+    await attempt("entrant/a", 2, 1, "deadline");
+    // Nothing was ever asked of this Entrant on Fixture 3 — the run did not
+    // reach it. The absence is a Gap like any other and cannot be filed under
+    // a stored cause, because there is no attempt row to read one off.
+    await score(1);
+
+    expect(await storedValue("entrant/a", 1, GAP_RATE_METRIC)).toMatchObject({
+      value: 1,
+      n: 3,
+      detail: {
+        causes: { ...NO_GAPS, refusal: 1, deadline: 1, unattempted: 1 },
+        gaps: [
+          { fplId: 1, cause: "refusal", attempts: 1 },
+          { fplId: 2, cause: "deadline", attempts: 1 },
+          { fplId: 3, cause: "unattempted", attempts: 0 }
+        ]
+      }
+    });
+  });
+
+  test("reports a Gap rate for an Entrant with no successful Prediction", async () => {
+    await storeFixture(1, 1);
+    await predict("entrant/a", 1, 2, 1);
+    await attempt("entrant/b", 1, 1, "timeout");
+
+    await score(1);
+
+    // The readable layer writes this Entrant no row at all, since a share over
+    // no Fixture is not zero. `gap_rate` is the row that says it was absent
+    // rather than wrong, so it is written precisely when the others are not.
+    expect(await storedValue("entrant/b", 1, MATCH_POINTS_METRIC)).toBeNull();
+    expect(await storedValue("entrant/b", 1, GAP_RATE_METRIC))
+      .toMatchObject({ value: 1, n: 1 });
+  });
+
+  test("counts Gaps over the Fixtures the Lock owns, settled or not", async () => {
+    await storeFixture(1, 1);
+    await storeFixture(2, 1);
+    await settle(1, 2, 1);
+    await predict("entrant/a", 1, 2, 1);
+    await predict("entrant/a", 2, 0, 0);
+    await attempt("entrant/b", 2, 1, "rate_limit");
+    await predict("entrant/b", 1, 2, 1);
+
+    await score(1);
+
+    // Whether a Fixture has been played says nothing about whether an Entrant
+    // answered it, so both Fixtures are in both denominators. A behavioural
+    // metric is answerable the moment the Lock passes.
+    expect(await storedValue("entrant/a", 1, GAP_RATE_METRIC))
+      .toMatchObject({ value: 0, n: 2 });
+    expect(await storedValue("entrant/b", 1, GAP_RATE_METRIC))
+      .toMatchObject({ value: 0.5, n: 2 });
+  });
+
+  test("accumulates the Gap rate over the Gameweeks before it", async () => {
+    await storeFixture(1, 1);
+    await storeFixture(2, 1);
+    await storeFixture(3, 2);
+    await storeFixture(4, 2);
+    for (const fplId of [1, 2, 3]) {
+      await predict("entrant/a", fplId, 2, 1);
+    }
+    await attempt("entrant/a", 4, 2, "provider");
+
+    await score(1);
+    await score(2);
+
+    expect(await storedValue("entrant/a", 2, GAP_RATE_METRIC))
+      .toMatchObject({ value: 0.5, n: 2 });
+    // One Gap in four Fixtures across the two Gameweeks, and the shape over
+    // them: the Season figure alone cannot tell a Gameweek that failed
+    // entirely from a Gap in each of two.
+    expect(await storedValue("entrant/a", 2, GAP_RATE_SEASON_TO_DATE_METRIC))
+      .toMatchObject({
+        value: 0.25,
+        n: 4,
+        detail: {
+          gameweeks: [
+            { gw: 1, n: 2, causes: NO_GAPS, gaps: [] },
+            {
+              gw: 2,
+              n: 2,
+              causes: { ...NO_GAPS, provider: 1 },
+              gaps: [{ fplId: 4, cause: "provider", attempts: 1 }]
+            }
+          ]
+        }
+      });
+  });
+
+  test("distributes attempts-to-valid over the Repairs each Prediction cost", async () => {
+    await storeFixture(1, 1);
+    await storeFixture(2, 1);
+    await storeFixture(3, 1);
+    await storeFixture(4, 1);
+    await predict("entrant/a", 1, 2, 1, undefined, 0);
+    await predict("entrant/a", 2, 2, 1, undefined, 2);
+    await attempt("entrant/a", 3, 1, "schema");
+    // Fixture 4 was never asked of this Entrant at all.
+
+    await score(1);
+
+    // The distribution is over the four Fixtures the Lock owns, so `n` is four.
+    // The mean is taken over the two that became valid: a Fixture that never
+    // did has no number of Repairs that reached one. The other two are kept
+    // apart — one spent its allowance and got nowhere, the other was never
+    // asked, and folding them together would report a Base Model's failure
+    // rate as double what it was.
+    expect(await storedValue("entrant/a", 1, ATTEMPTS_TO_VALID_METRIC))
+      .toMatchObject({
+        value: 1,
+        n: 4,
+        detail: {
+          distribution: {
+            "0": 1,
+            "1": 0,
+            "2": 1,
+            "3": 0,
+            failed: 1,
+            unattempted: 1
+          },
+          fixtures: [{ fplId: 1, repairs: 0 }, { fplId: 2, repairs: 2 }]
+        }
+      });
+  });
+
+  test("writes no attempts-to-valid row for an Entrant that never reached one", async () => {
+    await storeFixture(1, 1);
+    await predict("entrant/a", 1, 2, 1);
+    await attempt("entrant/b", 1, 1, "refusal");
+
+    await score(1);
+
+    // A mean over no valid Prediction is not zero, and a stored zero would read
+    // as an Entrant that answered first time every time — the exact opposite of
+    // what happened. The Gap rate of 1 beside it is what says so.
+    expect(await storedValue("entrant/b", 1, ATTEMPTS_TO_VALID_METRIC))
+      .toBeNull();
+    expect(await storedValue("entrant/b", 1, GAP_RATE_METRIC))
+      .toMatchObject({ value: 1, n: 1 });
+  });
+
+  test("accumulates attempts-to-valid over the Gameweeks before it", async () => {
+    await storeFixture(1, 1);
+    await storeFixture(2, 2);
+    await storeFixture(3, 2);
+    await predict("entrant/a", 1, 2, 1, undefined, 3);
+    await predict("entrant/a", 2, 2, 1, undefined, 1);
+    await attempt("entrant/a", 3, 2, "timeout");
+
+    await score(1);
+    await score(2);
+
+    expect(await storedValue(
+      "entrant/a", 2, ATTEMPTS_TO_VALID_SEASON_TO_DATE_METRIC
+    )).toMatchObject({
+      value: 2,
+      n: 3,
+      detail: {
+        gameweeks: [
+          {
+            gw: 1,
+            n: 1,
+            distribution: {
+              "0": 0, "1": 0, "2": 0, "3": 1, failed: 0, unattempted: 0
+            },
+            fixtures: [{ fplId: 1, repairs: 3 }]
+          },
+          {
+            gw: 2,
+            n: 2,
+            distribution: {
+              "0": 0, "1": 1, "2": 0, "3": 0, failed: 1, unattempted: 0
+            },
+            fixtures: [{ fplId: 2, repairs: 1 }]
+          }
+        ]
+      }
+    });
   });
 });

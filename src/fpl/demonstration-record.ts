@@ -8,7 +8,6 @@
  * it is arrived at. `score-team-sheet.ts` and `score-fpl-gameweek.ts` are split
  * along the same line.
  */
-import { MAX_REPAIRS } from "../repairs.js";
 import {
   VIOLATION_KINDS,
   type ViolationKind
@@ -51,23 +50,6 @@ export const REPAIRS_METRIC = "repairs";
  * Base Models — so the value is the mean and the detail is the shape.
  */
 export const REPAIRS_SEASON_TO_DATE_METRIC = "repairs_season_to_date";
-
-/**
- * Every bucket a Gameweek's Repair count can land in: none used through all
- * three, and then `failed` for the fourth invalid response that Rolled Over.
- *
- * Counted off `MAX_REPAIRS` rather than written out, so the distribution gains
- * a column if ADR-0010's allowance ever changes instead of quietly dropping
- * the Gameweeks that no longer fit.
- *
- * `failed` is its own bucket and not the top of the count because a Gameweek
- * that used all three Repairs and reached a legal action is not the Gameweek
- * that used all three and did not — they share a number and nothing else.
- */
-export const REPAIR_BUCKETS: readonly string[] = [
-  ...Array.from({ length: MAX_REPAIRS + 1 }, (_, used) => String(used)),
-  "failed"
-];
 
 /**
  * Whether this Gameweek Rolled Over: 1 or 0, so that the same metric name
@@ -120,6 +102,7 @@ export function emptyViolationProfile(): ViolationProfile {
   ) as ViolationProfile;
 }
 
+/** A Gameweek that Rolled Over reached no legal action, whatever it spent. */
 export function repairBucket(repairs: number, rolledOver: boolean): string {
   return rolledOver ? "failed" : String(repairs);
 }
@@ -145,8 +128,3 @@ export const FPL_DEMONSTRATION_METRICS = [
 ] as const;
 
 export type FplDemonstrationMetric = (typeof FPL_DEMONSTRATION_METRICS)[number];
-
-/** The distribution before any Gameweek is counted: every bucket at zero. */
-export function emptyRepairDistribution(): Record<string, number> {
-  return Object.fromEntries(REPAIR_BUCKETS.map((bucket) => [bucket, 0]));
-}
