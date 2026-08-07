@@ -1,7 +1,8 @@
 import type { Client } from "pg";
 import {
   outcomeOf,
-  type FixtureResult
+  type FixtureResult,
+  type Outcome
 } from "../fixture-result.js";
 
 type Database = Pick<Client, "query">;
@@ -63,7 +64,7 @@ interface ScoredFixture {
   fplId: number;
   predicted: [number, number];
   result: [number, number];
-  outcome: string;
+  outcome: Outcome;
   points: number;
 }
 
@@ -130,14 +131,20 @@ async function storeMetric(
   database: Database,
   { entrantId, season, gameweek, metric, value, n, detail }: StoredMetric
 ): Promise<void> {
-  // `scored_at` is left alone by the update, so a re-run over unchanged inputs
-  // leaves the row byte for byte as it was rather than restamping it.
+  // A row the run did not change is not written at all, so `scored_at` keeps
+  // saying when the figure it stamps was arrived at: a re-run over unchanged
+  // inputs leaves the row byte for byte as it was, and a correction that moves
+  // the value moves the stamp with it rather than backdating the new figure to
+  // when the old one was computed.
   await database.query(
     `insert into scores (model_id, season, gw, track, metric, value, n, detail)
      values ($1, $2, $3, 'match', $4, $5, $6, $7)
      on conflict (model_id, season, gw, track, metric)
      do update set value = excluded.value, n = excluded.n,
-                   detail = excluded.detail`,
+                   detail = excluded.detail, scored_at = now()
+              where scores.value is distinct from excluded.value
+                 or scores.n is distinct from excluded.n
+                 or scores.detail is distinct from excluded.detail`,
     [entrantId, season, gameweek, metric, value, n, JSON.stringify(detail)]
   );
 }
@@ -158,18 +165,22 @@ async function writeReadableRows(
 ): Promise<void> {
   const n = fixtures.length;
 
-  // A cumulative row's detail is its Gameweeks rather than its Fixtures: the
-  // per-Fixture trace is already on each Gameweek's own row, and repeating the
-  // Season's every Fixture on every snapshot would grow with the square of the
-  // Season.
+  // A cumulative row's detail is grouped by Gameweek and traced to the Fixture
+  // beneath it. The grouping is what a reader wants — a Season total is read as
+  // a shape over Gameweeks — and the Fixtures under it are what makes the row
+  // answer a surprising total on its own rather than by joining it back to the
+  // Gameweek rows that also hold them.
   const gameweeks = [...new Set(fixtures.map(({ gw }) => gw))].sort(
     (one, other) => one - other
   );
-  const perGameweek = <T>(of: (own: ScoredFixture[]) => T) =>
+  const perGameweek = <T>(summarise: (scored: ScoredFixture[]) => T) =>
     gameweeks.map((gw) => {
-      const own = fixtures.filter((fixture) => fixture.gw === gw);
-      return { gw, n: own.length, ...of(own) };
+      const scored = fixtures.filter((fixture) => fixture.gw === gw);
+      return { gw, n: scored.length, ...summarise(scored) };
     });
+
+  const withoutGameweek = (scored: ScoredFixture[]) =>
+    scored.map(({ gw: _gw, ...rest }) => rest);
 
   const store = (metric: string, value: number, detail: unknown) =>
     storeMetric(database, {
@@ -183,11 +194,12 @@ async function writeReadableRows(
       qualification: MATCH_POINTS_QUALIFICATION,
       ...cumulative
         ? {
-          gameweeks: perGameweek((own) => ({
-            points: own.reduce((total, { points }) => total + points, 0)
+          gameweeks: perGameweek((scored) => ({
+            points: scored.reduce((total, { points }) => total + points, 0),
+            fixtures: withoutGameweek(scored)
           }))
         }
-        : { fixtures: fixtures.map(({ gw: _gw, ...rest }) => rest) }
+        : { fixtures: withoutGameweek(fixtures) }
     }
   );
 
@@ -206,13 +218,15 @@ async function writeReadableRows(
       ({ points }: ScoredFixture) => points >= 2
     ]
   ] as const) {
-    const hits = (of: ScoredFixture[]) =>
-      of.filter(hit).map(({ fplId }) => fplId);
+    // The Fixtures it hit name the value: their count over `n` is the share,
+    // so the row explains itself without the Fixtures it missed.
+    const hits = (scored: ScoredFixture[]) =>
+      scored.filter(hit).map(({ fplId }) => fplId);
     await store(
       cumulative ? cumulativeMetric : metric,
       hits(fixtures).length / n,
       cumulative
-        ? { gameweeks: perGameweek((own) => ({ hits: hits(own) })) }
+        ? { gameweeks: perGameweek((scored) => ({ hits: hits(scored) })) }
         : { hits: hits(fixtures) }
     );
   }

@@ -1,6 +1,7 @@
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
+import { outcomeOf, type FixtureResult } from "../src/fixture-result.js";
 import {
   MATCH_POINTS_METRIC,
   MATCH_POINTS_QUALIFICATION,
@@ -84,11 +85,14 @@ describe("scoring the readable Match Points layer", () => {
       [
         SEASON,
         fplId,
+        // The same shape and the same derivation the fetch stores, so the
+        // fixture cannot drift into proving the scorer against a result no
+        // Season would ever hold.
         JSON.stringify({
           home_goals: home,
           away_goals: away,
-          outcome: home > away ? "H" : home < away ? "A" : "D"
-        })
+          outcome: outcomeOf(home, away)
+        } satisfies FixtureResult)
       ]
     );
   };
@@ -115,13 +119,16 @@ describe("scoring the readable Match Points layer", () => {
     entrantId: string,
     gameweek: number,
     metric: string
-  ): Promise<{ value: number; n: number | null; detail: unknown } | null> => {
+  ): Promise<
+    { value: number; n: number | null; detail: unknown; scoredAt: Date } | null
+  > => {
     const stored = await client.query<{
       value: string;
       n: number | null;
       detail: unknown;
+      scored_at: Date;
     }>(
-      `select value, n, detail
+      `select value, n, detail, scored_at
          from scores
         where model_id = $1 and season = $2 and gw = $3 and track = 'match'
           and metric = $4`,
@@ -130,7 +137,12 @@ describe("scoring the readable Match Points layer", () => {
     const row = stored.rows[0];
     return row === undefined
       ? null
-      : { value: Number(row.value), n: row.n, detail: row.detail };
+      : {
+        value: Number(row.value),
+        n: row.n,
+        detail: row.detail,
+        scoredAt: row.scored_at
+      };
   };
 
   test("awards 5, 3, 2 and 0 on the four exclusive cases", async () => {
@@ -191,6 +203,24 @@ describe("scoring the readable Match Points layer", () => {
       .toMatchObject({ value: 5, n: 1 });
     expect(await storedValue("entrant/a", 1, SCORE_PCT_METRIC))
       .toMatchObject({ value: 1, n: 1 });
+  });
+
+  test("writes no row for an Entrant that Gapped the whole Gameweek", async () => {
+    await storeFixture(1, 1);
+    await settle(1, 2, 1);
+    await predict("entrant/a", 1, 2, 1);
+
+    await scoreMatchGameweek({ database: client, season: SEASON, gameweek: 1 });
+
+    // Nothing settled is not nothing scored. Storing Score % of 0 for an
+    // Entrant that never answered would read as a forecast that got everything
+    // wrong, which is the distinction Gap rate exists to keep — so the
+    // readable layer is silent about it and `gap_rate` reports it.
+    expect(await storedValue("entrant/b", 1, MATCH_POINTS_METRIC)).toBeNull();
+    expect(await storedValue("entrant/b", 1, SCORE_PCT_METRIC)).toBeNull();
+    expect(await storedValue(
+      "entrant/b", 1, MATCH_POINTS_SEASON_TO_DATE_METRIC
+    )).toBeNull();
   });
 
   test("writes no row for a Gameweek with no settled result", async () => {
@@ -270,6 +300,39 @@ describe("scoring the readable Match Points layer", () => {
       .toMatchObject({ value: 1, n: 2 });
     expect(await storedValue("entrant/a", 1, MATCH_POINTS_SEASON_TO_DATE_METRIC))
       .toMatchObject({ value: 5, n: 1 });
+    // Grouped by Gameweek and traced to the Fixture, so the snapshot answers
+    // where its 8 came from without a join back to the Gameweek rows.
+    expect((await storedValue(
+      "entrant/a", 2, MATCH_POINTS_SEASON_TO_DATE_METRIC
+    ))?.detail).toEqual({
+      qualification: MATCH_POINTS_QUALIFICATION,
+      gameweeks: [
+        {
+          gw: 1,
+          n: 1,
+          points: 5,
+          fixtures: [
+            { fplId: 1, predicted: [2, 1], result: [2, 1], outcome: "H", points: 5 }
+          ]
+        },
+        {
+          gw: 2,
+          n: 1,
+          points: 3,
+          fixtures: [
+            { fplId: 2, predicted: [1, 1], result: [0, 0], outcome: "D", points: 3 }
+          ]
+        }
+      ]
+    });
+    expect((await storedValue(
+      "entrant/a", 2, SCORE_PCT_SEASON_TO_DATE_METRIC
+    ))?.detail).toEqual({
+      gameweeks: [
+        { gw: 1, n: 1, hits: [1] },
+        { gw: 2, n: 1, hits: [] }
+      ]
+    });
   });
 
   test("recomputes later snapshots when an earlier result is corrected", async () => {
@@ -281,6 +344,7 @@ describe("scoring the readable Match Points layer", () => {
     await predict("entrant/a", 2, 1, 1);
     await scoreMatchGameweek({ database: client, season: SEASON, gameweek: 1 });
     await scoreMatchGameweek({ database: client, season: SEASON, gameweek: 2 });
+    const before = await storedValue("entrant/a", 1, MATCH_POINTS_METRIC);
 
     // The Home win is overturned to a 1-1 draw: the exact 2-1 becomes a miss,
     // so Gameweek 1 falls to 0 and the Season through Gameweek 2 to the 3 the
@@ -294,6 +358,13 @@ describe("scoring the readable Match Points layer", () => {
       .toMatchObject({ value: 3, n: 2 });
     expect(await storedValue("entrant/a", 2, SCORE_PCT_SEASON_TO_DATE_METRIC))
       .toMatchObject({ value: 0, n: 2 });
+
+    // The corrected figure carries when it was arrived at, not when the figure
+    // it replaced was.
+    const after = await storedValue("entrant/a", 1, MATCH_POINTS_METRIC);
+    expect(after?.scoredAt.getTime()).toBeGreaterThan(
+      before?.scoredAt.getTime() ?? Infinity
+    );
   });
 
   test("re-running over the same stored rows changes nothing", async () => {
