@@ -27,13 +27,13 @@ replaces that result so the next scoring run can recompute from the corrected ev
 
 **Blocked by:** None — can start immediately.
 
-- [ ] The FPL fixtures boundary validates `finished`, `finished_provisional`, `team_h_score` and `team_a_score`, and an invalid response is archived before derived writes are refused
-- [ ] A Fixture gains no result until the feed reports `finished`; `finished_provisional` alone never makes a Fixture scoreable
-- [ ] A settled Fixture stores its Home and Away goals together with the derived `H`, `D` or `A` outcome
-- [ ] A changed settled score updates the existing Fixture result rather than creating another Fixture or refusing the correction
-- [ ] A Fixture that is never declared finished remains without a result and needs no special state
-- [ ] Both daily and Gameweek-specific fetches produce the same result behaviour and remain idempotent
-- [ ] Tests exercise provisional-only, `finished` with both flags true, and corrected results against real Postgres, treating the pinned `finished` semantics as the contract rather than claiming the current all-unfinished archive proves it
+- [x] The FPL fixtures boundary validates `finished`, `finished_provisional`, `team_h_score` and `team_a_score`, and an invalid response is archived before derived writes are refused
+- [x] A Fixture gains no result until the feed reports `finished`; `finished_provisional` alone never makes a Fixture scoreable
+- [x] A settled Fixture stores its Home and Away goals together with the derived `H`, `D` or `A` outcome
+- [x] A changed settled score updates the existing Fixture result rather than creating another Fixture or refusing the correction
+- [x] A Fixture that is never declared finished remains without a result and needs no special state
+- [x] Both daily and Gameweek-specific fetches produce the same result behaviour and remain idempotent
+- [x] Tests exercise provisional-only, `finished` with both flags true, and corrected results against real Postgres, treating the pinned `finished` semantics as the contract rather than claiming the current all-unfinished archive proves it
 
 ---
 

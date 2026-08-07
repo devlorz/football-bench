@@ -917,4 +917,166 @@ describe("fetching an FPL Gameweek", () => {
       latest_snapshot_archived: true
     }]);
   });
+
+  // The pre-Season archive reports every Fixture unfinished, so the pinned
+  // `finished` contract is exercised by patching the archived feed rather than
+  // by reading agreement out of an archive that cannot disagree.
+  async function fixturesReporting(
+    patches: Record<number, Record<string, unknown>>
+  ): Promise<string> {
+    const fixtures = JSON.parse(
+      await archivedBody("fpl-fixtures-2026-27.json.gz")
+    ) as { id: number }[];
+    for (const fixture of fixtures) {
+      Object.assign(fixture, patches[fixture.id] ?? {});
+    }
+    return JSON.stringify(fixtures);
+  }
+
+  async function reportedResponses(fixturesBody: string) {
+    const responses = new Map([
+      [
+        "https://fantasy.premierleague.com/api/bootstrap-static/",
+        await archivedBody("fpl-bootstrap-2026-27.json.gz")
+      ],
+      ["https://fantasy.premierleague.com/api/fixtures/", fixturesBody]
+    ]);
+    return async (url: string) => ({
+      status: 200,
+      body: responses.get(url) ?? ""
+    });
+  }
+
+  async function fetchReportedFixtures(fixturesBody: string): Promise<void> {
+    await fetchFplGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      now: beforeFirstDeadline,
+      http: await reportedResponses(fixturesBody)
+    });
+  }
+
+  test("stores a result only for Fixtures the feed reports finished", async () => {
+    await fetchReportedFixtures(await fixturesReporting({
+      1: {
+        finished: true,
+        finished_provisional: true,
+        team_h_score: 2,
+        team_a_score: 1
+      },
+      2: {
+        finished: false,
+        finished_provisional: true,
+        team_h_score: 1,
+        team_a_score: 1
+      },
+      3: {
+        finished: true,
+        finished_provisional: true,
+        team_h_score: 0,
+        team_a_score: 0
+      },
+      4: {
+        finished: true,
+        finished_provisional: true,
+        team_h_score: 1,
+        team_a_score: 2
+      }
+    }));
+
+    const stored = await client.query(
+      "select fpl_id, result from fixtures order by fpl_id"
+    );
+    expect(stored.rows.map(({ fpl_id: fplId, result }) => [fplId, result]))
+      .toEqual([
+        [1, { home_goals: 2, away_goals: 1, outcome: "H" }],
+        [2, null],
+        [3, { home_goals: 0, away_goals: 0, outcome: "D" }],
+        [4, { home_goals: 1, away_goals: 2, outcome: "A" }],
+        [5, null],
+        [6, null],
+        [7, null],
+        [8, null],
+        [9, null],
+        [10, null]
+      ]);
+  });
+
+  test("applies a corrected score to the same Fixture on a daily fetch", async () => {
+    await fetchReportedFixtures(await fixturesReporting({
+      1: {
+        finished: true,
+        finished_provisional: true,
+        team_h_score: 2,
+        team_a_score: 1
+      }
+    }));
+
+    const correctedFixturesBody = await fixturesReporting({
+      1: {
+        finished: true,
+        finished_provisional: true,
+        team_h_score: 0,
+        team_a_score: 1
+      }
+    });
+    const http = await reportedResponses(correctedFixturesBody);
+    for (const _run of [1, 2]) {
+      await fetchFplDaily({
+        database: client,
+        season: "2026-27",
+        now: beforeFirstDeadline,
+        http
+      });
+    }
+
+    const stored = await client.query(
+      `select result
+         from fixtures
+        where season = '2026-27' and fpl_id = 1`
+    );
+    expect(stored.rows).toEqual([{
+      result: { home_goals: 0, away_goals: 1, outcome: "A" }
+    }]);
+  });
+
+  test("refuses a result feed it cannot read, after archiving it", async () => {
+    const changedFixturesBody = await fixturesReporting({
+      1: { finished: "yes" },
+      2: { finished_provisional: null },
+      3: { team_h_score: 1.5 },
+      // Settled with no goals is unreadable: it would silently leave a
+      // scoreable Fixture without the result every metric reads.
+      4: { finished: true, team_h_score: 2, team_a_score: null }
+    });
+    await expect(fetchFplGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      now: beforeFirstDeadline,
+      http: await reportedResponses(changedFixturesBody)
+    })).rejects.toMatchObject({
+      name: FplSourceValidationError.name,
+      // Feed order, not id order: ids 1, 4, 3 and 2 sit at these indices.
+      issues: [
+        { field: "0.finished" },
+        { field: "1.team_a_score" },
+        { field: "2.team_h_score" },
+        { field: "5.finished_provisional" }
+      ]
+    });
+
+    const stored = await client.query(
+      `select
+         (select count(*)::int from fixtures) as fixtures,
+         (select body
+            from raw_snapshots
+           where source = 'fpl_fixtures') as archived`
+    );
+    expect(stored.rows).toEqual([{
+      fixtures: 0,
+      archived: changedFixturesBody
+    }]);
+  });
 });

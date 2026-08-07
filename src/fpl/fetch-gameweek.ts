@@ -49,12 +49,46 @@ const fixtureSchema = z.looseObject({
   event: z.number().int().positive().nullable(),
   kickoff_time: z.iso.datetime().nullable(),
   team_h: z.number().int().positive(),
-  team_a: z.number().int().positive()
+  team_a: z.number().int().positive(),
+  finished: z.boolean(),
+  finished_provisional: z.boolean(),
+  team_h_score: z.number().int().nonnegative().nullable(),
+  team_a_score: z.number().int().nonnegative().nullable()
+}).check(({ value: fixture, issues }) => {
+  // A finished Fixture without goals would be scoreable with nothing to score.
+  for (const side of ["team_h_score", "team_a_score"] as const) {
+    if (fixture.finished && fixture[side] === null) {
+      issues.push({
+        code: "custom",
+        input: fixture[side],
+        path: [side],
+        message: `finished Fixture ${fixture.id} has no ${side}`
+      });
+    }
+  }
 });
 
 const fixturesSchema = z.array(fixtureSchema);
 
 type Database = Pick<Client, "query">;
+
+/**
+ * `finished` alone decides scoreability: `finished_provisional` may still be
+ * true once `finished` turns true, so the two are never combined.
+ */
+function settledResult(
+  fixture: z.infer<typeof fixtureSchema>
+): string | null {
+  const { finished, team_h_score: home, team_a_score: away } = fixture;
+  if (!finished || home === null || away === null) {
+    return null;
+  }
+  return JSON.stringify({
+    home_goals: home,
+    away_goals: away,
+    outcome: home > away ? "H" : home < away ? "A" : "D"
+  });
+}
 
 export interface FetchFplGameweekOptions {
   database: Database;
@@ -403,12 +437,14 @@ async function fetchFpl({
         : null;
       await database.query(
         `insert into fixtures (
-           season, fpl_id, gw, locked_in_gw, home_team, away_team, kickoff_at
+           season, fpl_id, gw, locked_in_gw, home_team, away_team, kickoff_at,
+           result
          )
-         values ($1, $2, $3, $4, $5, $6, $7)
+         values ($1, $2, $3, $4, $5, $6, $7, $9)
          on conflict (season, fpl_id)
          do update set
            gw = excluded.gw,
+           result = coalesce(excluded.result, fixtures.result),
            home_team = excluded.home_team,
            away_team = excluded.away_team,
            kickoff_at = excluded.kickoff_at,
@@ -432,7 +468,8 @@ async function fetchFpl({
           fixture.homeTeam,
           fixture.awayTeam,
           fixture.kickoff_time,
-          observedAt
+          observedAt,
+          settledResult(fixture)
         ]
       );
     }
