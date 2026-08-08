@@ -9,6 +9,11 @@ import {
 import {
   ACCURACY_METRIC,
   ACCURACY_SEASON_TO_DATE_METRIC,
+  BET_HIT_PCT_METRIC,
+  BET_HIT_PCT_SEASON_TO_DATE_METRIC,
+  BET_POINTS_METRIC,
+  BET_POINTS_QUALIFICATION,
+  BET_POINTS_SEASON_TO_DATE_METRIC,
   BRIER_METRIC,
   BRIER_SEASON_TO_DATE_METRIC,
   COHERENCE_METRIC,
@@ -33,6 +38,7 @@ import {
   SCORE_PCT_METRIC,
   SCORE_PCT_SEASON_TO_DATE_METRIC,
   scoreMatchGameweek,
+  type BetSlipDetail,
   type PairedDifferenceDetail
 } from "../src/predictions/score-match-gameweek.js";
 import { MATCH_PROMPT_VERSION } from "../src/predictions/openrouter-entrant.js";
@@ -282,6 +288,8 @@ describe("scoring the readable Match Points layer", () => {
     // readable layer is silent about it and `gap_rate` reports it.
     expect(await storedValue("entrant/b", 1, MATCH_POINTS_METRIC)).toBeNull();
     expect(await storedValue("entrant/b", 1, SCORE_PCT_METRIC)).toBeNull();
+    expect(await storedValue("entrant/b", 1, BET_POINTS_METRIC)).toBeNull();
+    expect(await storedValue("entrant/b", 1, BET_HIT_PCT_METRIC)).toBeNull();
     expect(await storedValue(
       "entrant/b", 1, MATCH_POINTS_SEASON_TO_DATE_METRIC
     )).toBeNull();
@@ -436,6 +444,12 @@ describe("scoring the readable Match Points layer", () => {
       .toMatchObject({ value: 3, n: 2 });
     expect(await storedValue("entrant/a", 2, SCORE_PCT_SEASON_TO_DATE_METRIC))
       .toMatchObject({ value: 0, n: 2 });
+
+    // The second ranking tracks the correction under the same gate: against the
+    // 1-1 the 2-1 loses the Home win and over 2.5 on a total of two, and keeps
+    // under 3.5, under 4.5 and BTTS yes — three where it had five.
+    expect(await storedValue("entrant/a", 1, BET_POINTS_METRIC))
+      .toMatchObject({ value: 3, n: 1 });
 
     // The corrected figure carries when it was arrived at, not when the figure
     // it replaced was — and the Gameweek 2 row the correction did not move
@@ -1322,9 +1336,12 @@ describe("scoring the readable Match Points layer", () => {
     await score(1);
 
     // A Reference Line is not a competitor: it names no scoreline to be ranked
-    // on, and was never asked for a Prediction it could Gap or Repair.
+    // on — so neither readable ranking can hold it — and was never asked for a
+    // Prediction it could Gap or Repair.
     for (const metric of [
       MATCH_POINTS_METRIC,
+      BET_POINTS_METRIC,
+      BET_HIT_PCT_METRIC,
       SCORE_PCT_METRIC,
       OUTCOME_PCT_METRIC,
       COHERENCE_METRIC,
@@ -1717,6 +1734,231 @@ describe("scoring the readable Match Points layer", () => {
         ]
       }
     });
+  });
+
+  test("awards one point per winning leg of the Bet Slip", async () => {
+    await storeFixture(1, 1);
+    await storeFixture(2, 1);
+    await settle(1, 2, 1);
+    await settle(2, 0, 0);
+    // Hand-computed against the two results. The 2-1 is a Home win totalling
+    // three with both sides scoring; the 0-0 is a goalless draw.
+    //
+    // a on the 2-1 naming 2-1: Home, over 2.5, under 3.5, under 4.5, BTTS yes.
+    //   Every leg the result settles — five.
+    // b on the 0-0 naming 3-2: Home against a draw, over all three lines
+    //   against a total of none, BTTS yes against neither side scoring — zero.
+    // c on the 2-1 naming 0-0: the draw against a Home win, under 2.5 against
+    //   three goals and BTTS no against both scoring all lose, but under 3.5
+    //   and under 4.5 both land — two, the conservative slip collecting the
+    //   high lines cheaply.
+    // d on the 0-0 naming 1-1: the draw and all three unders land, BTTS yes
+    //   against neither side scoring does not — four.
+    await predict("entrant/a", 1, 2, 1);
+    await predict("entrant/b", 2, 3, 2);
+    await predict("entrant/c", 1, 0, 0);
+    await predict("entrant/d", 2, 1, 1);
+
+    await score(1);
+
+    expect(await storedValue("entrant/a", 1, BET_POINTS_METRIC))
+      .toMatchObject({ value: 5, n: 1 });
+    expect(await storedValue("entrant/b", 1, BET_POINTS_METRIC))
+      .toMatchObject({ value: 0, n: 1 });
+    expect(await storedValue("entrant/c", 1, BET_POINTS_METRIC))
+      .toMatchObject({ value: 2, n: 1 });
+    expect(await storedValue("entrant/d", 1, BET_POINTS_METRIC))
+      .toMatchObject({ value: 4, n: 1 });
+  });
+
+  test("stores every leg of every slip and the ranking qualification", async () => {
+    await storeFixture(1, 1);
+    await settle(1, 2, 1);
+    await predict("entrant/c", 1, 0, 0);
+
+    await score(1);
+
+    // The conservative slip against the 2-1, leg by leg as a person reads it:
+    // the draw lost, under 2.5 lost against three goals, the two higher unders
+    // won, and BTTS no lost against both sides scoring.
+    expect((await storedValue("entrant/c", 1, BET_POINTS_METRIC))?.detail)
+      .toEqual({
+        qualification: BET_POINTS_QUALIFICATION,
+        fixtures: [
+          {
+            fplId: 1,
+            predicted: [0, 0],
+            result: [2, 1],
+            slip: [
+              { market: "result", position: "D", settled: "H", won: false },
+              {
+                market: "over_under_2.5",
+                position: "under",
+                settled: "over",
+                won: false
+              },
+              {
+                market: "over_under_3.5",
+                position: "under",
+                settled: "under",
+                won: true
+              },
+              {
+                market: "over_under_4.5",
+                position: "under",
+                settled: "under",
+                won: true
+              },
+              { market: "btts", position: "no", settled: "yes", won: false }
+            ]
+          }
+        ]
+      });
+  });
+
+  test("settles the result leg by the scoreline, never by probs", async () => {
+    await storeFixture(1, 1);
+    await settle(1, 2, 1);
+    // Incoherent on purpose: Home is likeliest under the probabilities and the
+    // scoreline names an Away win. The slip is the scoreline's, so the result
+    // leg loses against the Home win — reading the argmax would have won it and
+    // made this slip a 3.
+    await predict("entrant/a", 1, 0, 1, { H: 0.8, D: 0.1, A: 0.1 });
+
+    await score(1);
+
+    const stored = await storedValue("entrant/a", 1, BET_POINTS_METRIC);
+    expect(stored).toMatchObject({ value: 2, n: 1 });
+    expect((stored?.detail as BetSlipDetail).fixtures[0]?.slip[0])
+      .toEqual({ market: "result", position: "A", settled: "H", won: false });
+  });
+
+  test("divides Bet hit % by the markets actually bet", async () => {
+    for (const fplId of [1, 2, 3, 4]) {
+      await storeFixture(fplId, 1);
+    }
+    await settle(1, 2, 1);
+    await settle(2, 0, 0);
+    // Fixture 3 is predicted and unplayed; Fixture 4 is settled and Gapped.
+    await settle(4, 3, 1);
+    await predict("entrant/a", 1, 0, 0);
+    await predict("entrant/a", 2, 1, 1);
+    await predict("entrant/a", 3, 2, 0);
+
+    await score(1);
+
+    // Two slips were placed, so ten markets were bet. The 0-0 against the 2-1
+    // won the two high unders; the 1-1 against the 0-0 won everything but BTTS:
+    // six of ten. Neither the Fixture with no result nor the Gap enters the
+    // denominator — one absent slip would otherwise pull the rate down as if
+    // its five markets had lost.
+    expect(await storedValue("entrant/a", 1, BET_POINTS_METRIC))
+      .toMatchObject({ value: 6, n: 2 });
+    expect(await storedValue("entrant/a", 1, BET_HIT_PCT_METRIC)).toMatchObject({
+      value: 0.6,
+      n: 2,
+      detail: {
+        won: 6,
+        bet: 10,
+        markets: {
+          result: 0.5,
+          "over_under_2.5": 0.5,
+          "over_under_3.5": 1,
+          "over_under_4.5": 1,
+          btts: 0
+        }
+      }
+    });
+  });
+
+  test("folds a late-settling deferred slip into its locked Gameweek", async () => {
+    await storeFixture(1, 1);
+    await storeFixture(2, 1, 2);
+    await storeFixture(3, 2);
+    await settle(1, 2, 1);
+    await settle(3, 0, 0);
+    // The 2-1 named exactly is five legs; the 1-1 against the goalless draw
+    // wins everything but BTTS, four. The deferred Fixture is unplayed for now.
+    await predict("entrant/a", 1, 2, 1);
+    await predict("entrant/a", 2, 1, 0);
+    await predict("entrant/a", 3, 1, 1);
+    await predict("entrant/b", 1, 2, 1);
+
+    await score(1);
+    await score(2);
+
+    expect(await storedValue("entrant/a", 1, BET_POINTS_METRIC))
+      .toMatchObject({ value: 5, n: 1 });
+    expect(await storedValue(
+      "entrant/a", 2, BET_POINTS_SEASON_TO_DATE_METRIC
+    )).toMatchObject({ value: 9, n: 2 });
+
+    // The deferred Fixture finishes 1-1 a Gameweek later. Against the 1-0 named
+    // under Gameweek 1's Lock: the Home win loses and BTTS no loses, the three
+    // unders all land on a total of two — three legs.
+    await settle(2, 1, 1);
+    await score(1, CORRECTED_AT);
+
+    // Gameweek 1's own row gains it, because Gameweek 1's Lock is what it was
+    // committed under, and the snapshot through Gameweek 2 gains it as well
+    // rather than staying permanently short of it.
+    expect(await storedValue("entrant/a", 1, BET_POINTS_METRIC))
+      .toMatchObject({ value: 8, n: 2 });
+    expect(await storedValue("entrant/a", 1, BET_HIT_PCT_METRIC))
+      .toMatchObject({ value: 0.8, n: 2 });
+    expect(await storedValue("entrant/a", 2, BET_POINTS_METRIC))
+      .toMatchObject({ value: 4, n: 1 });
+    expect(await storedValue(
+      "entrant/a", 2, BET_POINTS_SEASON_TO_DATE_METRIC
+    )).toMatchObject({
+      value: 12,
+      n: 3,
+      detail: {
+        gameweeks: [
+          { gw: 1, n: 2, points: 8 },
+          { gw: 2, n: 1, points: 4 }
+        ]
+      }
+    });
+    // Twelve winning legs of the fifteen the three slips stated.
+    expect(await storedValue(
+      "entrant/a", 2, BET_HIT_PCT_SEASON_TO_DATE_METRIC
+    )).toMatchObject({ value: 0.8, n: 3, detail: { won: 12, bet: 15 } });
+
+    // The Entrant that answered only Gameweek 1's first Fixture keeps the one
+    // slip it placed: the Gap forfeits its five markets in the total silently,
+    // and no row is invented for it.
+    expect(await storedValue(
+      "entrant/b", 2, BET_POINTS_SEASON_TO_DATE_METRIC
+    )).toMatchObject({ value: 5, n: 1 });
+  });
+
+  test("settles integer totals against the .5 lines with no push", async () => {
+    // One Fixture either side of each line, named exactly: totals of 2, 3, 4
+    // and 5 goals. Every line is a half, so each total falls strictly on one
+    // side of each of them and a slip naming the total exactly wins all five
+    // legs — 20 Bet Points over the four Fixtures, with no third position for a
+    // push to be reported under.
+    const totals: [number, [number, number], string[]][] = [
+      [1, [1, 1], ["under", "under", "under"]],
+      [2, [2, 1], ["over", "under", "under"]],
+      [3, [2, 2], ["over", "over", "under"]],
+      [4, [3, 2], ["over", "over", "over"]]
+    ];
+    for (const [fplId, [home, away]] of totals) {
+      await storeFixture(fplId, 1);
+      await settle(fplId, home, away);
+      await predict("entrant/a", fplId, home, away);
+    }
+
+    await score(1);
+
+    const stored = await storedValue("entrant/a", 1, BET_POINTS_METRIC);
+    expect(stored).toMatchObject({ value: 20, n: 4 });
+    expect((stored?.detail as BetSlipDetail).fixtures.map(({ slip }) =>
+      slip.filter(({ market }) => market.startsWith("over_under"))
+        .map(({ settled }) => settled)))
+      .toEqual(totals.map(([, , sides]) => sides));
   });
 });
 

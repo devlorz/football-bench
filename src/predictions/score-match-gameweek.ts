@@ -35,6 +35,35 @@ export const MATCH_POINTS_QUALIFICATION =
 export const MATCH_POINTS_METRIC = "match_points";
 export const MATCH_POINTS_SEASON_TO_DATE_METRIC = "match_points_season_to_date";
 
+/**
+ * Bet Points rank a second leaderboard and support no claim on their own
+ * (ADR-0023), and the flat stake is the part a reader has to be told: the slip
+ * is oddsless, so the cheap high lines pay the same as the hard result leg.
+ *
+ * Carried in the detail of every row a ranking can be read off, for the same
+ * reason the Match Points qualification is — a value must not be able to reach
+ * a reader without it.
+ */
+export const BET_POINTS_QUALIFICATION =
+  "Bet Points rank a second leaderboard and are not evidence: five flat, "
+  + "oddsless markets read off one named scoreline, so a conservative "
+  + "low-scoring slip collects the high over/under lines cheaply — under 4.5 "
+  + "lands in roughly nine Fixtures of ten — and they reward played "
+  + "percentages rather than boldness. Whether one Entrant forecasts better "
+  + "than another is only supported by the probability layer's Paired "
+  + "Differences and their interval.";
+
+/**
+ * One Gameweek's Bet Points, and the Season's through the same Gameweek: the
+ * second readable ranking, read off the same Predicted Score (ADR-0023).
+ */
+export const BET_POINTS_METRIC = "bet_points";
+export const BET_POINTS_SEASON_TO_DATE_METRIC = "bet_points_season_to_date";
+
+/** The share of the markets the slips stated that won, won and bet beside it. */
+export const BET_HIT_PCT_METRIC = "bet_hit_pct";
+export const BET_HIT_PCT_SEASON_TO_DATE_METRIC = "bet_hit_pct_season_to_date";
+
 /** The share of scored Fixtures whose exact scoreline the Entrant named. */
 export const SCORE_PCT_METRIC = "score_pct";
 export const SCORE_PCT_SEASON_TO_DATE_METRIC = "score_pct_season_to_date";
@@ -289,6 +318,84 @@ export function matchPoints(
   return outcomeOf(predictedHome, predictedAway) === result.outcome ? 2 : 0;
 }
 
+/** The goal-total lines a slip is read against (ADR-0023). */
+const OVER_UNDER_LINES = [2.5, 3.5, 4.5] as const;
+
+/** The five markets a slip states, named after the line each reads. */
+type BetMarket =
+  | "result"
+  | `over_under_${(typeof OVER_UNDER_LINES)[number]}`
+  | "btts";
+
+/**
+ * Every side a leg can take: an Outcome on the result leg, a side of the line
+ * on a goal total, yes or no on both teams to score.
+ *
+ * One union over all five markets rather than one per market, because a leg
+ * settles by comparing its own two sides and never one market's against
+ * another's.
+ */
+type BetPosition = Outcome | "over" | "under" | "yes" | "no";
+
+/**
+ * One market of a Bet Slip: the side the Predicted Score took, the side the
+ * result settled on, and whether they are the same.
+ */
+export interface BetLeg {
+  market: BetMarket;
+  position: BetPosition;
+  settled: BetPosition;
+  won: boolean;
+}
+
+/** What a Bet Points row retains: one slip per Fixture it settled. */
+export interface BetSlipDetail {
+  fixtures: {
+    fplId: number;
+    predicted: [number, number];
+    result: [number, number];
+    slip: BetLeg[];
+  }[];
+}
+
+/**
+ * The five markets one Predicted Score implies, settled against the result:
+ * the match result, the three goal-total lines, and both teams to score.
+ *
+ * Every leg is won by taking the side the result took, so one comparison
+ * settles all five and no leg can push — goal totals are integers and every
+ * line is a half (spec 0008).
+ *
+ * Nothing here reads `probs`, the result leg included (ADR-0023): the slip is
+ * one decision, so an incoherent Prediction settles by its scoreline and its
+ * incoherence stays measured by Coherence alone.
+ */
+function betSlip(
+  predictedHome: number,
+  predictedAway: number,
+  result: FixtureResult
+): BetLeg[] {
+  const { home_goals: home, away_goals: away } = result;
+  const leg = (
+    market: BetMarket,
+    position: BetPosition,
+    settled: BetPosition
+  ): BetLeg => ({ market, position, settled, won: position === settled });
+  const side = (total: number, line: number): BetPosition =>
+    total > line ? "over" : "under";
+  const both = (homeGoals: number, awayGoals: number): BetPosition =>
+    homeGoals > 0 && awayGoals > 0 ? "yes" : "no";
+  return [
+    leg("result", outcomeOf(predictedHome, predictedAway), result.outcome),
+    ...OVER_UNDER_LINES.map((line) => leg(
+      `over_under_${line}`,
+      side(predictedHome + predictedAway, line),
+      side(home + away, line)
+    )),
+    leg("btts", both(predictedHome, predictedAway), both(home, away))
+  ];
+}
+
 /**
  * One Fixture as one forecaster saw it, whether that forecaster is an Entrant
  * or a Reference Line. Everything a result decides is null until the Fixture
@@ -330,6 +437,7 @@ interface PredictedFixture extends ForecastFixture {
 
 interface SettledDetail extends ForecastSettled {
   points: number;
+  slip: BetLeg[];
 }
 
 type Settled<F extends ForecastFixture> =
@@ -345,6 +453,27 @@ const settledOf = <F extends ForecastFixture>(fixtures: F[]): Settled<F>[] =>
 
 const totalPoints = (fixtures: SettledFixture[]): number =>
   fixtures.reduce((total, { settled }) => total + settled.points, 0);
+
+/**
+ * What the slips over the Fixtures given came to: the markets won, the markets
+ * they stated, and the rate of each market beneath them.
+ *
+ * The winning legs are Bet Points and the pair is Bet hit %, so the two rows
+ * are one count read twice rather than two counts that could disagree.
+ */
+const betSlips = (fixtures: SettledFixture[]) => {
+  const legs = fixtures.flatMap(({ settled }) => settled.slip);
+  return {
+    won: legs.filter(({ won }) => won).length,
+    bet: legs.length,
+    markets: Object.fromEntries(
+      [...new Set(legs.map(({ market }) => market))].map((market) => {
+        const own = legs.filter((leg) => leg.market === market);
+        return [market, own.filter(({ won }) => won).length / own.length];
+      })
+    )
+  };
+};
 
 /**
  * RPS and Brier aggregate as the mean of their per-Fixture values, so a
@@ -412,6 +541,7 @@ async function predictedFixtures(
           result: [result.home_goals, result.away_goals],
           outcome: result.outcome,
           points: matchPoints(row.pred_home, row.pred_away, result),
+          slip: betSlip(row.pred_home, row.pred_away, result),
           rps: rankedProbabilityScore(row.probs, result.outcome),
           brier: brierScore(row.probs, result.outcome),
           accurate: likeliest === result.outcome
@@ -653,6 +783,56 @@ async function writeRows(
           }
           : pointsDetail(settled)
       }
+    );
+
+    // The second readable ranking, off the same Predicted Scores. The slips are
+    // retained whole rather than as a count of winning legs: which legs an
+    // Entrant wins is the breakdown the ranking exists to make readable, and a
+    // count would leave a surprising total to be recomputed to be understood.
+    const slipDetail = (scoped: SettledFixture[]): BetSlipDetail => ({
+      fixtures: scoped.map(({ fplId, predicted: named, settled: result }) => ({
+        fplId,
+        predicted: named,
+        result: result.result,
+        slip: result.slip
+      }))
+    });
+    await store(
+      cumulative ? BET_POINTS_SEASON_TO_DATE_METRIC : BET_POINTS_METRIC,
+      betSlips(settled).won,
+      settled.length,
+      {
+        qualification: BET_POINTS_QUALIFICATION,
+        ...cumulative
+          ? {
+            gameweeks: perGameweek(settled, (scoped) => ({
+              points: betSlips(scoped).won,
+              ...slipDetail(scoped)
+            }))
+          }
+          : slipDetail(settled)
+      }
+    );
+
+    // Both sides of the fraction, with the rate of each market beneath them.
+    // The denominator is the legs the slips actually stated, so a Gap and an
+    // unsettled Fixture are absent from it rather than five lost markets: the
+    // total absorbs an absence and the rate measures accuracy, and neither
+    // measures a blend of the two (ADR-0023).
+    //
+    // Per-market rates live here rather than as rows of their own. Metric names
+    // are text, so promoting one later needs no migration (spec 0008).
+    const whole = betSlips(settled);
+    await store(
+      cumulative ? BET_HIT_PCT_SEASON_TO_DATE_METRIC : BET_HIT_PCT_METRIC,
+      whole.won / whole.bet,
+      settled.length,
+      // Both sides stay at the top of a cumulative row as well, with the
+      // Gameweeks beneath them: a rate says nothing about what it was taken
+      // over, and a reader must not have to sum the Gameweeks to learn it.
+      cumulative
+        ? { ...whole, gameweeks: perGameweek(settled, betSlips) }
+        : whole
     );
   }
 
