@@ -38,6 +38,8 @@ export interface OpenFplGameweekOptions {
   gameweek: number;
   entrantId: string;
   apiKey: string;
+  /** How long one Entrant call may take. Unset is the fetcher's default. */
+  entrantCallTimeoutMs?: number;
   http: HttpFetcher;
   now: () => Date;
 }
@@ -102,6 +104,8 @@ export interface PlayFplGameweekOptions {
   /** The Gameweek's Lock and pool, read once for however many Entrants play. */
   locked: LockedGameweek;
   apiKey: string;
+  /** How long one Entrant call may take. Unset is the fetcher's default. */
+  entrantCallTimeoutMs?: number;
   http: HttpFetcher;
   now: () => Date;
 }
@@ -124,6 +128,7 @@ export async function playFplGameweek({
   // hands them on rather than restating them.
   locked: { deadline, pool: contextPool, ...windows },
   apiKey,
+  entrantCallTimeoutMs,
   http,
   now
 }: PlayFplGameweekOptions): Promise<FplGameweekResult> {
@@ -191,6 +196,9 @@ export async function playFplGameweek({
     pool: parseFplTrackContextPool(body),
     deadline,
     apiKey,
+    ...(entrantCallTimeoutMs === undefined
+      ? {}
+      : { timeoutMs: entrantCallTimeoutMs }),
     http,
     now
   });
@@ -249,6 +257,7 @@ export async function openFplGameweek({
   gameweek,
   entrantId,
   apiKey,
+  entrantCallTimeoutMs,
   http,
   now
 }: OpenFplGameweekOptions): Promise<FplGameweekResult> {
@@ -272,6 +281,7 @@ export async function openFplGameweek({
     entrant,
     locked,
     apiKey,
+    ...(entrantCallTimeoutMs === undefined ? {} : { entrantCallTimeoutMs }),
     http,
     now
   });

@@ -15,6 +15,7 @@ describe("the FPL job configuration", () => {
       databaseUrl: "postgresql://localhost/benchmark",
       season: "2026-27",
       concurrency: 4,
+      entrantCallTimeoutMs: 120_000,
       openRouterApiKey: "secret-from-environment"
     });
 
@@ -50,6 +51,41 @@ describe("the FPL job configuration", () => {
     })).toThrow("SEASON must use YYYY-YY format");
   });
 
+  test("the Entrant call's timeout is an operator knob on both FPL jobs", () => {
+    // Three of nine seats died at the hard-coded two minutes on every run of
+    // the dry opening, each corpse forcing another full-board retry. A slow
+    // reasoning model is now a configuration decision (spec 0010).
+    const environment = {
+      DATABASE_URL: "postgresql://localhost/benchmark",
+      SEASON: "2026-27",
+      GAMEWEEK: "1",
+      OPENROUTER_API_KEY: "secret-from-environment"
+    };
+
+    expect(readScheduledFplJobConfig({
+      ...environment,
+      ENTRANT_CALL_TIMEOUT_MS: "600000"
+    })).toMatchObject({ entrantCallTimeoutMs: 600_000 });
+    expect(readFplStartJobConfig({
+      ...environment,
+      ENTRANT_CALL_TIMEOUT_MS: "600000"
+    })).toMatchObject({ entrantCallTimeoutMs: 600_000 });
+
+    // Unset is today's two minutes, so no caller of the shared fetcher moves.
+    expect(readFplStartJobConfig(environment))
+      .toMatchObject({ entrantCallTimeoutMs: 120_000 });
+
+    // A typo surfaces at job start rather than as a mystery mid-run.
+    expect(() => readScheduledFplJobConfig({
+      ...environment,
+      ENTRANT_CALL_TIMEOUT_MS: "two minutes"
+    })).toThrow("ENTRANT_CALL_TIMEOUT_MS must be a positive integer");
+    expect(() => readFplStartJobConfig({
+      ...environment,
+      ENTRANT_CALL_TIMEOUT_MS: "0"
+    })).toThrow("ENTRANT_CALL_TIMEOUT_MS must be a positive integer");
+  });
+
   test("starting the track names the Gameweek explicitly", () => {
     // The operator chooses where the Season path begins and it is never
     // inferred, so the opening reads a Gameweek the scheduled run does not.
@@ -63,6 +99,7 @@ describe("the FPL job configuration", () => {
       season: "2026-27",
       gameweek: 28,
       concurrency: 9,
+      entrantCallTimeoutMs: 120_000,
       openRouterApiKey: "secret-from-environment"
     });
 

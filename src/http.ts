@@ -18,7 +18,8 @@ export type HttpFetcher = (
   options?: HttpRequestOptions
 ) => Promise<HttpResponse>;
 
-const DEFAULT_HTTP_TIMEOUT_MS = 120_000;
+/** What a request takes unless its caller says otherwise. */
+export const DEFAULT_HTTP_TIMEOUT_MS = 120_000;
 
 export const nodeHttpFetcher: HttpFetcher = async (url, options) => {
   const request: RequestInit = {

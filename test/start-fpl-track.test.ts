@@ -220,6 +220,7 @@ describe("starting the FPL track for all nine Entrants", () => {
     responses = [LEGAL_ACTION],
     perEntrant = {},
     beforeCall,
+    entrantCallTimeoutMs,
     http,
     now
   }: {
@@ -229,6 +230,7 @@ describe("starting the FPL track for all nine Entrants", () => {
     responses?: string[];
     perEntrant?: Readonly<Record<string, string[]>>;
     beforeCall?: () => Promise<void>;
+    entrantCallTimeoutMs?: number;
     http?: HttpFetcher;
     now?: () => Date;
   } = {}): Promise<{
@@ -249,7 +251,8 @@ describe("starting the FPL track for all nine Entrants", () => {
       concurrency,
       apiKey: "test-key",
       now: now ?? (() => new Date(at)),
-      http: http ?? scriptedHttp
+      http: http ?? scriptedHttp,
+      ...(entrantCallTimeoutMs === undefined ? {} : { entrantCallTimeoutMs })
     });
     return { opening, calls: script.calls };
   }
@@ -582,6 +585,34 @@ describe("starting the FPL track for all nine Entrants", () => {
       model_id: seatId(baseModel),
       count: baseModel === "vendor/base-5" ? 4 : 1
     })));
+  });
+
+  test("gives every Entrant call the operator's timeout", async () => {
+    // Three of nine seats died at the fetcher's two minutes on every run of
+    // the dry opening (spec 0010). The knob has to reach the wire to be a
+    // knob at all, so it is read from the options the fetcher receives.
+    const timeouts: (number | undefined)[] = [];
+    const capture: HttpFetcher = async (_url, options) => {
+      timeouts.push(options?.timeoutMs);
+      return { status: 200, body: openRouterBody(LEGAL_ACTION) };
+    };
+
+    await open({ entrantCallTimeoutMs: 600_000, http: capture });
+    expect(timeouts).toEqual(BASE_MODELS.map(() => 600_000));
+  });
+
+  test("leaves the call's timeout alone when the operator sets none", async () => {
+    // Unset means the shared fetcher's own default decides, which is how
+    // every other caller of it stays untouched by the knob.
+    const timeouts: (number | undefined)[] = [];
+    await open({
+      http: async (_url, options) => {
+        timeouts.push(options?.timeoutMs);
+        return { status: 200, body: openRouterBody(LEGAL_ACTION) };
+      }
+    });
+
+    expect(timeouts).toEqual(BASE_MODELS.map(() => undefined));
   });
 
   test("stores nothing at all when one Entrant's provider never answers", async () => {

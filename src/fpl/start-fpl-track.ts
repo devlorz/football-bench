@@ -37,6 +37,8 @@ export interface StartFplTrackOptions {
   /** How many Entrants may be called at once. */
   concurrency: number;
   apiKey: string;
+  /** How long one Entrant call may take. Unset is the fetcher's default. */
+  entrantCallTimeoutMs?: number;
   http: HttpFetcher;
   now: () => Date;
 }
@@ -139,6 +141,7 @@ export async function startFplTrack({
   gameweek,
   concurrency,
   apiKey,
+  entrantCallTimeoutMs,
   http,
   now
 }: StartFplTrackOptions): Promise<FplTrackOpening> {
@@ -258,6 +261,9 @@ export async function startFplTrack({
       pool,
       deadline,
       apiKey,
+      ...(entrantCallTimeoutMs === undefined
+        ? {}
+        : { timeoutMs: entrantCallTimeoutMs }),
       http,
       now
     });

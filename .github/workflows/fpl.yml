@@ -42,6 +42,9 @@ jobs:
       SEASON: ${{ vars.SEASON }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       FPL_CONCURRENCY: ${{ vars.FPL_CONCURRENCY }}
+      # Unset is the fetcher's two minutes, which three of nine seats died
+      # at on every run of the dry opening (spec 0010).
+      ENTRANT_CALL_TIMEOUT_MS: ${{ vars.ENTRANT_CALL_TIMEOUT_MS }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -66,6 +69,9 @@ jobs:
       GAMEWEEK: ${{ inputs.gameweek }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       FPL_CONCURRENCY: ${{ vars.FPL_CONCURRENCY }}
+      # Unset is the fetcher's two minutes, which three of nine seats died
+      # at on every run of the dry opening (spec 0010).
+      ENTRANT_CALL_TIMEOUT_MS: ${{ vars.ENTRANT_CALL_TIMEOUT_MS }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

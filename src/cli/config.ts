@@ -1,4 +1,5 @@
 import { resolveDryRunInstant } from "../dry-run/dry-run-clock.js";
+import { DEFAULT_HTTP_TIMEOUT_MS } from "../http.js";
 import { SEASON_ROSTER_SIZE } from "../season-roster.js";
 import {
   parseAttemptTrigger,
@@ -65,9 +66,17 @@ export interface PredictJobConfig extends ScheduledEntrantJobConfig {
   trigger: AttemptTrigger;
 }
 
-export type ScheduledFplJobConfig = ScheduledEntrantJobConfig;
+/**
+ * What both FPL jobs read. The timeout knob is the FPL track's alone: its
+ * opening prompt is the one reasoning models chew on for minutes, and the
+ * Match track's per-Fixture prompts have never approached the ceiling
+ * (spec 0010).
+ */
+export interface ScheduledFplJobConfig extends ScheduledEntrantJobConfig {
+  entrantCallTimeoutMs: number;
+}
 
-export interface FplStartJobConfig extends ScheduledEntrantJobConfig {
+export interface FplStartJobConfig extends ScheduledFplJobConfig {
   gameweek: number;
 }
 
@@ -176,20 +185,21 @@ export function readPredictJobConfig(
  * differs, which is why everything else is read once here.
  */
 /**
- * How many Entrants a job may call at once. Shared because every job that
+ * A whole-number knob with a default — how many Entrants a job may call at
+ * once, how long one of those calls may take. Shared because every job that
  * reads one rejects the same values for the same reason, and names its own
  * variable when it does.
  */
-function readConcurrency(
+function readPositiveInteger(
   environment: NodeJS.ProcessEnv,
   variable: string,
   fallback: number
 ): number {
-  const concurrency = Number(environment[variable]?.trim() || String(fallback));
-  if (!Number.isInteger(concurrency) || concurrency < 1) {
+  const value = Number(environment[variable]?.trim() || String(fallback));
+  if (!Number.isInteger(value) || value < 1) {
     throw new Error(`${variable} must be a positive integer`);
   }
-  return concurrency;
+  return value;
 }
 
 function readScheduledJobConfig(
@@ -197,7 +207,7 @@ function readScheduledJobConfig(
   concurrencyVariable: string,
   concurrencyDefault: number
 ): ScheduledEntrantJobConfig {
-  const concurrency = readConcurrency(
+  const concurrency = readPositiveInteger(
     environment,
     concurrencyVariable,
     concurrencyDefault
@@ -229,11 +239,18 @@ export function readScheduledPredictJobConfig(
 export function readScheduledFplJobConfig(
   environment: NodeJS.ProcessEnv
 ): ScheduledFplJobConfig {
-  return readScheduledJobConfig(
-    environment,
-    "FPL_CONCURRENCY",
-    SEASON_ROSTER_SIZE
-  );
+  return {
+    ...readScheduledJobConfig(
+      environment,
+      "FPL_CONCURRENCY",
+      SEASON_ROSTER_SIZE
+    ),
+    entrantCallTimeoutMs: readPositiveInteger(
+      environment,
+      "ENTRANT_CALL_TIMEOUT_MS",
+      DEFAULT_HTTP_TIMEOUT_MS
+    )
+  };
 }
 
 /**
@@ -264,7 +281,7 @@ export function readFplRehearsalJobConfig(
   return {
     databaseUrl: required(environment, "DATABASE_URL"),
     season: requiredSeason(environment),
-    concurrency: readConcurrency(
+    concurrency: readPositiveInteger(
       environment,
       "FPL_CONCURRENCY",
       SEASON_ROSTER_SIZE

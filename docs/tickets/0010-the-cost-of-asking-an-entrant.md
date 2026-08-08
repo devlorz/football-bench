@@ -41,11 +41,11 @@ Entrant call honours it — data fetches keep the fetcher's default unconditiona
 
 **Blocked by:** None — can start immediately.
 
-- [ ] The configured value reaches the Entrant call's fetch options — asserted from the
+- [x] The configured value reaches the Entrant call's fetch options — asserted from the
       captured request options at the scripted-fetcher seam
-- [ ] Unset means 120 seconds; no other caller of the shared fetcher changes behaviour
-- [ ] A malformed value is refused when the job configuration is read
-- [ ] Both FPL job configurations (`fpl:start`, `fpl:scheduled`) carry the knob
+- [x] Unset means 120 seconds; no other caller of the shared fetcher changes behaviour
+- [x] A malformed value is refused when the job configuration is read
+- [x] Both FPL job configurations (`fpl:start`, `fpl:scheduled`) carry the knob
 
 ## The uniform cache breakpoint
 

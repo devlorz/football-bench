@@ -42,6 +42,12 @@ export interface AskForGameweekActionOptions {
   pool: PoolPlayer[];
   deadline: Date;
   apiKey: string;
+  /**
+   * How long this call may take, when the operator has said (spec 0010).
+   * Unset leaves the fetcher's own default, which is what every other caller
+   * of it keeps.
+   */
+  timeoutMs?: number;
   http: HttpFetcher;
   now: () => Date;
 }
@@ -237,6 +243,7 @@ export async function askForGameweekAction({
   pool,
   deadline,
   apiKey,
+  timeoutMs,
   http,
   now
 }: AskForGameweekActionOptions): Promise<GameweekActionOutcome> {
@@ -256,6 +263,9 @@ export async function askForGameweekAction({
       },
       messages
     );
+    if (timeoutMs !== undefined) {
+      request.timeoutMs = timeoutMs;
+    }
     const startedAt = now();
     let response: HttpResponse;
     let receivedAt: Date;

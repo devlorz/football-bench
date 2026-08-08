@@ -300,6 +300,7 @@ describe("opening the FPL track for a Gameweek", () => {
     entrantId = "entrant/v1",
     at = "2026-08-28T11:30:00Z",
     responses = [],
+    entrantCallTimeoutMs,
     http,
     now
   }: {
@@ -307,6 +308,7 @@ describe("opening the FPL track for a Gameweek", () => {
     entrantId?: string;
     at?: string;
     responses?: string[];
+    entrantCallTimeoutMs?: number;
     http?: HttpFetcher;
     now?: () => Date;
   }): Promise<Turn[][]> {
@@ -318,10 +320,25 @@ describe("opening the FPL track for a Gameweek", () => {
       entrantId,
       apiKey: "test-key",
       now: now ?? (() => new Date(at)),
-      http: http ?? script.http
+      http: http ?? script.http,
+      ...(entrantCallTimeoutMs === undefined ? {} : { entrantCallTimeoutMs })
     });
     return script.conversations;
   }
+
+  test("gives the Entrant call the operator's timeout", async () => {
+    // The weekly run reads the same knob the opening does (spec 0010): the
+    // seats that chew for minutes are the same seats either week.
+    await seedStandingManagerState();
+    const timeouts: (number | undefined)[] = [];
+    const capture: HttpFetcher = async (_url, options) => {
+      timeouts.push(options?.timeoutMs);
+      return { status: 200, body: openRouterBody(STAND_PAT) };
+    };
+
+    await play({ entrantCallTimeoutMs: 600_000, http: capture });
+    expect(timeouts).toEqual([600_000]);
+  });
 
   test("hands the Entrant the stored context and keeps the state it produces", async () => {
     await seedStandingManagerState();
