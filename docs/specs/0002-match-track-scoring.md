@@ -314,6 +314,21 @@ Running the scorer over old Fixtures is the back-fill path. Elo is replayed from
 on every run, so a corrected earlier result deterministically changes every affected later
 forecast.
 
+Elo's rules are pinned so a reader can check one by hand. Every club starts at 1500; the prior
+Season's stored results seed it, both divisions counting, so a promoted club carries the form
+it was promoted on rather than starting level with a club that survived. `K = 20`, the Home
+side is credited `+60`, and the expectation is the logistic `E = 1 / (1 + 10^(−d/400))`.
+Ratings key on football-data.co.uk's club identity, which is what the history is stored under.
+
+That expectation is one number covering three outcomes, so the split into them is pinned as
+well: the draw holds the Home line's recalibrated `0.28`, and the rest follows from `E` being
+`H + D/2` by definition — `H = E − 0.14` and `A = 1 − 0.28 − H`, each clamped into its share
+where the rating gap would send it past. This adds one assumption to what Elo said instead of
+fitting a second model beside it; a Reference Line whose constants were fitted would stop
+being the thing a reader orients by. The draw therefore does not narrow as the gap widens, as
+it does in reality, and ratings are not regressed toward 1500 between Seasons. Both are
+deferred rather than decided: each needs its own pinned constant and its own recalibration.
+
 `reference-odds` is deferred — it requires odds columns from football-data.co.uk that the
 current fetch discards, and it is post-Lock information shown as a line only.
 

@@ -23,6 +23,8 @@ import {
   NO_POSITIVE_CONTROL_QUALIFICATION,
   OUTCOME_PCT_METRIC,
   OUTCOME_PCT_SEASON_TO_DATE_METRIC,
+  eloProbabilities,
+  REFERENCE_ELO,
   REFERENCE_HOME,
   REFERENCE_UNIFORM,
   RPS_METRIC,
@@ -61,7 +63,8 @@ describe("scoring the readable Match Points layer", () => {
 
   beforeEach(async () => {
     await client.query(
-      `truncate scores, contexts, predictions, fixtures, models, gameweeks
+      `truncate scores, contexts, predictions, fixtures, models, gameweeks,
+       historical_matches
        restart identity cascade`
     );
     await client.query(
@@ -86,13 +89,18 @@ describe("scoring the readable Match Points layer", () => {
   const storeFixture = async (
     fplId: number,
     lockedInGw: number,
-    gw = lockedInGw
+    gw = lockedInGw,
+    /** Only the Elo line reads either, so both default out of the way. */
+    {
+      teams = [`Home ${fplId}`, `Away ${fplId}`],
+      kickoff = "2026-08-21T19:00:00Z"
+    }: { teams?: [string, string]; kickoff?: string } = {}
   ): Promise<void> => {
     await client.query(
       `insert into fixtures (
          season, fpl_id, gw, locked_in_gw, home_team, away_team, kickoff_at
-       ) values ($1, $2, $3, $4, $5, $6, '2026-08-21T19:00:00Z')`,
-      [SEASON, fplId, gw, lockedInGw, `Home ${fplId}`, `Away ${fplId}`]
+       ) values ($1, $2, $3, $4, $5, $6, $7)`,
+      [SEASON, fplId, gw, lockedInGw, teams[0], teams[1], kickoff]
     );
     await client.query(
       `insert into contexts (season, gw, track, fpl_id, hash, body)
@@ -1345,13 +1353,16 @@ describe("scoring the readable Match Points layer", () => {
   });
 
   /** Every row one Reference Line holds for one Gameweek, in a stable order. */
-  const referenceRows = async (gameweek: number): Promise<unknown[]> => (
+  const referenceRows = async (
+    gameweek: number,
+    line = REFERENCE_HOME
+  ): Promise<unknown[]> => (
     await client.query(
       `select metric, value, n, detail
          from scores
         where model_id = $1 and season = $2 and gw = $3 and track = 'match'
         order by metric`,
-      [REFERENCE_HOME, SEASON, gameweek]
+      [line, SEASON, gameweek]
     )
   ).rows;
 
@@ -1415,5 +1426,327 @@ describe("scoring the readable Match Points layer", () => {
       value: expect.closeTo(0.356, 12),
       scoredAt: CORRECTED_AT
     });
+  });
+
+  test("scores the Elo Reference Line from level ratings", async () => {
+    await storeFixture(1, 1);
+    await settle(1, 2, 1);
+
+    await score(1);
+
+    // Nothing stored says either side is better, so both sit at 1500 and only
+    // the Home advantage separates them: d = 1500 + 60 − 1500 = 60, and
+    // E = 1 / (1 + 10^(−60/400)) = 1 / 1.70794578438414 = 0.585498678671810.
+    //
+    // The mapping holds the draw at 0.28 and splits the rest off E = H + D/2:
+    // H = E − 0.14 = 0.445498678671810, A = 1 − 0.28 − H = 0.274501321328190.
+    //
+    // Against the Home win, RPS counts the two cumulative terms:
+    // ((0.445498678671810 − 1)² + (0.725498678671810 − 1)²) / 2
+    //   = (0.307577... + 0.075245...) / 2 = 0.191411345382816.
+    expect(await storedValue(REFERENCE_ELO, 1, RPS_METRIC)).toMatchObject({
+      value: expect.closeTo(0.191411345382816, 12),
+      n: 1,
+      detail: {
+        fixtures: [
+          {
+            fplId: 1,
+            probs: {
+              H: expect.closeTo(0.445498678671810, 12),
+              D: 0.28,
+              A: expect.closeTo(0.274501321328190, 12)
+            },
+            outcome: "H",
+            rps: expect.closeTo(0.191411345382816, 12)
+          }
+        ]
+      }
+    });
+    // Brier over the same three, unnormalised: (0.445498678671810 − 1)²
+    //   + 0.28² + 0.274501321328190² = 0.307568... + 0.0784 + 0.075351...
+    expect(await storedValue(REFERENCE_ELO, 1, BRIER_METRIC)).toMatchObject({
+      value: expect.closeTo(0.461222690765632, 12),
+      n: 1
+    });
+    // Home is the likeliest of the three at 0.445498678671810, and Home won.
+    expect(await storedValue(REFERENCE_ELO, 1, ACCURACY_METRIC))
+      .toMatchObject({ value: 1, n: 1 });
+  });
+
+  /** One result the prior Season left behind, under the identity it is held by. */
+  const played = (
+    homeTeam: string,
+    awayTeam: string,
+    homeGoals: number,
+    awayGoals: number,
+    playedOn = "2026-05-10T14:00:00Z"
+  ): Promise<unknown> =>
+    client.query(
+      `insert into historical_matches (
+         season, division, played_on, home_team, away_team, home_goals,
+         away_goals
+       ) values ('2025-26', 'Premier League', $1, $2, $3, $4, $5)`,
+      [playedOn, homeTeam, awayTeam, homeGoals, awayGoals]
+    );
+
+  test("seeds Elo ratings from the prior Season's results", async () => {
+    // Stored history names clubs as football-data.co.uk does, and a Fixture
+    // names them as FPL does. Tottenham is one of the clubs the two disagree
+    // about, so a line that skipped the resolution would leave Spurs at 1500
+    // and forecast this Fixture level.
+    await played("Tottenham", "Everton", 3, 0);
+    await storeFixture(1, 1, 1, { teams: ["Spurs", "Everton"] });
+    await settle(1, 1, 1);
+
+    await score(1);
+
+    // Both sides began the prior Season at 1500, so Tottenham's home win was
+    // worth K × (1 − E) = 20 × (1 − 0.585498678671810) = 8.29002642656381,
+    // taking them to 1508.29002642656381 and Everton to 1491.70997357343619.
+    //
+    // This Season's Fixture is therefore forecast at
+    // d = 1508.29002642656381 + 60 − 1491.70997357343619 = 76.58005285312762,
+    // E = 1 / (1 + 10^(−76.58005285312762/400)) = 0.608456837835021,
+    // so H = 0.468456837835021, D = 0.28, A = 0.251543162164979.
+    //
+    // Against the draw, RPS = (0.468456837835021² + (0.748456837835021 − 1)²)
+    //   / 2 = (0.219451... + 0.063273...) / 2 = 0.141362885673172.
+    expect(await storedValue(REFERENCE_ELO, 1, RPS_METRIC)).toMatchObject({
+      value: expect.closeTo(0.141362885673172, 12),
+      n: 1,
+      detail: {
+        fixtures: [
+          {
+            fplId: 1,
+            probs: {
+              H: expect.closeTo(0.468456837835021, 12),
+              D: 0.28,
+              A: expect.closeTo(0.251543162164979, 12)
+            }
+          }
+        ]
+      }
+    });
+  });
+
+  test("forecasts each Fixture from the ratings that stood before it", async () => {
+    // The same two clubs twice in one Gameweek, the lower Fixture id kicking
+    // off second. Ordering the replay by id rather than by kick-off would swap
+    // the two forecasts below.
+    await storeFixture(1, 1, 1, {
+      teams: ["Spurs", "Everton"],
+      kickoff: "2026-08-22T16:30:00Z"
+    });
+    await storeFixture(2, 1, 1, {
+      teams: ["Spurs", "Everton"],
+      kickoff: "2026-08-22T14:00:00Z"
+    });
+    await settle(1, 2, 1);
+    await settle(2, 2, 1);
+
+    await score(1);
+
+    // Fixture 2 is played first with nothing behind it, so it is forecast level
+    // at H = 0.445498678671810 and scores 0.191411345382816 on the Home win.
+    //
+    // Its result then moves Spurs to 1508.29002642656381 and Everton to
+    // 1491.70997357343619, which is what Fixture 1 is forecast from:
+    // H = 0.468456837835021, and RPS = ((0.468456837835021 − 1)²
+    //   + (0.748456837835021 − 1)²) / 2 = 0.172906047838151.
+    //
+    // Fixture 1's own 2-1 reaches neither forecast. A result that could reach
+    // its own would let the line score a Fixture it had already seen.
+    expect(await storedValue(REFERENCE_ELO, 1, RPS_METRIC)).toMatchObject({
+      value: expect.closeTo(0.182158696610484, 12),
+      n: 2,
+      detail: {
+        fixtures: [
+          {
+            fplId: 1,
+            probs: { H: expect.closeTo(0.468456837835021, 12) },
+            rps: expect.closeTo(0.172906047838151, 12)
+          },
+          {
+            fplId: 2,
+            probs: { H: expect.closeTo(0.445498678671810, 12) },
+            rps: expect.closeTo(0.191411345382816, 12)
+          }
+        ]
+      }
+    });
+  });
+
+  test("keeps the Elo line off the leaderboard and out of the roster", async () => {
+    await storeFixture(1, 1);
+    await settle(1, 2, 1);
+    await predict("entrant/a", 1, 2, 1);
+    await predict("entrant/b", 1, 1, 1);
+
+    await score(1);
+
+    // A rating is not a scoreline, so there is nothing for the readable layer
+    // to rank; and the line was never asked, so there is nothing to Gap or
+    // Repair. It is no Entrant either, so no comparison is published for it and
+    // its silence can never empty a complete case.
+    for (const metric of [
+      MATCH_POINTS_METRIC,
+      SCORE_PCT_METRIC,
+      OUTCOME_PCT_METRIC,
+      COHERENCE_METRIC,
+      GAP_RATE_METRIC,
+      ATTEMPTS_TO_VALID_METRIC,
+      RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC
+    ]) {
+      expect(await storedValue(REFERENCE_ELO, 1, metric)).toBeNull();
+    }
+    expect(await storedValue(REFERENCE_ELO, 1, RPS_METRIC)).not.toBeNull();
+
+    const written = await client.query(
+      "select 1 from predictions where model_id = $1", [REFERENCE_ELO]
+    );
+    expect(written.rowCount).toBe(0);
+
+    // The role is what every roster query reads, so a row carrying `entrant`
+    // here would put the line on the leaderboard with nothing to say so.
+    const model = await client.query<{ role: string }>(
+      "select role from models where id = $1", [REFERENCE_ELO]
+    );
+    expect(model.rows[0]?.role).toBe("reference");
+  });
+
+  test("recomputes downstream Elo forecasts when an earlier result is corrected", async () => {
+    await storeFixture(1, 1, 1, {
+      teams: ["Spurs", "Everton"],
+      kickoff: "2026-08-22T14:00:00Z"
+    });
+    await storeFixture(2, 2, 2, {
+      teams: ["Spurs", "Everton"],
+      kickoff: "2026-08-29T14:00:00Z"
+    });
+    await settle(1, 2, 1);
+    await settle(2, 1, 1);
+
+    await score(2);
+
+    // Gameweek 1's Home win put Spurs on 1508.29002642656381 and Everton on
+    // 1491.70997357343619, so Gameweek 2 is forecast at H = 0.468456837835021
+    // and scores 0.141362885673172 on the draw.
+    expect(await storedValue(REFERENCE_ELO, 2, RPS_METRIC)).toMatchObject({
+      value: expect.closeTo(0.141362885673172, 12),
+      n: 1
+    });
+
+    await settle(1, 0, 1);
+    await score(2, CORRECTED_AT);
+
+    // The same Fixture was really an Away win, so K × (0 − 0.585498678671810)
+    // = −11.70997357343619 leaves Spurs on 1488.29002642656381 and Everton on
+    // 1511.70997357343619. Gameweek 2 is then forecast at d = 36.58005285312762,
+    // E = 0.552449268825046 and H = 0.412449268825046, scoring
+    // (0.412449268825046² + (0.692449268825046 − 1)²) / 2 = 0.132350925800282.
+    //
+    // Nobody predicted differently and Gameweek 2's own result did not change:
+    // the replay is what carries the correction forward.
+    expect(await storedValue(REFERENCE_ELO, 2, RPS_METRIC)).toMatchObject({
+      value: expect.closeTo(0.132350925800282, 12),
+      n: 1,
+      scoredAt: CORRECTED_AT
+    });
+  });
+
+  test("replays the same Elo path in either batch shape", async () => {
+    await played("Tottenham", "Everton", 3, 0);
+    await storeFixture(1, 1, 1, {
+      teams: ["Spurs", "Everton"],
+      kickoff: "2026-08-22T14:00:00Z"
+    });
+    await storeFixture(2, 2, 2, {
+      teams: ["Everton", "Spurs"],
+      kickoff: "2026-08-29T14:00:00Z"
+    });
+    await settle(1, 2, 1);
+    await settle(2, 0, 2);
+
+    await score(2);
+    const inOneRun = await referenceRows(2, REFERENCE_ELO);
+
+    await client.query("truncate scores");
+    await score(1);
+    await score(2);
+
+    // A Gameweek at a time, which is how a live Season reaches them, against
+    // one run that finds both Fixtures already stored. The replay starts from
+    // the prior Season either way and reads no state a run leaves behind, so a
+    // Gameweek scored twice cannot move a rating twice.
+    expect(await referenceRows(2, REFERENCE_ELO)).toEqual(inOneRun);
+    expect(inOneRun).not.toHaveLength(0);
+  });
+
+  test("passes an unsettled Fixture over without moving a rating", async () => {
+    // Played first and never settled, so the two below are forecast as though
+    // it had not been played at all.
+    await storeFixture(1, 1, 1, {
+      teams: ["Spurs", "Everton"],
+      kickoff: "2026-08-22T12:00:00Z"
+    });
+    await storeFixture(2, 1, 1, {
+      teams: ["Spurs", "Everton"],
+      kickoff: "2026-08-22T14:00:00Z"
+    });
+    await storeFixture(3, 1, 1, {
+      teams: ["Spurs", "Everton"],
+      kickoff: "2026-08-22T16:30:00Z"
+    });
+    await settle(2, 2, 1);
+    await settle(3, 2, 1);
+
+    await score(1);
+
+    // Fixture 2 is still forecast level at H = 0.445498678671810: the unsettled
+    // Fixture ahead of it moved nothing. Fixture 3 then reads Fixture 2's Home
+    // win alone, at H = 0.468456837835021 — not two Home wins.
+    //
+    // The unsettled Fixture is absent from the row rather than a miss, which is
+    // why n is 2 over three Fixtures.
+    expect(await storedValue(REFERENCE_ELO, 1, RPS_METRIC)).toMatchObject({
+      n: 2,
+      detail: {
+        fixtures: [
+          { fplId: 2, probs: { H: expect.closeTo(0.445498678671810, 12) } },
+          { fplId: 3, probs: { H: expect.closeTo(0.468456837835021, 12) } }
+        ]
+      }
+    });
+  });
+});
+
+describe("the Elo mapping at its clamp", () => {
+  // A gap this wide takes a Season of results to build, so it is stated here
+  // rather than replayed at the scoring seam, where the ratings behind it could
+  // not be computed by hand.
+
+  test("holds the draw and empties the outsider past the clamp", () => {
+    // d = 2000 + 60 − 1500 = 560, so E = 1 / (1 + 10^(−1.4))
+    //   = 1 / 1.039810717 = 0.961713... and H = E − 0.14 = 0.821713...,
+    // which is past the 0.72 the draw's fixed 0.28 leaves. Home takes the 0.72
+    // and Away is left nothing rather than the distribution summing past one.
+    expect(eloProbabilities(2000, 1500)).toEqual({ H: 0.72, D: 0.28, A: 0 });
+
+    // The same gap the other way: d = 1500 + 60 − 2000 = −440,
+    // E = 1 / (1 + 10^1.1) = 1 / 13.589254 = 0.073588..., so H = −0.066411...
+    // before the clamp holds it at 0, leaving Away the whole 0.72.
+    expect(eloProbabilities(1500, 2000)).toEqual({ H: 0, D: 0.28, A: 0.72 });
+  });
+
+  test("leaves a gap short of the clamp alone", () => {
+    // d = 1800 + 60 − 1500 = 360, E = 1 / (1 + 10^(−0.9))
+    //   = 1 / 1.125892541 = 0.888195..., so H = 0.748195... would clamp — but
+    // one step less does not: d = 1700 + 60 − 1500 = 260,
+    // E = 1 / (1 + 10^(−0.65)) = 1 / 1.2238721139 = 0.8170788342,
+    // H = E − 0.14 = 0.6770788342 and A = 1 − 0.28 − H = 0.0429211658.
+    const probs = eloProbabilities(1700, 1500);
+    expect(probs.H).toBeCloseTo(0.6770788342, 10);
+    expect(probs.D).toBe(0.28);
+    expect(probs.A).toBeCloseTo(0.0429211658, 10);
   });
 });

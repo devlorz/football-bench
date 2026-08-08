@@ -150,14 +150,14 @@ joins the probability layer without entering the Entrant ranking.
 
 **Blocked by:** Add Home and Uniform Reference Lines.
 
-- [ ] Elo uses `K=20`, a Home advantage of `+60` and the pinned logistic mapping, seeded from the prior Season
-- [ ] Each forecast is produced from ratings as they stood before that Fixture's result, so a result cannot leak into its own prediction
-- [ ] Historical results and current-Season Fixtures are replayed deterministically in a stable chronological order
-- [ ] The Elo path is replayed in memory during every scoring run and writes no `predictions` row
-- [ ] Scoring old Fixtures supplies the back-fill, and a corrected earlier result deterministically recomputes every downstream rating and affected score
-- [ ] Settled Fixtures produce RPS, Brier and accuracy with `n` and per-Fixture forecast detail
-- [ ] `reference-elo` is a Reference Line, produces no Predicted Score or Match Points, and never participates in the leaderboard or Entrant complete-case intersection
-- [ ] Tests use a short sequence with ratings and probabilities calculated independently by hand
+- [x] Elo uses `K=20`, a Home advantage of `+60` and the pinned logistic mapping, seeded from the prior Season
+- [x] Each forecast is produced from ratings as they stood before that Fixture's result, so a result cannot leak into its own prediction
+- [x] Historical results and current-Season Fixtures are replayed deterministically in a stable chronological order
+- [x] The Elo path is replayed in memory during every scoring run and writes no `predictions` row
+- [x] Scoring old Fixtures supplies the back-fill, and a corrected earlier result deterministically recomputes every downstream rating and affected score
+- [x] Settled Fixtures produce RPS, Brier and accuracy with `n` and per-Fixture forecast detail
+- [x] `reference-elo` is a Reference Line, produces no Predicted Score or Match Points, and never participates in the leaderboard or Entrant complete-case intersection
+- [x] Tests use a short sequence with ratings and probabilities calculated independently by hand
 
 ---
 

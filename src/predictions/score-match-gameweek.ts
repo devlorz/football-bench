@@ -8,6 +8,7 @@ import {
   type Outcome,
   type Probs
 } from "../fixture-result.js";
+import { footballDataTeamName } from "../football-data/team-identity.js";
 import { emptyRepairDistribution } from "../repairs.js";
 import { GAP_CAUSES, type GapCause } from "./gap-alert.js";
 import { MATCH_PROMPT_VERSION } from "./openrouter-entrant.js";
@@ -703,6 +704,10 @@ async function writeRows(
 interface LockedFixture {
   gw: number;
   fplId: number;
+  /** Both sides and when they met, which only the Elo replay below reads. */
+  homeTeam: string;
+  awayTeam: string;
+  kickoffAt: Date;
   result: FixtureResult | null;
 }
 
@@ -723,42 +728,61 @@ async function lockedFixtures(
   const rows = await database.query<{
     gw: number;
     fpl_id: number;
+    home_team: string;
+    away_team: string;
+    kickoff_at: Date;
     result: FixtureResult | null;
   }>(
-    `select locked_in_gw as gw, fpl_id, result
+    `select locked_in_gw as gw, fpl_id, home_team, away_team, kickoff_at,
+            result
        from fixtures
       where season = $1 and locked_in_gw is not null
       order by locked_in_gw, fpl_id`,
     [season]
   );
-  return rows.rows.map(({ gw, fpl_id, result }) =>
-    ({ gw, fplId: fpl_id, result }));
+  return rows.rows.map(
+    ({ gw, fpl_id, home_team, away_team, kickoff_at, result }) => ({
+      gw,
+      fplId: fpl_id,
+      homeTeam: home_team,
+      awayTeam: away_team,
+      kickoffAt: kickoff_at,
+      result
+    })
+  );
 }
 
 export const REFERENCE_HOME = "reference-home";
 export const REFERENCE_UNIFORM = "reference-uniform";
+export const REFERENCE_ELO = "reference-elo";
+
+/**
+ * Every Reference Line, with the name its `models` row carries.
+ *
+ * One list, so a line cannot be scored with no row to hang off, or gain a row
+ * nothing scores. None of them names a scoreline, so all are scored on the
+ * probability layer alone, never ranked and never able to win (CONTEXT.md,
+ * ADR-0012).
+ */
+const REFERENCE_LINES: { id: string; name: string }[] = [
+  { id: REFERENCE_HOME, name: "Home Reference Line" },
+  { id: REFERENCE_UNIFORM, name: "Uniform Reference Line" },
+  { id: REFERENCE_ELO, name: "Elo Reference Line" }
+];
 
 /**
  * The two trivial rules a reader orients by: the long-run Home advantage, and
  * knowing nothing at all.
  *
  * The probabilities are pinned constants rather than anything fitted, which is
- * what makes the lines deterministic across a back-fill: the same Fixture
- * scores the same on the first run and on a recomputation a Season later. They
- * name no scoreline and so are scored on the probability layer alone, never
- * ranked and never able to win (CONTEXT.md, ADR-0012).
+ * what makes these two deterministic across a back-fill: the same Fixture
+ * scores the same on the first run and on a recomputation a Season later. Elo
+ * is not among them because it is derived rather than declared, and reaches the
+ * same determinism by replaying the same stored results every time.
  */
-const REFERENCE_LINES: { id: string; name: string; probs: Probs }[] = [
-  {
-    id: REFERENCE_HOME,
-    name: "Home Reference Line",
-    probs: { H: 0.44, D: 0.28, A: 0.28 }
-  },
-  {
-    id: REFERENCE_UNIFORM,
-    name: "Uniform Reference Line",
-    probs: { H: 1 / 3, D: 1 / 3, A: 1 / 3 }
-  }
+const CONSTANT_REFERENCE_LINES: { id: string; probs: Probs }[] = [
+  { id: REFERENCE_HOME, probs: { H: 0.44, D: 0.28, A: 0.28 } },
+  { id: REFERENCE_UNIFORM, probs: { H: 1 / 3, D: 1 / 3, A: 1 / 3 } }
 ];
 
 /**
@@ -767,44 +791,202 @@ const REFERENCE_LINES: { id: string; name: string; probs: Probs }[] = [
  * No `predictions` row is written for it: a Reference Line answers nothing and
  * is asked nothing, so a stored Prediction would put it in every query that
  * asks who predicted a Fixture — the complete-case intersection first among
- * them (ADR-0011). The forecast is a constant and re-deriving it costs nothing.
+ * them (ADR-0011). Re-deriving a forecast costs nothing: two of the three lines
+ * are constants, and the third is a replay over Fixtures already in hand.
  */
 const referenceForecast = (
-  probs: Probs,
+  probsOf: (fixture: LockedFixture) => Probs,
+  fixtures: LockedFixture[]
+): ForecastFixture[] =>
+  fixtures.map((fixture) => {
+    const { gw, fplId, result } = fixture;
+    const probs = probsOf(fixture);
+    const likeliest = argmaxOutcome(probs);
+    return {
+      gw,
+      fplId,
+      probs,
+      likeliest,
+      settled: result === null
+        ? null
+        : {
+          result: [result.home_goals, result.away_goals],
+          outcome: result.outcome,
+          rps: rankedProbabilityScore(probs, result.outcome),
+          brier: brierScore(probs, result.outcome),
+          accurate: likeliest === result.outcome
+        }
+    };
+  });
+
+/** Where a club no stored result mentions starts. */
+const ELO_START = 1500;
+/** What one result moves a rating by, and what playing at home is worth. */
+const ELO_K = 20;
+const ELO_HOME_ADVANTAGE = 60;
+/** The share of every Elo forecast the draw takes (spec 0002). */
+const ELO_DRAW = 0.28;
+
+/**
+ * The Home side's expected score under the pinned logistic mapping: 1 for a
+ * win, a half for a draw, so it is one number covering three outcomes.
+ */
+const eloExpectation = (home: number, away: number): number =>
+  1 / (1 + 10 ** ((away - home - ELO_HOME_ADVANTAGE) / 400));
+
+/**
+ * What two ratings say about one Fixture: that one number spread over the three
+ * outcomes.
+ *
+ * The draw is the pinned constant the Home Reference Line was recalibrated to
+ * and the rest follows from the expectation being `H + D/2` by definition, so
+ * the split says exactly what Elo said and adds one assumption rather than a
+ * second fitted model. A rating gap wide enough to send either side past its
+ * share is clamped, which keeps a distribution a distribution; the draw holds
+ * its 0.28 through the clamp, so the two clamped outcomes are 0.72 and 0.
+ *
+ * ponytail: the draw does not narrow as the gap widens, which it does in
+ * reality. A gap-sensitive draw needs its own pinned constants and its own
+ * recalibration (spec 0002), and this line exists for orientation rather than
+ * to forecast well.
+ *
+ * Exported for the clamp, which a rating gap only reaches after a Season of
+ * results and so cannot be stated as one at the scoring seam.
+ */
+export function eloProbabilities(home: number, away: number): Probs {
+  const homeProb = Math.min(
+    Math.max(eloExpectation(home, away) - ELO_DRAW / 2, 0),
+    1 - ELO_DRAW
+  );
+  return { H: homeProb, D: ELO_DRAW, A: 1 - ELO_DRAW - homeProb };
+}
+
+/**
+ * Every Fixture in the order it was played, ties broken by Fixture id.
+ *
+ * Two Fixtures kicking off at the same instant is ordinary — a Gameweek's
+ * Saturday holds several — and which of them a rating change reaches first
+ * would otherwise be whatever order the rows arrived in.
+ */
+const chronological = (fixtures: LockedFixture[]): LockedFixture[] =>
+  [...fixtures].sort((one, other) =>
+    one.kickoffAt.getTime() - other.kickoffAt.getTime()
+      || one.fplId - other.fplId
+  );
+
+/** One result, as the replay reads it: who met, and how it went. */
+interface EloResult {
+  homeTeam: string;
+  awayTeam: string;
+  outcome: Outcome;
+}
+
+/**
+ * The Season before the one being scored, in the `YYYY-YY` form every stored
+ * Season uses. `2026-27` is seeded from `2025-26`.
+ */
+const priorSeason = (season: string): string => {
+  const start = Number(season.slice(0, 4)) - 1;
+  return `${start}-${String((start + 1) % 100).padStart(2, "0")}`;
+};
+
+/**
+ * The prior Season's results, in the order they were played.
+ *
+ * Both stored divisions count: a promoted club spent the prior Season in the
+ * Championship, and starting it level with a club that survived the Premier
+ * League would say less than its own results do. A club neither division
+ * mentions starts level, which is the most anything stored supports.
+ */
+async function priorSeasonResults(
+  database: Database,
+  season: string
+): Promise<EloResult[]> {
+  const rows = await database.query<{
+    home_team: string;
+    away_team: string;
+    home_goals: number;
+    away_goals: number;
+  }>(
+    `select home_team, away_team, home_goals, away_goals
+       from historical_matches
+      where season = $1
+      order by played_on, home_team, away_team`,
+    [priorSeason(season)]
+  );
+  return rows.rows.map(({ home_team, away_team, home_goals, away_goals }) => ({
+    homeTeam: home_team,
+    awayTeam: away_team,
+    outcome: outcomeOf(home_goals, away_goals)
+  }));
+}
+
+/**
+ * The Elo line's forecast of every Fixture given, replayed in memory from the
+ * prior Season's results through this one's.
+ *
+ * Every Fixture is forecast from the ratings as they stood before it, which is
+ * what the chronological pass is for: a result reaching its own forecast would
+ * let the line score a Fixture it had already seen.
+ *
+ * Ratings are keyed on football-data.co.uk's identity, because that is what the
+ * history is stored under and a Fixture names its clubs as FPL does. A name
+ * neither source has been reviewed for resolves to itself and simply matches
+ * nothing, which leaves that club level rather than merged with another.
+ *
+ * ponytail: ratings carry across the Season boundary untouched. Regressing them
+ * toward 1500 between Seasons is the usual practice and would need its own
+ * pinned constant; nothing has asked for one.
+ */
+const eloForecast = (
+  history: EloResult[],
   fixtures: LockedFixture[]
 ): ForecastFixture[] => {
-  const likeliest = argmaxOutcome(probs);
-  return fixtures.map(({ gw, fplId, result }) => ({
-    gw,
-    fplId,
-    probs,
-    likeliest,
-    settled: result === null
-      ? null
-      : {
-        result: [result.home_goals, result.away_goals],
-        outcome: result.outcome,
-        rps: rankedProbabilityScore(probs, result.outcome),
-        brier: brierScore(probs, result.outcome),
-        accurate: likeliest === result.outcome
-      }
-  }));
+  const ratings = new Map<string, number>();
+  const rating = (team: string): number => ratings.get(team) ?? ELO_START;
+  const record = ({ homeTeam, awayTeam, outcome }: EloResult): void => {
+    const expectation = eloExpectation(rating(homeTeam), rating(awayTeam));
+    const scored = outcome === "H" ? 1 : outcome === "D" ? 0.5 : 0;
+    const change = ELO_K * (scored - expectation);
+    ratings.set(homeTeam, rating(homeTeam) + change);
+    ratings.set(awayTeam, rating(awayTeam) - change);
+  };
+
+  history.forEach(record);
+
+  const forecast = new Map<number, Probs>();
+  for (const { fplId, homeTeam, awayTeam, result } of chronological(fixtures)) {
+    const home = footballDataTeamName(homeTeam);
+    const away = footballDataTeamName(awayTeam);
+    forecast.set(fplId, eloProbabilities(rating(home), rating(away)));
+    // After the forecast, never before it: a Fixture is answered on what stood
+    // when it kicked off. An unsettled Fixture moves nothing and is passed
+    // over, which is also what makes a later-settled deferred Fixture reach
+    // every rating it should once it does settle.
+    if (result !== null) {
+      record({ homeTeam: home, awayTeam: away, outcome: result.outcome });
+    }
+  }
+  // Every Fixture was just forecast, so the lookup below cannot miss; the
+  // Fixtures are mapped in their own order rather than the replay's, because
+  // the detail a row carries reads in Gameweek order like every other.
+  return referenceForecast(({ fplId }) => forecast.get(fplId)!, fixtures);
 };
 
 /**
  * The `models` rows the Reference Lines' scores hang off, written here because
- * this is the only thing that needs them and their definition is the constant
- * above rather than anything a Season is set up with.
+ * this is the only thing that needs them and each line is defined above rather
+ * than by anything a Season is set up with.
  *
  * They carry the Match track's Prompt Version, which is what says which track
  * a seat is entered for — but the `reference` role keeps them out of every
- * roster, so neither can stand as a Comparison Anchor or empty a complete case.
+ * roster, so none can stand as a Comparison Anchor or empty a complete case.
  *
  * The row is overwritten rather than left alone where one already exists: the
- * definition above is the only one there is, and a row carrying `entrant` under
- * one of these ids would put a constant probability vector on the leaderboard
- * with nothing to say so. `base_model` is the line's own id because the column
- * is not null and there is no underlying LLM to name.
+ * definitions above are the only ones there are, and a row carrying `entrant`
+ * under one of these ids would put a rule nobody was asked to follow on the
+ * leaderboard with nothing to say so. `base_model` is the line's own id because
+ * the column is not null and there is no underlying LLM to name.
  */
 async function ensureReferenceLines(database: Database): Promise<void> {
   for (const { id, name } of REFERENCE_LINES) {
@@ -1222,8 +1404,16 @@ export async function scoreMatchGameweek({
   // Over every Fixture the Season's Locks own rather than only this Gameweek's,
   // so scoring one Gameweek back-fills the lines across the Season the Entrants
   // already cover.
-  const references = REFERENCE_LINES.map(({ id, probs }) =>
-    ({ id, forecast: referenceForecast(probs, locked) }));
+  const references = [
+    ...CONSTANT_REFERENCE_LINES.map(({ id, probs }) =>
+      ({ id, forecast: referenceForecast(() => probs, locked) })),
+    {
+      id: REFERENCE_ELO,
+      forecast: eloForecast(
+        await priorSeasonResults(database, season), locked
+      )
+    }
+  ];
 
   await database.query("begin");
   try {
