@@ -7,12 +7,15 @@ import {
 import type { HttpFetcher } from "../http.js";
 import {
   openingManagerState,
-  type ManagerState
+  type ManagerState,
+  type PoolPlayer
 } from "./apply-gameweek-action.js";
 import {
   askForGameweekAction,
+  judgeGameweekResponse,
   type GameweekEntrant
 } from "./ask-for-gameweek-action.js";
+import { parseOpenRouterResponse } from "../predictions/openrouter-entrant.js";
 import {
   loadLockedGameweek,
   storeFplContext
@@ -49,6 +52,74 @@ export interface StartFplTrackOptions {
 export interface FplTrackOpening {
   gameweek: number;
   missing: string[];
+}
+
+/**
+ * The opening this seat already has on record for the Gameweek, replayed
+ * through the rules reducer as if it had just been answered (ADR-0025) — or
+ * null for a seat that never got a legal answer on record and must be called.
+ *
+ * A retry of a refused opening re-billed every seat, including the eight whose
+ * legal actions the run had already thrown away. The accepted action is parsed
+ * back out of `attempts.raw_response` at the point of use — no new column, no
+ * second copy of a fact the audit trail already states — and driven through
+ * the same judgement a live response gets, against the same stored context the
+ * first run priced from. That is the whole reason the record can stand in for
+ * the call: `storeFplContext` writes insert-or-nothing, so every retry hands
+ * every seat the byte-identical text, and a replayed answer is an answer to
+ * exactly the question being asked.
+ *
+ * Trusting the recorded `ok` flag and skipping to the commit was declined: a
+ * replay costs nothing, and re-proving legality against the state actually
+ * being committed turns any drift between two runs into this error rather than
+ * a stale Squad committed silently.
+ */
+async function replayRecordedOpening(
+  database: Database,
+  season: string,
+  gameweek: number,
+  entrantId: string,
+  previous: ManagerState,
+  pool: PoolPlayer[]
+): Promise<{ state: ManagerState; repairsUsed: number; receivedAt: Date } | null> {
+  const recorded = await database.query<{
+    attempt_no: number;
+    raw_response: string | null;
+    attempted_at: Date;
+  }>(
+    `select attempt_no, raw_response, attempted_at
+       from attempts
+      where model_id = $1 and season = $2 and gw = $3 and track = 'fpl' and ok
+      order by attempt_no
+      limit 1`,
+    [entrantId, season, gameweek]
+  );
+  const [attempt] = recorded.rows;
+  if (attempt === undefined) {
+    return null;
+  }
+  // A legal attempt whose body cannot be read back is a broken ledger, not an
+  // Entrant that answered badly — it says so in its own words rather than
+  // borrowing the rules' refusal below.
+  const content = parseOpenRouterResponse(attempt.raw_response ?? "")?.content;
+  if (content === null || content === undefined) {
+    throw new Error(
+      `${entrantId} has a recorded opening action for Gameweek ${gameweek} of `
+      + `${season} that cannot be read back out of its attempt`
+    );
+  }
+  const judged = judgeGameweekResponse(content, previous, pool, gameweek);
+  if (!("state" in judged)) {
+    throw new Error(
+      `${entrantId} has a recorded opening action for Gameweek ${gameweek} of `
+      + `${season} that the rules now refuse: ${judged.reason}`
+    );
+  }
+  return {
+    state: judged.state,
+    repairsUsed: attempt.attempt_no,
+    receivedAt: attempt.attempted_at
+  };
 }
 
 /**
@@ -161,6 +232,22 @@ export async function startFplTrack({
       entrant.id,
       opening
     );
+    const pool = parseFplTrackContextPool(body);
+    // A seat that already answered legally is not asked again. What it said is
+    // replayed from the record instead, so one seat's provider outage stops
+    // costing eight other Entrants' answers (ADR-0025).
+    const replayed = await replayRecordedOpening(
+      database,
+      season,
+      gameweek,
+      entrant.id,
+      previous,
+      pool
+    );
+    if (replayed !== null) {
+      openings.set(entrant.id, replayed);
+      return;
+    }
     const outcome = await askForGameweekAction({
       database,
       season,
@@ -168,7 +255,7 @@ export async function startFplTrack({
       entrant,
       body,
       previous,
-      pool: parseFplTrackContextPool(body),
+      pool,
       deadline,
       apiKey,
       http,

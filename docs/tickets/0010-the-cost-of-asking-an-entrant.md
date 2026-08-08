@@ -23,15 +23,15 @@ rules reducer as if freshly answered. The opening stays all-or-none.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] A retry after a one-seat failure calls that seat only — asserted from the calls a
+- [x] A retry after a one-seat failure calls that seat only — asserted from the calls a
       scripted fetcher receives
-- [ ] Replayed seats commit Manager States identical to the ones fresh answers produce
-- [ ] A recorded action that no longer passes the reducer fails the retry loudly;
+- [x] Replayed seats commit Manager States identical to the ones fresh answers produce
+- [x] A recorded action that no longer passes the reducer fails the retry loudly;
       nothing stale is committed
-- [ ] No migration and no new column: the record read is `attempts.raw_response` as it
+- [x] No migration and no new column: the record read is `attempts.raw_response` as it
       already stands
-- [ ] The scheduled weekly path is untouched, its Manager-State skip asserted unchanged
-- [ ] Proven at the `startFplTrack` seam through scripted HTTP and a real Postgres
+- [x] The scheduled weekly path is untouched, its Manager-State skip asserted unchanged
+- [x] Proven at the `startFplTrack` seam through scripted HTTP and a real Postgres
 
 ## The timeout knob
 

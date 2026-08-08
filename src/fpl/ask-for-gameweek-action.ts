@@ -83,7 +83,12 @@ type JudgedResponse =
   | { state: ManagerState }
   | { kind: ViolationKind | typeof GAMEWEEK_ACTION_SCHEMA_KIND; reason: string };
 
-function judgeGameweekResponse(
+/**
+ * Exported for the opening replay (ADR-0025), which judges a response read
+ * back out of `attempts.raw_response` exactly as the loop below judges a fresh
+ * one. Two paths to the same verdict would be two definitions of legal.
+ */
+export function judgeGameweekResponse(
   content: string,
   previous: ManagerState,
   pool: PoolPlayer[],

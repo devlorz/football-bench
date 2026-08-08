@@ -807,6 +807,77 @@ describe("starting the FPL track for all nine Entrants", () => {
     ]);
   });
 
+  test("re-calls only the seat that failed and replays the rest from record", async () => {
+    // One run that fails on a single seat, with a second seat taking a Repair
+    // to get there. Eight legal openings are on record and one is not.
+    await open({
+      perEntrant: {
+        "vendor/base-2": [CAPTAIN_ON_THE_BENCH, LEGAL_ACTION],
+        "vendor/base-5": Array.from({ length: 4 }, () => CAPTAIN_ON_THE_BENCH)
+      }
+    });
+
+    // The retry scripts nobody but the seat that never answered legally: any
+    // other seat being called runs off the end of its script and says so,
+    // rather than quietly costing an Entrant call it need not have made.
+    const { opening, calls } = await open({
+      responses: [],
+      perEntrant: { "vendor/base-5": [LEGAL_ACTION] },
+      at: "2026-08-21T12:30:00Z"
+    });
+
+    expect(opening).toEqual({ gameweek: 1, missing: [] });
+    expect(calls.map(({ baseModel }) => baseModel)).toEqual(["vendor/base-5"]);
+
+    // And what the replay commits is what a fresh answer commits: the same
+    // Squad at the same purchase prices, with the Repair the recorded run
+    // actually used still counted against the seat that used it.
+    const states = await client.query<Record<string, unknown>>(
+      `select squad, team_sheet, bank, free_transfers, hits, chips_used,
+              chip_active, rolled_over, attempts_used, model_id, predicted_at
+         from manager_states
+        order by model_id`
+    );
+    expect(states.rows).toEqual(BASE_MODELS.map((baseModel) => ({
+      ...STORED_OPENING_STATE,
+      attempts_used: baseModel === "vendor/base-2" ? 1 : 0,
+      model_id: seatId(baseModel),
+      // A replayed seat keeps the instant its action was actually received;
+      // only the seat that was called again carries the retry's clock. Replay
+      // changes what a run costs and nothing else.
+      predicted_at: new Date(
+        baseModel === "vendor/base-5"
+          ? "2026-08-21T12:30:00Z"
+          : "2026-08-21T11:30:00Z"
+      )
+    })));
+  });
+
+  test("fails the retry when a recorded action no longer passes the reducer", async () => {
+    await open({
+      perEntrant: {
+        "vendor/base-5": Array.from({ length: 4 }, () => CAPTAIN_ON_THE_BENCH)
+      }
+    });
+    // A recorded answer that the rules now refuse. Replaying through the
+    // reducer is what makes this loud instead of a stale Squad committed on
+    // the strength of an `ok` flag written by an earlier run.
+    await client.query(
+      "update attempts set raw_response = $1 where model_id = 'fpl/base-2'",
+      [openRouterBody(CAPTAIN_ON_THE_BENCH)]
+    );
+
+    await expect(open({
+      responses: [],
+      perEntrant: { "vendor/base-5": [LEGAL_ACTION] }
+    })).rejects.toThrow(
+      "fpl/base-2 has a recorded opening action for Gameweek 1 of 2026-27 "
+      + "that the rules now refuse"
+    );
+    const states = await client.query("select model_id from manager_states");
+    expect(states.rows).toEqual([]);
+  });
+
   test("refuses to open a track that has already started", async () => {
     await open();
 
