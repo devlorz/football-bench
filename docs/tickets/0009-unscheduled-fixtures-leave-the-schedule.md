@@ -44,11 +44,11 @@ limitation recorded on ticket 0006's schedule slice closes.
 
 **Blocked by:** The fetch tells a withdrawn Fixture from a scheduled one.
 
-- [ ] The schedule section omits an Unscheduled Fixture; the club's absence renders as
+- [x] The schedule section omits an Unscheduled Fixture; the club's absence renders as
       the Blank, with no annotation — tested against a real Postgres
-- [ ] A restored Fixture lists under its new Gameweek, including the Double it may create
-- [ ] A stored, hashed body shows the withdrawn Fixture's club nowhere in its Gameweek's
+- [x] A restored Fixture lists under its new Gameweek, including the Double it may create
+- [x] A stored, hashed body shows the withdrawn Fixture's club nowhere in its Gameweek's
       list — asserted at the `openFplGameweek` seam
-- [ ] The limitation note on
+- [x] The limitation note on
       [ticket 0006's schedule slice](./done/0006-fixtures-availability-detail-and-the-league-table-in-the-fpl-context.md)
       is marked closed and the doc comment recording it on the schedule read is removed

@@ -33,7 +33,7 @@ nowhere; neither is annotated.
 - [x] The builder is tested pure; the six-Gameweek read is tested against a real Postgres
 - [x] The stored, hashed body carries the section — asserted at the `openFplGameweek` seam
 
-**Known limitation — the Blank is only as honest as the fetch.** A Fixture FPL removes
+**Known limitation (closed) — the Blank is only as honest as the fetch.** A Fixture FPL removes
 from the calendar (`event = null`) keeps its stored `gw` and kickoff, so the section still
 lists it under a Gameweek it will not be played in, and the Blank it creates never appears.
 Neither half is fixable where the schedule is read: a Fixture that was never Locked is left
@@ -47,7 +47,9 @@ Locked ones as unscheduled rather than leaving `deferred` to mean two things —
 spec, and must land before the first FPL Lock for stories 3 and 4 to hold.
 [Spec 0009](../specs/0009-unscheduled-fixtures-leave-the-schedule.md) and
 [ADR 0024](../adr/0024-an-unscheduled-fixture-leaves-the-stored-schedule.md) now own the
-fix; its [ticket](./0009-unscheduled-fixtures-leave-the-schedule.md) closes this note.
+fix; its [ticket](../0009-unscheduled-fixtures-leave-the-schedule.md) closed this note: the
+fetch tells a withdrawn Fixture from a scheduled one, and the schedule read excludes the
+Unscheduled ones.
 
 ## The league table joins the context
 

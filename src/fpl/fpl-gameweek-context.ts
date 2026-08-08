@@ -181,13 +181,9 @@ interface FixtureRow {
  * writes that move onto `gw`.
  *
  * The window is whatever the calendar holds: near the season's end there are
- * simply fewer rows, and the section is shorter without saying why.
- *
- * `gw` is stale, though, for a Fixture FPL removes from the calendar outright
- * (`event = null`): the fetch leaves that row where it was, so it is still
- * listed under a Gameweek it will not be played in and the Blank it creates
- * never shows. Nothing readable here tells the two apart — see the limitation
- * recorded on ticket 0006's schedule slice, whose fix belongs to the fetch.
+ * simply fewer rows, and the section is shorter without saying why. An
+ * Unscheduled Fixture is off the calendar and so out of the window, and the
+ * Blank that leaves carries the fact by itself (ADR-0024).
  */
 async function schedule(
   database: Database,
@@ -197,7 +193,7 @@ async function schedule(
   const ahead = await database.query<FixtureRow>(
     `select gw, home_team, away_team, kickoff_at
        from fixtures
-      where season = $1 and gw between $2 and $3
+      where season = $1 and gw between $2 and $3 and not unscheduled
       order by gw, kickoff_at, fpl_id`,
     [season, gameweek, gameweek + SCHEDULE_GAMEWEEKS - 1]
   );

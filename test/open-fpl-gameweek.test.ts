@@ -1181,6 +1181,67 @@ describe("opening the FPL track for a Gameweek", () => {
     expect(body).not.toContain("2026-10-24");
   });
 
+  test("leaves an Unscheduled Fixture out, and the Blank unremarked", async () => {
+    await seedSchedule();
+    // Chelsea v Brentford withdrawn from Gameweek 2's calendar. Chelsea's
+    // other Fixture is in Gameweek 6, so Gameweek 2 is a Blank for it and the
+    // section has one club fewer rather than one row of nothing.
+    await client.query(
+      "update fixtures set unscheduled = true where fpl_id = 103"
+    );
+    await seedStandingManagerState();
+    await play({ responses: [STAND_PAT] });
+
+    const stored = await client.query<{ body: string; hash: string }>(
+      "select body, hash from contexts where gw = 2 and track = 'fpl'"
+    );
+    const body = stored.rows[0]!.body;
+    expect(stored.rows[0]!.hash).toBe(
+      createHash("sha256").update(body).digest("hex")
+    );
+    expect(body).toContain([
+      "Fixtures, this Gameweek and the five ahead:",
+      "Gameweek 2",
+      "- Everton v Fulham | 2026-08-30",
+      "Gameweek 3",
+      "- Fulham v Arsenal | 2026-09-19"
+    ].join("\n"));
+    // Absence is the whole statement: the match is gone from the list and
+    // nothing anywhere says why (ADR 0021).
+    expect(body).not.toContain("Chelsea v Brentford");
+    expect(body).not.toContain("2026-08-29");
+    // A Blank and not a club struck off: Chelsea is missing from Gameweek 2's
+    // list and present in Gameweek 6's, in this same body.
+    expect(body).toContain("- Chelsea v Everton | 2026-10-10");
+    expect(body.toLowerCase()).not.toContain("postponed");
+    expect(body.toLowerCase()).not.toContain("unscheduled");
+  });
+
+  test("lists a restored Fixture under its new Gameweek, Double and all", async () => {
+    await seedSchedule();
+    // The row as a restoration leaves it: a new date in Gameweek 6, where
+    // Chelsea already plays Everton, and the Unscheduled mark cleared. The
+    // clearing itself is the fetch's, and is proved there; what is read here
+    // is that such a row rejoins the schedule, as the Double it makes.
+    await client.query(
+      `update fixtures
+          set gw = 6, kickoff_at = '2026-10-11T14:00:00Z', unscheduled = false
+        where fpl_id = 103`
+    );
+    await seedStandingManagerState();
+    await play({ responses: [STAND_PAT] });
+
+    const stored = await client.query<{ body: string }>(
+      "select body from contexts where gw = 2 and track = 'fpl'"
+    );
+    expect(stored.rows[0]!.body).toContain([
+      "Gameweek 6",
+      "- Chelsea v Everton | 2026-10-10",
+      "- Chelsea v Brentford | 2026-10-11",
+      "Gameweek 7"
+    ].join("\n"));
+  });
+
   /**
    * A scripted opening month of the Season, hand-summed into the table the
    * context must show. Six clubs, four rounds, every club playing once a
