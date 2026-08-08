@@ -50,5 +50,5 @@ limitation recorded on ticket 0006's schedule slice closes.
 - [x] A stored, hashed body shows the withdrawn Fixture's club nowhere in its Gameweek's
       list — asserted at the `openFplGameweek` seam
 - [x] The limitation note on
-      [ticket 0006's schedule slice](./done/0006-fixtures-availability-detail-and-the-league-table-in-the-fpl-context.md)
+      [ticket 0006's schedule slice](./0006-fixtures-availability-detail-and-the-league-table-in-the-fpl-context.md)
       is marked closed and the doc comment recording it on the schedule read is removed
