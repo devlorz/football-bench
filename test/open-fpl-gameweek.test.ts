@@ -26,7 +26,10 @@ import {
 import { storePlayerPoints } from "./fpl-points-fixture.js";
 import { legalStateFrom } from "./fpl-replay.js";
 import { storedState } from "./fpl-state-fixture.js";
-import { firstMessageText } from "./sent-context.js";
+import {
+  firstMessageText,
+  type CapturedTurn as Turn
+} from "./sent-context.js";
 
 const { Client } = pg;
 
@@ -161,11 +164,6 @@ const REFUSED = JSON.stringify({
   },
   usage: { prompt_tokens: 4096, completion_tokens: 12 }
 });
-
-interface Turn {
-  role: string;
-  content: string | { type: string; text: string }[];
-}
 
 /**
  * Answers each call with the next scripted response and records the whole

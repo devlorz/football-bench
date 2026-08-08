@@ -13,7 +13,10 @@ import { DEFAULT_HTTP_TIMEOUT_MS, type HttpFetcher } from "../src/http.js";
 import { FPL_POOL, type FixturePlayer } from "./fpl-pool-fixture.js";
 import { storePlayerPoints } from "./fpl-points-fixture.js";
 import { STORED_OPENING_STATE } from "./fpl-state-fixture.js";
-import { firstMessageText } from "./sent-context.js";
+import {
+  firstMessageText,
+  type CapturedTurn as Turn
+} from "./sent-context.js";
 
 const { Client } = pg;
 
@@ -64,11 +67,6 @@ function openRouterBody(content: string): string {
     },
     usage: { prompt_tokens: 4096, completion_tokens: 256 }
   });
-}
-
-interface Turn {
-  role: string;
-  content: string | { type: string; text: string }[];
 }
 
 /**

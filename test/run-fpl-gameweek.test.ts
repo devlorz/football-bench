@@ -12,7 +12,10 @@ import {
   storeSettledPoints
 } from "./fpl-points-fixture.js";
 import { scoreFplGameweek } from "../src/fpl/score-fpl-gameweek.js";
-import { firstMessageText } from "./sent-context.js";
+import {
+  firstMessageText,
+  type CapturedTurn as Turn
+} from "./sent-context.js";
 
 const { Client } = pg;
 
@@ -71,11 +74,6 @@ function openRouterBody(content: string): string {
     },
     usage: { prompt_tokens: 4096, completion_tokens: 256 }
   });
-}
-
-interface Turn {
-  role: string;
-  content: string | { type: string; text: string }[];
 }
 
 interface Call {

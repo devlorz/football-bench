@@ -19,7 +19,8 @@ export function firstMessageText(
   if (first === undefined) {
     throw new Error("the captured request carried no messages");
   }
+  // One block is all the envelope ever makes, so there is nothing to join.
   return typeof first.content === "string"
     ? first.content
-    : first.content.map(({ text }) => text).join("");
+    : first.content[0]!.text;
 }
