@@ -25,15 +25,15 @@ new date. One migration adds the column.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] A never-Locked Fixture FPL withdraws is deleted; restored later, it reappears under
+- [x] A never-Locked Fixture FPL withdraws is deleted; restored later, it reappears under
       its new Gameweek
-- [ ] A Locked Fixture FPL withdraws keeps its row, Prediction, locked Gameweek and
+- [x] A Locked Fixture FPL withdraws keeps its row, Prediction, locked Gameweek and
       `deferred` flag, and gains the Unscheduled mark; rescheduling clears the mark while
       `deferred` stays true
-- [ ] Observing the same withdrawal on a later fetch is a no-op — the daily cadence stays
+- [x] Observing the same withdrawal on a later fetch is a no-op — the daily cadence stays
       idempotent
-- [ ] The existing deferral tests run unchanged and green
-- [ ] The fetch behaviour is tested against a real Postgres at the fetch seam
+- [x] The existing deferral tests run unchanged and green
+- [x] The fetch behaviour is tested against a real Postgres at the fetch seam
 
 ## The Blank renders as absence
 

@@ -478,6 +478,228 @@ describe("fetching an FPL Gameweek", () => {
     }]);
   });
 
+  test("marks a Locked Fixture Unscheduled while FPL withdraws it, and clears the mark on rescheduling", async () => {
+    const {
+      fixturesBody,
+      responses,
+      http
+    } = await archivedFplSources();
+    await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: () => new Date("2026-08-21T17:29:00.000Z"),
+      http
+    });
+    await client.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values (
+         'entrant/v1', 'Entrant', 'provider/model', 'provider',
+         'match/2026-27-v1', 'entrant'
+       ) on conflict (id) do nothing;
+       insert into contexts (
+         season, gw, track, fpl_id, hash, body
+       ) values (
+         '2026-27', 1, 'match', 1, 'context-hash', 'context'
+       );
+       update fixtures
+          set locked_in_gw = 1
+        where season = '2026-27' and fpl_id = 1;
+       insert into predictions (
+         model_id, season, fpl_id, probs, pred_home, pred_away,
+         context_id, attempts_used, predicted_at
+       )
+       select
+         'entrant/v1', '2026-27', 1, '{"H":0.6,"D":0.25,"A":0.15}',
+         2, 1, id, 0, '2026-08-21T17:29:00Z'
+       from contexts
+       where season = '2026-27' and gw = 1 and fpl_id = 1`
+    );
+
+    const withdrawnFixtures = JSON.parse(fixturesBody);
+    withdrawnFixtures[0].event = null;
+    withdrawnFixtures[0].kickoff_time = null;
+    responses.set(
+      "https://fantasy.premierleague.com/api/fixtures/",
+      JSON.stringify(withdrawnFixtures)
+    );
+    await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: () => new Date("2026-08-21T17:30:00.000Z"),
+      http
+    });
+
+    const storedQuery = `select
+         f.gw, f.locked_in_gw, f.kickoff_at, f.deferred, f.unscheduled,
+         count(p.*)::int as predictions
+       from fixtures f
+       left join predictions p
+         on p.season = f.season
+        and p.fpl_id = f.fpl_id
+      where f.season = '2026-27' and f.fpl_id = 1
+      group by f.season, f.fpl_id`;
+    const withdrawn = await client.query(storedQuery);
+    expect(withdrawn.rows).toEqual([{
+      gw: 1,
+      locked_in_gw: 1,
+      kickoff_at: new Date("2026-08-21T19:00:00.000Z"),
+      deferred: true,
+      unscheduled: true,
+      predictions: 1
+    }]);
+
+    const restoredFixtures = JSON.parse(fixturesBody);
+    restoredFixtures[0].event = 2;
+    restoredFixtures[0].kickoff_time = "2026-08-29T14:00:00Z";
+    responses.set(
+      "https://fantasy.premierleague.com/api/fixtures/",
+      JSON.stringify(restoredFixtures)
+    );
+    await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: () => new Date("2026-08-21T17:31:00.000Z"),
+      http
+    });
+
+    const restored = await client.query(storedQuery);
+    expect(restored.rows).toEqual([{
+      gw: 2,
+      locked_in_gw: 1,
+      kickoff_at: new Date("2026-08-29T14:00:00.000Z"),
+      deferred: true,
+      unscheduled: false,
+      predictions: 1
+    }]);
+  });
+
+  test("deletes a never-Locked Fixture FPL withdraws, and rebuilds it when FPL restores it", async () => {
+    const {
+      fixturesBody,
+      responses,
+      http
+    } = await archivedFplSources();
+    await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: () => new Date("2026-08-21T17:00:00.000Z"),
+      http
+    });
+
+    const withdrawnFixtures = JSON.parse(fixturesBody);
+    withdrawnFixtures[0].event = null;
+    withdrawnFixtures[0].kickoff_time = null;
+    responses.set(
+      "https://fantasy.premierleague.com/api/fixtures/",
+      JSON.stringify(withdrawnFixtures)
+    );
+    await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: () => new Date("2026-08-21T17:01:00.000Z"),
+      http
+    });
+
+    const withdrawn = await client.query(
+      `select gw from fixtures where season = '2026-27' and fpl_id = 1`
+    );
+    expect(withdrawn.rows).toEqual([]);
+
+    const restoredFixtures = JSON.parse(fixturesBody);
+    restoredFixtures[0].event = 2;
+    restoredFixtures[0].kickoff_time = "2026-08-29T14:00:00Z";
+    responses.set(
+      "https://fantasy.premierleague.com/api/fixtures/",
+      JSON.stringify(restoredFixtures)
+    );
+    await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: () => new Date("2026-08-21T17:02:00.000Z"),
+      http
+    });
+
+    const restored = await client.query(
+      `select gw, kickoff_at
+         from fixtures
+        where season = '2026-27' and fpl_id = 1`
+    );
+    expect(restored.rows).toEqual([{
+      gw: 2,
+      kickoff_at: new Date("2026-08-29T14:00:00.000Z")
+    }]);
+  });
+
+  test("observes the same withdrawal on a later fetch as a no-op", async () => {
+    const {
+      fixturesBody,
+      responses,
+      http
+    } = await archivedFplSources();
+    await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: () => new Date("2026-08-21T17:29:00.000Z"),
+      http
+    });
+    await client.query(
+      `update fixtures
+          set locked_in_gw = 1
+        where season = '2026-27' and fpl_id = 1`
+    );
+
+    const withdrawnFixtures = JSON.parse(fixturesBody);
+    const [locked, neverLocked] = withdrawnFixtures.slice(0, 2);
+    for (const fixture of [locked, neverLocked]) {
+      fixture.event = null;
+      fixture.kickoff_time = null;
+    }
+    responses.set(
+      "https://fantasy.premierleague.com/api/fixtures/",
+      JSON.stringify(withdrawnFixtures)
+    );
+    await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: () => new Date("2026-08-21T17:30:00.000Z"),
+      http
+    });
+    const firstObservation = await client.query(
+      `select fpl_id, gw, locked_in_gw, deferred, unscheduled, updated_at
+         from fixtures
+        where season = '2026-27' and fpl_id = any($1::integer[])
+        order by fpl_id`,
+      [[locked.id, neverLocked.id]]
+    );
+
+    await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: () => new Date("2026-08-22T06:00:00.000Z"),
+      http
+    });
+
+    const secondObservation = await client.query(
+      `select fpl_id, gw, locked_in_gw, deferred, unscheduled, updated_at
+         from fixtures
+        where season = '2026-27' and fpl_id = any($1::integer[])
+        order by fpl_id`,
+      [[locked.id, neverLocked.id]]
+    );
+    expect(firstObservation.rows).toEqual([
+      {
+        fpl_id: locked.id,
+        gw: 1,
+        locked_in_gw: 1,
+        deferred: true,
+        unscheduled: true,
+        updated_at: expect.any(Date)
+      }
+    ]);
+    expect(secondObservation.rows).toEqual(firstObservation.rows);
+  });
+
   test("attaches a late new Fixture to the next open Gameweek", async () => {
     const {
       fixturesBody,

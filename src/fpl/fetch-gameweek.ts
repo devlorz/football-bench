@@ -415,6 +415,17 @@ async function fetchFpl({
     }
 
     if (unscheduledFixtureIds.length > 0) {
+      // A never-Locked withdrawn Fixture holds nothing the feed cannot rebuild,
+      // and no Prediction can reference it before its Lock (ADR-0024). Each
+      // statement below skips rows already in the state it writes, so observing
+      // the same withdrawal on a later fetch touches nothing.
+      await database.query(
+        `delete from fixtures
+          where season = $1
+            and fpl_id = any($2::integer[])
+            and locked_in_gw is null`,
+        [season, unscheduledFixtureIds]
+      );
       await database.query(
         `update fixtures f
             set deferred = true,
@@ -424,8 +435,20 @@ async function fetchFpl({
             and f.fpl_id = any($2::integer[])
             and f.locked_in_gw = locked_gameweek.gw
             and f.season = locked_gameweek.season
-            and locked_gameweek.deadline_at <= $3`,
+            and locked_gameweek.deadline_at <= $3
+            and not f.deferred`,
         [season, unscheduledFixtureIds, observedAt]
+      );
+      // Only Locked rows survive the deletion above. The mark reports the live
+      // calendar, where `deferred` records history (ADR-0024).
+      await database.query(
+        `update fixtures
+            set unscheduled = true,
+                updated_at = now()
+          where season = $1
+            and fpl_id = any($2::integer[])
+            and not unscheduled`,
+        [season, unscheduledFixtureIds]
       );
     }
 
@@ -450,6 +473,7 @@ async function fetchFpl({
            home_team = excluded.home_team,
            away_team = excluded.away_team,
            kickoff_at = excluded.kickoff_at,
+           unscheduled = false,
            deferred = fixtures.deferred or (
              fixtures.locked_in_gw is not null
              and fixtures.locked_in_gw <> excluded.gw
