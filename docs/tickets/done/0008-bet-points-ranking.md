@@ -49,7 +49,7 @@ person computed by hand.
 **Blocked by:** "Settle the Bet Slip into Bet Points" and spec 0002's "Rehearse the complete
 scorer on the archived Gameweek" (the harness this pass extends).
 
-- [ ] The rehearsal pass produces `bet_points` and `bet_hit_pct` rows, per Gameweek and season-to-date, for every Entrant with Predictions in the archived Gameweek
-- [ ] At least one Entrant's full Gameweek — every slip, the total and the hit rate — is asserted against hand-computed values
-- [ ] The ranking the rows imply is derivable from stored data alone, every figure carrying its `n`
-- [ ] Running the rehearsal twice produces identical rows both times
+- [x] The rehearsal pass produces `bet_points` and `bet_hit_pct` rows, per Gameweek and season-to-date, for every Entrant with Predictions in the archived Gameweek
+- [x] At least one Entrant's full Gameweek — every slip, the total and the hit rate — is asserted against hand-computed values
+- [x] The ranking the rows imply is derivable from stored data alone, every figure carrying its `n`
+- [x] Running the rehearsal twice produces identical rows both times

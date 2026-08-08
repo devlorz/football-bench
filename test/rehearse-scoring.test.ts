@@ -3,6 +3,11 @@ import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import type { Probs } from "../src/fixture-result.js";
 import { MATCH_PROMPT_VERSION } from "../src/predictions/openrouter-entrant.js";
 import {
+  BET_HIT_PCT_METRIC,
+  BET_HIT_PCT_SEASON_TO_DATE_METRIC,
+  BET_POINTS_METRIC,
+  BET_POINTS_QUALIFICATION,
+  BET_POINTS_SEASON_TO_DATE_METRIC,
   GAP_RATE_METRIC,
   MATCH_POINTS_METRIC,
   REFERENCE_ELO,
@@ -142,6 +147,120 @@ describe("rehearsing the complete scorer on the archived Gameweek", () => {
       n: 1,
       detail: expect.anything()
     });
+  });
+
+  test("settles sol's whole Gameweek into the Bet Points a person computed", async () => {
+    const { report } = await rehearse();
+    const rows = report.metrics.filter(({ entrantId }) => entrantId === "sol");
+
+    // sol's whole archived Gameweek is one slip: 3-0 named on Fixture 1, which
+    // the script settles 2-0. Read by hand, leg by leg —
+    //   result       3-0 is a Home win, 2-0 is a Home win          won
+    //   over/under 2.5   3 goals named is over, 2 settled under    lost
+    //   over/under 3.5   3 is under, 2 is under                    won
+    //   over/under 4.5   3 is under, 2 is under                    won
+    //   btts         3-0 says no, 2-0 says no                      won
+    // — four winning legs off five stated, and no other Fixture was answered,
+    // so the Gameweek and the Season through it are the same four.
+    const slip = [
+      { market: "result", position: "H", settled: "H", won: true },
+      {
+        market: "over_under_2.5", position: "over", settled: "under",
+        won: false
+      },
+      {
+        market: "over_under_3.5", position: "under", settled: "under",
+        won: true
+      },
+      {
+        market: "over_under_4.5", position: "under", settled: "under",
+        won: true
+      },
+      { market: "btts", position: "no", settled: "no", won: true }
+    ];
+    const rate = {
+      won: 4,
+      bet: 5,
+      markets: {
+        result: 1,
+        "over_under_2.5": 0,
+        "over_under_3.5": 1,
+        "over_under_4.5": 1,
+        btts: 1
+      }
+    };
+    expect(rows).toContainEqual({
+      entrantId: "sol",
+      gw: GAMEWEEK,
+      metric: BET_POINTS_METRIC,
+      value: 4,
+      n: 1,
+      detail: {
+        qualification: BET_POINTS_QUALIFICATION,
+        fixtures: [
+          { fplId: 1, predicted: [3, 0], result: [2, 0], slip }
+        ]
+      }
+    });
+    expect(rows).toContainEqual({
+      entrantId: "sol",
+      gw: GAMEWEEK,
+      metric: BET_HIT_PCT_METRIC,
+      value: 0.8,
+      n: 1,
+      detail: rate
+    });
+
+    // One Gameweek in, the Season through it is that Gameweek — the ranking a
+    // reader sees, each figure carrying the one Fixture it was taken over.
+    expect(rows).toContainEqual({
+      entrantId: "sol",
+      gw: GAMEWEEK,
+      metric: BET_POINTS_SEASON_TO_DATE_METRIC,
+      value: 4,
+      n: 1,
+      detail: {
+        qualification: BET_POINTS_QUALIFICATION,
+        gameweeks: [
+          {
+            gw: GAMEWEEK,
+            n: 1,
+            points: 4,
+            fixtures: [{ fplId: 1, predicted: [3, 0], result: [2, 0], slip }]
+          }
+        ]
+      }
+    });
+    expect(rows).toContainEqual({
+      entrantId: "sol",
+      gw: GAMEWEEK,
+      metric: BET_HIT_PCT_SEASON_TO_DATE_METRIC,
+      value: 0.8,
+      n: 1,
+      detail: { ...rate, gameweeks: [{ gw: GAMEWEEK, n: 1, ...rate }] }
+    });
+  });
+
+  test("ranks the Entrants on stored Bet Points alone", async () => {
+    const { report } = await rehearse();
+
+    // The ranking a reader takes off the season-to-date rows, with nothing
+    // recomputed from the Predictions. All three answered the same Fixture,
+    // settled 2-0, and each slip was read by hand:
+    //   steady  1-0  Home win, all three unders, no both-teams   5 of 5
+    //   sol     3-0  Home win, over 2.5 lost, the rest won       4 of 5
+    //   drawish 1-1  a Draw called and both-teams-to-score lost  3 of 5
+    // One Fixture apiece, and every figure says so.
+    const ranked = report.metrics
+      .filter(({ metric }) => metric === BET_POINTS_SEASON_TO_DATE_METRIC)
+      .sort((one, other) => other.value - one.value)
+      .map(({ entrantId, value, n }) => [entrantId, value, n]);
+
+    expect(ranked).toEqual([
+      ["steady", 5, 1],
+      ["sol", 4, 1],
+      ["drawish", 3, 1]
+    ]);
   });
 
   test("publishes one comparison per non-anchor Entrant on the complete case", async () => {
