@@ -56,11 +56,11 @@ and no change to the stored context text or its hash.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] Every request's first message carries exactly one trailing breakpoint, identical
+- [x] Every request's first message carries exactly one trailing breakpoint, identical
       across seats — asserted from captured requests
-- [ ] Repair turns leave the first message byte-identical, breakpoint included
-- [ ] The stored context body and hash are unchanged by the breakpoint
-- [ ] The real discount is read from recorded attempts after the first Gameweek, per
+- [x] Repair turns leave the first message byte-identical, breakpoint included
+- [x] The stored context body and hash are unchanged by the breakpoint
+- [x] The real discount is read from recorded attempts after the first Gameweek, per
       spec 0003's standing rule — the spec records the expectation, not an estimate
 
 ## The opening sentence
