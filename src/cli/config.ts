@@ -176,15 +176,6 @@ export function readPredictJobConfig(
 }
 
 /**
- * Reads a `ScheduledEntrantJobConfig` for whichever track asks for one.
- *
- * The concurrency variable is a parameter because the two must stay separate:
- * the tracks share a deadline (ADR-0006) and nothing else, and the FPL prompt
- * is several times the Match prompt's size, so one number for both would tie
- * two costs that have no reason to move together. It is the only thing that
- * differs, which is why everything else is read once here.
- */
-/**
  * A whole-number knob with a default — how many Entrants a job may call at
  * once, how long one of those calls may take. Shared because every job that
  * reads one rejects the same values for the same reason, and names its own
@@ -202,6 +193,15 @@ function readPositiveInteger(
   return value;
 }
 
+/**
+ * Reads a `ScheduledEntrantJobConfig` for whichever track asks for one.
+ *
+ * The concurrency variable is a parameter because the two must stay separate:
+ * the tracks share a deadline (ADR-0006) and nothing else, and the FPL prompt
+ * is several times the Match prompt's size, so one number for both would tie
+ * two costs that have no reason to move together. It is the only thing that
+ * differs, which is why everything else is read once here.
+ */
 function readScheduledJobConfig(
   environment: NodeJS.ProcessEnv,
   concurrencyVariable: string,

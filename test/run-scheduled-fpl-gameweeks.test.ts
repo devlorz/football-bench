@@ -7,7 +7,7 @@ import {
 import { startFplTrack } from "../src/fpl/start-fpl-track.js";
 import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
 import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
-import type { HttpFetcher } from "../src/http.js";
+import { DEFAULT_HTTP_TIMEOUT_MS, type HttpFetcher } from "../src/http.js";
 import { FPL_POOL } from "./fpl-pool-fixture.js";
 
 const { Client } = pg;
@@ -132,6 +132,7 @@ describe("scheduled FPL Gameweek runs", () => {
       gameweek,
       concurrency: 3,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_HTTP_TIMEOUT_MS,
       now: () => new Date("2026-08-21T11:30:00Z"),
       http: answering(OPENING).http
     });
@@ -140,8 +141,13 @@ describe("scheduled FPL Gameweek runs", () => {
 
   async function schedule({
     at,
-    http
-  }: { at: string; http: HttpFetcher }): Promise<
+    http,
+    entrantCallTimeoutMs = DEFAULT_HTTP_TIMEOUT_MS
+  }: {
+    at: string;
+    http: HttpFetcher;
+    entrantCallTimeoutMs?: number;
+  }): Promise<
     Awaited<ReturnType<typeof runScheduledFplGameweeks>>
   > {
     return runScheduledFplGameweeks({
@@ -149,10 +155,32 @@ describe("scheduled FPL Gameweek runs", () => {
       season: "2026-27",
       concurrency: 3,
       apiKey: "test-key",
+      entrantCallTimeoutMs,
       now: () => new Date(at),
       http
     });
   }
+
+  test("gives every Entrant call the operator's timeout", async () => {
+    // The weekly run reads the same knob the opening does (spec 0010), and it
+    // reaches the wire through the scheduler rather than through a shortcut:
+    // the seats that chew for minutes are the same seats either week.
+    await openTheTrack();
+    const timeouts: (number | undefined)[] = [];
+
+    const runs = await schedule({
+      at: "2026-08-28T11:30:00Z",
+      entrantCallTimeoutMs: 600_000,
+      http: async (_url, options) => {
+        timeouts.push(options?.timeoutMs);
+        return { status: 200, body: openRouterBody(STAND_PAT) };
+      }
+    });
+
+    expect(runs).toHaveLength(1);
+    expect(timeouts).toHaveLength(SEASON_ROSTER_SIZE);
+    expect(timeouts.every((timeout) => timeout === 600_000)).toBe(true);
+  });
 
   test("runs a Gameweek when its Lock is six hours away", async () => {
     await openTheTrack();

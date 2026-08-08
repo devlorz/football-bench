@@ -9,7 +9,7 @@ import {
 } from "../src/context/build-fpl-track-context.js";
 import { GAMEWEEK_RULES } from "../src/fpl/apply-gameweek-action.js";
 import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
-import type { HttpFetcher } from "../src/http.js";
+import { DEFAULT_HTTP_TIMEOUT_MS, type HttpFetcher } from "../src/http.js";
 import { FPL_POOL, type FixturePlayer } from "./fpl-pool-fixture.js";
 import { storePlayerPoints } from "./fpl-points-fixture.js";
 import { STORED_OPENING_STATE } from "./fpl-state-fixture.js";
@@ -220,7 +220,7 @@ describe("starting the FPL track for all nine Entrants", () => {
     responses = [LEGAL_ACTION],
     perEntrant = {},
     beforeCall,
-    entrantCallTimeoutMs,
+    entrantCallTimeoutMs = DEFAULT_HTTP_TIMEOUT_MS,
     http,
     now
   }: {
@@ -252,7 +252,7 @@ describe("starting the FPL track for all nine Entrants", () => {
       apiKey: "test-key",
       now: now ?? (() => new Date(at)),
       http: http ?? scriptedHttp,
-      ...(entrantCallTimeoutMs === undefined ? {} : { entrantCallTimeoutMs })
+      entrantCallTimeoutMs
     });
     return { opening, calls: script.calls };
   }
@@ -599,20 +599,6 @@ describe("starting the FPL track for all nine Entrants", () => {
 
     await open({ entrantCallTimeoutMs: 600_000, http: capture });
     expect(timeouts).toEqual(BASE_MODELS.map(() => 600_000));
-  });
-
-  test("leaves the call's timeout alone when the operator sets none", async () => {
-    // Unset means the shared fetcher's own default decides, which is how
-    // every other caller of it stays untouched by the knob.
-    const timeouts: (number | undefined)[] = [];
-    await open({
-      http: async (_url, options) => {
-        timeouts.push(options?.timeoutMs);
-        return { status: 200, body: openRouterBody(LEGAL_ACTION) };
-      }
-    });
-
-    expect(timeouts).toEqual(BASE_MODELS.map(() => undefined));
   });
 
   test("stores nothing at all when one Entrant's provider never answers", async () => {

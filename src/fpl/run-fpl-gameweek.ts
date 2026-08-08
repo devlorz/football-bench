@@ -22,8 +22,8 @@ export interface RunFplGameweekOptions {
   /** How many Entrants may be called at once. */
   concurrency: number;
   apiKey: string;
-  /** How long one Entrant call may take. Unset is the fetcher's default. */
-  entrantCallTimeoutMs?: number;
+  /** How long one Entrant call may take (spec 0010). */
+  entrantCallTimeoutMs: number;
   http: HttpFetcher;
   now: () => Date;
 }
@@ -129,7 +129,7 @@ export async function runFplGameweek({
       entrant,
       locked,
       apiKey,
-      ...(entrantCallTimeoutMs === undefined ? {} : { entrantCallTimeoutMs }),
+      entrantCallTimeoutMs,
       http,
       now
     }));

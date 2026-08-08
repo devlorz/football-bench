@@ -5,7 +5,7 @@ import { runFplGameweek } from "../src/fpl/run-fpl-gameweek.js";
 import { startFplTrack } from "../src/fpl/start-fpl-track.js";
 import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
 import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
-import type { HttpFetcher } from "../src/http.js";
+import { DEFAULT_HTTP_TIMEOUT_MS, type HttpFetcher } from "../src/http.js";
 import { FPL_POOL, type FixturePlayer } from "./fpl-pool-fixture.js";
 import {
   EVERYONE_PLAYED,
@@ -195,6 +195,7 @@ describe("running a Gameweek for the whole FPL roster", () => {
       gameweek,
       concurrency: 3,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_HTTP_TIMEOUT_MS,
       now: () => new Date("2026-08-21T11:30:00Z"),
       http: script.http
     });
@@ -235,6 +236,7 @@ describe("running a Gameweek for the whole FPL roster", () => {
       gameweek,
       concurrency,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_HTTP_TIMEOUT_MS,
       now: now ?? (() => new Date(at)),
       http: http ?? script.http
     });
@@ -517,6 +519,7 @@ describe("running a Gameweek for the whole FPL roster", () => {
       gameweek: 2,
       concurrency: 3,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_HTTP_TIMEOUT_MS,
       now: () => new Date("2026-08-28T11:30:00Z"),
       http: async () => {
         calls += 1;
@@ -673,6 +676,7 @@ describe("running a Gameweek for the whole FPL roster", () => {
       gameweek: 2,
       concurrency: 0,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_HTTP_TIMEOUT_MS,
       now: () => new Date("2026-08-28T11:30:00Z"),
       http: async () => {
         calls += 1;

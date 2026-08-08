@@ -4,6 +4,7 @@ import { FPL_PROMPT_VERSION } from "../context/build-fpl-track-context.js";
 import { runFplGameweek } from "../fpl/run-fpl-gameweek.js";
 import { startFplTrack } from "../fpl/start-fpl-track.js";
 import type { ArchivedSnapshot } from "../dry-run/archive-replay-fetcher.js";
+import { DEFAULT_HTTP_TIMEOUT_MS } from "../http.js";
 import { createRehearsalFetcher } from "./rehearsal-fetcher.js";
 import {
   readFplRehearsalReport,
@@ -155,6 +156,7 @@ export async function runFplRehearsal({
     gameweek: OPENING_GAMEWEEK,
     concurrency,
     apiKey: "rehearsal",
+    entrantCallTimeoutMs: DEFAULT_HTTP_TIMEOUT_MS,
     http: createRehearsalFetcher({
       season,
       snapshots: archive.snapshots,
@@ -177,6 +179,7 @@ export async function runFplRehearsal({
       gameweek,
       concurrency,
       apiKey: "rehearsal",
+      entrantCallTimeoutMs: DEFAULT_HTTP_TIMEOUT_MS,
       http: createRehearsalFetcher({
         season,
         snapshots: archive.snapshots,

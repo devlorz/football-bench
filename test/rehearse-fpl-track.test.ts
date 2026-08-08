@@ -1,4 +1,5 @@
 import pg from "pg";
+import { DEFAULT_HTTP_TIMEOUT_MS } from "../src/http.js";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
 import {
@@ -152,6 +153,7 @@ describe("rehearsing the FPL track over archived Gameweeks", () => {
       gameweek: 1,
       concurrency: 3,
       apiKey: "rehearsal",
+      entrantCallTimeoutMs: DEFAULT_HTTP_TIMEOUT_MS,
       http: createRehearsalFetcher({ season: SEASON, snapshots, answer }),
       now: () => new Date("2026-08-21T11:30:00Z")
     });
@@ -182,6 +184,7 @@ describe("rehearsing the FPL track over archived Gameweeks", () => {
       gameweek,
       concurrency: 3,
       apiKey: "rehearsal",
+      entrantCallTimeoutMs: DEFAULT_HTTP_TIMEOUT_MS,
       http: createRehearsalFetcher({ season: SEASON, snapshots, answer }),
       now: () => new Date(deadline)
     });
@@ -196,6 +199,7 @@ describe("rehearsing the FPL track over archived Gameweeks", () => {
       gameweek: 1,
       concurrency: 3,
       apiKey: "rehearsal",
+      entrantCallTimeoutMs: DEFAULT_HTTP_TIMEOUT_MS,
       http: createRehearsalFetcher({
         season: SEASON,
         snapshots,
@@ -223,6 +227,7 @@ describe("rehearsing the FPL track over archived Gameweeks", () => {
       gameweek: 1,
       concurrency: 3,
       apiKey: "rehearsal",
+      entrantCallTimeoutMs: DEFAULT_HTTP_TIMEOUT_MS,
       http: createRehearsalFetcher({
         season: SEASON,
         snapshots,
