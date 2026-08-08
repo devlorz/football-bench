@@ -413,7 +413,13 @@ function leagueSection(league: FplLeagueTable | null): string[] {
 
 function squadSection(state: ManagerState): string[] {
   if (state.squad.active.length === 0) {
-    return ["Squad: none yet — this is your opening Squad."];
+    // The one Gameweek where every player arrives through transfers_in, said
+    // outright: seats that read only "none yet" still sent a transfers_out
+    // they had nothing to fill (spec 0010, amended inside v2 under ADR-0026).
+    return [
+      "Squad: none yet — this is your opening Squad. Buy all fifteen players "
+      + "through transfers_in; transfers_out stays empty."
+    ];
   }
   return [
     "Squad, with what you paid for each player:",

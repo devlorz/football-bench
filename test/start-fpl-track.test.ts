@@ -330,8 +330,10 @@ describe("starting the FPL track for all nine Entrants", () => {
     // What that one text says: nobody owns anything yet, every rule the
     // reducer can refuse an action for, and the locked pool with each player
     // pinned on one line the reducer can price from.
-    expect(context!.body)
-      .toContain("Squad: none yet — this is your opening Squad.");
+    expect(context!.body).toContain(
+      "Squad: none yet — this is your opening Squad. Buy all fifteen players "
+      + "through transfers_in; transfers_out stays empty."
+    );
     expect(context!.body).toContain("£100.0m");
     // Gameweek 1's normal case, and the reason the empty table is announced
     // rather than dropped: an opening Season really has played nothing.

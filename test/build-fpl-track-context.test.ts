@@ -242,6 +242,26 @@ function chipLine(body: string, half: "first" | "second"): string {
 }
 
 describe("The Manager State the FPL context reports", () => {
+  test("tells the opening Squad how to be bought, and only that one", () => {
+    // An empty Squad is the only Gameweek where every player has to arrive
+    // through transfers_in, and the seats that read the old line kept sending
+    // a transfers_out they had nothing to fill (spec 0010).
+    const opening = context({ gameweek: 1 });
+
+    expect(opening).toContain(
+      "Squad: none yet — this is your opening Squad. Buy all fifteen players "
+      + "through transfers_in; transfers_out stays empty."
+    );
+
+    const bought = context({
+      gameweek: 2,
+      state: legalStateFrom(OPENING_ACTION)
+    });
+
+    expect(bought).not.toContain("none yet");
+    expect(bought).toContain("Squad, with what you paid for each player:");
+  });
+
   test("reverts a Free Hit before showing the Squad and bank it opens on", () => {
     // The reducer reverts a Free Hit before it judges the next action, so a
     // context built from the same stored row has to revert it too. Showing the

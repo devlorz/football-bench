@@ -72,9 +72,9 @@ first-use rule.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] The sentence renders on the empty-Squad branch and nowhere else — a Gameweek with
+- [x] The sentence renders on the empty-Squad branch and nowhere else — a Gameweek with
       a Squad shows the ordinary line
-- [ ] Every existing test asserting the old opening line is updated alongside
-- [ ] The transfer-pricing readback is unaffected
-- [ ] The Prompt Version constant still reads `fpl/2026-27-v2`; if the first Lock has
+- [x] Every existing test asserting the old opening line is updated alongside
+- [x] The transfer-pricing readback is unaffected
+- [x] The Prompt Version constant still reads `fpl/2026-27-v2`; if the first Lock has
       arrived, this ships as a v3 instead — checked at merge time
