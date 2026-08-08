@@ -3,10 +3,8 @@ import { describe, expect, test } from "vitest";
 import {
   rehearsalExitCode,
   rehearseInThrowawayPostgres
-} from "../src/fpl-rehearsal/rehearse-in-throwaway-postgres.js";
+} from "../src/rehearsal.js";
 import type { FplRehearsalResult } from "../src/fpl-rehearsal/run-fpl-rehearsal.js";
-
-const ARCHIVE = { bootstrap: "{}", snapshots: [] };
 
 function cluster() {
   const stopped: string[] = [];
@@ -26,10 +24,8 @@ describe("rehearsing in a throwaway Postgres", () => {
     // The migration path is what fails here, which is the earliest a real run
     // can fail with a cluster already built.
     await expect(rehearseInThrowawayPostgres({
-      archive: ARCHIVE,
-      season: "2026-27",
-      concurrency: 1,
       start: postgres.start,
+      rehearse: async () => undefined,
       connect: async () => ({
         query: async () => { throw new Error("migrations refused"); },
         end: async () => undefined
@@ -48,10 +44,8 @@ describe("rehearsing in a throwaway Postgres", () => {
     // fails after the rehearsal has finished with it. A cluster left running
     // because a socket would not close is the one leak nothing else catches.
     await expect(rehearseInThrowawayPostgres({
-      archive: ARCHIVE,
-      season: "2026-27",
-      concurrency: 1,
       start: postgres.start,
+      rehearse: async () => undefined,
       connect: async () => ({
         query: async () => { throw new Error("migrations refused"); },
         end: async () => { throw new Error("socket would not close"); }
@@ -65,10 +59,8 @@ describe("rehearsing in a throwaway Postgres", () => {
     const postgres = cluster();
 
     await expect(rehearseInThrowawayPostgres({
-      archive: ARCHIVE,
-      season: "2026-27",
-      concurrency: 1,
       start: postgres.start,
+      rehearse: async () => undefined,
       connect: async () => { throw new Error("connection refused"); }
     })).rejects.toThrow("connection refused");
 
@@ -97,10 +89,11 @@ describe("what the rehearsal command exits with", () => {
   test("fails on an incomplete path even though the run reached the end", () => {
     // The run finished. That is precisely the outcome an operator must not
     // read as success when a seat is missing a Gameweek.
-    expect(rehearsalExitCode({
+    const short: FplRehearsalResult = {
       ...whole,
       observed: { entrants: 9, gameweeks: 3, metricRows: 192 },
       shortfalls: ["fpl/idle holds 2 of 3 Gameweeks"]
-    })).toBe(1);
+    };
+    expect(rehearsalExitCode(short)).toBe(1);
   });
 });

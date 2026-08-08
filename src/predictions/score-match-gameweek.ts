@@ -771,6 +771,12 @@ const REFERENCE_LINES: { id: string; name: string }[] = [
 ];
 
 /**
+ * The same roster by id alone, for a reader that needs to know which lines a
+ * run should have scored without knowing what each is called.
+ */
+export const REFERENCE_LINE_IDS = REFERENCE_LINES.map(({ id }) => id);
+
+/**
  * The two trivial rules a reader orients by: the long-run Home advantage, and
  * knowing nothing at all.
  *
@@ -1339,6 +1345,27 @@ async function targetGameweeks(
   ].sort((one, other) => one - other);
 }
 
+/**
+ * The Season roster: every Match Entrant `models` holds. No exclusion is
+ * representable and removing one would need its own decision (CONTEXT.md).
+ * Reference Lines are not in it, and so neither empty a complete case nor stand
+ * as a Comparison Anchor.
+ *
+ * An FPL seat holds the same `entrant` role and is told apart by its Prompt
+ * Version, here as in every other place that asks who was asked to answer. The
+ * role alone would carry the whole FPL roster into a Match complete case and
+ * empty it, since an FPL seat writes no Match Prediction.
+ */
+export async function matchRoster(database: Database): Promise<string[]> {
+  const stored = await database.query<{ id: string }>(
+    `select id from models
+      where role = 'entrant' and prompt_version = $1
+      order by id`,
+    [MATCH_PROMPT_VERSION]
+  );
+  return stored.rows.map(({ id }) => id);
+}
+
 export interface ScoreMatchGameweekOptions {
   database: Database;
   season: string;
@@ -1385,21 +1412,7 @@ export async function scoreMatchGameweek({
   // carries the same stamp however long the pass takes.
   const scoredAt = now();
 
-  // The Season roster is every Match Entrant `models` holds; no exclusion is
-  // representable and removing one would need its own decision (CONTEXT.md).
-  // Reference Lines are not in it, and so neither empty a complete case nor
-  // stand as a Comparison Anchor.
-  //
-  // An FPL seat holds the same `entrant` role and is told apart by its Prompt
-  // Version, here as in every other place that asks who was asked to answer.
-  // The role alone would carry the whole FPL roster into a Match complete case
-  // and empty it, since an FPL seat writes no Match Prediction.
-  const roster = (await database.query<{ id: string }>(
-    `select id from models
-      where role = 'entrant' and prompt_version = $1
-      order by id`,
-    [MATCH_PROMPT_VERSION]
-  )).rows.map(({ id }) => id);
+  const roster = await matchRoster(database);
 
   // Over every Fixture the Season's Locks own rather than only this Gameweek's,
   // so scoring one Gameweek back-fills the lines across the Season the Entrants

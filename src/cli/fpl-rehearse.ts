@@ -8,7 +8,8 @@ import { formatFplRehearsalResult } from "../fpl-rehearsal/format-rehearsal-resu
 import {
   rehearsalExitCode,
   rehearseInThrowawayPostgres
-} from "../fpl-rehearsal/rehearse-in-throwaway-postgres.js";
+} from "../rehearsal.js";
+import { runFplRehearsal } from "../fpl-rehearsal/run-fpl-rehearsal.js";
 import { rehearsalArchive } from "../fpl-rehearsal/rehearsal-archive.js";
 import { readFplRehearsalJobConfig } from "./config.js";
 
@@ -34,15 +35,18 @@ console.log(
 );
 
 const result = await rehearseInThrowawayPostgres({
-  archive,
-  season: config.season,
-  concurrency: config.concurrency,
   start: () => startTemporaryPostgres("football-benchmark-fpl-rehearsal-"),
   connect: async (connectionString) => {
     const target = new Client({ connectionString });
     await target.connect();
     return target;
-  }
+  },
+  rehearse: (target) => runFplRehearsal({
+    target,
+    archive,
+    season: config.season,
+    concurrency: config.concurrency
+  })
 });
 
 console.log(formatFplRehearsalResult(result));
