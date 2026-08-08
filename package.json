@@ -14,6 +14,7 @@
     "fpl:scheduled": "tsx src/cli/fpl-scheduled.ts",
     "fpl:rehearse": "tsx src/cli/fpl-rehearse.ts",
     "preflight": "tsx src/cli/preflight.ts",
+    "match:rehearse": "tsx src/cli/rehearse-scoring.ts",
     "predict": "tsx src/cli/predict.ts",
     "predict:scheduled": "tsx src/cli/predict-scheduled.ts",
     "test": "vitest run",

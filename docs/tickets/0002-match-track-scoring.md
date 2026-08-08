@@ -170,14 +170,14 @@ first live Gameweek will produce without touching live data or making a network 
 **Blocked by:** Publish deterministic comparisons against the Comparison Anchor · Report Gaps and
 attempts-to-valid · Add the Elo Reference Line.
 
-- [ ] The rehearsal builds its database through the production migration path and loads the archived Gameweek and Predictions already used by the dry run
-- [ ] Fabricated Fixture results remain confined to the throwaway database and the configured live database is never opened for writes
-- [ ] The rehearsal cannot reach the network and refuses any dependency that is not satisfied by archived or stored data
-- [ ] One run produces Match Points, probability metrics, Comparison Anchor comparisons, behavioural metrics and all three Reference Lines
-- [ ] The output includes every Entrant and enough per-Fixture detail for a reviewer to inspect a surprising total
-- [ ] Expected metric values and row counts are asserted rather than accepted because the output looks plausible
-- [ ] A second run with the same injected clock leaves row counts, values, sample sizes, intervals and details unchanged
-- [ ] The operator command exits non-zero when the full expected scoring record is not produced
+- [x] The rehearsal builds its database through the production migration path and loads the archived Gameweek and Predictions already used by the dry run
+- [x] Fabricated Fixture results remain confined to the throwaway database and the configured live database is never opened for writes
+- [x] The rehearsal cannot reach the network and refuses any dependency that is not satisfied by archived or stored data
+- [x] One run produces Match Points, probability metrics, Comparison Anchor comparisons, behavioural metrics and all three Reference Lines
+- [x] The output includes every Entrant and enough per-Fixture detail for a reviewer to inspect a surprising total
+- [x] Expected metric values and row counts are asserted rather than accepted because the output looks plausible
+- [x] A second run with the same injected clock leaves row counts, values, sample sizes, intervals and details unchanged
+- [x] The operator command exits non-zero when the full expected scoring record is not produced
 
 ---
 
