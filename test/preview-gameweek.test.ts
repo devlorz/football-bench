@@ -5,6 +5,10 @@ import { previewGameweek } from "../src/dry-run/preview-gameweek.js";
 import { MATCH_PROMPT_VERSION } from "../src/predictions/openrouter-entrant.js";
 import { archivedBody } from "./archived-fixture.js";
 import { resetSchema } from "./schema-fixture.js";
+import {
+  firstMessageText,
+  type CapturedTurn
+} from "./sent-context.js";
 
 const { Client } = pg;
 const SEASON = "2026-27";
@@ -84,10 +88,10 @@ describe("previewing a Gameweek with live Entrants", () => {
       now: () => new Date("2026-08-21T11:30:00Z"),
       http: async (url, options) => {
         const body = JSON.parse(options?.body ?? "{}") as {
-          messages: Array<{ content: string }>;
+          messages: CapturedTurn[];
         };
         const fixtureId = Number(
-          /Fixture ID: (\d+)/.exec(body.messages[0]?.content ?? "")?.[1] ?? 0
+          /Fixture ID: (\d+)/.exec(firstMessageText(body.messages))?.[1] ?? 0
         );
         asked.push(fixtureId);
         return { status: 200, body: liveResponse(fixtureId) };

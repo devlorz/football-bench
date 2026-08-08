@@ -193,7 +193,16 @@ describe("pre-flight for the Base Model roster", () => {
       },
       body: JSON.stringify({
         model: "vendor/base-model-1",
-        messages: [{ role: "user", content: context }],
+        // One content block carrying the cache breakpoint every request ends
+        // its first message with (spec 0010).
+        messages: [{
+          role: "user",
+          content: [{
+            type: "text",
+            text: context,
+            cache_control: { type: "ephemeral" }
+          }]
+        }],
         provider: {
           order: ["provider-1"],
           allow_fallbacks: false,

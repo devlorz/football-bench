@@ -7,6 +7,10 @@ import {
   archivedBody
 } from "./archived-fixture.js";
 import { resetSchema } from "./schema-fixture.js";
+import {
+  firstMessageText,
+  type CapturedTurn
+} from "./sent-context.js";
 
 const { Client } = pg;
 
@@ -113,9 +117,9 @@ describe("scheduled Prediction runs", () => {
       http: async (_url, options) => {
         const request = JSON.parse(options?.body ?? "{}") as {
           model: string;
-          messages: Array<{ content: string }>;
+          messages: CapturedTurn[];
         };
-        mainContext = request.messages[0]?.content ?? "";
+        mainContext = firstMessageText(request.messages);
         if (request.model === "vendor/gap") {
           return { status: 503, body: "provider unavailable" };
         }
@@ -149,11 +153,11 @@ describe("scheduled Prediction runs", () => {
       http: async (_url, options) => {
         const request = JSON.parse(options?.body ?? "{}") as {
           model: string;
-          messages: Array<{ content: string }>;
+          messages: CapturedTurn[];
         };
         fillRequests.push({
           model: request.model,
-          context: request.messages[0]?.content ?? ""
+          context: firstMessageText(request.messages)
         });
         return {
           status: 200,

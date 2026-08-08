@@ -44,6 +44,37 @@ export interface OpenRouterMessage {
   content: string;
 }
 
+/**
+ * The conversation as it goes on the wire: the first message's text wrapped in
+ * one content block ending with one `cache_control` breakpoint, every later
+ * turn left as it stands (spec 0010).
+ *
+ * The breakpoint is uniform and semantically inert. The two providers that
+ * require it stated begin discounting the prefix a Repair chain re-sends, the
+ * seven that discount on their own ignore it, and no seat's envelope differs
+ * from another's. It lives in the envelope only: the stored context text, its
+ * hash and the Prompt Version are untouched by it.
+ */
+function withCacheBreakpoint(
+  messages: readonly OpenRouterMessage[]
+): unknown[] {
+  const [first, ...rest] = messages;
+  if (first === undefined) {
+    return [];
+  }
+  return [
+    {
+      role: first.role,
+      content: [{
+        type: "text",
+        text: first.content,
+        cache_control: { type: "ephemeral" }
+      }]
+    },
+    ...rest
+  ];
+}
+
 export function openRouterRequest(
   apiKey: string,
   entrant: OpenRouterEntrant,
@@ -66,9 +97,11 @@ export function openRouterRequest(
     },
     body: JSON.stringify({
       model: entrant.baseModel,
-      messages: typeof messagesOrInitialPrompt === "string"
-        ? [{ role: "user", content: messagesOrInitialPrompt }]
-        : messagesOrInitialPrompt,
+      messages: withCacheBreakpoint(
+        typeof messagesOrInitialPrompt === "string"
+          ? [{ role: "user", content: messagesOrInitialPrompt }]
+          : messagesOrInitialPrompt
+      ),
       provider,
       stream: false
     })

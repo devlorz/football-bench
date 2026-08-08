@@ -3,13 +3,17 @@ import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
 import type { HttpRequest } from "../src/http.js";
 import { predictGameweek } from "../src/predictions/predict-gameweek.js";
+import {
+  firstMessageText,
+  type CapturedTurn
+} from "./sent-context.js";
 
 const { Client } = pg;
 
 function requestedFixtureId(body: {
-  messages: Array<{ content: string }>;
+  messages: CapturedTurn[];
 }): number {
-  const fixtureId = body.messages[0]?.content.match(
+  const fixtureId = firstMessageText(body.messages).match(
     /Fixture ID: (\d+)/
   )?.[1];
   if (fixtureId === undefined) {
@@ -103,9 +107,9 @@ describe("predicting a Gameweek", () => {
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async (_url, options) => {
         const request = JSON.parse(options?.body ?? "{}") as {
-          messages: Array<{ content: string }>;
+          messages: CapturedTurn[];
         };
-        prompt = request.messages[0]?.content ?? "";
+        prompt = firstMessageText(request.messages);
         return {
           status: 200,
           body: JSON.stringify({
@@ -183,9 +187,9 @@ describe("predicting a Gameweek", () => {
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async (_url, options) => {
         const request = JSON.parse(options?.body ?? "{}") as {
-          messages: Array<{ content: string }>;
+          messages: CapturedTurn[];
         };
-        prompt = request.messages[0]?.content ?? "";
+        prompt = firstMessageText(request.messages);
         return {
           status: 200,
           body: JSON.stringify({
@@ -256,9 +260,9 @@ describe("predicting a Gameweek", () => {
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async (_url, options) => {
         const request = JSON.parse(options?.body ?? "{}") as {
-          messages: Array<{ content: string }>;
+          messages: CapturedTurn[];
         };
-        prompt = request.messages[0]?.content ?? "";
+        prompt = firstMessageText(request.messages);
         return {
           status: 200,
           body: JSON.stringify({
@@ -402,7 +406,16 @@ describe("predicting a Gameweek", () => {
       },
       body: JSON.stringify({
         model: "openai/gpt-5.2",
-        messages: [{ role: "user", content: context }],
+        // The stored context goes out in one content block ending with the
+        // cache breakpoint every request carries (spec 0010).
+        messages: [{
+          role: "user",
+          content: [{
+            type: "text",
+            text: context,
+            cache_control: { type: "ephemeral" }
+          }]
+        }],
         provider: {
           order: ["openai"],
           allow_fallbacks: false
@@ -662,9 +675,9 @@ describe("predicting a Gameweek", () => {
       now: () => new Date("2026-08-21T16:00:00Z"),
       http: async (_url, options) => {
         const request = JSON.parse(options?.body ?? "{}") as {
-          messages: Array<{ content: string }>;
+          messages: CapturedTurn[];
         };
-        prompt = request.messages[0]?.content ?? "";
+        prompt = firstMessageText(request.messages);
         return {
           status: 200,
           body: JSON.stringify({
@@ -770,7 +783,7 @@ describe("predicting a Gameweek", () => {
       http: async (_url, options) => {
         const body = JSON.parse(options?.body ?? "{}") as {
           model: string;
-          messages: Array<{ content: string }>;
+          messages: CapturedTurn[];
         };
         requestBodies.push(body);
         activeCalls += 1;
@@ -1141,9 +1154,7 @@ describe("predicting a Gameweek", () => {
   });
 
   test("repairs a validation failure with the fixed validator message", async () => {
-    const requests: Array<{
-      messages: Array<{ role: string; content: string }>;
-    }> = [];
+    const requests: Array<{ messages: CapturedTurn[] }> = [];
     const responses = [
       {
         content: JSON.stringify({
@@ -1188,7 +1199,7 @@ describe("predicting a Gameweek", () => {
       },
       http: async (_url, options) => {
         const request = JSON.parse(options?.body ?? "{}") as {
-          messages: Array<{ role: string; content: string }>;
+          messages: CapturedTurn[];
         };
         requests.push(request);
         const response = responses.shift();

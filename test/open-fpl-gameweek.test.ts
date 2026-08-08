@@ -26,6 +26,7 @@ import {
 import { storePlayerPoints } from "./fpl-points-fixture.js";
 import { legalStateFrom } from "./fpl-replay.js";
 import { storedState } from "./fpl-state-fixture.js";
+import { firstMessageText } from "./sent-context.js";
 
 const { Client } = pg;
 
@@ -163,7 +164,7 @@ const REFUSED = JSON.stringify({
 
 interface Turn {
   role: string;
-  content: string;
+  content: string | { type: string; text: string }[];
 }
 
 /**
@@ -329,7 +330,7 @@ describe("opening the FPL track for a Gameweek", () => {
   test("hands the Entrant the stored context and keeps the state it produces", async () => {
     await seedStandingManagerState();
     const [played] = await play({ responses: [STAND_PAT] });
-    const prompt = played![0]!.content;
+    const prompt = firstMessageText(played!);
 
     const contexts = await client.query(
       "select track, fpl_id, hash, body from contexts"
@@ -428,8 +429,22 @@ describe("opening the FPL track for a Gameweek", () => {
     // being measured on self-correction (ADR-0004), which is the whole point
     // of the loop. Starting over would measure a second first attempt.
     expect(conversations).toHaveLength(2);
+    // Spelt out rather than copied from the first call, so the Repair is held
+    // to the whole envelope: the first message carries its one cache
+    // breakpoint (spec 0010) and is byte-identical to the one already sent —
+    // a prefix that moved between turns is a prefix no provider can discount
+    // — and the turns appended to it carry no breakpoint of their own.
+    const opening = {
+      role: "user",
+      content: [{
+        type: "text",
+        text: firstMessageText(conversations[0]!),
+        cache_control: { type: "ephemeral" }
+      }]
+    };
+    expect(conversations[0]![0]).toEqual(opening);
     expect(conversations[1]).toEqual([
-      { role: "user", content: conversations[0]![0]!.content },
+      opening,
       { role: "assistant", content: CAPTAIN_ON_THE_BENCH },
       { role: "user", content: gameweekRepairMessage(CAPTAIN_NOT_STARTING) }
     ]);
@@ -901,7 +916,7 @@ describe("opening the FPL track for a Gameweek", () => {
     await seedStandingManagerState();
     const [laterCall] = await play({ responses: [STAND_PAT] });
 
-    const later = laterCall![0]!.content;
+    const later = firstMessageText(laterCall!);
     // Its own fifteen at what it paid for them, which is what a Transfer is
     // priced against and what a Team Sheet must be picked from. An Entrant
     // shown an empty Squad and judged on a full one would spend a Repair on a
@@ -1022,7 +1037,7 @@ describe("opening the FPL track for a Gameweek", () => {
       responses: [standPatOnEvanilson]
     });
 
-    expect(rerun![0]!.content).toBe(second!.body);
+    expect(firstMessageText(rerun!)).toBe(second!.body);
     expect(second!.body).not.toBe(first!.body);
     expect(second!.body).not.toContain("£13.0m");
     const after = await client.query<{ model_id: string; body: string }>(

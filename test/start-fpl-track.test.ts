@@ -13,6 +13,7 @@ import { DEFAULT_HTTP_TIMEOUT_MS, type HttpFetcher } from "../src/http.js";
 import { FPL_POOL, type FixturePlayer } from "./fpl-pool-fixture.js";
 import { storePlayerPoints } from "./fpl-points-fixture.js";
 import { STORED_OPENING_STATE } from "./fpl-state-fixture.js";
+import { firstMessageText } from "./sent-context.js";
 
 const { Client } = pg;
 
@@ -67,7 +68,7 @@ function openRouterBody(content: string): string {
 
 interface Turn {
   role: string;
-  content: string;
+  content: string | { type: string; text: string }[];
 }
 
 /**
@@ -327,7 +328,19 @@ describe("starting the FPL track for all nine Entrants", () => {
     }
     expect(calls).toHaveLength(BASE_MODELS.length);
     for (const { messages } of calls) {
-      expect(messages[0]).toEqual({ role: "user", content: context!.body });
+      // The stored text reaches every seat, wrapped in one content block
+      // ending with one cache breakpoint (spec 0010). Deep equality is the
+      // assertion: it pins the breakpoint as the only one there is, and pins
+      // it identical from seat to seat, so no Entrant's envelope differs from
+      // another's.
+      expect(messages[0]).toEqual({
+        role: "user",
+        content: [{
+          type: "text",
+          text: context!.body,
+          cache_control: { type: "ephemeral" }
+        }]
+      });
     }
 
     // What that one text says: nobody owns anything yet, every rule the
@@ -729,7 +742,7 @@ describe("starting the FPL track for all nine Entrants", () => {
     );
     expect(contexts.rows).toEqual(stored.rows);
     for (const { messages } of calls) {
-      expect(messages[0]!.content).toBe(stored.rows[0]!.body);
+      expect(firstMessageText(messages)).toBe(stored.rows[0]!.body);
     }
     expect(stored.rows[0]!.body).toContain("Palmer");
     expect(stored.rows[0]!.body).not.toContain("£13.0m");

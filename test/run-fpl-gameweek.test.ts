@@ -12,6 +12,7 @@ import {
   storeSettledPoints
 } from "./fpl-points-fixture.js";
 import { scoreFplGameweek } from "../src/fpl/score-fpl-gameweek.js";
+import { firstMessageText } from "./sent-context.js";
 
 const { Client } = pg;
 
@@ -74,7 +75,7 @@ function openRouterBody(content: string): string {
 
 interface Turn {
   role: string;
-  content: string;
+  content: string | { type: string; text: string }[];
 }
 
 interface Call {
@@ -276,7 +277,7 @@ describe("running a Gameweek for the whole FPL roster", () => {
     // Every Entrant saw the Squad it owns, priced from the Gameweek's own
     // locked pool.
     for (const { messages } of calls) {
-      expect(messages[0]!.content).toContain("- 8 | bought for £12.0m");
+      expect(firstMessageText(messages)).toContain("- 8 | bought for £12.0m");
     }
   });
 
