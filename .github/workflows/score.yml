@@ -1,0 +1,41 @@
+name: Daily scoring
+
+on:
+  schedule:
+    # After the 06:00 UTC fetch, so a Gameweek's results and deferred Locks are
+    # already stored when the scorer reads them.
+    - cron: "0 10 * * *"
+  # A corrected result is applied by dispatching the same run by hand.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: match-scoring
+  cancel-in-progress: false
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SEASON: ${{ vars.SEASON }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Migrations are deployed deliberately before enabling this workflow.
+      - run: npm run match:score
+      - name: Open or update the scoring failure issue
+        if: ${{ failure() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SCORE_ALERT_ASSIGNEE: ${{ vars.SCORE_ALERT_ASSIGNEE }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash scripts/report-score-failure.sh

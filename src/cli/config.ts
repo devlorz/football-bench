@@ -16,6 +16,16 @@ export interface HistoricalFetchJobConfig {
   season: string;
 }
 
+/**
+ * What the daily scoring run reads. No key and no Gameweek: the scorer calls
+ * nobody, and reads every Gameweek the Season's Locks own rather than one an
+ * operator or a workflow input names.
+ */
+export interface ScoreJobConfig {
+  databaseUrl: string;
+  season: string;
+}
+
 export interface DailyFetchJobConfig {
   databaseUrl: string;
   season: string;
@@ -106,6 +116,15 @@ export function readHistoricalFetchJobConfig(
     throw new Error("HISTORICAL_SEASON must use YYYY-YY format");
   }
   return { databaseUrl, season };
+}
+
+export function readScoreJobConfig(
+  environment: NodeJS.ProcessEnv
+): ScoreJobConfig {
+  return {
+    databaseUrl: required(environment, "DATABASE_URL"),
+    season: requiredSeason(environment)
+  };
 }
 
 export function readDailyFetchJobConfig(

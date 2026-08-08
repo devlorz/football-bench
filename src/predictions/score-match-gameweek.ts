@@ -1496,3 +1496,54 @@ export async function scoreMatchGameweek({
     throw error;
   }
 }
+
+export interface ScoreMatchSeasonOptions {
+  database: Database;
+  season: string;
+  /** Read once for the whole Season, so one run leaves one stamp. */
+  now: () => Date;
+}
+
+/**
+ * Scores every Gameweek the Season's Locks own, and returns them in order.
+ *
+ * Every Gameweek rather than the latest, because `scoreMatchGameweek` looks
+ * only forward: it recomputes the Gameweek it is given and the cumulative
+ * snapshots after it. A result corrected in an earlier Gameweek would never be
+ * revisited by a run that named only the last Lock, so a daily job that named
+ * one could not apply a correction at all.
+ *
+ * A Gameweek with nothing settled is not skipped here — the scorer already
+ * declines to write a record of zeros for one, and its Coherence and
+ * behavioural rows are answerable the moment the Lock passes.
+ *
+ * ponytail: every Gameweek re-bootstraps every later snapshot, so the run is
+ * quadratic in Gameweeks over its most expensive part — 10,000 resamples per
+ * published comparison per target, minutes rather than seconds by May. If that
+ * outgrows a daily job, the same rows come from scoring `min(gameweeks)` once,
+ * which sweeps corrections through every published snapshot, plus each locked
+ * Gameweek absent from `scores`, which bootstraps the genuinely new ones: one
+ * more query for a linear number of targets.
+ */
+export async function scoreMatchSeason({
+  database,
+  season,
+  now
+}: ScoreMatchSeasonOptions): Promise<number[]> {
+  const locked = await database.query<{ gw: number }>(
+    `select distinct locked_in_gw as gw
+       from fixtures
+      where season = $1 and locked_in_gw is not null
+      order by gw`,
+    [season]
+  );
+  const gameweeks = locked.rows.map(({ gw }) => gw);
+
+  const scoredAt = now();
+  for (const gameweek of gameweeks) {
+    await scoreMatchGameweek({
+      database, season, gameweek, now: () => scoredAt
+    });
+  }
+  return gameweeks;
+}

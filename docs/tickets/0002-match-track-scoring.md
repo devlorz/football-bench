@@ -189,12 +189,12 @@ fails. An ordinary day with nothing scoreable remains silent.
 
 **Blocked by:** Rehearse the complete scorer on the archived Gameweek.
 
-- [ ] A score command runs the complete Match track scorer for the configured Season and can be invoked locally or by the workflow
-- [ ] The new score workflow establishes the specified daily 10:00 UTC run after the existing 06:00 UTC fetch, preserving the ordering dependency for deferred Fixtures
-- [ ] A manual dispatch runs the same scoring path and can immediately apply a corrected result
-- [ ] The workflow pins its dependencies, uses a scoring concurrency group and applies the same database configuration conventions as the existing jobs
-- [ ] A Gameweek with no settled result is skipped successfully and emits no misleading zero score or failure alert
-- [ ] Repeated scheduled and manual runs are safe and cannot duplicate scoring rows
-- [ ] A workflow failure opens or comments on one scoring-failure issue, links the failed run and uses the configured assignee when present
-- [ ] Failure reporting reuses the shared open-or-comment boundary and is tested at the `gh` process boundary rather than inferred from YAML text
-- [ ] Workflow configuration and the operator command are tested without contacting the live database
+- [x] A score command runs the complete Match track scorer for the configured Season and can be invoked locally or by the workflow
+- [x] The new score workflow establishes the specified daily 10:00 UTC run after the existing 06:00 UTC fetch, preserving the ordering dependency for deferred Fixtures
+- [x] A manual dispatch runs the same scoring path and can immediately apply a corrected result
+- [x] The workflow pins its dependencies, uses a scoring concurrency group and applies the same database configuration conventions as the existing jobs
+- [x] A Gameweek with no settled result is skipped successfully and emits no misleading zero score or failure alert
+- [x] Repeated scheduled and manual runs are safe and cannot duplicate scoring rows
+- [x] A workflow failure opens or comments on one scoring-failure issue, links the failed run and uses the configured assignee when present
+- [x] Failure reporting reuses the shared open-or-comment boundary and is tested at the `gh` process boundary rather than inferred from YAML text
+- [x] Workflow configuration and the operator command are tested without contacting the live database
