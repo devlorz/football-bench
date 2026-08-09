@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/modernist-a4b238fd-710d-4e6d-b9e6-8001cf1af62f/styles.css">
+<script src="_ds/modernist-a4b238fd-710d-4e6d-b9e6-8001cf1af62f/_ds_bundle.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=IBM+Plex+Serif:wght@400;600&display=swap">
+<style>
+  body{margin:0;background:#f0eee9;font-family:"Archivo",system-ui,sans-serif}
+  a{color:#ec3013}
+  a:hover{color:#ae1800}
+  .dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}
+  .dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}
+  .dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}
+  .dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}
+  .dv-opts{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+  .dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}
+  .dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}
+  .dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.55)}
+  .dv-card{max-width:100%;border:1px solid rgba(0,0,0,.10);overflow:hidden}
+  .dv-opt:target .dv-oid{background:#2a78d6;color:#fff}
+  .dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}
+</style>
+</helmet>
+
+<section class="dv-turn" id="t1">
+  <div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Three visual directions for the leaderboard — same data, same structure</span></div>
+  <div class="dv-opts">
+
+    <!-- 1a Modernist -->
+    <div class="dv-opt" id="1a">
+      <div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Modernist — the system currently bound. Archivo, red on paper, 2px rules.</div>
+      <div class="dv-card" style="width:880px;background:#f3f2f2;color:#201e1d;font-family:'Archivo',system-ui,sans-serif;padding:28px 30px 30px">
+        <div style="display:flex;align-items:baseline;gap:10px;border-bottom:2px solid rgba(32,30,29,.4);padding-bottom:12px;margin-bottom:20px">
+          <span style="font-weight:800;font-size:17px;letter-spacing:-0.02em">FOOTBALL BENCH</span>
+          <span style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:#ec3013">Match track</span>
+          <span style="margin-left:auto;font-size:11px;font-family:ui-monospace,Menlo,monospace;color:rgba(32,30,29,.55)">n = 137 · through GW 14</span>
+        </div>
+        <h2 style="font-family:'Archivo';font-weight:800;font-size:38px;letter-spacing:-0.03em;margin:0 0 18px">One set of fixtures, one lock</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:14px">
+          <thead><tr>
+            <th style="text-align:left;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(32,30,29,.6);padding:8px;border-bottom:2px solid rgba(32,30,29,.4);width:46px">#</th>
+            <th style="text-align:left;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(32,30,29,.6);padding:8px;border-bottom:2px solid rgba(32,30,29,.4)">Entrant</th>
+            <th style="text-align:right;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(32,30,29,.6);padding:8px;border-bottom:2px solid rgba(32,30,29,.4);width:210px">Match points</th>
+            <th style="text-align:right;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(32,30,29,.6);padding:8px;border-bottom:2px solid rgba(32,30,29,.4);width:150px">Bet points</th>
+          </tr></thead>
+          <tbody>
+            <sc-for list="{{ rows }}" as="r" hint-placeholder-count="6">
+              <tr>
+                <td style="padding:9px 8px;border-bottom:1px solid rgba(32,30,29,.25);font-weight:800;font-size:17px;color:#ec3013">{{ r.rank }}</td>
+                <td style="padding:9px 8px;border-bottom:1px solid rgba(32,30,29,.25)"><span style="font-weight:800;font-size:15px">{{ r.name }}</span> <span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:rgba(32,30,29,.5)">{{ r.id }}</span></td>
+                <td style="padding:9px 8px;border-bottom:1px solid rgba(32,30,29,.25)">
+                  <div style="display:flex;align-items:center;gap:10px;justify-content:flex-end">
+                    <div style="width:120px;height:8px;background:rgba(32,30,29,.1)"><div style="height:100%;background:#ec3013;width:{{ r.mpPct }}%"></div></div>
+                    <span style="font-weight:800;font-size:18px;min-width:40px;display:inline-block;text-align:right">{{ r.mp }}</span>
+                  </div>
+                </td>
+                <td style="padding:9px 8px;border-bottom:1px solid rgba(32,30,29,.25);text-align:right;font-weight:800;font-size:18px">{{ r.bp }}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 1b Terminal -->
+    <div class="dv-opt" id="1b">
+      <div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Instrument panel — dark, monospaced, amber. Reads like the pipeline that produces it.</div>
+      <div class="dv-card" style="width:880px;background:#101211;color:#e6e4dc;font-family:'JetBrains Mono',ui-monospace,monospace;padding:26px 28px 30px;border-color:#2a2d2b">
+        <div style="display:flex;align-items:baseline;gap:14px;border-bottom:1px solid #2f332f;padding-bottom:11px;margin-bottom:18px">
+          <span style="font-weight:700;font-size:13px;letter-spacing:.14em">FOOTBALL-BENCH</span>
+          <span style="font-size:11px;color:#c9a227">match_track/leaderboard</span>
+          <span style="margin-left:auto;font-size:11px;color:#7d8280">n=137 gw=14 anchor=gemini/v1</span>
+        </div>
+        <div style="font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:26px;line-height:1.15;margin-bottom:6px;letter-spacing:-0.01em">Season-to-date, sorted by match points</div>
+        <div style="font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:13px;color:#8b918e;margin-bottom:20px;max-width:62ch">Both columns rank. Neither separates base models on its own — the interval layer does that, and it is published with its n.</div>
+        <div style="display:grid;grid-template-columns:34px 1fr 96px 210px 96px;gap:0;font-size:10.5px;letter-spacing:.1em;color:#7d8280;border-bottom:1px solid #2f332f;padding-bottom:7px">
+          <div>#</div><div>ENTRANT</div><div style="text-align:right">MATCH</div><div></div><div style="text-align:right">BET</div>
+        </div>
+        <sc-for list="{{ rows }}" as="r" hint-placeholder-count="6">
+          <div style="display:grid;grid-template-columns:34px 1fr 96px 210px 96px;gap:0;align-items:center;border-bottom:1px solid #1e2120;padding:10px 0;font-size:13px">
+            <div style="color:#c9a227">{{ r.rank }}</div>
+            <div><span style="font-family:'IBM Plex Sans',system-ui,sans-serif;font-weight:600;font-size:14px">{{ r.name }}</span> <span style="color:#6e7370;font-size:11px">{{ r.id }}</span></div>
+            <div style="text-align:right;font-weight:700;font-size:16px">{{ r.mp }}</div>
+            <div style="padding-left:16px"><div style="height:3px;background:#242726"><div style="height:100%;background:#c9a227;width:{{ r.mpPct }}%"></div></div></div>
+            <div style="text-align:right;color:#a9aeab">{{ r.bp }}</div>
+          </div>
+        </sc-for>
+        <div style="margin-top:16px;font-size:11px;color:#6e7370">last score run 10:00 UTC · 9 fixtures scored · 0 gaps outstanding</div>
+      </div>
+    </div>
+
+    <!-- 1c Almanac -->
+    <div class="dv-opt" id="1c">
+      <div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Almanac — warm paper, serif display, hairline rules. Reads like a season annual.</div>
+      <div class="dv-card" style="width:880px;background:#f4efe4;color:#1e2a2a;font-family:'IBM Plex Sans',system-ui,sans-serif;padding:34px 38px 36px;border-color:rgba(30,42,42,.18)">
+        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:24px">
+          <span style="font-family:'Instrument Serif',Georgia,serif;font-size:20px">Football Bench</span>
+          <span style="font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#3f7370">Match track</span>
+          <span style="margin-left:auto;font-size:11px;color:rgba(30,42,42,.5)">2026/27 · 137 fixtures scored</span>
+        </div>
+        <h2 style="font-family:'Instrument Serif',Georgia,serif;font-weight:400;font-size:52px;line-height:1.02;letter-spacing:-0.01em;margin:0 0 8px;max-width:20ch">The standings after fourteen gameweeks</h2>
+        <p style="margin:0 0 26px;max-width:58ch;font-size:14px;color:rgba(30,42,42,.65);text-wrap:pretty">Five points for an exact scoreline, three for the goal difference, two for the outcome. The betting column is read off the same scoreline, never asked for separately.</p>
+        <sc-for list="{{ rows }}" as="r" hint-placeholder-count="6">
+          <div style="display:grid;grid-template-columns:64px 1fr 130px 130px;align-items:baseline;border-top:1px solid rgba(30,42,42,.22);padding:15px 0">
+            <div style="font-family:'Instrument Serif',Georgia,serif;font-size:36px;line-height:1;color:{{ r.almanacRank }}">{{ r.rank }}</div>
+            <div>
+              <div style="font-family:'Instrument Serif',Georgia,serif;font-size:24px;line-height:1.1">{{ r.name }}</div>
+              <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:rgba(30,42,42,.45)">{{ r.tier }} · {{ r.id }}</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-family:'Instrument Serif',Georgia,serif;font-size:30px;line-height:1">{{ r.mp }}</div>
+              <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:rgba(30,42,42,.45)">Match</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-family:'Instrument Serif',Georgia,serif;font-size:30px;line-height:1;color:rgba(30,42,42,.62)">{{ r.bp }}</div>
+              <div style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:rgba(30,42,42,.45)">Bet</div>
+            </div>
+          </div>
+        </sc-for>
+        <div style="border-top:2px solid #3f7370;margin-top:2px"></div>
+      </div>
+    </div>
+
+  </div>
+  <p class="dv-next">Try next: "build all three pages in <a class="dv-oid" href="#1b">1b</a>" · "keep <a class="dv-oid" href="#1a">1a</a> but borrow the big serif numerals from <a class="dv-oid" href="#1c">1c</a>" · "show three more directions"</p>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const ents = [
+      { id: 'gemini/v1', name: 'Gemini 3 Pro', tier: 'Frontier', mp: 231, bp: 356 },
+      { id: 'claude/v1', name: 'Claude Opus 5', tier: 'Frontier', mp: 226, bp: 349 },
+      { id: 'gpt/v1', name: 'GPT-5', tier: 'Frontier', mp: 219, bp: 361 },
+      { id: 'grok/v1', name: 'Grok 4', tier: 'First-party', mp: 208, bp: 338 },
+      { id: 'deepseek/v1', name: 'DeepSeek V4', tier: 'Open-weight', mp: 201, bp: 330 },
+      { id: 'qwen/v1', name: 'Qwen3 Max', tier: 'Open-weight', mp: 197, bp: 327 }
+    ];
+    const max = Math.max(...ents.map(e => e.mp));
+    return {
+      rows: ents.map((e, i) => ({
+        ...e, rank: i + 1,
+        mpPct: +(e.mp / max * 100).toFixed(1),
+        almanacRank: i === 0 ? '#3f7370' : 'rgba(30,42,42,.35)'
+      }))
+    };
+  }
+}
+
+</script>
+</body>
+</html>

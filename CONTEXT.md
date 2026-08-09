@@ -16,6 +16,12 @@ _Avoid_: model (ambiguous — means Base Model, Entrant, or Prompt Version depen
 The underlying LLM an Entrant calls, e.g. Claude Opus 5, GPT-5, Gemini 3 Pro.
 _Avoid_: model, LLM
 
+**Base Model Class**:
+Where a Base Model comes from — Frontier, First-party or Open-weight (ADR-0009, ADR-0014).
+A property of the Base Model, not of the Entrant, and it ranks nothing: it is shown beside
+an Entrant so a reader knows what kind of thing is being compared.
+_Avoid_: tier (Tier is the Match Points tier and nothing else)
+
 **Prompt Version**:
 A frozen (prompt template + context builder) pair. Held constant across all Entrants within
 a season so that any difference between them is attributable to the Base Model alone.
@@ -165,6 +171,12 @@ _Abbreviate_: RPS
 For one Fixture, the difference between two Entrants' scores on that same Fixture. The unit
 of comparison on the leaderboard — it cancels out how hard the Fixture was and leaves only
 which Entrant forecast it better.
+
+**Entrant Record**:
+One Entrant's history Gameweek by Gameweek — Match Points, Bet Points, exact scorelines,
+correct outcomes, RPS and Gaps — read only over Gameweeks that have been scored. Nothing in
+a Record is back-filled, so a Gameweek an Entrant Gapped stays visible as a Gap.
+_Avoid_: model stats
 
 **Comparison Anchor**:
 The one Entrant used as the common reference for a cumulative Gameweek snapshot's published
