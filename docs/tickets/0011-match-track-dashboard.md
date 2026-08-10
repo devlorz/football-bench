@@ -91,26 +91,57 @@ loading and error treatments.
 
 **Blocked by:** "The read seam and the leaderboard endpoint".
 
-- [ ] The nine Entrants render ranked with their bars, ids and Base Model Class, matching the
+- [x] The nine Entrants render ranked with their bars, ids and Base Model Class, matching the
       design at 1440px in both themes
-- [ ] The sort control reorders the table and recomputes the ranks; the choice is in the URL
+- [x] The sort control reorders the table and recomputes the ranks; the choice is in the URL
       via `replaceState` and survives a reload; Back leaves the page rather than stepping
       through sort choices
-- [ ] Both qualifications render at full length from the response — the panel grows to fit the
+- [x] Both qualifications render at full length from the response — the panel grows to fit the
       text rather than the text being cut to fit the panel
-- [ ] With `throughGw` null the pre-season state renders instead, with the Lock date and the
+- [x] With `throughGw` null the pre-season state renders instead, with the Lock date and the
       nine entered Entrants
-- [ ] The design system sheet is vendored unmodified and every override lives in a second
+- [x] The design system sheet is vendored unmodified and every override lives in a second
       sheet beside it
-- [ ] Chrome, headings and column headers are in the built HTML; while the fetch is in flight
+- [x] Chrome, headings and column headers are in the built HTML; while the fetch is in flight
       the data region holds still blocks with no animation; a failed fetch is one line in the
       danger colour and nothing retries
-- [ ] At 375px the nav collapses behind the hamburger, picking a link closes it, the rows take
+- [x] At 375px the nav collapses behind the hamburger, picking a link closes it, the rows take
       the two-column form the design specifies, and the page does not scroll sideways
 - [ ] Tab reaches every control and the focus ring is the accent one at 2px offset, never the
-      browser default
+      browser default — ticked once and unticked again: the ring that was walked was
+      Modernist's inset one, clipped by `.seg`, and the ring at 2px offset that replaced it
+      has not been seen. See the walk record below.
 - [ ] The manual acceptance checklist in spec 0011 has been walked and its result recorded on
       the ticket
+
+### The manual acceptance walk
+
+Walked by hand against the seeded Postgres (`the design's` and `pre-season`), in both themes,
+at 1440px and 375px. Nine steps in spec 0011 §"The pages"; four of them are about pages this
+slice does not build, and are deferred rather than passed.
+
+| # | Step | Result |
+|---|---|---|
+| 1 | Each nav link reaches its page and marks itself current | **Partial.** Leaderboard reaches its page and takes `aria-current`. `/fixtures` and `/entrants` 404 until their slices land. |
+| 2 | Sort reorders and recomputes ranks; URL updates; reload holds; Back leaves the page | Pass |
+| 3 | Picking an Entrant redraws everything | Deferred — the Entrant Record page |
+| 4 | Opening a rationale closes the one already open | Deferred — the Fixtures page |
+| 5 | The theme toggle flips both ways and holds across a nav and a reload | Pass |
+| 6 | Tab reaches every control and the focus ring is the accent one, never the browser default | **Re-walk pending** — see below |
+| 7 | At 375px the nav collapses, picking a link closes it, every grid is one column, the page does not scroll sideways | Pass. The per-Gameweek table in this step belongs to the Entrant Record page. |
+| 8 | With the Worker stopped, each page shows the one error line and no spinner | Pass |
+| 9 | With the seed stopped at `pre-season`, each page shows its pre-season state | Pass |
+
+Three things changed after the walk and have not been seen in a browser since:
+
+- **Step 6.** The ring on the sort control was Modernist's inset `-2px` one, clipped by
+  `.seg`'s `overflow: hidden`. Both halves were moved; the ring at 2px offset is unwalked.
+- **Step 6 and the screen reader.** The ruled list now carries `table` / `row` /
+  `columnheader` / `cell` roles, and at 375px the column headers are clipped rather than
+  `display: none` so they stay in the accessibility tree.
+- **Step 5.** The theme toggle's accessible name now says which theme the click leads to.
+
+The gate above stays unticked until those are walked.
 
 ## The first deploy, by hand
 

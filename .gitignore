@@ -2,3 +2,5 @@ node_modules/
 dist/
 .env
 coverage/
+.astro/
+.DS_Store

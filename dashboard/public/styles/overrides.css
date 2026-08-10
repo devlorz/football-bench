@@ -1,0 +1,393 @@
+/*
+ * Everything this dashboard changes about Modernist, and nothing Modernist
+ * itself says. `modernist.css` beside this file is vendored whole and never
+ * edited, so the next version of the design system can be dropped over it and
+ * this sheet is the whole of what has to be re-read.
+ *
+ * Three kinds of thing live here: the token overrides the design of record
+ * names (the purple accent, the data ramp, the dark theme), the page chrome the
+ * system has no component for, and the one breakpoint at 760px.
+ */
+
+/* ── tokens ──────────────────────────────────────────────────────────────── */
+
+:root {
+  --color-accent: #6d28d2;
+  --color-accent-100: #f2ecfd;
+  --color-accent-200: #e0d2fa;
+  --color-accent-300: #c6adf6;
+  --color-accent-400: #a37ef0;
+  --color-accent-500: #6d28d2;
+  --color-accent-600: #5a1cb4;
+  --color-accent-700: #471490;
+  --color-accent-800: #340f68;
+  --color-accent-900: #231044;
+
+  --color-accent-2: #6d28d2;
+  --color-accent-2-100: #f2ecfd;
+  --color-accent-2-300: #c6adf6;
+  --color-accent-2-500: #6d28d2;
+  --color-accent-2-700: #471490;
+
+  /* The data ramp. `--tier-5` down to `--tier-0` are the Match Points tiers and
+     are reused by every chart on the site; `--danger` is the only survivor of
+     the design system's red. */
+  --tier-5: #6d28d2;
+  --tier-3: #a37ef0;
+  --tier-2: #bab6b6;
+  --tier-0: #605d5d;
+  --danger: #ae1800;
+
+  /* The width the design was drawn at. Beyond it the rows keep stretching and
+     the 78px rank sits a screen away from the points it belongs to, so the
+     content stops and the ground continues. */
+  --page-max: 1440px;
+}
+
+[data-theme="dark"] {
+  --color-bg: #1a1918;
+  --color-surface: #242220;
+  --color-text: #f0eeec;
+  --color-divider: color-mix(in srgb, #f0eeec 38%, transparent);
+  --color-accent: #a37ef0;
+  --color-accent-500: #a37ef0;
+  --color-accent-600: #8a5ce8;
+  --color-accent-700: #c6adf6;
+  --tier-5: #a37ef0;
+  --tier-3: #6d28d2;
+  --tier-2: #9b9797;
+  --tier-0: #605d5d;
+  --danger: #ff9783;
+}
+
+[data-theme="dark"] .card,
+[data-theme="dark"] .dialog { background: var(--color-surface); }
+[data-theme="dark"] a { color: #c6adf6; }
+[data-theme="dark"] a:hover { color: #e0d2fa; }
+a { color: var(--color-accent); }
+a:hover { color: var(--color-accent-700); }
+
+/* The focus ring is the accent one at 2px offset on everything reachable, and
+   never the browser default. */
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* The sort control is the one place that rule does not reach on its own. The
+   radio it is focused on is visually hidden, so the ring a reader sees is the
+   one Modernist draws on the label -- and it draws it at `-2px`, inside a
+   container that clips anything drawn outward. Both halves have to move: the
+   clip is nothing but a radius guard on a system whose radius is zero. */
+.seg { overflow: visible; }
+.seg-opt:has(input:focus-visible) { outline-offset: 2px; }
+
+html {
+  min-height: 100vh;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* ── chrome ──────────────────────────────────────────────────────────────── */
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--color-bg);
+  /* Grown from the edge rather than capped, so the header's rule still spans
+     the window while its contents line up with the page's. The extra 28px is
+     the page's own padding, which the cap below sits inside. */
+  padding: 14px max(28px, calc((100% - var(--page-max)) / 2 + 28px));
+  gap: 28px;
+  align-items: baseline;
+}
+.nav-brand {
+  margin-right: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.brand-name { font-size: 18px; letter-spacing: -0.02em; }
+.brand-track {
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+.navlinks { display: flex; gap: 20px; margin-right: auto; }
+.navlinks a {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.navtools { display: flex; align-items: center; gap: 14px; margin-left: auto; }
+.navtools .btn { padding: 6px; }
+.burger { display: none; }
+
+/* A moon on the light theme and a sun on the dark one, swapped by the same
+   attribute the tokens above switch on. In CSS rather than in the toggle's
+   script because an SVG element is not an `HTMLElement`: it has no `hidden`
+   property, so hiding one from JavaScript sets a field nothing reads. */
+[data-theme="dark"] .icon-moon,
+:root:not([data-theme="dark"]) .icon-sun { display: none; }
+
+.page {
+  padding: 0 28px 80px;
+  max-width: var(--page-max);
+  margin-inline: auto;
+}
+
+/* ── leaderboard ─────────────────────────────────────────────────────────── */
+
+.hero {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 48px;
+  border-bottom: 2px solid var(--color-divider);
+  padding: 40px 0 28px;
+}
+.hero h1 {
+  font-size: 44px;
+  letter-spacing: -0.01em;
+  margin: 0 0 12px;
+  max-width: 16ch;
+}
+.hero p {
+  max-width: 56ch;
+  margin: 0;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+  text-wrap: pretty;
+}
+.soft { background: var(--color-surface); }
+.stats {
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.stat-label {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+.stat-value {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 24px;
+}
+
+.rankbar {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 22px 0 14px;
+}
+.rankbar h2 { margin: 0; font-size: 22px; }
+.muted { color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+.ranknote { margin-left: auto; font-size: 12px; }
+
+.lbhead,
+.lbrow {
+  display: grid;
+  grid-template-columns: 78px 1fr 200px 200px;
+  align-items: center;
+}
+.lbhead {
+  padding: 10px 0;
+  border-bottom: 2px solid var(--color-divider);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+.lbbody { border-top: 2px solid var(--color-divider); }
+.lbrow {
+  border-bottom: 2px solid var(--color-divider);
+  padding: 14px 0;
+}
+.lbrow:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
+.lb-rank {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 48px;
+  line-height: 1;
+}
+.lbrow:first-child .lb-rank { color: var(--color-accent); }
+.lb-name {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+.lb-id {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.cell { padding-left: 20px; }
+.lb-value {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 30px;
+  line-height: 1;
+}
+.bar {
+  height: 6px;
+  background: color-mix(in srgb, var(--color-text) 10%, transparent);
+  margin-top: 7px;
+  max-width: 150px;
+}
+.bar > span { display: block; height: 100%; }
+.bar-match > span { background: var(--tier-5); }
+.bar-bet > span { background: var(--tier-0); }
+
+.footnotes {
+  margin-top: 28px;
+  border-top: 2px solid var(--color-divider);
+  padding-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 32px;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 65%, transparent);
+}
+.footnotes p { margin: 0; }
+.footnotes strong { color: var(--color-text); }
+
+/* The qualifications are the benchmark's own sentences and are shown whole: the
+   panel grows to fit the text, and nothing here clamps, truncates or scrolls
+   it. */
+.qualifications {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  margin-top: 28px;
+}
+
+/* ── pre-season ──────────────────────────────────────────────────────────── */
+
+.preseason {
+  padding: 80px 0;
+  border-bottom: 2px solid var(--color-divider);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  align-items: start;
+}
+.kicker {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  margin-bottom: 10px;
+}
+.preseason h2 { font-size: 34px; margin: 0 0 12px; max-width: 18ch; }
+.preseason p {
+  margin: 0;
+  max-width: 48ch;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+.entered { padding: 24px 26px; }
+.entered-title {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+.entered-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 9px 0;
+  border-bottom: 2px solid var(--color-divider);
+}
+.entered-name {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 15px;
+}
+.entered-note {
+  margin-top: 14px;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+/* ── loading and error ───────────────────────────────────────────────────── */
+
+/* Still blocks over the grid the real rows use. The design system has no
+   animation and no radius, and a loading state is not where either arrives. */
+.skeleton { background: var(--color-surface); height: 48px; }
+.lbrow-skeleton { padding: 14px 0; column-gap: 0; }
+.lbrow-skeleton .skeleton:nth-child(1) { width: 58px; }
+.lbrow-skeleton .skeleton:nth-child(3),
+.lbrow-skeleton .skeleton:nth-child(4) { margin-left: 20px; }
+
+.error {
+  color: var(--danger);
+  font-size: 14px;
+  padding: 22px 0;
+}
+
+[hidden] { display: none !important; }
+
+/* ── 760px ───────────────────────────────────────────────────────────────── */
+
+@media (max-width: 760px) {
+  .page { padding: 0 16px 56px; }
+  .nav { padding: 12px 16px; flex-wrap: wrap; gap: 12px; row-gap: 10px; }
+  h1 { font-size: 30px; }
+  h2 { font-size: 24px; }
+  .hero h1 { font-size: 30px; }
+  .hero,
+  .preseason,
+  .qualifications,
+  .footnotes { grid-template-columns: 1fr; gap: 24px; }
+  .preseason { padding: 48px 0; }
+
+  .navlinks { display: none; }
+  .nav.menu-open .navlinks {
+    display: flex;
+    flex-direction: column;
+    flex-basis: 100%;
+    gap: 0;
+    margin: 6px 0 0;
+    order: 3;
+  }
+  .nav.menu-open .navlinks a {
+    padding: 12px 0;
+    border-top: 2px solid var(--color-divider);
+    font-size: 15px;
+  }
+  .burger { display: inline-flex; order: 2; }
+
+  /* Clipped and not `display: none`: the design takes the column headers off a
+     phone, and `display: none` would take them off the accessibility tree with
+     them -- leaving four unlabelled figures per row on the one layout where
+     nothing on screen says which column they are in. */
+  .lbhead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .ranknote { display: none; }
+  .rankbar { flex-wrap: wrap; }
+  .rankbar .seg { margin-left: auto; }
+
+  .lbhead,
+  .lbrow {
+    grid-template-columns: 40px 1fr auto auto;
+    column-gap: 14px;
+  }
+  .lbrow > .cell { padding-left: 0; text-align: right; }
+  .lb-rank { font-size: 28px; }
+  .lb-name { font-size: 16px; }
+  .lb-value { font-size: 20px; }
+  .bar { max-width: 56px; margin-left: auto; }
+  .lbrow-skeleton .skeleton:nth-child(3),
+  .lbrow-skeleton .skeleton:nth-child(4) { margin-left: 0; width: 56px; }
+}
