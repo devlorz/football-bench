@@ -216,6 +216,9 @@ describe("the Entrant record endpoint on the design's Season", () => {
       expect(sum((row) => row.matchPoints)).toBe(entrant.matchPoints);
       expect(sum((row) => row.betPoints)).toBe(entrant.betPoints);
       expect(sum((row) => row.gaps)).toBe(entrant.gaps);
+      // The denominator the counts were taken over, which is the Entrant's own
+      // and not the Lock's.
+      expect(sum((row) => row.settled)).toBe(entrant.n);
       expect(sum((row) => row.exact)).toBe(
         entrant.tiers.find(({ points }) => points === 5)?.count
       );
@@ -239,6 +242,9 @@ describe("the Entrant record endpoint on the design's Season", () => {
     expect(gap).toBeDefined();
     expect(gap!.fixtures).toBeGreaterThan(0);
     expect(gap!.rps).not.toBeNull();
+    // The Fixtures it answered are fewer than the Fixtures its Lock owned, by
+    // exactly the Gaps.
+    expect(gap!.settled).toBe(gap!.fixtures - gap!.gaps);
   });
 
   test("carries the cache lifetime the scoring run moves on", async () => {

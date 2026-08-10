@@ -444,6 +444,112 @@ html {
 .rationale-body { font-size: 13px; max-width: 80ch; text-wrap: pretty; }
 .rationale-meta { font-size: 11px; margin-top: 8px; }
 
+/* ── entrant record ──────────────────────────────────────────────────────── */
+
+.sthero {
+  border-bottom: 2px solid var(--color-divider);
+  padding: 40px 0 22px;
+}
+.sthero h1 { font-size: 38px; letter-spacing: -0.01em; margin: 0 0 6px; }
+.sthero p {
+  margin: 0;
+  max-width: 60ch;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+  text-wrap: pretty;
+}
+
+/* One column, unlike the leaderboard's: that state has a panel of entered
+   Entrants beside its prose and this one has nothing to put there. */
+.stpre { grid-template-columns: 1fr; }
+
+.sttabs { display: flex; flex-wrap: wrap; margin: 18px 0 20px; }
+.sttab {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: currentColor;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 13px;
+  padding: 9px 16px;
+  cursor: pointer;
+  margin: 0 8px 10px 0;
+}
+.sttab-on { background: var(--color-accent); color: var(--color-bg); }
+
+.stkpi {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 28px;
+}
+.stkpi > div { padding: 18px 22px; }
+.stat-big {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 32px;
+  line-height: 1;
+}
+.stat-note { font-size: 11px; margin-top: 3px; }
+
+.stcharts {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 32px;
+  align-items: start;
+  margin-bottom: 34px;
+}
+.stcharts h4,
+#record > h4 { margin: 0 0 10px; }
+.stchart { width: 100%; height: auto; display: block; }
+.stchart-note { font-size: 12px; margin-top: 4px; }
+
+.stbar { display: flex; height: 34px; margin-bottom: 10px; }
+.stbar > div { height: 100%; }
+.strow {
+  display: grid;
+  grid-template-columns: 14px 1fr 60px 60px;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 0;
+  border-bottom: 2px solid var(--color-divider);
+  font-size: 13px;
+}
+.stswatch { width: 12px; height: 12px; }
+.stcount {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 15px;
+  text-align: right;
+}
+.stpct { font-size: 12px; text-align: right; }
+
+.stmarkets-title { margin-top: 26px !important; }
+.stmarket { padding: 7px 0; border-bottom: 2px solid var(--color-divider); }
+.stmarket-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  margin-bottom: 5px;
+}
+.stmarket-count { font-size: 12px; }
+.stmarket-bar {
+  height: 8px;
+  background: color-mix(in srgb, var(--color-text) 10%, transparent);
+}
+.stmarket-bar > div { height: 100%; background: var(--color-accent); }
+
+/* The table's own scroll container: it may be wider than a phone, and the page
+   itself must never scroll sideways. */
+.sttable { overflow-x: auto; }
+.sttable .num { text-align: right; }
+/* The design's two fixed columns, so the Gameweek and its Fixture count stay
+   beside each other however wide the six figures make the rest. */
+.sttable th:first-child { width: 70px; }
+.sttable th:nth-child(2) { width: 90px; }
+.sttable .stgw { font-family: var(--font-heading); font-weight: 800; }
+.sttable .strps { font-family: var(--font-body); font-size: 12px; }
+
 /* ── loading and error ───────────────────────────────────────────────────── */
 
 /* Still blocks over the grid the real rows use. The design system has no
@@ -568,4 +674,12 @@ html {
   .fxbar { max-width: none; }
   .fx-coherence { order: 2; flex-basis: 100%; }
   .rationale { order: 3; flex-basis: 100%; }
+
+  .sthero h1 { font-size: 30px; }
+  .stkpi { grid-template-columns: 1fr 1fr; }
+  .stcharts { grid-template-columns: 1fr; gap: 24px; }
+  /* The one grid that does not stack: it scrolls inside `.sttable` instead, so
+     eight columns of figures stay a table rather than becoming eight
+     paragraphs. */
+  .sttable .table { min-width: 560px; }
 }

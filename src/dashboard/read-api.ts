@@ -446,6 +446,14 @@ export interface EntrantGameweek {
   gw: number;
   /** The Fixtures this Gameweek's Lock owned, not the ones the Entrant answered. */
   fixtures: number;
+  /**
+   * The Fixtures this Entrant settled a Prediction on, which is the denominator
+   * the counts beside it were taken over. It is `fixtures` less what the
+   * Entrant Gapped and less what has not settled, and the two must not be read
+   * as one: three correct Outcomes out of nine Fixtures the Entrant answered
+   * eight of is a share of a denominator it was never measured against.
+   */
+  settled: number;
   matchPoints: number;
   betPoints: number;
   /** Exact scorelines, which are the Fixtures that scored 5. */
@@ -639,6 +647,7 @@ async function entrants(query: Query, season: string): Promise<Response> {
           return {
             gw: week.gw,
             fixtures: week.n,
+            settled: scored.length,
             matchPoints: at(points, week.gw)?.points ?? 0,
             betPoints: at(bets, week.gw)?.points ?? 0,
             exact: scored.filter((fixture) => fixture.points === 5).length,

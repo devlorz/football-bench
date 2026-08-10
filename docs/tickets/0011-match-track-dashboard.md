@@ -271,21 +271,79 @@ behind all of it. Switching Entrant redraws everything at once and costs no seco
 
 **Blocked by:** "The Leaderboard page".
 
-- [ ] `/api/entrants` returns all nine with their complete per-Gameweek series, so selecting an
+- [x] `/api/entrants` returns all nine with their complete per-Gameweek series, so selecting an
       Entrant is a re-render and not a fetch
-- [ ] Tier counts and per-market hit counts are taken over the flattened
+- [x] Tier counts and per-market hit counts are taken over the flattened
       `detail.gameweeks[].fixtures[]` of the cumulative rows, and match the same counts summed
       over that Season's per-Gameweek rows
-- [ ] Counts are counted from the detail, never recovered by multiplying `score_pct` or
+- [x] Counts are counted from the detail, never recovered by multiplying `score_pct` or
       `outcome_pct` by `n`
-- [ ] The cumulative chart's domains follow the data — x from Gameweek 1 to `throughGw`, y to a
+- [x] The cumulative chart's domains follow the data — x from Gameweek 1 to `throughGw`, y to a
       deterministic ceiling at or above the field's highest total — and no line is clipped at
       `throughGw` 14 or at `throughGw` 30
-- [ ] The selected Entrant is in the URL and survives a reload; switching redraws the chart,
+- [x] The selected Entrant is in the URL and survives a reload; switching redraws the chart,
       the tier bar, the market list and every table row together
-- [ ] A non-zero Gap count renders in the danger colour, a Gapped Gameweek stays in the table,
+- [x] A non-zero Gap count renders in the danger colour, a Gapped Gameweek stays in the table,
       and the page states that nothing is back-filled
-- [ ] The response carries `public, s-maxage=300, stale-while-revalidate=3600`
-- [ ] At 375px the per-Gameweek table scrolls inside its own wrapper and the page does not
+- [x] The response carries `public, s-maxage=300, stale-while-revalidate=3600`
+- [x] At 375px the per-Gameweek table scrolls inside its own wrapper and the page does not
       scroll sideways
-- [ ] The manual acceptance checklist has been walked and its result recorded on the ticket
+- [x] The manual acceptance checklist has been walked and its result recorded on the ticket
+
+### The manual acceptance walk
+
+Ten tests in
+[test/dashboard-entrants-api.test.ts](../../test/dashboard-entrants-api.test.ts) cover the
+endpoint over a real Postgres under `dashboard_read`; `astro check`, `astro build` and
+`tsc --noEmit` are clean; `modernist.css` is still byte-for-byte the vendored file.
+
+Walked in a driven Chrome against the seeded Postgres (`the design's` and `pre-season`), in
+both themes and in both layouts. Nine steps in spec 0011 §"The pages".
+
+| # | Step | Result |
+|---|---|---|
+| 1 | Each nav link reaches its page and marks itself current | **Pass, and complete for the first time.** All three pages now exist; each takes `aria-current` and the other two do not. |
+| 2 | Sort reorders and recomputes ranks; URL updates; reload holds; Back leaves the page | Passed on the Leaderboard slice; not re-walked, nothing in this slice touches it |
+| 3 | Picking an Entrant redraws everything | Pass. One click swaps the four headline figures, the chart's accent line, the tier bar and its four counts, the five market rows and all fourteen table rows. The id is in the URL, a reload holds it, and Back from two selections landed on the Leaderboard rather than stepping through them. |
+| 4 | Opening a rationale closes the one already open | Passed on the Fixtures slice; this page has no rationale |
+| 5 | The theme toggle flips both ways and holds across a nav and a reload | Pass, including across a nav from the Leaderboard into this page |
+| 6 | Tab reaches every control and the focus ring is the accent one, never the browser default | Pass. The nine Entrant buttons take the 2px accent ring at 2px offset with `:focus-visible` matching; nothing on the page is unreachable. |
+| 7 | At 375px the nav collapses, picking a link closes it, every grid is one column, the page does not scroll sideways | Pass, with the same caveat and one note below |
+| 8 | With the Worker stopped, each page shows the one error line and no spinner | Pass — after a cache-bypassing reload; see below |
+| 9 | With the seed stopped at `pre-season`, each page shows its pre-season state | Pass. `throughGw` null renders "No settled gameweeks" and the record region is hidden entirely. |
+
+**The 375px caveat is unchanged**, and it is the same one the Fixtures slice recorded: Chrome
+will not size its own window below about 757 CSS pixels. The breakpoint's branch was exercised
+at 757 — burger shown, nav links hidden, the headline strip at two columns, the charts row at
+one — and the 375 case was checked by squeezing the document within it: `body.scrollWidth`
+stayed at 375, and the per-Gameweek table scrolled inside its own wrapper (560px of table in a
+343px box) rather than moving the page.
+
+**The chart's axis labels are small on a phone**, and this is stated rather than fixed. The
+SVG keeps its 880-unit viewBox and scales to the column, so at 375px the 11px tick labels
+render at about 4px. The design squashes the same chart at the same width, every figure the
+chart draws is in the table beneath it, and the alternatives — a second horizontal scroller, or
+a font size recomputed against the rendered width on every resize — are both worse than the
+thing they fix. Worth a look if the phone layout is ever revisited.
+
+**The browser cache cost time again**, exactly as the Fixtures slice recorded. With the Worker
+stopped, an ordinary reload rendered the *cached* body and no error line at all; the error
+state only appeared on a cache-bypassing reload. The response carries `s-maxage` and no
+`max-age` and a browser heuristically caches it. Nothing here changes the header ADR-0028
+chose; it stays a thing to confirm against a real edge in the deploy slice.
+
+**Three things the walk found and fixed.**
+
+- The last x-axis label was cut in half. The first and last Gameweeks sit on the plot's own
+  edges, so a centred label hangs outside the viewBox; the ends now anchor `start` and `end`.
+- The Outcome column read `3 / 9` for an Entrant that answered eight of the Gameweek's nine
+  Fixtures — an Entrant-scoped numerator over a Lock-scoped denominator. The body now carries
+  the Entrant's own settled count per Gameweek beside the Lock's, and the column reads `3 / 8`.
+  The Fixtures column still says what the Lock owned, which is the figure the Gaps are against.
+- The pre-season block was the Leaderboard's two-column grid with nothing in its right half.
+  That state has a panel of entered Entrants to put there and this one does not, so it is one
+  column here.
+
+A fourth thing was fixed unprompted: an `?entrant=` id that is not on the roster falls back to
+the first Entrant *and rewrites the URL to it*, so a stale link is not copied onward still
+naming a seat that is not being shown.
