@@ -19,7 +19,8 @@
     "predict": "tsx src/cli/predict.ts",
     "predict:scheduled": "tsx src/cli/predict-scheduled.ts",
     "test": "vitest run",
-    "predict:preview": "tsx src/cli/predict-preview.ts"
+    "predict:preview": "tsx src/cli/predict-preview.ts",
+    "seed": "tsx src/cli/seed.ts"
   },
   "dependencies": {
     "pg": "8.16.3",

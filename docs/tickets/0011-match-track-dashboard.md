@@ -32,20 +32,20 @@ the roster in one place.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] One command against an empty database produces nine Entrants carrying the match Prompt
+- [x] One command against an empty database produces nine Entrants carrying the match Prompt
       Version, fourteen settled Gameweeks, and a fifteenth with Fixtures and Predictions and
       no results
-- [ ] Every `scores` row comes from running the real scorer; the seed writes none itself, and
+- [x] Every `scores` row comes from running the real scorer; the seed writes none itself, and
       a test asserts no `scores` row exists until the scorer has run
-- [ ] Each of the three stopping points produces exactly the state the spec's table names —
+- [x] Each of the three stopping points produces exactly the state the spec's table names —
       pre-season is the roster and Gameweek 1 Fixtures, pending adds fourteen settled
       Gameweeks and Gameweek 15's Fixtures, the design's adds Gameweek 15's contexts and
       Predictions
-- [ ] Each Entrant's row carries its Base Model Class, and the three classes across the roster
+- [x] Each Entrant's row carries its Base Model Class, and the three classes across the roster
       match ADR-0014 — three Frontier, one First-party, five Open-weight
-- [ ] The seed leaves at least one Gap and one incoherent Prediction, so the states the pages
+- [x] The seed leaves at least one Gap and one incoherent Prediction, so the states the pages
       must render are present rather than hypothetical
-- [ ] A Gameweek with other than ten Fixtures is present, so nothing downstream can quietly
+- [x] A Gameweek with other than ten Fixtures is present, so nothing downstream can quietly
       assume ten
 
 ## The read seam and the leaderboard endpoint
