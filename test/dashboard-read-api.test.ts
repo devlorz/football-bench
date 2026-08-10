@@ -349,6 +349,79 @@ describe("the dashboard read API on a Locked Gameweek nothing has settled", () =
     });
 });
 
+describe("the dashboard read API when the whole roster Gapped a Gameweek", () => {
+  const writer = new Client({ connectionString: process.env.DATABASE_URL });
+  const reader = new Client({ connectionString: process.env.DATABASE_URL });
+
+  const query: Query = async (sql, parameters = []) =>
+    (await reader.query(sql, [...parameters])).rows;
+
+  beforeAll(async () => {
+    await writer.connect();
+    await reader.connect();
+    await writer.query(
+      `truncate scores, contexts, predictions, fixtures, models, gameweeks,
+       historical_matches restart identity cascade`
+    );
+    await seedSeason({ database: writer, season: SEASON, stopAt: "pre-season" });
+
+    // Gameweek 1 Locked, played and settled, with not one Prediction against
+    // it: the shape an OpenRouter outage over the Prediction window leaves,
+    // which ADR-0009 enters this roster knowing can happen to all nine at once.
+    await writer.query(
+      `update fixtures
+          set locked_in_gw = gw,
+              result = jsonb_build_object(
+                'home_goals', 2, 'away_goals', 1, 'outcome', 'H')
+        where season = $1`,
+      [SEASON]
+    );
+    await scoreMatchSeason({
+      database: writer,
+      season: SEASON,
+      now: () => new Date("2026-08-16T10:00:00Z")
+    });
+    await reader.query("set role dashboard_read");
+
+    return async () => {
+      await writer.end();
+      await reader.end();
+    };
+  });
+
+  test("reads a scored Gameweek that no Entrant scored on", async () => {
+    // The scorer wrote what it had — the Gaps — and no Match Points row for
+    // anybody, because no Entrant settled a Prediction.
+    const points = await writer.query(
+      "select 1 from scores where season = $1 and metric = $2",
+      [SEASON, "match_points_season_to_date"]
+    );
+    expect(points.rowCount).toBe(0);
+
+    const response = await handleDashboardRequest(
+      new Request("https://benchmark.example/api/leaderboard"),
+      query, SEASON, NOW
+    );
+    const body = await response.json() as LeaderboardBody;
+
+    // Ten Fixtures settled and the scorer has been over them: this Season has
+    // been scored, and reporting it as pre-season would tell a reader the
+    // Season had not started on the day it did.
+    expect(body.throughGw).toBe(1);
+    expect(body.settledFixtures).toBe(10);
+    expect(body.entrants).toHaveLength(ROSTER.length);
+    for (const entrant of body.entrants) {
+      expect(entrant).toMatchObject({ matchPoints: 0, betPoints: 0, n: 0 });
+    }
+
+    // Nine noughts is a ranking a reader can see, so it carries its caveats —
+    // and here there is no stored row to read them from, because the rows that
+    // carry a qualification are exactly the ones that were never written.
+    expect(body.matchPointsQualification).toBe(MATCH_POINTS_QUALIFICATION);
+    expect(body.betPointsQualification).toBe(BET_POINTS_QUALIFICATION);
+  });
+});
+
 describe("the dashboard read API with an Entrant that settled nothing", () => {
   const writer = new Client({ connectionString: process.env.DATABASE_URL });
   const reader = new Client({ connectionString: process.env.DATABASE_URL });

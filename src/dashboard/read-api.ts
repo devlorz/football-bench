@@ -1,6 +1,7 @@
 import { MATCH_PROMPT_VERSION } from "../predictions/openrouter-entrant.js";
 import {
-  BET_POINTS_SEASON_TO_DATE_METRIC, MATCH_POINTS_SEASON_TO_DATE_METRIC
+  BET_POINTS_QUALIFICATION, BET_POINTS_SEASON_TO_DATE_METRIC,
+  MATCH_POINTS_QUALIFICATION, MATCH_POINTS_SEASON_TO_DATE_METRIC
 } from "../predictions/score-match-gameweek.js";
 
 /**
@@ -67,19 +68,33 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
   // played, and would move a Season's ranking to a Gameweek that has no
   // ranking — blanking the fourteen Gameweeks that do.
   //
-  // Match Points are outcome-dependent, and the scorer writes no
-  // outcome-dependent row for a Gameweek with nothing settled rather than a
-  // record of zeros. The Gameweek the ranking exists for is therefore the last
-  // one the ranking's own metric reaches.
+  // A Gameweek has been scored when the scorer has been over it and it had
+  // something to score, which is two facts and not one. Any Match `scores` row
+  // on the Gameweek is the first — the scorer writes the behavioural rows even
+  // where it writes nothing else — and a Fixture the Lock owns carrying a
+  // result is the second.
+  //
+  // Neither half alone survives its edge. Reading Match Points rows would call
+  // a Gameweek unscored when every Entrant Gapped it, because the scorer writes
+  // no outcome-dependent row for an Entrant that settled nothing — and a whole
+  // roster Gapping one Gameweek is an OpenRouter outage, which ADR-0009 enters
+  // this roster knowing (a Season with Fixtures settled would then read as
+  // pre-season). Reading settled Fixtures alone would call a Gameweek scored
+  // the moment its last match ended, hours before the daily run.
   //
   // Every read of `scores` filters `track = 'match'`. A seat can hold both
   // tracks, and a read missing it lets an FPL demonstration figure be read as a
   // Match one — in a ranking, which is the one place ADR-0003 is careful never
   // to let the tracks meet.
   const [scored] = await query(
-    `select max(gw) as through_gw from scores
-      where season = $1 and track = 'match' and metric = $2`,
-    [season, MATCH_POINTS_SEASON_TO_DATE_METRIC]
+    `select max(s.gw) as through_gw
+       from scores s
+      where s.season = $1 and s.track = 'match'
+        and exists (
+          select 1 from fixtures f
+           where f.season = s.season and f.locked_in_gw = s.gw
+             and f.result is not null)`,
+    [season]
   );
   const throughGw = numberOrNull(scored?.through_gw);
 
@@ -152,15 +167,30 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
   // only if it scored — so an Entrant that Gapped a whole Season would strip
   // the caveat off eight Entrants' rankings, which is the one failure spec 0011
   // exists to prevent.
-  const qualification = (column: string): string | null =>
-    textOrNull(rows.map((row) => row[column]).find((each) => each != null));
+  //
+  // The scorer's own constant is the fallback, and only where a scored Season
+  // holds no row to read one from: a Gameweek every Entrant Gapped is scored,
+  // ranks nine Entrants at nought, and stores no qualification anywhere,
+  // because the rows that carry one are the rows that were never written. A
+  // ranking a reader can see is a ranking that carries its caveat, and there is
+  // no third source. Where a row exists it is still the row that answers, which
+  // is what keeps the round trip under test.
+  const qualification = (column: string, stored: string): string | null => {
+    if (throughGw === null) {
+      return null;
+    }
+    return textOrNull(rows.map((row) => row[column]).find((each) => each != null))
+      ?? stored;
+  };
 
   return json({
     season,
     throughGw,
     settledFixtures: Number(settled?.settled ?? 0),
-    matchPointsQualification: qualification("match_qualification"),
-    betPointsQualification: qualification("bet_qualification"),
+    matchPointsQualification:
+      qualification("match_qualification", MATCH_POINTS_QUALIFICATION),
+    betPointsQualification:
+      qualification("bet_qualification", BET_POINTS_QUALIFICATION),
     entrants
   }, LEADERBOARD_CACHE);
 }
