@@ -347,6 +347,37 @@ describe("the dashboard read API on a Locked Gameweek nothing has settled", () =
       expect(body.entrants.map(({ id }) => id)).toEqual(ROSTER);
       expect(body.entrants.every(({ n }) => n === null)).toBe(true);
     });
+
+  test("holds it through the window between results and the scoring run",
+    async () => {
+      // Results are ingested by a job of their own and scored by a later one,
+      // so every settled Gameweek spends hours in this state: the Fixtures have
+      // results, the scorer has not been back, and the Gameweek's behavioural
+      // rows have been there since the Lock. Nothing may move until the scorer
+      // runs.
+      await writer.query(
+        `update fixtures
+            set result = jsonb_build_object(
+                  'home_goals', 2, 'away_goals', 1, 'outcome', 'H'),
+                updated_at = $2
+          where season = $1`,
+        [SEASON, "2026-08-15T20:00:00Z"]
+      );
+
+      const response = await handleDashboardRequest(
+        new Request("https://benchmark.example/api/leaderboard"),
+        query, SEASON, NOW
+      );
+      const body = await response.json() as LeaderboardBody;
+
+      // The evidence count is the Fixtures', and moves the moment they settle.
+      // `throughGw` is the scorer's, and does not.
+      expect(body.settledFixtures).toBe(10);
+      expect(body.throughGw).toBeNull();
+      expect(body.entrants.every(({ matchPoints }) => matchPoints === null))
+        .toBe(true);
+      expect(body.matchPointsQualification).toBeNull();
+    });
 });
 
 describe("the dashboard read API when the whole roster Gapped a Gameweek", () => {

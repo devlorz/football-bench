@@ -1,7 +1,7 @@
 import { MATCH_PROMPT_VERSION } from "../predictions/openrouter-entrant.js";
 import {
   BET_POINTS_QUALIFICATION, BET_POINTS_SEASON_TO_DATE_METRIC,
-  MATCH_POINTS_QUALIFICATION, MATCH_POINTS_SEASON_TO_DATE_METRIC
+  MATCH_POINTS_QUALIFICATION, MATCH_POINTS_SEASON_TO_DATE_METRIC, RPS_METRIC
 } from "../predictions/score-match-gameweek.js";
 
 /**
@@ -68,33 +68,34 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
   // played, and would move a Season's ranking to a Gameweek that has no
   // ranking — blanking the fourteen Gameweeks that do.
   //
-  // A Gameweek has been scored when the scorer has been over it and it had
-  // something to score, which is two facts and not one. Any Match `scores` row
-  // on the Gameweek is the first — the scorer writes the behavioural rows even
-  // where it writes nothing else — and a Fixture the Lock owns carrying a
-  // result is the second.
+  // The per-Gameweek `rps` row is the fact that answers, because it is the one
+  // the scorer writes for a Gameweek exactly when both halves of "scored" hold.
+  // It is outcome-dependent, so it is written only over Fixtures that settled;
+  // and the Reference Lines carry it whatever the Entrants did, so a Gameweek
+  // every Entrant Gapped still has one — which the Match Points rows do not,
+  // and a whole roster Gapping one Gameweek is an OpenRouter outage that
+  // ADR-0009 enters this roster knowing about.
   //
-  // Neither half alone survives its edge. Reading Match Points rows would call
-  // a Gameweek unscored when every Entrant Gapped it, because the scorer writes
-  // no outcome-dependent row for an Entrant that settled nothing — and a whole
-  // roster Gapping one Gameweek is an OpenRouter outage, which ADR-0009 enters
-  // this roster knowing (a Season with Fixtures settled would then read as
-  // pre-season). Reading settled Fixtures alone would call a Gameweek scored
-  // the moment its last match ended, hours before the daily run.
+  // The cumulative counterpart would be wrong here: it is written over every
+  // Gameweek up to its target, so it appears on a Gameweek that settled nothing
+  // as soon as an earlier one settled something.
+  //
+  // Reading anything the scorer has written on the Gameweek would be wrong in
+  // the other direction, and in two ways. Coherence, Gaps and Repairs are
+  // behavioural — answerable the moment a Lock passes — so a Gameweek being
+  // played would read as scored. Pairing those with a settled Fixture does not
+  // save it either: results are ingested by a job of their own, hours before
+  // the scoring run, and in that window both facts hold while nothing has been
+  // scored at all.
   //
   // Every read of `scores` filters `track = 'match'`. A seat can hold both
   // tracks, and a read missing it lets an FPL demonstration figure be read as a
   // Match one — in a ranking, which is the one place ADR-0003 is careful never
   // to let the tracks meet.
   const [scored] = await query(
-    `select max(s.gw) as through_gw
-       from scores s
-      where s.season = $1 and s.track = 'match'
-        and exists (
-          select 1 from fixtures f
-           where f.season = s.season and f.locked_in_gw = s.gw
-             and f.result is not null)`,
-    [season]
+    `select max(gw) as through_gw from scores
+      where season = $1 and track = 'match' and metric = $2`,
+    [season, RPS_METRIC]
   );
   const throughGw = numberOrNull(scored?.through_gw);
 
@@ -168,13 +169,20 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
   // the caveat off eight Entrants' rankings, which is the one failure spec 0011
   // exists to prevent.
   //
-  // The scorer's own constant is the fallback, and only where a scored Season
-  // holds no row to read one from: a Gameweek every Entrant Gapped is scored,
-  // ranks nine Entrants at nought, and stores no qualification anywhere,
-  // because the rows that carry one are the rows that were never written. A
-  // ranking a reader can see is a ranking that carries its caveat, and there is
-  // no third source. Where a row exists it is still the row that answers, which
-  // is what keeps the round trip under test.
+  // The scorer's own constant is the fallback, and it is a stated compromise
+  // rather than the design. It is reached only when a scored Season holds no
+  // ranking row at all — which needs no Entrant to have settled a single
+  // Prediction all Season, so an outage over the first settled Gameweek and
+  // nothing later. That state still ranks nine Entrants at nought on the page,
+  // and a ranking a reader can see is a ranking that carries its caveat; with
+  // no row written there is no third source to read one from.
+  //
+  // What it costs: in that one branch the string is not proved to have survived
+  // storage, because there is no stored string. The alternative is a scorer
+  // that writes a zero-valued ranking row when the whole roster Gaps, which
+  // spec 0011 puts out of scope and which is a decision to take in the open.
+  // Where a row exists it is still the row that answers, so the round trip the
+  // spec asks for is under test on every Season that has one.
   const qualification = (column: string, stored: string): string | null => {
     if (throughGw === null) {
       return null;
