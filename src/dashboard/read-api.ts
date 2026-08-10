@@ -2,7 +2,9 @@ import { argmaxOutcome, outcomeOf, type Probs } from "../fixture-result.js";
 import { MATCH_PROMPT_VERSION } from "../predictions/openrouter-entrant.js";
 import {
   BET_POINTS_QUALIFICATION, BET_POINTS_SEASON_TO_DATE_METRIC,
-  MATCH_POINTS_QUALIFICATION, MATCH_POINTS_SEASON_TO_DATE_METRIC, RPS_METRIC
+  GAP_RATE_SEASON_TO_DATE_METRIC, MATCH_POINTS_QUALIFICATION,
+  MATCH_POINTS_SEASON_TO_DATE_METRIC, RPS_METRIC,
+  RPS_SEASON_TO_DATE_METRIC, type BetLeg
 } from "../predictions/score-match-gameweek.js";
 
 /**
@@ -19,13 +21,13 @@ export type Query = (
 
 /**
  * How long each answer may be served for, chosen per endpoint because the three
- * do not change on the same clock (ADR-0028). The leaderboard moves when the
- * daily scoring run writes.
+ * do not change on the same clock (ADR-0028). The leaderboard and the Entrant
+ * records both move when the daily scoring run writes, and share this one.
  *
  * Caching must also be enabled in the Worker's configuration: the header alone
  * does not cache a Worker's response.
  */
-const LEADERBOARD_CACHE = "public, s-maxage=300, stale-while-revalidate=3600";
+const SCORED_CACHE = "public, s-maxage=300, stale-while-revalidate=3600";
 
 /**
  * Sixty seconds and no stale window: Predictions land at the main run, six
@@ -59,6 +61,55 @@ const textOrNull = (value: unknown): string | null =>
   value === null || value === undefined ? null : String(value);
 
 /**
+ * The Gameweek the Season has been *scored* through, which is not the last
+ * Gameweek holding a `scores` row. Coherence, Gaps and Repairs are behavioural:
+ * the scorer answers them the moment a Lock passes, so a Locked and unplayed
+ * Gameweek carries rows of its own. Reading `max(gw)` over all of them would
+ * call Gameweek 1 scored while its matches are still being played, and would
+ * move a Season's ranking to a Gameweek that has no ranking — blanking the
+ * fourteen Gameweeks that do.
+ *
+ * The per-Gameweek `rps` row is the fact that answers, because it is the one
+ * the scorer writes for a Gameweek exactly when both halves of "scored" hold.
+ * It is outcome-dependent, so it is written only over Fixtures that settled;
+ * and the Reference Lines carry it whatever the Entrants did, so a Gameweek
+ * every Entrant Gapped still has one — which the Match Points rows do not, and
+ * a whole roster Gapping one Gameweek is an OpenRouter outage that ADR-0009
+ * enters this roster knowing about.
+ *
+ * The cumulative counterpart would be wrong here: it is written over every
+ * Gameweek up to its target, so it appears on a Gameweek that settled nothing
+ * as soon as an earlier one settled something.
+ *
+ * Reading anything the scorer has written on the Gameweek would be wrong in the
+ * other direction, and in two ways. Coherence, Gaps and Repairs are
+ * behavioural — answerable the moment a Lock passes — so a Gameweek being
+ * played would read as scored. Pairing those with a settled Fixture does not
+ * save it either: results are ingested by a job of their own, hours before the
+ * scoring run, and in that window both facts hold while nothing has been scored
+ * at all.
+ *
+ * Every read of `scores` filters `track = 'match'`. A seat can hold both
+ * tracks, and a read missing it lets an FPL demonstration figure be read as a
+ * Match one — in a ranking, which is the one place ADR-0003 is careful never to
+ * let the tracks meet.
+ *
+ * Null is the pre-season state, and it is what both pages that gate on it
+ * switch their empty state on.
+ */
+async function scoredThrough(
+  query: Query,
+  season: string
+): Promise<number | null> {
+  const [scored] = await query(
+    `select max(gw) as through_gw from scores
+      where season = $1 and track = 'match' and metric = $2`,
+    [season, RPS_METRIC]
+  );
+  return numberOrNull(scored?.through_gw);
+}
+
+/**
  * The nine Entrants ranked Season-to-date, both qualifications, and the
  * evidence the ranking rests on.
  *
@@ -70,44 +121,7 @@ const textOrNull = (value: unknown): string | null =>
  * read and a visible ranking of noughts to caveat.
  */
 async function leaderboard(query: Query, season: string): Promise<Response> {
-  // The Gameweek the Season has been *scored* through, which is not the last
-  // Gameweek holding a `scores` row. Coherence, Gaps and Repairs are
-  // behavioural: the scorer answers them the moment a Lock passes, so a Locked
-  // and unplayed Gameweek carries rows of its own. Reading `max(gw)` over all
-  // of them would call Gameweek 1 scored while its matches are still being
-  // played, and would move a Season's ranking to a Gameweek that has no
-  // ranking — blanking the fourteen Gameweeks that do.
-  //
-  // The per-Gameweek `rps` row is the fact that answers, because it is the one
-  // the scorer writes for a Gameweek exactly when both halves of "scored" hold.
-  // It is outcome-dependent, so it is written only over Fixtures that settled;
-  // and the Reference Lines carry it whatever the Entrants did, so a Gameweek
-  // every Entrant Gapped still has one — which the Match Points rows do not,
-  // and a whole roster Gapping one Gameweek is an OpenRouter outage that
-  // ADR-0009 enters this roster knowing about.
-  //
-  // The cumulative counterpart would be wrong here: it is written over every
-  // Gameweek up to its target, so it appears on a Gameweek that settled nothing
-  // as soon as an earlier one settled something.
-  //
-  // Reading anything the scorer has written on the Gameweek would be wrong in
-  // the other direction, and in two ways. Coherence, Gaps and Repairs are
-  // behavioural — answerable the moment a Lock passes — so a Gameweek being
-  // played would read as scored. Pairing those with a settled Fixture does not
-  // save it either: results are ingested by a job of their own, hours before
-  // the scoring run, and in that window both facts hold while nothing has been
-  // scored at all.
-  //
-  // Every read of `scores` filters `track = 'match'`. A seat can hold both
-  // tracks, and a read missing it lets an FPL demonstration figure be read as a
-  // Match one — in a ranking, which is the one place ADR-0003 is careful never
-  // to let the tracks meet.
-  const [scored] = await query(
-    `select max(gw) as through_gw from scores
-      where season = $1 and track = 'match' and metric = $2`,
-    [season, RPS_METRIC]
-  );
-  const throughGw = numberOrNull(scored?.through_gw);
+  const throughGw = await scoredThrough(query, season);
 
   // What the pre-season page is waiting on, and read only there: a Season with
   // a table to show has no use for a deadline, and the Fixtures page answers
@@ -256,7 +270,7 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
     betPointsQualification:
       qualification("bet_qualification", BET_POINTS_QUALIFICATION),
     entrants
-  }, LEADERBOARD_CACHE);
+  }, SCORED_CACHE);
 }
 
 export interface SlotPrediction {
@@ -427,6 +441,218 @@ async function fixtures(
   return json(body, FIXTURES_CACHE);
 }
 
+/** One row of the per-Gameweek table, and one point of the cumulative chart. */
+export interface EntrantGameweek {
+  gw: number;
+  /** The Fixtures this Gameweek's Lock owned, not the ones the Entrant answered. */
+  fixtures: number;
+  matchPoints: number;
+  betPoints: number;
+  /** Exact scorelines, which are the Fixtures that scored 5. */
+  exact: number;
+  /** Correct Outcomes, which is everything from 2 up. */
+  outcome: number;
+  /** Null on a Gameweek the Entrant settled nothing in: a mean over none. */
+  rps: number | null;
+  gaps: number;
+}
+
+/** One leg of the Bet Slip over the Season, with both sides of its fraction. */
+export interface MarketHits {
+  market: string;
+  hits: number;
+  n: number;
+}
+
+/** One of the 5 / 3 / 2 / 0 tiers, counted rather than recovered from a share. */
+export interface TierCount {
+  points: number;
+  count: number;
+}
+
+export interface EntrantRecord {
+  id: string;
+  name: string;
+  baseModelClass: string | null;
+  /** Null on a Season with nothing scored, as the leaderboard's are. */
+  matchPoints: number | null;
+  betPoints: number | null;
+  rps: number | null;
+  gaps: number | null;
+  n: number | null;
+  tiers: TierCount[];
+  markets: MarketHits[];
+  gameweeks: EntrantGameweek[];
+}
+
+/**
+ * What `/api/entrants` answers with. Exported for the tests, so a body they
+ * describe for themselves is not a body they can go on describing after this
+ * one has changed.
+ */
+export interface EntrantsBody {
+  season: string;
+  throughGw: number | null;
+  entrants: EntrantRecord[];
+}
+
+/** The Match Points tiers, in the order the design's stacked bar stacks them. */
+const TIERS = [5, 3, 2, 0];
+
+/**
+ * A cumulative row's detail is `{ gameweeks: [{ gw, n, ... }] }` where a
+ * per-Gameweek row's is flat. Reading a cumulative row as if it were flat finds
+ * no `fixtures` key and counts nothing, silently, which is the one mistake spec
+ * 0011 names for this endpoint.
+ */
+const perGameweek = <T extends { gw: number }>(detail: unknown): T[] =>
+  (detail as { gameweeks?: T[] } | null)?.gameweeks ?? [];
+
+interface PointsGameweek {
+  gw: number;
+  points: number;
+  fixtures: { points: number }[];
+}
+
+interface BetGameweek {
+  gw: number;
+  points: number;
+  fixtures: { slip: BetLeg[] }[];
+}
+
+/** `n` is the Fixtures the Lock owned, which is the denominator of the rate. */
+interface GapGameweek {
+  gw: number;
+  n: number;
+  gaps: unknown[];
+}
+
+/**
+ * All nine Entrants with their complete per-Gameweek series, so selecting one
+ * is a re-render and not a fetch — the cumulative chart draws nine lines at
+ * once, and a page that fetched per Entrant could not draw the field.
+ *
+ * Every count here is counted over the flattened detail. `score_pct` and
+ * `outcome_pct` are shares beside these rows and are not read: multiplying a
+ * float share by `n` to recover an integer is a rounding bug waiting for the
+ * Gameweek that makes it visible.
+ */
+async function entrants(query: Query, season: string): Promise<Response> {
+  const throughGw = await scoredThrough(query, season);
+
+  // The cumulative rows at the scored Gameweek carry the whole Season each, so
+  // the series is four rows per Entrant rather than four per Gameweek.
+  //
+  // Left joins for the same reason the leaderboard uses them: pre-season
+  // returns the nine entered Entrants with nothing beside them, and `gw = $6`
+  // is null there and matches no row.
+  const rows = await query(
+    `select m.id, m.name, m.config ->> 'baseModelClass' as base_model_class,
+            points.value as match_points, points.n as n,
+            points.detail as points_detail,
+            bets.value as bet_points, bets.detail as bets_detail,
+            rps.value as rps, rps.detail as rps_detail,
+            gaps.detail as gaps_detail
+       from models m
+       left join scores points
+         on points.model_id = m.id and points.season = $1
+        and points.track = 'match' and points.gw = $6
+        and points.metric = $2
+       left join scores bets
+         on bets.model_id = m.id and bets.season = $1
+        and bets.track = 'match' and bets.gw = $6 and bets.metric = $3
+       left join scores rps
+         on rps.model_id = m.id and rps.season = $1
+        and rps.track = 'match' and rps.gw = $6 and rps.metric = $4
+       left join scores gaps
+         on gaps.model_id = m.id and gaps.season = $1
+        and gaps.track = 'match' and gaps.gw = $6 and gaps.metric = $5
+      where m.role = 'entrant' and m.prompt_version = $7
+      order by m.id`,
+    [
+      season,
+      MATCH_POINTS_SEASON_TO_DATE_METRIC,
+      BET_POINTS_SEASON_TO_DATE_METRIC,
+      RPS_SEASON_TO_DATE_METRIC,
+      GAP_RATE_SEASON_TO_DATE_METRIC,
+      throughGw,
+      MATCH_PROMPT_VERSION
+    ]
+  );
+
+  const scoredOrNull = (value: unknown): number | null =>
+    throughGw === null ? null : Number(value ?? 0);
+
+  const body: EntrantsBody = {
+    season,
+    throughGw,
+    entrants: rows.map((row) => {
+      const points = perGameweek<PointsGameweek>(row.points_detail);
+      const bets = perGameweek<BetGameweek>(row.bets_detail);
+      const rps = perGameweek<{ gw: number; mean: number }>(row.rps_detail);
+      // The Gap rate is the one row written for every Entrant of the roster
+      // whether it answered or not, so it is the spine the series is hung on:
+      // a Gameweek an Entrant Gapped entirely stays a row rather than closing
+      // over, and all nine lines share one x-domain.
+      const gaps = perGameweek<GapGameweek>(row.gaps_detail);
+
+      const at = <T extends { gw: number }>(from: T[], gw: number) =>
+        from.find((each) => each.gw === gw);
+
+      const settled = points.flatMap(({ fixtures }) => fixtures);
+      const legs = bets
+        .flatMap(({ fixtures }) => fixtures)
+        .flatMap(({ slip }) => slip);
+
+      return {
+        id: String(row.id),
+        name: String(row.name),
+        baseModelClass: textOrNull(row.base_model_class),
+        matchPoints: scoredOrNull(row.match_points),
+        betPoints: scoredOrNull(row.bet_points),
+        // A mean over no settled Fixture is not zero, which is why an Entrant
+        // that settled nothing keeps a null here where its points read 0.
+        rps: numberOrNull(row.rps),
+        gaps: throughGw === null
+          ? null
+          : gaps.reduce((total, week) => total + week.gaps.length, 0),
+        n: scoredOrNull(row.n),
+        tiers: throughGw === null
+          ? []
+          : TIERS.map((tier) => ({
+            points: tier,
+            count: settled.filter((fixture) => fixture.points === tier).length
+          })),
+        // In the order the slips state their legs, which is the order the
+        // design lists them in.
+        markets: [...new Set(legs.map(({ market }) => market))]
+          .map((market) => {
+            const own = legs.filter((leg) => leg.market === market);
+            return {
+              market,
+              hits: own.filter(({ won }) => won).length,
+              n: own.length
+            };
+          }),
+        gameweeks: gaps.map((week) => {
+          const scored = at(points, week.gw)?.fixtures ?? [];
+          return {
+            gw: week.gw,
+            fixtures: week.n,
+            matchPoints: at(points, week.gw)?.points ?? 0,
+            betPoints: at(bets, week.gw)?.points ?? 0,
+            exact: scored.filter((fixture) => fixture.points === 5).length,
+            outcome: scored.filter((fixture) => fixture.points > 0).length,
+            rps: at(rps, week.gw)?.mean ?? null,
+            gaps: week.gaps.length
+          };
+        })
+      };
+    })
+  };
+  return json(body, SCORED_CACHE);
+}
+
 function json(body: unknown, cacheControl: string): Response {
   return new Response(JSON.stringify(body), {
     headers: {
@@ -462,6 +688,9 @@ export async function handleDashboardRequest(
   }
   if (pathname === "/api/fixtures") {
     return await fixtures(query, season, now);
+  }
+  if (pathname === "/api/entrants") {
+    return await entrants(query, season);
   }
   return new Response("Not found", {
     status: 404,
