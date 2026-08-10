@@ -486,7 +486,7 @@ html {
 .stkpi > div { padding: 18px 22px; }
 /* The leaderboard's stat, one size up: the design gives this strip 32px. */
 .stkpi .stat-value { font-size: 32px; line-height: 1; }
-.stat-note { font-size: 11px; margin-top: 3px; }
+.stnote { font-size: 11px; margin-top: 3px; }
 
 .stcharts {
   display: grid;
@@ -495,8 +495,7 @@ html {
   align-items: start;
   margin-bottom: 34px;
 }
-.stcharts h4,
-#record > h4 { margin: 0 0 10px; }
+.sth4 { margin: 0 0 10px; }
 .stchart { width: 100%; height: auto; display: block; }
 .stchart-note { font-size: 12px; margin-top: 4px; }
 
@@ -520,7 +519,7 @@ html {
 }
 .stpct { font-size: 12px; text-align: right; }
 
-.stmarkets-title { margin-top: 26px !important; }
+.sth4-spaced { margin: 26px 0 10px; }
 .stmarket { padding: 7px 0; border-bottom: 2px solid var(--color-divider); }
 .stmarket-head {
   display: flex;

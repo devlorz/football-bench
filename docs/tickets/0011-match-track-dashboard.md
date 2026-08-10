@@ -294,8 +294,20 @@ behind all of it. Switching Entrant redraws everything at once and costs no seco
 
 Ten tests in
 [test/dashboard-entrants-api.test.ts](../../test/dashboard-entrants-api.test.ts) cover the
-endpoint over a real Postgres under `dashboard_read`; `astro check`, `astro build` and
-`tsc --noEmit` are clean; `modernist.css` is still byte-for-byte the vendored file.
+endpoint over a real Postgres under `dashboard_read`, one of them through the Worker's own
+driver — this is the first body carrying whole `jsonb` columns across the seam, and a driver
+handing `detail` back as text would empty every series, tier and market without an error
+anywhere. Four more in
+[test/dashboard-entrant-chart.test.ts](../../test/dashboard-entrant-chart.test.ts) cover the
+chart's two domains, which are the one part of the page's script that can be wrong while still
+rendering as a chart. `astro check`, `astro build` and `tsc --noEmit` are clean;
+`modernist.css` is still byte-for-byte the vendored file.
+
+**This page's script is bundled rather than `is:inline`**, unlike the other two, because an
+inline script can import nothing and the domains had to be importable to be tested. Being
+bundled it is also type-checked, so it now reads the seam's exported `EntrantsBody` — a page
+cannot go on describing a shape the endpoint has left, which is the rule the Fixtures slice
+put the tests under and this puts the page under too.
 
 Walked in a driven Chrome against the seeded Postgres (`the design's` and `pre-season`), in
 both themes and in both layouts. Nine steps in spec 0011 §"The pages".

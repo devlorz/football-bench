@@ -1,6 +1,7 @@
 import pg from "pg";
 import { beforeAll, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
+import { workerDriver } from "./worker-driver.js";
 import { seedSeason, type SeedStop } from "../src/seed-season.js";
 import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
 import {
@@ -8,7 +9,10 @@ import {
 } from "../src/dashboard/read-api.js";
 import { MATCH_PROMPT_VERSION } from "../src/predictions/openrouter-entrant.js";
 import {
-  BET_POINTS_METRIC, MATCH_POINTS_METRIC, scoreMatchSeason
+  BET_POINTS_METRIC, BET_POINTS_SEASON_TO_DATE_METRIC,
+  GAP_RATE_SEASON_TO_DATE_METRIC, MATCH_POINTS_METRIC,
+  MATCH_POINTS_SEASON_TO_DATE_METRIC, RPS_SEASON_TO_DATE_METRIC,
+  scoreMatchSeason
 } from "../src/predictions/score-match-gameweek.js";
 
 const { Client } = pg;
@@ -83,6 +87,25 @@ async function enterFplSeat(writer: pg.Client): Promise<void> {
              'anthropic', $1, 'entrant')`,
     [FPL_PROMPT_VERSION]
   );
+
+  // Both filters this endpoint relies on are load-bearing and neither
+  // substitutes for the other. The seat above is what the roster filter keeps
+  // off the page; these rows are what the track filter keeps out of the
+  // figures. They sit on a Match Entrant, on the Gameweek the Season is scored
+  // through, under the metric names the Match track uses — so each of the four
+  // left joins that forgot `track = 'match'` would match two rows, and the
+  // endpoint would answer with an FPL demonstration figure or with nine
+  // Entrants returned twice.
+  for (const metric of [
+    MATCH_POINTS_SEASON_TO_DATE_METRIC, BET_POINTS_SEASON_TO_DATE_METRIC,
+    RPS_SEASON_TO_DATE_METRIC, GAP_RATE_SEASON_TO_DATE_METRIC
+  ]) {
+    await writer.query(
+      `insert into scores (model_id, season, gw, track, metric, value, n, detail)
+       values ('claude/v1', $1, $2, 'fpl', $3, 999, 999, '{"gameweeks": []}')`,
+      [SEASON, THROUGH_GW, metric]
+    );
+  }
 }
 
 /**
@@ -158,19 +181,17 @@ describe("the Entrant record endpoint on the design's Season", () => {
     }
   });
 
-  test("carries the four headline figures and the Base Model Class",
-    async () => {
-      const [first] = (await entrants()).entrants;
-      expect(first).toBeDefined();
+  test("carries the four headline figures", async () => {
+    const [first] = (await entrants()).entrants;
+    expect(first).toBeDefined();
 
-      expect(first!.name).toBeTruthy();
-      expect(first!.baseModelClass).toBeTruthy();
-      expect(first!.matchPoints).toBeGreaterThan(0);
-      expect(first!.betPoints).toBeGreaterThan(0);
-      expect(first!.rps).toBeGreaterThan(0);
-      expect(first!.gaps).toBe(0);
-      expect(first!.n).toBeGreaterThan(0);
-    });
+    expect(first!.name).toBeTruthy();
+    expect(first!.matchPoints).toBeGreaterThan(0);
+    expect(first!.betPoints).toBeGreaterThan(0);
+    expect(first!.rps).toBeGreaterThan(0);
+    expect(first!.gaps).toBe(0);
+    expect(first!.n).toBeGreaterThan(0);
+  });
 
   test("counts the tiers over the flattened cumulative detail", async () => {
     const body = await entrants();
@@ -247,6 +268,27 @@ describe("the Entrant record endpoint on the design's Season", () => {
     expect(gap!.settled).toBe(gap!.fixtures - gap!.gaps);
   });
 
+  test("answers the same body through the Worker's driver", async () => {
+    // The body this endpoint builds is read out of four `jsonb` columns carried
+    // whole across the seam, which no earlier endpoint does: the leaderboard
+    // unwraps its one string in SQL, and the Fixtures page's `probs` is one
+    // small object per row. A driver that handed `detail` back as text rather
+    // than as an object would leave `perGameweek` finding no `gameweeks` key —
+    // and every series, tier and market would come back empty with no error
+    // anywhere, which is the exact failure this endpoint is written against.
+    const driver = await workerDriver();
+    try {
+      const response = await handleDashboardRequest(
+        new Request("https://benchmark.example/api/entrants"),
+        driver.query, SEASON, NOW
+      );
+
+      expect(await response.json()).toEqual(await entrants());
+    } finally {
+      await driver.end();
+    }
+  });
+
   test("carries the cache lifetime the scoring run moves on", async () => {
     const response = await get("/api/entrants");
 
@@ -317,6 +359,17 @@ describe("the Entrant record endpoint with a Gameweek wholly Gapped", () => {
     expect(absent).toMatchObject({ matchPoints: 0, betPoints: 0, n: 0 });
     expect(absent!.rps).toBeNull();
     expect(absent!.gaps).toBeGreaterThan(0);
+
+    // The breakdowns are asked for whatever the Entrant did, so both are still
+    // there and both read nought. The markets are the Season's own, taken
+    // across the field: this Entrant stated no leg of its own to name them
+    // with, and five rows of nought is the answer rather than no rows at all.
+    expect(absent!.tiers).toEqual(
+      [5, 3, 2, 0].map((points) => ({ points, count: 0 }))
+    );
+    expect(absent!.markets).toEqual(
+      MARKETS.map((market) => ({ market, hits: 0, n: 0 }))
+    );
   });
 });
 

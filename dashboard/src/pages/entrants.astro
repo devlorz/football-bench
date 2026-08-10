@@ -41,28 +41,28 @@ import Page from "../layouts/Page.astro";
       <div class="soft">
         <div class="stat-label">Match points</div>
         <div class="stat-value" id="kpi-match">&nbsp;</div>
-        <div class="muted stat-note" id="kpi-match-note"></div>
+        <div class="muted stnote" id="kpi-match-note"></div>
       </div>
       <div class="soft">
         <div class="stat-label">Bet points</div>
         <div class="stat-value" id="kpi-bet">&nbsp;</div>
-        <div class="muted stat-note">One point per market won</div>
+        <div class="muted stnote">One point per market won</div>
       </div>
       <div class="soft">
         <div class="stat-label">RPS</div>
         <div class="stat-value" id="kpi-rps">&nbsp;</div>
-        <div class="muted stat-note">Ranked probability score · lower is better</div>
+        <div class="muted stnote">Ranked probability score · lower is better</div>
       </div>
       <div class="soft">
         <div class="stat-label">Gaps</div>
         <div class="stat-value" id="kpi-gaps">&nbsp;</div>
-        <div class="muted stat-note">Fixtures with no prediction stored</div>
+        <div class="muted stnote">Fixtures with no prediction stored</div>
       </div>
     </div>
 
     <div class="stcharts">
       <div>
-        <h4>Cumulative match points</h4>
+        <h4 class="sth4">Cumulative match points</h4>
         {/* The domains follow the data and are computed below, so nothing is
             clipped at Gameweek 14 or at Gameweek 30. The figures themselves are
             in the table underneath, which is what a screen reader reads. */}
@@ -79,16 +79,16 @@ import Page from "../layouts/Page.astro";
       </div>
 
       <div>
-        <h4>Score-tier breakdown</h4>
+        <h4 class="sth4">Score-tier breakdown</h4>
         <div class="stbar" id="tier-bar"></div>
         <div id="tier-rows"></div>
 
-        <h4 class="stmarkets-title">Bet slip market hit rate</h4>
+        <h4 class="sth4-spaced">Bet slip market hit rate</h4>
         <div id="market-rows"></div>
       </div>
     </div>
 
-    <h4>Per-gameweek record</h4>
+    <h4 class="sth4">Per-gameweek record</h4>
     {/* Its own scroll container, so the table can be wider than a phone without
         the page ever scrolling sideways. */}
     <div class="sttable">
@@ -117,11 +117,21 @@ import Page from "../layouts/Page.astro";
     </div>
   </section>
 
-  <script is:inline>
-  (() => {
-    const $ = (id) => document.getElementById(id);
+  {/* Bundled rather than `is:inline`, unlike the other two pages: it is the
+      one page whose script has a part worth a test, and an inline script can
+      import nothing. The chart's two domains live in `chart-domain.ts` and are
+      tested there; everything else here is DOM. */}
+  <script>
+  import { across, ceiling } from "../chart-domain.js";
+  import type {
+    EntrantRecord, EntrantsBody
+  } from "../../../src/dashboard/read-api.js";
 
-    const div = (className, value) => {
+  (() => {
+    // Every id below is in the built HTML above, so the element is there.
+    const $ = (id: string): HTMLElement => document.getElementById(id)!;
+
+    const div = (className: string, value?: string): HTMLDivElement => {
       const node = document.createElement("div");
       node.className = className;
       if (value !== undefined) node.textContent = value;
@@ -131,13 +141,13 @@ import Page from "../layouts/Page.astro";
     // The design's own labels for the tiers and the five markets. The keys are
     // the scorer's; an unnamed market renders as its key rather than as
     // nothing, so a new leg on the slip is visible the day it appears.
-    const TIERS = {
+    const TIERS: Record<number, { label: string; fill: string }> = {
       5: { label: "Exact score · 5 pts", fill: "var(--tier-5)" },
       3: { label: "Goal difference · 3 pts", fill: "var(--tier-3)" },
       2: { label: "Outcome only · 2 pts", fill: "var(--tier-2)" },
       0: { label: "No points", fill: "var(--tier-0)" }
     };
-    const MARKETS = {
+    const MARKETS: Record<string, string> = {
       result: "Match result",
       "over_under_2.5": "Over/under 2.5",
       "over_under_3.5": "Over/under 3.5",
@@ -149,10 +159,10 @@ import Page from "../layouts/Page.astro";
     // holds it, and it is written with `replaceState` for the reason the sort
     // choice is: picking an Entrant is a view of one page, not navigation, and
     // Back is expected to leave rather than walk back through nine choices.
-    let body = null;
+    let body: EntrantsBody | null = null;
     let selected = new URL(location.href).searchParams.get("entrant");
 
-    const remember = (id) => {
+    const remember = (id: string): void => {
       selected = id;
       const url = new URL(location.href);
       if (url.searchParams.get("entrant") === id) return;
@@ -160,7 +170,8 @@ import Page from "../layouts/Page.astro";
       history.replaceState(null, "", url);
     };
 
-    const percent = (count, total) => (total > 0 ? (count / total) * 100 : 0);
+    const percent = (count: number, total: number): number =>
+      total > 0 ? (count / total) * 100 : 0;
 
     /* ── the chart ──────────────────────────────────────────────────────── */
 
@@ -168,28 +179,19 @@ import Page from "../layouts/Page.astro";
     // 880 × 260 viewBox.
     const PLOT = { left: 44, right: 874, top: 8, bottom: 230 };
 
-    /**
-     * A deterministic ceiling at or above the field's highest total, in four
-     * intervals so the design's five grid lines still land on round numbers.
-     * The design's fixed 0–260 clips any Season that outscores it and wastes
-     * half the plot on one that does not.
-     */
-    const ceiling = (most) => {
-      if (!(most > 0)) return 4;
-      const rough = most / 4;
-      const magnitude = 10 ** Math.floor(Math.log10(rough));
-      const step = [1, 2, 2.5, 5, 10]
-        .map((factor) => factor * magnitude)
-        .find((candidate) => candidate >= rough);
-      return step * 4;
-    };
-
-    const cumulative = (entrant) => {
+    /** One point per Gameweek the Entrant has a row for, in Gameweek order. */
+    const cumulative = (entrant: EntrantRecord) => {
       let running = 0;
-      return entrant.gameweeks.map((week) => (running += week.matchPoints));
+      return entrant.gameweeks.map((week) => ({
+        gw: week.gw,
+        total: (running += week.matchPoints)
+      }));
     };
 
-    const svg = (name, attributes) => {
+    const svg = (
+      name: string,
+      attributes: Record<string, string | number>
+    ): SVGElement => {
       const node =
         document.createElementNS("http://www.w3.org/2000/svg", name);
       for (const [key, value] of Object.entries(attributes)) {
@@ -198,25 +200,28 @@ import Page from "../layouts/Page.astro";
       return node;
     };
 
-    function renderChart(entrant) {
+    function renderChart(entrant: EntrantRecord, field: EntrantRecord[]) {
       const chart = $("chart");
       const weeks = entrant.gameweeks;
       chart.replaceChildren();
       if (weeks.length === 0) return;
 
-      const series = body.entrants.map(cumulative);
-      const top = ceiling(Math.max(...series.map((each) => each.at(-1) ?? 0)));
+      const series = field.map(cumulative);
+      const top = ceiling(
+        Math.max(...series.map((each) => each.at(-1)?.total ?? 0))
+      );
       const span = PLOT.bottom - PLOT.top;
-      const y = (value) => PLOT.bottom - (value / top) * span;
-      // One Gameweek is one point and has no width to spread over; it draws at
-      // the left edge rather than dividing by zero.
-      const x = (index) => weeks.length === 1
-        ? PLOT.left
-        : PLOT.left + (index * (PLOT.right - PLOT.left)) / (weeks.length - 1);
+      const y = (value: number) => PLOT.bottom - (value / top) * span;
+      // By the Gameweek's own number, so every line is read against one axis
+      // whatever rows each Entrant has.
+      const first = weeks[0]!.gw;
+      const last = weeks.at(-1)!.gw;
+      const x = (gw: number) =>
+        PLOT.left + across(gw, first, last) * (PLOT.right - PLOT.left);
 
-      const path = (points) =>
-        points.map((value, index) =>
-          (index === 0 ? "M" : "L") + x(index) + " " + y(value)).join(" ");
+      const path = (points: { gw: number; total: number }[]) =>
+        points.map(({ gw, total }, index) =>
+          (index === 0 ? "M" : "L") + x(gw) + " " + y(total)).join(" ");
 
       for (let tick = 0; tick <= 4; tick += 1) {
         const value = (top / 4) * tick;
@@ -243,7 +248,7 @@ import Page from "../layouts/Page.astro";
         // one would hang over the viewBox and be cut in half. Only the ends
         // need it; everything between is centred on its Gameweek.
         const label = svg("text", {
-          x: x(index), y: 256, "font-size": 11,
+          x: x(week.gw), y: 256, "font-size": 11,
           "text-anchor": index === 0
             ? "start"
             : index === weeks.length - 1 ? "end" : "middle",
@@ -253,10 +258,10 @@ import Page from "../layouts/Page.astro";
         chart.append(label);
       });
 
-      body.entrants.forEach((each, index) => {
+      field.forEach((each, index) => {
         if (each.id === entrant.id) return;
         chart.append(svg("path", {
-          d: path(series[index]), fill: "none", stroke: "currentColor",
+          d: path(series[index]!), fill: "none", stroke: "currentColor",
           "stroke-opacity": 0.2, "stroke-width": 1.5
         }));
       });
@@ -274,12 +279,14 @@ import Page from "../layouts/Page.astro";
 
     /* ── the panels ─────────────────────────────────────────────────────── */
 
-    function renderTiers(entrant) {
+    function renderTiers(entrant: EntrantRecord) {
       const bar = document.createDocumentFragment();
       const rows = document.createDocumentFragment();
       for (const tier of entrant.tiers) {
-        const { label, fill } = TIERS[tier.points];
-        const share = percent(tier.count, entrant.n);
+        const { label, fill } = TIERS[tier.points]!;
+        // `n` is null only before the Season is scored, and this panel is
+        // not on screen then; a nought denominator draws a nought bar.
+        const share = percent(tier.count, entrant.n ?? 0);
 
         const part = div("");
         part.style.background = fill;
@@ -301,7 +308,7 @@ import Page from "../layouts/Page.astro";
       $("tier-rows").replaceChildren(rows);
     }
 
-    function renderMarkets(entrant) {
+    function renderMarkets(entrant: EntrantRecord) {
       const rows = document.createDocumentFragment();
       for (const market of entrant.markets) {
         const row = div("stmarket");
@@ -324,11 +331,11 @@ import Page from "../layouts/Page.astro";
       $("market-rows").replaceChildren(rows);
     }
 
-    function renderTable(entrant) {
+    function renderTable(entrant: EntrantRecord) {
       const rows = document.createDocumentFragment();
       for (const week of entrant.gameweeks) {
         const row = document.createElement("tr");
-        const cell = (value, className) => {
+        const cell = (value: string, className?: string): HTMLElement => {
           const node = document.createElement("td");
           node.textContent = value;
           if (className) node.className = className;
@@ -353,14 +360,14 @@ import Page from "../layouts/Page.astro";
       $("gw-rows").replaceChildren(rows);
     }
 
-    function renderTabs() {
+    function renderTabs(field: EntrantRecord[], selectedId: string) {
       const tabs = document.createDocumentFragment();
-      for (const entrant of body.entrants) {
+      for (const entrant of field) {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "sttab";
         button.textContent = entrant.name;
-        const current = entrant.id === selected;
+        const current = entrant.id === selectedId;
         button.classList.toggle("sttab-on", current);
         button.setAttribute("aria-pressed", String(current));
         button.addEventListener("click", () => {
@@ -373,31 +380,34 @@ import Page from "../layouts/Page.astro";
     }
 
     function render() {
-      const pre = body.throughGw === null;
+      const data = body;
+      if (data === null) return;
+
+      const pre = data.throughGw === null;
       $("preseason").hidden = !pre;
       $("record").hidden = pre;
       if (pre) return;
 
       // An id that is not on the roster — a stale link, or a seat that left —
       // falls back to the first Entrant rather than rendering nothing.
-      const entrant = body.entrants.find((each) => each.id === selected)
-        ?? body.entrants[0];
+      const entrant = data.entrants.find((each) => each.id === selected)
+        ?? data.entrants[0];
       if (!entrant) return;
       // The link is corrected to the Entrant actually on screen, so a stale id
       // is not copied on to the next reader still saying it.
       remember(entrant.id);
 
-      renderTabs();
+      renderTabs(data.entrants, entrant.id);
       $("kpi-match").textContent = String(entrant.matchPoints);
       $("kpi-match-note").textContent =
-        entrant.n + " settled fixtures · through GW " + body.throughGw;
+        entrant.n + " settled fixtures · through GW " + data.throughGw;
       $("kpi-bet").textContent = String(entrant.betPoints);
       $("kpi-rps").textContent =
         entrant.rps === null ? "—" : entrant.rps.toFixed(3);
       $("kpi-gaps").textContent = String(entrant.gaps);
-      $("kpi-gaps").classList.toggle("danger", entrant.gaps > 0);
+      $("kpi-gaps").classList.toggle("danger", (entrant.gaps ?? 0) > 0);
 
-      renderChart(entrant);
+      renderChart(entrant, data.entrants);
       renderTiers(entrant);
       renderMarkets(entrant);
       renderTable(entrant);
@@ -410,7 +420,7 @@ import Page from "../layouts/Page.astro";
         if (!response.ok) throw new Error(String(response.status));
         return response.json();
       })
-      .then((json) => { body = json; render(); })
+      .then((json: EntrantsBody) => { body = json; render(); })
       .catch(() => {
         // One line, and nothing retries.
         $("error").hidden = false;

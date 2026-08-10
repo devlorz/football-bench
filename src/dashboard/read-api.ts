@@ -61,6 +61,19 @@ const textOrNull = (value: unknown): string | null =>
   value === null || value === undefined ? null : String(value);
 
 /**
+ * A figure off a scored Season, where an Entrant with no row of its own scored
+ * a nought rather than being absent: the scorer writes no outcome-dependent row
+ * for an Entrant that Gapped every Fixture, and reading that back as null would
+ * put a Season-long Gap on the page in the one shape reserved for a Season that
+ * has not started. Null belongs to `throughGw` alone, and both pages that gate
+ * on it read it the same way.
+ */
+const scoredOrNull = (
+  throughGw: number | null,
+  value: unknown
+): number | null => throughGw === null ? null : Number(value ?? 0);
+
+/**
  * The Gameweek the Season has been *scored* through, which is not the last
  * Gameweek holding a `scores` row. Coherence, Gaps and Repairs are behavioural:
  * the scorer answers them the moment a Lock passes, so a Locked and unplayed
@@ -182,22 +195,13 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
     ]
   );
 
-  // An Entrant with no row on a Season that has been scored settled nothing,
-  // which is a nought and not an absence: the scorer writes no
-  // outcome-dependent row for an Entrant that Gapped every Fixture, and reading
-  // that back as null would put a Season-long Gap on the page in the one shape
-  // reserved for a Season that has not started. Null is the pre-season state
-  // and belongs to `throughGw` alone.
-  const scoredOrNull = (value: unknown): number | null =>
-    throughGw === null ? null : Number(value ?? 0);
-
   const entrants: LeaderboardEntrant[] = rows.map((row) => ({
     id: String(row.id),
     name: String(row.name),
     baseModelClass: textOrNull(row.base_model_class),
-    matchPoints: scoredOrNull(row.match_points),
-    betPoints: scoredOrNull(row.bet_points),
-    n: scoredOrNull(row.n)
+    matchPoints: scoredOrNull(throughGw, row.match_points),
+    betPoints: scoredOrNull(throughGw, row.bet_points),
+    n: scoredOrNull(throughGw, row.n)
   }));
 
   // One string per ranking rather than one per row: the scorer writes the same
@@ -481,7 +485,6 @@ export interface TierCount {
 export interface EntrantRecord {
   id: string;
   name: string;
-  baseModelClass: string | null;
   /** Null on a Season with nothing scored, as the leaderboard's are. */
   matchPoints: number | null;
   betPoints: number | null;
@@ -561,7 +564,7 @@ async function entrants(query: Query, season: string): Promise<Response> {
   // returns the nine entered Entrants with nothing beside them, and `gw = $6`
   // is null there and matches no row.
   const rows = await query(
-    `select m.id, m.name, m.config ->> 'baseModelClass' as base_model_class,
+    `select m.id, m.name,
             points.value as match_points, points.n as n,
             points.detail as points_detail,
             bets.value as bet_points, bets.detail as bets_detail,
@@ -594,57 +597,63 @@ async function entrants(query: Query, season: string): Promise<Response> {
     ]
   );
 
-  const scoredOrNull = (value: unknown): number | null =>
-    throughGw === null ? null : Number(value ?? 0);
+  const legsOf = (bets: BetGameweek[]): BetLeg[] =>
+    bets.flatMap(({ fixtures }) => fixtures).flatMap(({ slip }) => slip);
+
+  const records = rows.map((row) => ({
+    row,
+    points: perGameweek<PointsGameweek>(row.points_detail),
+    bets: perGameweek<BetGameweek>(row.bets_detail),
+    rps: perGameweek<{ gw: number; mean: number }>(row.rps_detail),
+    // The Gap rate is the one row written for every Entrant of the roster
+    // whether it answered or not, so it is the spine the series is hung on: a
+    // Gameweek an Entrant Gapped entirely stays a row rather than closing over,
+    // and all nine lines share one x-domain.
+    gaps: perGameweek<GapGameweek>(row.gaps_detail)
+  }));
+
+  // The markets the Season's slips actually state, in the order a slip states
+  // them, and taken across the whole field rather than per Entrant. An Entrant
+  // that settled nothing has no leg of its own, and story 32 asks for the
+  // breakdown by market whatever that Entrant did — so its five rows read nought
+  // out of nought instead of vanishing.
+  const markets = [
+    ...new Set(records.flatMap(({ bets }) => legsOf(bets)).map((leg) => leg.market))
+  ];
 
   const body: EntrantsBody = {
     season,
     throughGw,
-    entrants: rows.map((row) => {
-      const points = perGameweek<PointsGameweek>(row.points_detail);
-      const bets = perGameweek<BetGameweek>(row.bets_detail);
-      const rps = perGameweek<{ gw: number; mean: number }>(row.rps_detail);
-      // The Gap rate is the one row written for every Entrant of the roster
-      // whether it answered or not, so it is the spine the series is hung on:
-      // a Gameweek an Entrant Gapped entirely stays a row rather than closing
-      // over, and all nine lines share one x-domain.
-      const gaps = perGameweek<GapGameweek>(row.gaps_detail);
-
+    entrants: records.map(({ row, points, bets, rps, gaps }) => {
       const settled = points.flatMap(({ fixtures }) => fixtures);
-      const legs = bets
-        .flatMap(({ fixtures }) => fixtures)
-        .flatMap(({ slip }) => slip);
+      const legs = legsOf(bets);
 
       return {
         id: String(row.id),
         name: String(row.name),
-        baseModelClass: textOrNull(row.base_model_class),
-        matchPoints: scoredOrNull(row.match_points),
-        betPoints: scoredOrNull(row.bet_points),
+        matchPoints: scoredOrNull(throughGw, row.match_points),
+        betPoints: scoredOrNull(throughGw, row.bet_points),
         // A mean over no settled Fixture is not zero, which is why an Entrant
         // that settled nothing keeps a null here where its points read 0.
         rps: numberOrNull(row.rps),
         gaps: throughGw === null
           ? null
           : gaps.reduce((total, week) => total + week.gaps.length, 0),
-        n: scoredOrNull(row.n),
+        n: scoredOrNull(throughGw, row.n),
         tiers: throughGw === null
           ? []
           : TIERS.map((tier) => ({
             points: tier,
             count: settled.filter((fixture) => fixture.points === tier).length
           })),
-        // In the order the slips state their legs, which is the order the
-        // design lists them in.
-        markets: [...new Set(legs.map(({ market }) => market))]
-          .map((market) => {
-            const own = legs.filter((leg) => leg.market === market);
-            return {
-              market,
-              hits: own.filter(({ won }) => won).length,
-              n: own.length
-            };
-          }),
+        markets: markets.map((market) => {
+          const own = legs.filter((leg) => leg.market === market);
+          return {
+            market,
+            hits: own.filter(({ won }) => won).length,
+            n: own.length
+          };
+        }),
         gameweeks: gaps.map((week) => {
           const own = at(points, week.gw);
           const scored = own?.fixtures ?? [];
