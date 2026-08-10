@@ -40,22 +40,22 @@ import Page from "../layouts/Page.astro";
     <div class="stkpi">
       <div class="soft">
         <div class="stat-label">Match points</div>
-        <div class="stat-big" id="kpi-match">&nbsp;</div>
+        <div class="stat-value" id="kpi-match">&nbsp;</div>
         <div class="muted stat-note" id="kpi-match-note"></div>
       </div>
       <div class="soft">
         <div class="stat-label">Bet points</div>
-        <div class="stat-big" id="kpi-bet">&nbsp;</div>
+        <div class="stat-value" id="kpi-bet">&nbsp;</div>
         <div class="muted stat-note">One point per market won</div>
       </div>
       <div class="soft">
         <div class="stat-label">RPS</div>
-        <div class="stat-big" id="kpi-rps">&nbsp;</div>
+        <div class="stat-value" id="kpi-rps">&nbsp;</div>
         <div class="muted stat-note">Ranked probability score · lower is better</div>
       </div>
       <div class="soft">
         <div class="stat-label">Gaps</div>
-        <div class="stat-big" id="kpi-gaps">&nbsp;</div>
+        <div class="stat-value" id="kpi-gaps">&nbsp;</div>
         <div class="muted stat-note">Fixtures with no prediction stored</div>
       </div>
     </div>
@@ -120,7 +120,6 @@ import Page from "../layouts/Page.astro";
   <script is:inline>
   (() => {
     const $ = (id) => document.getElementById(id);
-    const text = (node, value) => { node.textContent = value; };
 
     const div = (className, value) => {
       const node = document.createElement("div");
@@ -160,8 +159,6 @@ import Page from "../layouts/Page.astro";
       url.searchParams.set("entrant", id);
       history.replaceState(null, "", url);
     };
-
-    const select = (id) => { remember(id); render(); };
 
     const percent = (count, total) => (total > 0 ? (count / total) * 100 : 0);
 
@@ -366,7 +363,10 @@ import Page from "../layouts/Page.astro";
         const current = entrant.id === selected;
         button.classList.toggle("sttab-on", current);
         button.setAttribute("aria-pressed", String(current));
-        button.addEventListener("click", () => select(entrant.id));
+        button.addEventListener("click", () => {
+          remember(entrant.id);
+          render();
+        });
         tabs.append(button);
       }
       $("tabs").replaceChildren(tabs);
@@ -388,12 +388,13 @@ import Page from "../layouts/Page.astro";
       remember(entrant.id);
 
       renderTabs();
-      text($("kpi-match"), String(entrant.matchPoints));
-      text($("kpi-match-note"),
-        entrant.n + " settled fixtures · through GW " + body.throughGw);
-      text($("kpi-bet"), String(entrant.betPoints));
-      text($("kpi-rps"), entrant.rps === null ? "—" : entrant.rps.toFixed(3));
-      text($("kpi-gaps"), String(entrant.gaps));
+      $("kpi-match").textContent = String(entrant.matchPoints);
+      $("kpi-match-note").textContent =
+        entrant.n + " settled fixtures · through GW " + body.throughGw;
+      $("kpi-bet").textContent = String(entrant.betPoints);
+      $("kpi-rps").textContent =
+        entrant.rps === null ? "—" : entrant.rps.toFixed(3);
+      $("kpi-gaps").textContent = String(entrant.gaps);
       $("kpi-gaps").classList.toggle("danger", entrant.gaps > 0);
 
       renderChart(entrant);

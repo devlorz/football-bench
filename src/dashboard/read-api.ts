@@ -516,6 +516,12 @@ const TIERS = [5, 3, 2, 0];
 const perGameweek = <T extends { gw: number }>(detail: unknown): T[] =>
   (detail as { gameweeks?: T[] } | null)?.gameweeks ?? [];
 
+/** One metric's entry for one Gameweek, or nothing where it wrote none. */
+const at = <T extends { gw: number }>(
+  from: T[],
+  gw: number
+): T | undefined => from.find((each) => each.gw === gw);
+
 interface PointsGameweek {
   gw: number;
   points: number;
@@ -604,9 +610,6 @@ async function entrants(query: Query, season: string): Promise<Response> {
       // over, and all nine lines share one x-domain.
       const gaps = perGameweek<GapGameweek>(row.gaps_detail);
 
-      const at = <T extends { gw: number }>(from: T[], gw: number) =>
-        from.find((each) => each.gw === gw);
-
       const settled = points.flatMap(({ fixtures }) => fixtures);
       const legs = bets
         .flatMap(({ fixtures }) => fixtures)
@@ -643,12 +646,13 @@ async function entrants(query: Query, season: string): Promise<Response> {
             };
           }),
         gameweeks: gaps.map((week) => {
-          const scored = at(points, week.gw)?.fixtures ?? [];
+          const own = at(points, week.gw);
+          const scored = own?.fixtures ?? [];
           return {
             gw: week.gw,
             fixtures: week.n,
             settled: scored.length,
-            matchPoints: at(points, week.gw)?.points ?? 0,
+            matchPoints: own?.points ?? 0,
             betPoints: at(bets, week.gw)?.points ?? 0,
             exact: scored.filter((fixture) => fixture.points === 5).length,
             outcome: scored.filter((fixture) => fixture.points > 0).length,

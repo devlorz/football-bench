@@ -484,12 +484,8 @@ html {
   margin-bottom: 28px;
 }
 .stkpi > div { padding: 18px 22px; }
-.stat-big {
-  font-family: var(--font-heading);
-  font-weight: 800;
-  font-size: 32px;
-  line-height: 1;
-}
+/* The leaderboard's stat, one size up: the design gives this strip 32px. */
+.stkpi .stat-value { font-size: 32px; line-height: 1; }
 .stat-note { font-size: 11px; margin-top: 3px; }
 
 .stcharts {
