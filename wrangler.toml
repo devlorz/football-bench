@@ -1,0 +1,21 @@
+name = "football-benchmark-dashboard"
+main = "src/dashboard/worker.ts"
+
+# `postgres.js` opens a TCP socket and reaches for `node:` built-ins, so it runs
+# on a Worker only under `nodejs_compat` and a compatibility date recent enough
+# for it. If the driver proves awkward the recorded fallback is Hyperdrive with
+# `pg` -- the queries take an injected query interface, so the driver is the
+# only thing that would change -- and that is a finding to report rather than a
+# decision to take quietly.
+compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
+
+# `SEASON` is the one thing the seam needs beyond the connection. `DATABASE_URL`
+# is deliberately absent: it is a Worker secret set with `wrangler secret put`,
+# so the login role's password is in no checkout of this repository.
+[vars]
+SEASON = "2026-27"
+
+# The route claiming `/api/*` on the Pages hostname, so the browser fetches a
+# relative path and nothing is cross-origin, is set in the first deploy. It is
+# left out here rather than guessed: the hostname does not exist yet.

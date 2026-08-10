@@ -58,24 +58,24 @@ the harness together, and every later endpoint is an addition to a path that alr
 
 **Blocked by:** "A seeded Season with three stopping points".
 
-- [ ] A migration creates `dashboard_read` as a `nologin` role, grants it `select` on the
+- [x] A migration creates `dashboard_read` as a `nologin` role, grants it `select` on the
       tables the endpoint reads, and adds a select policy for it on each — and creating the
       role is guarded against `pg_roles`, so a second `resetSchema` in one run does not fail
-- [ ] Tests `set role dashboard_read` before querying, and a table granted without a policy
+- [x] Tests `set role dashboard_read` before querying, and a table granted without a policy
       fails a test rather than returning an empty page
-- [ ] One exported function takes a `Request`, a query interface, the Season and the instant,
+- [x] One exported function takes a `Request`, a query interface, the Season and the instant,
       and returns a `Response`; the Worker entry point holds only the wiring
-- [ ] The endpoint returns nine Entrants when the database also holds FPL seats and FPL
+- [x] The endpoint returns nine Entrants when the database also holds FPL seats and FPL
       `scores` rows — the roster filter is role plus the match Prompt Version, and every read
       of `scores` filters `track = 'match'`
-- [ ] Both qualification strings appear byte-for-byte, compared in the test against the
+- [x] Both qualification strings appear byte-for-byte, compared in the test against the
       constants the scorer exports, so shortening either in the read layer fails
-- [ ] The settled-Fixture count shown beside the Season is counted from Lock-owned Fixtures
+- [x] The settled-Fixture count shown beside the Season is counted from Lock-owned Fixtures
       with a result, and differs from an Entrant's own `n` when that Entrant has Gapped —
       asserted with a Gap present
-- [ ] `throughGw` is `null` on a Season with nothing scored, and the nine entered Entrants are
+- [x] `throughGw` is `null` on a Season with nothing scored, and the nine entered Entrants are
       still returned
-- [ ] The response carries `public, s-maxage=300, stale-while-revalidate=3600`, and an unknown
+- [x] The response carries `public, s-maxage=300, stale-while-revalidate=3600`, and an unknown
       path is a `404`
 
 ## The Leaderboard page
