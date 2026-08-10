@@ -8,7 +8,7 @@ import {
 } from "../src/dashboard/read-api.js";
 import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
 import {
-  BET_POINTS_QUALIFICATION, MATCH_POINTS_QUALIFICATION
+  BET_POINTS_QUALIFICATION, MATCH_POINTS_QUALIFICATION, scoreMatchSeason
 } from "../src/predictions/score-match-gameweek.js";
 
 const { Client } = pg;
@@ -268,4 +268,143 @@ describe("the dashboard read API before the Season starts", () => {
       .toBe(true);
     expect(body.matchPointsQualification).toBeNull();
   });
+});
+
+describe("the dashboard read API on a Locked Gameweek nothing has settled", () => {
+  const writer = new Client({ connectionString: process.env.DATABASE_URL });
+  const reader = new Client({ connectionString: process.env.DATABASE_URL });
+
+  const query: Query = async (sql, parameters = []) =>
+    (await reader.query(sql, [...parameters])).rows;
+
+  beforeAll(async () => {
+    await writer.connect();
+    await reader.connect();
+    await writer.query(
+      `truncate scores, contexts, predictions, fixtures, models, gameweeks,
+       historical_matches restart identity cascade`
+    );
+    await seedSeason({ database: writer, season: SEASON, stopAt: "pre-season" });
+
+    // Gameweek 1 Locked, one Prediction committed, and the matches still being
+    // played: the state a real Season is in for four days out of every seven.
+    await writer.query(
+      "update fixtures set locked_in_gw = gw where season = $1", [SEASON]
+    );
+    const context = await writer.query<{ id: string }>(
+      `insert into contexts (season, gw, track, fpl_id, hash, body, built_at)
+       values ($1, 1, 'match', 1, 'seeded-hash', 'seeded body', $2)
+       returning id`,
+      [SEASON, "2026-08-14T11:30:00Z"]
+    );
+    await writer.query(
+      `insert into predictions (
+         model_id, season, fpl_id, probs, pred_home, pred_away, context_id,
+         attempts_used, predicted_at
+       ) values ('claude/v1', $1, 1, '{"H": 0.5, "D": 0.3, "A": 0.2}', 2, 1,
+                 $2, 0, $3)`,
+      [SEASON, context.rows[0]?.id, "2026-08-14T11:30:00Z"]
+    );
+    await scoreMatchSeason({
+      database: writer,
+      season: SEASON,
+      now: () => new Date("2026-08-14T18:00:00Z")
+    });
+    await reader.query("set role dashboard_read");
+
+    return async () => {
+      await writer.end();
+      await reader.end();
+    };
+  });
+
+  test("holds the pre-season state while the scorer's behavioural rows exist",
+    async () => {
+      // Coherence, Gaps and Repairs are answerable the moment the Lock passes,
+      // so the scorer has written rows on Gameweek 1. Without them this test
+      // would be the pre-season one again and would prove nothing.
+      const behavioural = await writer.query<{ metric: string }>(
+        "select distinct metric from scores where season = $1 and gw = 1",
+        [SEASON]
+      );
+      expect(behavioural.rows.length).toBeGreaterThan(0);
+      expect(behavioural.rows.map(({ metric }) => metric))
+        .not.toContain("match_points_season_to_date");
+
+      const response = await handleDashboardRequest(
+        new Request("https://benchmark.example/api/leaderboard"),
+        query, SEASON, NOW
+      );
+      const body = await response.json() as LeaderboardBody;
+
+      // A Gameweek that has been answered is not a Gameweek that has been
+      // scored. Reading the last `scores` row instead would call this Season
+      // scored through Gameweek 1 and rank nine Entrants on nothing — and on a
+      // Season already fourteen Gameweeks in, it would move the ranking to a
+      // Locked Gameweek that has no ranking and blank all fourteen.
+      expect(body.throughGw).toBeNull();
+      expect(body.settledFixtures).toBe(0);
+      expect(body.entrants.map(({ id }) => id)).toEqual(ROSTER);
+      expect(body.entrants.every(({ n }) => n === null)).toBe(true);
+    });
+});
+
+describe("the dashboard read API with an Entrant that settled nothing", () => {
+  const writer = new Client({ connectionString: process.env.DATABASE_URL });
+  const reader = new Client({ connectionString: process.env.DATABASE_URL });
+
+  const query: Query = async (sql, parameters = []) =>
+    (await reader.query(sql, [...parameters])).rows;
+
+  beforeAll(async () => {
+    await writer.connect();
+    await reader.connect();
+    await writer.query(
+      `truncate scores, contexts, predictions, fixtures, models, gameweeks,
+       historical_matches restart identity cascade`
+    );
+    await seedSeason({
+      database: writer, season: SEASON, stopAt: "the design's"
+    });
+    // What the scorer leaves for an Entrant that Gapped every Fixture of the
+    // Season: the behavioural rows are its own and the outcome-dependent ones
+    // were never written. The rows are removed rather than invented, so every
+    // figure the other eight are read on is still the scorer's own.
+    await writer.query(
+      `delete from scores
+        where model_id = 'claude/v1' and metric in ($1, $2)`,
+      [
+        "match_points_season_to_date", "bet_points_season_to_date"
+      ]
+    );
+    await reader.query("set role dashboard_read");
+
+    return async () => {
+      await writer.end();
+      await reader.end();
+    };
+  });
+
+  test("keeps both qualifications on a ranking the first Entrant is absent from",
+    async () => {
+      const response = await handleDashboardRequest(
+        new Request("https://benchmark.example/api/leaderboard"),
+        query, SEASON, NOW
+      );
+      const body = await response.json() as LeaderboardBody;
+
+      // `claude/v1` sorts first, so a read taking the qualification from the
+      // first row would publish eight Entrants' rankings with neither caveat —
+      // the one failure spec 0011 names as its sharper problem.
+      expect(body.matchPointsQualification).toBe(MATCH_POINTS_QUALIFICATION);
+      expect(body.betPointsQualification).toBe(BET_POINTS_QUALIFICATION);
+
+      const byId = new Map(body.entrants.map((each) => [each.id, each]));
+      // Settled nothing, on a Season that has been scored: a nought, and not
+      // the shape reserved for a Season that has not started.
+      expect(byId.get("claude/v1")).toMatchObject({
+        matchPoints: 0, betPoints: 0, n: 0
+      });
+      expect(byId.get("gpt/v1")?.n).toBe(SETTLED_FIXTURES);
+    });
 });

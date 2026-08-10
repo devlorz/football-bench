@@ -59,14 +59,27 @@ const textOrNull = (value: unknown): string | null =>
  * itself.
  */
 async function leaderboard(query: Query, season: string): Promise<Response> {
+  // The Gameweek the Season has been *scored* through, which is not the last
+  // Gameweek holding a `scores` row. Coherence, Gaps and Repairs are
+  // behavioural: the scorer answers them the moment a Lock passes, so a Locked
+  // and unplayed Gameweek carries rows of its own. Reading `max(gw)` over all
+  // of them would call Gameweek 1 scored while its matches are still being
+  // played, and would move a Season's ranking to a Gameweek that has no
+  // ranking — blanking the fourteen Gameweeks that do.
+  //
+  // Match Points are outcome-dependent, and the scorer writes no
+  // outcome-dependent row for a Gameweek with nothing settled rather than a
+  // record of zeros. The Gameweek the ranking exists for is therefore the last
+  // one the ranking's own metric reaches.
+  //
   // Every read of `scores` filters `track = 'match'`. A seat can hold both
   // tracks, and a read missing it lets an FPL demonstration figure be read as a
   // Match one — in a ranking, which is the one place ADR-0003 is careful never
   // to let the tracks meet.
   const [scored] = await query(
-    "select max(gw) as through_gw from scores where season = $1"
-    + " and track = 'match'",
-    [season]
+    `select max(gw) as through_gw from scores
+      where season = $1 and track = 'match' and metric = $2`,
+    [season, MATCH_POINTS_SEASON_TO_DATE_METRIC]
   );
   const throughGw = numberOrNull(scored?.through_gw);
 
@@ -112,24 +125,42 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
     ]
   );
 
+  // An Entrant with no row on a Season that has been scored settled nothing,
+  // which is a nought and not an absence: the scorer writes no
+  // outcome-dependent row for an Entrant that Gapped every Fixture, and reading
+  // that back as null would put a Season-long Gap on the page in the one shape
+  // reserved for a Season that has not started. Null is the pre-season state
+  // and belongs to `throughGw` alone.
+  const scoredOrNull = (value: unknown): number | null =>
+    throughGw === null ? null : Number(value ?? 0);
+
   const entrants: LeaderboardEntrant[] = rows.map((row) => ({
     id: String(row.id),
     name: String(row.name),
     baseModelClass: textOrNull(row.base_model_class),
-    matchPoints: numberOrNull(row.match_points),
-    betPoints: numberOrNull(row.bet_points),
-    n: numberOrNull(row.n)
+    matchPoints: scoredOrNull(row.match_points),
+    betPoints: scoredOrNull(row.bet_points),
+    n: scoredOrNull(row.n)
   }));
+
+  // One string per ranking rather than one per row: the scorer writes the same
+  // sentence into every row a ranking can be read off, and the page shows it
+  // once under the table.
+  //
+  // Taken from whichever Entrant has one rather than from the first row. The
+  // first row is the alphabetically first Entrant, which has a qualification
+  // only if it scored — so an Entrant that Gapped a whole Season would strip
+  // the caveat off eight Entrants' rankings, which is the one failure spec 0011
+  // exists to prevent.
+  const qualification = (column: string): string | null =>
+    textOrNull(rows.map((row) => row[column]).find((each) => each != null));
 
   return json({
     season,
     throughGw,
     settledFixtures: Number(settled?.settled ?? 0),
-    // One string per ranking rather than one per row: the scorer writes the
-    // same sentence into every row a ranking can be read off, and the page
-    // shows it once under the table.
-    matchPointsQualification: textOrNull(rows[0]?.match_qualification),
-    betPointsQualification: textOrNull(rows[0]?.bet_qualification),
+    matchPointsQualification: qualification("match_qualification"),
+    betPointsQualification: qualification("bet_qualification"),
     entrants
   }, LEADERBOARD_CACHE);
 }
