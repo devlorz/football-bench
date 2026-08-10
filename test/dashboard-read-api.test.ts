@@ -1,7 +1,7 @@
 import pg from "pg";
-import postgres from "postgres";
 import { beforeAll, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
+import { workerDriver } from "./worker-driver.js";
 import { seedSeason } from "../src/seed-season.js";
 import {
   handleDashboardRequest, type Query
@@ -208,39 +208,20 @@ describe("the dashboard read API", () => {
   });
 
   test("answers the same body through the Worker's driver", async () => {
-    // ADR-0027 puts `postgres.js` on the Worker and `pg` everywhere else, which
-    // leaves the driver the one part of the read path a suite running on `pg`
-    // cannot see. The two disagree about exactly what this endpoint is full of
-    // — `numeric` and `count(*)` reach one as a string and the other as a
-    // number — so the bodies matching is the claim worth making.
-    // Handed the parts rather than the URL. `postgres.js` does not read the
-    // `?host=` parameter a connection string carries — `pg` does, and the
-    // harness's temporary cluster listens on a socket and on no TCP port at
-    // all, so the URL that reaches `pg` over a socket sends `postgres.js` to
-    // whatever is on localhost at the same port. Deployment hands the Worker an
-    // ordinary `host:port` URL and never meets this; a test that pointed the
-    // driver at a developer's own Postgres and reported a driver fault would.
-    const url = new URL(process.env.DATABASE_URL ?? "");
-    const sql = postgres({
-      host: url.searchParams.get("host") ?? url.hostname,
-      port: Number(url.port),
-      username: url.username,
-      database: url.pathname.slice(1),
-      max: 1,
-      fetch_types: false
-    });
+    // `numeric` and `count(*)` reach one driver as a string and the other as a
+    // number, which is exactly what this endpoint is full of, so the bodies
+    // matching is the claim worth making. What the driver needs and why is in
+    // `test/worker-driver.ts`.
+    const driver = await workerDriver();
     try {
-      await sql.unsafe("set role dashboard_read");
       const response = await handleDashboardRequest(
         new Request("https://benchmark.example/api/leaderboard"),
-        (text, parameters = []) => sql.unsafe(text, parameters as never[]),
-        SEASON,
-        NOW
+        driver.query, SEASON, NOW
       );
 
       expect(await response.json()).toEqual(await leaderboard());
     } finally {
-      await sql.end();
+      await driver.end();
     }
   });
 

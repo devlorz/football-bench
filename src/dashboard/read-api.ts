@@ -1,3 +1,4 @@
+import { argmaxOutcome, outcomeOf, type Probs } from "../fixture-result.js";
 import { MATCH_PROMPT_VERSION } from "../predictions/openrouter-entrant.js";
 import {
   BET_POINTS_QUALIFICATION, BET_POINTS_SEASON_TO_DATE_METRIC,
@@ -25,6 +26,13 @@ export type Query = (
  * does not cache a Worker's response.
  */
 const LEADERBOARD_CACHE = "public, s-maxage=300, stale-while-revalidate=3600";
+
+/**
+ * Sixty seconds and no stale window: Predictions land at the main run, six
+ * hours before the deadline, and again at the Fill two hours before, so an hour
+ * of stale would show Gaps the Fill has already closed.
+ */
+const FIXTURES_CACHE = "public, s-maxage=60";
 
 interface LeaderboardEntrant {
   id: string;
@@ -251,6 +259,174 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
   }, LEADERBOARD_CACHE);
 }
 
+export interface SlotPrediction {
+  probs: Probs;
+  predHome: number;
+  predAway: number;
+  /** Derived here from the Prediction alone; see below. */
+  coherent: boolean;
+  rationale: string | null;
+  contextHash: string;
+  /** `predictions.attempts_used`, which is 0 for a Prediction valid first time. */
+  repairs: number;
+}
+
+/** A Gap is a slot with nothing in it, and never a missing entry. */
+export interface FixtureSlot {
+  entrant: { id: string; name: string };
+  prediction: SlotPrediction | null;
+}
+
+export interface FixtureView {
+  fplId: number;
+  homeTeam: string;
+  awayTeam: string;
+  kickoffAt: string;
+  slots: FixtureSlot[];
+}
+
+/**
+ * What `/api/fixtures` answers with. Exported because the tests assert on it,
+ * and a body they describe for themselves is a body they can go on describing
+ * after this one has changed.
+ */
+export interface FixturesBody {
+  season: string;
+  gw: number | null;
+  deadlineAt: string | null;
+  lockPassed: boolean;
+  fixtures: FixtureView[];
+}
+
+/**
+ * The Gameweek in front of the reader, its Fixtures, and what all nine Entrants
+ * committed before the Lock.
+ *
+ * The page never reads `throughGw` and this body does not carry it.
+ * `throughGw` moves when the scorer runs; Predictions exist from the main run
+ * six hours before the deadline, so for the whole of a played-but-unscored
+ * Gameweek 1 a page gating on it would call committed Predictions pre-season
+ * and hide the very thing it exists to show.
+ */
+async function fixtures(
+  query: Query,
+  season: string,
+  now: Date
+): Promise<Response> {
+  // The rule, in one statement: the earliest Gameweek owning a Fixture that is
+  // not deferred and has no result, and the last Gameweek by number when every
+  // such Fixture has settled.
+  //
+  // Ownership is `coalesce(locked_in_gw, gw)` — what the predict path already
+  // selects due work by, and the write path's reading of ADR-0015. A Fixture
+  // belongs to its Locked Gameweek once it has one and to its scheduled
+  // Gameweek until then, so a rule reading `locked_in_gw` alone would find
+  // nothing at all before the first Prediction run.
+  //
+  // The fallback is taken over the Fixtures rather than over `gameweeks`: a
+  // Season's schedule can hold a Gameweek no Fixture has reached yet, and
+  // holding on that one would answer a finished Season with an empty page.
+  //
+  // It counts only Fixtures the listing below would show, which is the same
+  // predicate and not merely `not deferred`. A Gameweek whose every Fixture the
+  // page drops is a Gameweek the page cannot render, so selecting it lands a
+  // finished Season on the empty state this fallback exists to prevent.
+  //
+  // `deferred` in the first branch keeps a Fixture that will never gain a
+  // result from pinning the page to its Gameweek for the rest of the Season.
+  const [current] = await query(
+    `with current as (
+       select coalesce(
+         (select min(coalesce(locked_in_gw, gw)) from fixtures
+           where season = $1 and not deferred and result is null),
+         (select max(coalesce(locked_in_gw, gw)) from fixtures
+           where season = $1 and (not deferred or locked_in_gw is not null))
+       ) as gw
+     )
+     select current.gw, gameweeks.deadline_at
+       from current
+       left join gameweeks
+         on gameweeks.season = $1 and gameweeks.gw = current.gw`,
+    [season]
+  );
+  const gw = numberOrNull(current?.gw);
+  const deadline = current?.deadline_at == null
+    ? null
+    : new Date(current.deadline_at as string | Date);
+
+  // A deferred Fixture that was Locked stays on the page: its Predictions were
+  // committed under this Gameweek's Lock and are what a reader came for. One
+  // that left the schedule before any run reached it is not in the Gameweek at
+  // all, and would read as nine Gaps.
+  const rows = await query(
+    `select fpl_id, home_team, away_team, kickoff_at from fixtures
+      where season = $1 and coalesce(locked_in_gw, gw) = $2
+        and (not deferred or locked_in_gw is not null)
+      order by kickoff_at, fpl_id`,
+    [season, gw]
+  );
+
+  // The same nine in the same order on every Fixture, which is what makes a
+  // Gap a slot rather than a shorter list.
+  const roster = await query(
+    `select id, name from models
+      where role = 'entrant' and prompt_version = $1 order by id`,
+    [MATCH_PROMPT_VERSION]
+  );
+
+  const predictions = await query(
+    `select p.fpl_id, p.model_id, p.probs, p.pred_home, p.pred_away,
+            p.rationale, p.attempts_used as repairs, c.hash as context_hash
+       from predictions p
+       join contexts c on c.id = p.context_id
+       join fixtures f on f.season = p.season and f.fpl_id = p.fpl_id
+      where p.season = $1 and coalesce(f.locked_in_gw, f.gw) = $2`,
+    [season, gw]
+  );
+
+  const byFixtureAndEntrant = new Map<string, SlotPrediction>();
+  for (const row of predictions) {
+    const probs = row.probs as Probs;
+    byFixtureAndEntrant.set(`${row.fpl_id}:${row.model_id}`, {
+      probs,
+      predHome: Number(row.pred_home),
+      predAway: Number(row.pred_away),
+      // The Coherence metric is a share over an Entrant's Predictions; the page
+      // needs the flag for one. Derived from the Prediction alone, reading no
+      // result, and by the same comparison the scorer makes, so the page and
+      // the metric cannot disagree.
+      coherent: argmaxOutcome(probs)
+        === outcomeOf(Number(row.pred_home), Number(row.pred_away)),
+      rationale: textOrNull(row.rationale),
+      contextHash: String(row.context_hash),
+      repairs: Number(row.repairs)
+    });
+  }
+
+  const body: FixturesBody = {
+    season,
+    gw,
+    deadlineAt: deadline?.toISOString() ?? null,
+    // The one thing the instant is used for: it separates the pre-lock banner
+    // from the committed view and never selects the Gameweek.
+    lockPassed: deadline !== null && now >= deadline,
+    fixtures: rows.map((row) => ({
+      fplId: Number(row.fpl_id),
+      homeTeam: String(row.home_team),
+      awayTeam: String(row.away_team),
+      kickoffAt: new Date(row.kickoff_at as string | Date).toISOString(),
+      slots: roster.map((entrant) => ({
+        entrant: { id: String(entrant.id), name: String(entrant.name) },
+        // Null and not missing: an Entrant that did not answer must not be
+        // indistinguishable from one that answered badly.
+        prediction:
+          byFixtureAndEntrant.get(`${row.fpl_id}:${entrant.id}`) ?? null
+      }))
+    }))
+  };
+  return json(body, FIXTURES_CACHE);
+}
+
 function json(body: unknown, cacheControl: string): Response {
   return new Response(JSON.stringify(body), {
     headers: {
@@ -283,6 +459,9 @@ export async function handleDashboardRequest(
   const { pathname } = new URL(request.url);
   if (pathname === "/api/leaderboard") {
     return await leaderboard(query, season);
+  }
+  if (pathname === "/api/fixtures") {
+    return await fixtures(query, season, now);
   }
   return new Response("Not found", {
     status: 404,
