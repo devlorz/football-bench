@@ -225,6 +225,28 @@ row's `detail` without arithmetic the scorer does not already do:
 No new metric, no new column on `scores`, no change to the scorer. If a figure in the design
 cannot be read this way, the design's figure is dropped rather than the scorer extended.
 
+**The qualifications have one documented exception.** They are normally read from the stored
+ranking rows. If a scored Season has no ranking rows because no Entrant has settled a
+Prediction, the read layer uses the scorer-exported canonical qualifications, so that a
+visible zero ranking never loses its caveats.
+
+That Season exists: an outage across the Prediction window can take all nine Entrants at once
+— the roster reaches every Base Model through one provider (ADR-0009) — and if it takes the
+Season's first settled Gameweek, the scorer writes no ranking row for anybody while the page
+still ranks nine Entrants at nought. The exception is narrow by construction and stated in
+full: it applies only where `throughGw` is not null and no ranking row carries a qualification
+at all, which needs no Entrant to have settled one Prediction all Season, since a cumulative
+row exists from the first Gameweek any Entrant settled one on.
+
+The invariant being protected is the one this spec's problem statement is built around: a
+value must not reach a reader without its caveat. The alternative that keeps every
+qualification inside Postgres is a scorer that writes zero-valued cumulative Match and Bet
+Points rows with `n: 0` when the whole roster Gaps — which is a change to the scorer, and so
+a change to the decision above rather than a detail of the read layer. It is not taken here:
+the exported constant is the same source of truth the scorer itself writes from, so the two
+cannot drift, and inventing rows would change what a `scores` row means for every reader of
+the table.
+
 **Cumulative detail is nested.** A per-Gameweek row holds `detail.fixtures[]`; a
 `_season_to_date` row holds `detail.gameweeks[].fixtures[]`. Every count above is taken over
 the flattening of the cumulative shape, and a read that assumes the flat shape on a cumulative
@@ -456,9 +478,15 @@ can echo a row; it cannot notice the day the endpoint reads the wrong metric nam
   `/api/fixtures` returns filled slots and the leaderboard still returns `throughGw: null`.
   This is the case a Fixtures page gating on `throughGw` would get wrong, and it exists for
   a real four days of every Season.
-- **The qualifications survive the round trip.** Both qualification strings appear in the
-  leaderboard body byte-for-byte as the scorer wrote them — the constants are exported and the
-  test compares against them, so shortening one in the read layer fails.
+- **The qualifications survive the round trip.** On a Season with ranking rows, both
+  qualification strings appear in the leaderboard body byte-for-byte as the scorer wrote them
+  — the constants are exported and the test compares against them, so shortening one in the
+  read layer fails. This is the storage round trip, and it is what the normal Season proves.
+- **The canonical fallback keeps the caveats on a ranking with no rows.** With the whole roster
+  Gapping the Season's first settled Gameweek, both strings still appear. This test proves the
+  exception, not the round trip: there is no stored string in this state, and the assertion it
+  makes is that a visible zero ranking does not reach a reader bare. The two tests are kept
+  apart deliberately, so that neither is read as evidence for the other.
 - **Derived figures agree with their source.** Tier counts sum to the Match Points row's `n`;
   per-market hit counts sum to what the slips in `detail` hold.
 - **Coherence.** A Prediction whose argmax disagrees with its Predicted Score is flagged; one

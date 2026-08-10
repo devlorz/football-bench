@@ -160,7 +160,19 @@ describe("the dashboard read API", () => {
       .toBeGreaterThan(1);
   });
 
-  test("carries both qualifications byte for byte", async () => {
+  test("carries both qualifications byte for byte out of storage", async () => {
+    // The storage round trip, and the only test that proves it: this Season has
+    // ranking rows, so both strings are read from `detail` and compared against
+    // the constants the scorer wrote them from. Shortening either in the read
+    // layer fails here.
+    const stored = await writer.query<{ qualification: string }>(
+      `select distinct detail ->> 'qualification' as qualification
+         from scores
+        where season = $1 and metric = 'match_points_season_to_date'`,
+      [SEASON]
+    );
+    expect(stored.rows).toEqual([{ qualification: MATCH_POINTS_QUALIFICATION }]);
+
     const body = await leaderboard();
 
     expect(body.matchPointsQualification).toBe(MATCH_POINTS_QUALIFICATION);
@@ -445,9 +457,19 @@ describe("the dashboard read API when the whole roster Gapped a Gameweek", () =>
       expect(entrant).toMatchObject({ matchPoints: 0, betPoints: 0, n: 0 });
     }
 
-    // Nine noughts is a ranking a reader can see, so it carries its caveats —
-    // and here there is no stored row to read them from, because the rows that
-    // carry a qualification are exactly the ones that were never written.
+    // The documented exception, and not the round trip. There is no stored
+    // string in this state — the rows that carry a qualification are exactly
+    // the ones that were never written — so what is asserted here is only that
+    // a visible ranking of nine noughts does not reach a reader bare. The
+    // storage round trip is proved on the seeded Season and nowhere else, and
+    // the two are kept apart so neither reads as evidence for the other.
+    const anyQualification = await writer.query(
+      `select 1 from scores
+        where season = $1 and detail ? 'qualification'`,
+      [SEASON]
+    );
+    expect(anyQualification.rowCount).toBe(0);
+
     expect(body.matchPointsQualification).toBe(MATCH_POINTS_QUALIFICATION);
     expect(body.betPointsQualification).toBe(BET_POINTS_QUALIFICATION);
   });

@@ -54,10 +54,12 @@ const textOrNull = (value: unknown): string | null =>
  * The nine Entrants ranked Season-to-date, both qualifications, and the
  * evidence the ranking rests on.
  *
- * The qualifications are read out of the rows rather than imported from the
- * scorer, because the claim being made is that what the scorer stored reaches a
- * reader intact. Restating the constant here would answer that question with
- * itself.
+ * The qualifications are read out of the stored rows, because the claim being
+ * made is that what the scorer stored reaches a reader intact, and restating
+ * the constant would answer that question with itself. The scorer's exported
+ * constant is imported all the same, for the one documented exception below: a
+ * scored Season with no ranking row anywhere, which has no stored string to
+ * read and a visible ranking of noughts to caveat.
  */
 async function leaderboard(query: Query, season: string): Promise<Response> {
   // The Gameweek the Season has been *scored* through, which is not the last
