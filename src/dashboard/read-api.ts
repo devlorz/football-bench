@@ -183,14 +183,35 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
   // storage, because there is no stored string. The alternative is a scorer
   // that writes a zero-valued ranking row when the whole roster Gaps, which
   // spec 0011 puts out of scope and which is a decision to take in the open.
-  // Where a row exists it is still the row that answers, so the round trip the
-  // spec asks for is under test on every Season that has one.
-  const qualification = (column: string, stored: string): string | null => {
+  //
+  // Which branch applies is decided once, by whether any ranking row was found
+  // at all, and never per string. A fallback asked per qualification would
+  // answer a missing Bet Points caveat on a Season full of ranking rows with
+  // the constant — silently, and looking exactly like the intended exception,
+  // which is how a storage fault becomes invisible. Where ranking rows exist
+  // the stored string is the only answer, and its absence is a fault: it fails
+  // closed, and the page's error line is the state a reader is left in, rather
+  // than a ranking that lost its caveat on the way out of the database.
+  const hasRankingRows = rows.some(
+    (row) => row.match_points != null || row.bet_points != null
+  );
+
+  const qualification = (column: string, canonical: string): string | null => {
     if (throughGw === null) {
       return null;
     }
-    return textOrNull(rows.map((row) => row[column]).find((each) => each != null))
-      ?? stored;
+    if (!hasRankingRows) {
+      return canonical;
+    }
+    const stored =
+      textOrNull(rows.map((row) => row[column]).find((each) => each != null));
+    if (stored === null) {
+      throw new Error(
+        `The Season's ranking rows carry no ${column}, and a ranking cannot be `
+        + "published without it"
+      );
+    }
+    return stored;
   };
 
   return json({

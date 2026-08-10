@@ -165,13 +165,17 @@ describe("the dashboard read API", () => {
     // ranking rows, so both strings are read from `detail` and compared against
     // the constants the scorer wrote them from. Shortening either in the read
     // layer fails here.
-    const stored = await writer.query<{ qualification: string }>(
-      `select distinct detail ->> 'qualification' as qualification
-         from scores
-        where season = $1 and metric = 'match_points_season_to_date'`,
-      [SEASON]
-    );
-    expect(stored.rows).toEqual([{ qualification: MATCH_POINTS_QUALIFICATION }]);
+    const storedIn = async (metric: string): Promise<Array<unknown>> =>
+      (await writer.query<{ qualification: string }>(
+        `select distinct detail ->> 'qualification' as qualification
+           from scores where season = $1 and metric = $2`,
+        [SEASON, metric]
+      )).rows;
+
+    expect(await storedIn("match_points_season_to_date"))
+      .toEqual([{ qualification: MATCH_POINTS_QUALIFICATION }]);
+    expect(await storedIn("bet_points_season_to_date"))
+      .toEqual([{ qualification: BET_POINTS_QUALIFICATION }]);
 
     const body = await leaderboard();
 
@@ -472,6 +476,52 @@ describe("the dashboard read API when the whole roster Gapped a Gameweek", () =>
 
     expect(body.matchPointsQualification).toBe(MATCH_POINTS_QUALIFICATION);
     expect(body.betPointsQualification).toBe(BET_POINTS_QUALIFICATION);
+  });
+});
+
+describe("the dashboard read API with a qualification missing from storage", () => {
+  const writer = new Client({ connectionString: process.env.DATABASE_URL });
+  const reader = new Client({ connectionString: process.env.DATABASE_URL });
+
+  const query: Query = async (sql, parameters = []) =>
+    (await reader.query(sql, [...parameters])).rows;
+
+  beforeAll(async () => {
+    await writer.connect();
+    await reader.connect();
+    await writer.query(
+      `truncate scores, contexts, predictions, fixtures, models, gameweeks,
+       historical_matches restart identity cascade`
+    );
+    await seedSeason({
+      database: writer, season: SEASON, stopAt: "the design's"
+    });
+    // A Season full of ranking rows with one caveat gone from them: a scorer
+    // that stopped writing it, or a hand at a `psql` prompt. Not the state the
+    // documented exception covers, and nothing about it says so from inside a
+    // single row.
+    await writer.query(
+      `update scores set detail = detail - 'qualification'
+        where season = $1 and metric = $2`,
+      [SEASON, "bet_points_season_to_date"]
+    );
+    await reader.query("set role dashboard_read");
+
+    return async () => {
+      await writer.end();
+      await reader.end();
+    };
+  });
+
+  test("fails closed rather than substituting the canonical string", async () => {
+    // The fallback is decided by whether ranking rows exist, once, and never
+    // per string. Asked per qualification it would answer this with the
+    // constant — indistinguishable from the exception, and a storage fault
+    // nobody would ever see. A reader gets the page's error line instead.
+    await expect(handleDashboardRequest(
+      new Request("https://benchmark.example/api/leaderboard"),
+      query, SEASON, NOW
+    )).rejects.toThrow(/bet_qualification/);
   });
 });
 

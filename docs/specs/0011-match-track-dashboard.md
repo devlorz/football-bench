@@ -230,6 +230,15 @@ ranking rows. If a scored Season has no ranking rows because no Entrant has sett
 Prediction, the read layer uses the scorer-exported canonical qualifications, so that a
 visible zero ranking never loses its caveats.
 
+**Which branch applies is decided once, and never per string.** The read layer asks whether
+any ranking row was found at all: none and a scored Season is the exception; ranking rows
+present means the stored string is the only answer, and its absence is a fault that fails
+closed rather than one the constant papers over. A fallback asked per qualification would
+answer a missing Bet Points caveat on a Season full of ranking rows with the constant —
+silently, and looking exactly like the intended exception, which is how a storage fault
+becomes invisible. A reader gets the page's error line instead, which is the state the design
+already has for data that cannot be read.
+
 That Season exists: an outage across the Prediction window can take all nine Entrants at once
 — the roster reaches every Base Model through one provider (ADR-0009) — and if it takes the
 Season's first settled Gameweek, the scorer writes no ranking row for anybody while the page
@@ -487,6 +496,10 @@ can echo a row; it cannot notice the day the endpoint reads the wrong metric nam
   exception, not the round trip: there is no stored string in this state, and the assertion it
   makes is that a visible zero ranking does not reach a reader bare. The two tests are kept
   apart deliberately, so that neither is read as evidence for the other.
+- **A qualification missing where ranking rows exist fails closed.** With the Bet Points
+  caveat stripped from a scored Season's rows, the endpoint raises rather than returning the
+  constant — the case that separates the documented exception from a storage fault wearing its
+  clothes.
 - **Derived figures agree with their source.** Tier counts sum to the Match Points row's `n`;
   per-market hit counts sum to what the slips in `detail` hold.
 - **Coherence.** A Prediction whose argmax disagrees with its Predicted Score is flagged; one
