@@ -281,13 +281,25 @@ the same comparison the scorer uses, so the page and the metric can never disagr
 
 | Endpoint | Body |
 |---|---|
-| `/api/leaderboard` | the nine Entrants with id, name, Base Model Class, Match Points, Bet Points, both qualifications, per-Entrant `n`, the Season's settled-Fixture count, and `throughGw` |
+| `/api/leaderboard` | the nine Entrants with id, name, Base Model Class, Match Points, Bet Points, both qualifications, per-Entrant `n`, the Season's settled-Fixture count, `throughGw`, and `nextLock` |
 | `/api/fixtures` | the current Gameweek, its deadline, its Fixtures, and per Fixture a slot for each of the nine Entrants |
 | `/api/entrants` | all nine Entrants with their complete per-Gameweek series, tier counts and per-market hit counts |
 
 `/api/entrants` returns the whole field rather than one Entrant because the cumulative chart
 draws all nine lines at once; selecting an Entrant is therefore a re-render and not a fetch.
 Each body is what one page renders, so no page composes two responses and none over-fetches.
+
+**`nextLock` is the pre-season state's own fact**, and is on `/api/leaderboard` because story 38
+asks the empty table to state the Lock a reader is waiting on, and no page composes two
+responses — a leaderboard reaching for the Fixtures body to find a date would break exactly the
+rule this section sets. It is `{ gw, deadlineAt }` or null, and it is null on any Season that
+has been scored: a Season with a table to read has no use for a deadline, and a page carrying
+both could put one beside the other.
+
+Pre-season it is the Season's **earliest** Gameweek, not the earliest deadline still ahead of
+the clock. Nothing scored is a Season the seed writes as the roster and Gameweek 1 alone, so
+the state holds one Lock; and a clock would answer a Season whose first deadline has passed
+while its scoring run has not yet landed with no date at all.
 
 **`throughGw` is carried by `/api/leaderboard` and `/api/entrants`**, the two pages that gate
 on it, because no page composes two responses and a page whose body lacks it has no way to ask.

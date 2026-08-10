@@ -101,6 +101,23 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
   );
   const throughGw = numberOrNull(scored?.through_gw);
 
+  // What the pre-season page is waiting on, and read only there: a Season with
+  // a table to show has no use for a deadline, and the Fixtures page answers
+  // its own Lock from its own body.
+  //
+  // The earliest Gameweek rather than the earliest deadline still ahead of
+  // `now`. Pre-season is a Season with nothing scored, which the seed writes as
+  // the roster and Gameweek 1 alone -- the state has one Lock in it, and asking
+  // a clock would answer a Season whose first deadline has passed and whose
+  // scoring run has not yet landed with no date at all.
+  const [lock] = throughGw === null
+    ? await query(
+      `select gw, deadline_at from gameweeks
+        where season = $1 order by gw limit 1`,
+      [season]
+    )
+    : [];
+
   // Not any Entrant's `n`: the figure the whole ranking is presented against is
   // counted from the Fixtures a Lock owns that have a result, without reference
   // to any Entrant, so one Entrant's Gap cannot move it.
@@ -217,6 +234,14 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
   return json({
     season,
     throughGw,
+    nextLock: lock
+      ? {
+        gw: Number(lock.gw),
+        // One driver hands back a `Date` and the other a string; JSON has one
+        // instant, and the page formats it.
+        deadlineAt: new Date(lock.deadline_at as string | Date).toISOString()
+      }
+      : null,
     settledFixtures: Number(settled?.settled ?? 0),
     matchPointsQualification:
       qualification("match_qualification", MATCH_POINTS_QUALIFICATION),

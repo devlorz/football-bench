@@ -46,6 +46,7 @@ interface LeaderboardEntrant {
 interface LeaderboardBody {
   season: string;
   throughGw: number | null;
+  nextLock: { gw: number; deadlineAt: string } | null;
   settledFixtures: number;
   matchPointsQualification: string | null;
   betPointsQualification: string | null;
@@ -146,6 +147,10 @@ describe("the dashboard read API", () => {
     // Fourteen and not fifteen: Gameweek 15 is Locked and unplayed, and the
     // FPL row sitting on it is on the other track.
     expect(body.throughGw).toBe(14);
+
+    // The Lock is the pre-season state's own fact. A scored Season has a table
+    // to read, and a page carrying both could put a deadline beside it.
+    expect(body.nextLock).toBeNull();
   });
 
   test("carries Match Points and Bet Points for every Entrant", async () => {
@@ -283,6 +288,26 @@ describe("the dashboard read API before the Season starts", () => {
     expect(body.entrants.every(({ matchPoints }) => matchPoints === null))
       .toBe(true);
     expect(body.matchPointsQualification).toBeNull();
+  });
+
+  test("states the Lock the empty table is waiting on", async () => {
+    // The precondition the assertion below would otherwise assume: pre-season
+    // holds Gameweek 1 and no other, so the earliest Gameweek is the one a
+    // reader is waiting on rather than one the seed happens to order first.
+    const gameweeks = await query(
+      "select gw from gameweeks where season = $1 order by gw", [SEASON]
+    );
+    expect(gameweeks.map(({ gw }) => gw)).toEqual([1]);
+
+    const response = await handleDashboardRequest(
+      new Request("https://benchmark.example/api/leaderboard"),
+      query, SEASON, NOW
+    );
+    const body = await response.json() as LeaderboardBody;
+
+    expect(body.nextLock).toEqual({
+      gw: 1, deadlineAt: "2026-08-14T17:30:00.000Z"
+    });
   });
 });
 
