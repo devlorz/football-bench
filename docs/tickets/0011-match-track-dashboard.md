@@ -107,11 +107,12 @@ loading and error treatments.
       danger colour and nothing retries
 - [x] At 375px the nav collapses behind the hamburger, picking a link closes it, the rows take
       the two-column form the design specifies, and the page does not scroll sideways
-- [ ] Tab reaches every control and the focus ring is the accent one at 2px offset, never the
+- [x] Tab reaches every control and the focus ring is the accent one at 2px offset, never the
       browser default — ticked once and unticked again: the ring that was walked was
       Modernist's inset one, clipped by `.seg`, and the ring at 2px offset that replaced it
-      has not been seen. See the walk record below.
-- [ ] The manual acceptance checklist in spec 0011 has been walked and its result recorded on
+      has not been seen. See the walk record below. **Re-walked and passed** during the
+      Fixtures slice.
+- [x] The manual acceptance checklist in spec 0011 has been walked and its result recorded on
       the ticket
 
 ### The manual acceptance walk
@@ -127,12 +128,15 @@ slice does not build, and are deferred rather than passed.
 | 3 | Picking an Entrant redraws everything | Deferred — the Entrant Record page |
 | 4 | Opening a rationale closes the one already open | Deferred — the Fixtures page |
 | 5 | The theme toggle flips both ways and holds across a nav and a reload | Pass |
-| 6 | Tab reaches every control and the focus ring is the accent one, never the browser default | **Re-walk pending** — see below |
+| 6 | Tab reaches every control and the focus ring is the accent one, never the browser default | **Pass**, on the re-walk during the Fixtures slice |
 | 7 | At 375px the nav collapses, picking a link closes it, every grid is one column, the page does not scroll sideways | Pass. The per-Gameweek table in this step belongs to the Entrant Record page. |
 | 8 | With the Worker stopped, each page shows the one error line and no spinner | Pass |
 | 9 | With the seed stopped at `pre-season`, each page shows its pre-season state | Pass |
 
-Three things changed after the walk and have not been seen in a browser since:
+Three things changed after the walk and were unseen at the time. All three were re-walked
+during the Fixtures slice and passed: the ring draws outside `.seg` and is not clipped, the
+column headers are in the accessibility tree at 375px, and the toggle's name says which theme
+the click leads to. The record of what changed is kept below.
 
 - **Step 6.** The ring on the sort control was Modernist's inset `-2px` one, clipped by
   `.seg`'s `overflow: hidden`. Both halves were moved; the ring at 2px offset is unwalked.
@@ -140,8 +144,6 @@ Three things changed after the walk and have not been seen in a browser since:
   `columnheader` / `cell` roles, and at 375px the column headers are clipped rather than
   `display: none` so they stay in the accessibility tree.
 - **Step 5.** The theme toggle's accessible name now says which theme the click leads to.
-
-The gate above stays unticked until those are walked.
 
 ## The first deploy, by hand
 
@@ -175,28 +177,90 @@ the two runs happen.
 
 **Blocked by:** "The Leaderboard page".
 
-- [ ] The current Gameweek is the earliest owning a Fixture that is not deferred and has no
+- [x] The current Gameweek is the earliest owning a Fixture that is not deferred and has no
       result, ownership read as `coalesce(locked_in_gw, gw)`; if all are settled it is the last
       Gameweek by number
-- [ ] That rule is asserted at each of its cases: before any Prediction run when no Fixture has
+- [x] That rule is asserted at each of its cases: before any Prediction run when no Fixture has
       a `locked_in_gw` at all, before a deadline, after a deadline with Fixtures unsettled,
       after every Fixture settles, at the final Gameweek, and with a deferred Fixture that
       never settles
-- [ ] Every Fixture carries nine Entrant slots in the same order, a Gapped Entrant appearing as
+- [x] Every Fixture carries nine Entrant slots in the same order, a Gapped Entrant appearing as
       a slot with a null Prediction rather than as a missing entry, and the "n of 9" tag counts
       the filled ones
-- [ ] Coherence is derived from the Prediction alone — the argmax of `probs` against the
+- [x] Coherence is derived from the Prediction alone — the argmax of `probs` against the
       Outcome the Predicted Score implies — and an incoherent Prediction renders in the danger
       colour
-- [ ] The Repair count is labelled Repairs and reads `attempts_used`, so zero means valid on
+- [x] The Repair count is labelled Repairs and reads `attempts_used`, so zero means valid on
       the first attempt; nothing on the page calls it attempts
-- [ ] Expanding a rationale closes the one already open, and the panel carries the display-only
+- [x] Expanding a rationale closes the one already open, and the panel carries the display-only
       label, the context hash and the note that the Prediction was stored before the deadline
-- [ ] The Lock note counts the Fixtures actually in the Gameweek rather than asserting ten
-- [ ] The page does not read `throughGw`: with Gameweek 1 locked and unscored it shows the
+- [x] The Lock note counts the Fixtures actually in the Gameweek rather than asserting ten
+- [x] The page does not read `throughGw`: with Gameweek 1 locked and unscored it shows the
       committed Predictions, not the pre-season state
-- [ ] The response carries `public, s-maxage=60` with no stale window
-- [ ] The manual acceptance checklist has been walked and its result recorded on the ticket
+- [x] The response carries `public, s-maxage=60` with no stale window
+- [x] The manual acceptance checklist has been walked and its result recorded on the ticket
+
+### The manual acceptance walk
+
+Fourteen tests in
+[test/dashboard-fixtures-api.test.ts](../../test/dashboard-fixtures-api.test.ts) cover the
+endpoint over a real Postgres under `dashboard_read`; `astro check`, `astro build` and
+`tsc --noEmit` are clean; `modernist.css` is still byte-for-byte the vendored file.
+
+Walked in a driven Chrome against the seeded Postgres (`the design's`), in both themes and in
+both layouts. Nine steps in spec 0011 §"The pages".
+
+| # | Step | Result |
+|---|---|---|
+| 1 | Each nav link reaches its page and marks itself current | **Partial.** Leaderboard and Fixtures both reach their page and take `aria-current`. `/entrants` 404s until its slice lands. |
+| 2 | Sort reorders and recomputes ranks; URL updates; reload holds; Back leaves the page | Passed on the Leaderboard slice; not re-walked, nothing in this slice touches it |
+| 3 | Picking an Entrant redraws everything | Deferred — the Entrant Record page |
+| 4 | Opening a rationale closes the one already open | Pass. Exclusive within a Fixture and across two, and the button it closes goes back to `Why`. |
+| 5 | The theme toggle flips both ways and holds across a nav and a reload | Pass. Its name reads `Switch to dark theme` / `Switch to light theme` — the re-walk the Leaderboard slice was waiting on. |
+| 6 | Tab reaches every control and the focus ring is the accent one, never the browser default | Pass. Nav links, theme toggle, every `Why`, and the sort control all take a 2px accent ring at 2px offset with `:focus-visible` matching; the sort control's ring draws **outside** `.seg` and is not clipped, which is the other re-walk the Leaderboard slice was waiting on. |
+| 7 | At 375px the nav collapses, picking a link closes it, every grid is one column, the page does not scroll sideways | Pass, with one caveat below |
+| 8 | With the Worker stopped, each page shows the one error line and no spinner | Pass |
+| 9 | With the seed stopped at `pre-season`, each page shows its pre-season state | Pass. The leaderboard states the Lock and lists the nine entered Entrants; the Fixtures page shows Gameweek 1 with the banner and nine pending slots per Fixture. Walked at `pending` as well, which is the state that state's banner was written for. |
+
+**The 375px caveat.** Chrome will not size its own window below about 757 CSS pixels, so the
+breakpoint's branch was exercised at 757 and the 375 case was checked by squeezing the document
+to 375 within it: `scrollWidth` stayed at 375 and the only elements past the edge were the
+column headers inside their clipped 1px box. Nothing was seen at a real 375-pixel viewport.
+
+**The banner's two wordings both walked.** It carries the −6h / −2h sentence while the Lock is
+ahead and swaps it once the Lock has passed, because saying two runs *fire* when both are
+behind the deadline is false. Walked at `pending`, the second wording by moving Gameweek 15's
+deadline behind the clock on a database that was re-seeded straight after.
+
+**Two defects found and fixed during the walk.**
+
+- The phone row put the Predicted Score on its own line under the probability bar; the design
+  has it beside the Entrant's name. Source order is name, split, score, coherence, so the fix
+  is `order` on the split and what follows it rather than a second DOM order for one layout.
+- The pending banner's prose was invisible in the dark theme. `--color-accent-100` is the one
+  token whose light value is a background rather than an ink, and the dark theme had not
+  overridden it — so a near-white paragraph sat on a near-white panel. Fixed on the token, not
+  on the banner, because `.tag-accent` is filled from the same one.
+
+**One thing to know before the next walk.** After re-seeding, a page can render the *previous*
+Season's numbers: the endpoint's `Cache-Control` carries `s-maxage` and no `max-age`, and a
+browser will heuristically cache such a response. A reload with the cache bypassed shows the
+truth. Worth confirming against a real edge in the deploy slice — it is the header ADR-0028
+chose, and nothing here changes it.
+
+Two additions the design does not name, both stated here rather than left to be found:
+
+- **A Fixture with every slot empty says so in its own block** — `9 entrants pending · context
+  not yet built`, which is the design's per-Fixture pending line, shown per Fixture rather than
+  only when the whole Gameweek is pending. A Gameweek half-filled by the Fill run would
+  otherwise show an empty table under a banner that says predictions have not run.
+- **A deferred Fixture stays on the page if it was Locked** and is dropped if it was not. Its
+  Predictions were committed under this Gameweek's Lock and are what a reader came for; one
+  that left the schedule before any run reached it would render as nine Gaps. Both branches are
+  asserted, and the rule's *fallback* counts the same Fixtures the listing shows rather than
+  merely the undeferred ones — a Season whose last Gameweek is entirely deferred and unlocked
+  would otherwise select a Gameweek the page then renders none of, which is exactly the empty
+  state the fallback exists to prevent.
 
 ## The Entrant record
 

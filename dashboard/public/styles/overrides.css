@@ -53,6 +53,13 @@
   --color-accent-500: #a37ef0;
   --color-accent-600: #8a5ce8;
   --color-accent-700: #c6adf6;
+  /* The tint a panel is filled with, and the only token whose light value is a
+     background rather than an ink. Left at its light value it stays near-white
+     under near-white text, which is a panel whose prose cannot be read at all
+     -- and it is the fill the design gives the pending banner and the accent
+     tag both. Moved here rather than on the banner, so every consumer of the
+     token is fixed once. */
+  --color-accent-100: #2b2145;
   --tier-5: #a37ef0;
   --tier-3: #6d28d2;
   --tier-2: #9b9797;
@@ -314,11 +321,137 @@ html {
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
 
+/* ── fixtures ────────────────────────────────────────────────────────────── */
+
+.fxhero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  border-bottom: 2px solid var(--color-divider);
+  padding: 40px 0 22px;
+}
+.fxhero h1 { font-size: 38px; letter-spacing: -0.01em; margin: 0; }
+.fxlock { border-left: 2px solid var(--color-divider); padding-left: 20px; }
+.fxlock-time {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 20px;
+}
+.fxlock-note { font-size: 12px; }
+
+/* The one accent-tinted panel on the site, and the design's own: the state
+   before a Prediction run has to read as pending rather than as missing. */
+.fx-banner {
+  background: var(--color-accent-100);
+  padding: 20px 24px;
+  margin: 28px 0 0;
+  display: flex;
+  gap: 18px;
+  align-items: baseline;
+  font-size: 13px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+.fx-banner-title {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--color-accent-700);
+  white-space: nowrap;
+}
+.fx-empty { padding: 34px 0; }
+
+.fx { border-bottom: 2px solid var(--color-divider); padding: 20px 0 24px; }
+.fx-title {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+.fx-teams {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 26px;
+  letter-spacing: -0.02em;
+}
+.fx-v { color: var(--color-accent); }
+.fx-when { font-size: 12px; }
+.fx-title .tag { margin-left: auto; }
+
+.fxhead,
+.fxrow {
+  display: grid;
+  grid-template-columns: 190px 1fr 96px 96px;
+  gap: 16px;
+  align-items: center;
+}
+.fxtable .fxhead { padding: 0 0 8px; }
+.fxrow { padding: 9px 0; border-bottom: 2px solid var(--color-divider); }
+.fx-name {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 14px;
+}
+.fx-split { display: flex; align-items: center; gap: 8px; }
+.fxbar {
+  display: flex;
+  height: 14px;
+  flex: 1;
+  max-width: 420px;
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+}
+.fxbar > span { height: 100%; }
+.fxbar-h { background: var(--color-accent); }
+.fxbar-d { background: var(--tier-2); }
+.fxbar-a { background: var(--tier-0); }
+.fx-probs {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  white-space: nowrap;
+}
+.fx-score {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 17px;
+}
+.fx-coherence {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+/* An incoherent Prediction reads as a flag and not as a data point. */
+.danger { color: var(--danger); }
+.fx-why { font-size: 11px; margin-left: auto; }
+.fx-gap { font-size: 12px; }
+.fx-pending { display: flex; gap: 10px; align-items: center; font-size: 13px; }
+.fx-pending-mark {
+  width: 10px;
+  height: 10px;
+  background: var(--tier-2);
+}
+
+/* Spans the row it belongs to: it is a cell of that row rather than a block
+   between the table and its rows. */
+.rationale {
+  grid-column: 1 / -1;
+  background: var(--color-surface);
+  border-left: 2px solid var(--color-accent);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+.rationale-body { font-size: 13px; max-width: 80ch; text-wrap: pretty; }
+.rationale-meta { font-size: 11px; margin-top: 8px; }
+
 /* ── loading and error ───────────────────────────────────────────────────── */
 
 /* Still blocks over the grid the real rows use. The design system has no
    animation and no radius, and a loading state is not where either arrives. */
 .skeleton { background: var(--color-surface); height: 48px; }
+.fx-skeleton { display: grid; gap: 14px; }
+.skeleton-title { height: 30px; max-width: 380px; }
+.fx-skeleton .skeleton:last-child { height: 120px; }
 .lbrow-skeleton { padding: 14px 0; column-gap: 0; }
 .lbrow-skeleton .skeleton:nth-child(1) { width: 58px; }
 .lbrow-skeleton .skeleton:nth-child(3),
@@ -390,4 +523,49 @@ html {
   .bar { max-width: 56px; margin-left: auto; }
   .lbrow-skeleton .skeleton:nth-child(3),
   .lbrow-skeleton .skeleton:nth-child(4) { margin-left: 0; width: 56px; }
+
+  .fxhero { display: block; }
+  .fxhero h1 { font-size: 30px; }
+  .fxlock {
+    border-left: 0;
+    border-top: 2px solid var(--color-divider);
+    padding: 14px 0 0;
+    margin-top: 18px;
+  }
+  .fx-banner { display: block; }
+  .fx-banner-title { display: block; margin-bottom: 6px; white-space: normal; }
+
+  .fx-title { flex-wrap: wrap; gap: 8px 14px; }
+  .fx-teams { font-size: 20px; }
+  .fx-title .tag { margin-left: 0; }
+
+  /* Clipped and not `display: none`, for the same reason the leaderboard's
+     are: the design takes the column headers off a phone, and that is not the
+     same as taking them off the accessibility tree. */
+  .fxtable .fxhead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* Name and score on one line, the probability split below it, coherence and
+     the disclosure under that. */
+  .fxrow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 12px;
+    padding: 12px 0;
+  }
+  /* Source order is name, split, score, coherence; the design's phone order is
+     name and score together, then the split, then coherence. `order` is what
+     reorders them without moving the columns the roles above are read from. */
+  .fx-name { flex: 1; }
+  .fx-split { order: 1; flex-basis: 100%; }
+  .fxbar { max-width: none; }
+  .fx-coherence { order: 2; flex-basis: 100%; }
+  .rationale { order: 3; flex-basis: 100%; }
 }
