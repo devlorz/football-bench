@@ -461,10 +461,12 @@ remote_published=0
 
 # The home repository, when it has the object -- and the flag is set from what
 # the tag *resolves to* afterwards, not from the exit status of `git tag`.
-# `git tag -f deployed <nonexistent-sha>` returns 0 and leaves a tag that
-# resolves to nothing, so a success message hung off its exit status is a lie
-# waiting to happen. Verified: the message only prints when the tag now names
-# the commit.
+# `git tag -f <existing-tag> <nonexistent-sha>` returns 0, prints "Updated
+# tag", and leaves the tag resolving to nothing -- the old value is gone and
+# the exit status says it went well. Reproduced on git 2.50.1 in a scratch
+# repository, and once by accident on this one. So a success message hung off
+# `git tag`'s exit status is a lie waiting to happen; the flag comes from what
+# the tag resolves to afterwards.
 if git -C "$HOME_REPO" cat-file -e "$SHA^{commit}" 2>/dev/null; then
   git -C "$HOME_REPO" tag -f deployed "$SHA" >/dev/null 2>&1
   if [ "$(git -C "$HOME_REPO" rev-parse -q --verify 'deployed^{commit}' \
@@ -489,13 +491,27 @@ if [ -z "$REMOTE_URL" ]; then
 else
   git remote remove shared 2>/dev/null || true
   git remote add shared "$REMOTE_URL"
-  git fetch -q shared || printf 'the shared remote is unreachable\n'
 
+  # Whether the fetch worked has to be its own fact. Without it, a network or
+  # auth failure leaves no `shared/*` refs, the containment test below finds
+  # nothing, and "the remote does not have this commit" becomes
+  # indistinguishable from "we could not ask" -- which would reach `skip` and
+  # permit cleanup while every other machine still resolves the old tag.
+  if git fetch -q shared; then
+    fetched=1
+  else
+    fetched=0
+    printf 'could NOT reach %s -- treating the shared record as unrepaired\n' \
+      "$REMOTE_URL"
+  fi
+
+  if [ "$fetched" = "0" ]; then
+    remote_published=0
   # Only publish when the shared remote genuinely carries this commit. Pushing
   # the tag to one that does not would drag every unpushed commit along with
   # it to create a shared record that does not exist yet -- a decision for a
   # person, not a step in a recovery.
-  if git branch -r --contains "$SHA" 2>/dev/null | grep -q '^ *shared/'; then
+  elif git branch -r --contains "$SHA" 2>/dev/null | grep -q '^ *shared/'; then
     old="$(git ls-remote shared refs/tags/deployed | cut -f1)"
     git push --force-with-lease="refs/tags/deployed:${old}" \
       shared refs/tags/deployed && remote_published=1
