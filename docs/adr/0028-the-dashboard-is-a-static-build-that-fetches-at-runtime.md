@@ -1,5 +1,11 @@
 # The dashboard is a static build that fetches at runtime
 
+> Status: the deployment topology described here — Pages plus a Worker route claiming `/api/*`
+> on the Pages hostname — and the preview consequence that follows from it are superseded by
+> ADR-0029 (one Worker serving both the assets and the read API). The static-build decision
+> itself, and every consequence about the pages, the URL state and the cache lifetimes, stands.
+> The cache *headers* those lifetimes are carried in changed with ADR-0029.
+
 The dashboard is an Astro project built with `output: 'static'` and deployed to Cloudflare
 Pages, and each of its three pages fetches its own `/api/*` endpoint in the browser once
 loaded. Astro rather than React because the pages are documents — type, rules and hand-written

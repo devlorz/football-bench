@@ -230,7 +230,9 @@ describe("the Fixtures endpoint on the design's Season", () => {
 
     // Sixty seconds and no stale window: Predictions land at deadline −6h and
     // again at −2h, and an hour of stale would serve Gaps the Fill has closed.
-    expect(response.headers.get("cache-control")).toBe("public, s-maxage=60");
+    expect(response.headers.get("cloudflare-cdn-cache-control"))
+      .toBe("max-age=60");
+    expect(response.headers.get("cache-control")).toBe("no-cache");
   });
 
   test("answers the same body through the Worker's driver", async () => {

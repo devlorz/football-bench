@@ -2,10 +2,10 @@
 import { defineConfig } from "astro/config";
 
 export default defineConfig({
-  // Every page is built ahead of time and served from Pages (ADR-0028). The
-  // numbers arrive in the browser from `/api/*`, which a Worker route claims on
-  // the same hostname -- so no origin is a build input and nothing here needs
-  // to know where the API lives.
+  // Every page is built ahead of time (ADR-0028) and served as a static asset
+  // by the same Worker that answers `/api/*` (ADR-0029). The numbers arrive in
+  // the browser from a relative path on the one hostname -- so no origin is a
+  // build input and nothing here needs to know where the API lives.
   output: "static",
 
   // `dist/fixtures.html` rather than `dist/fixtures/index.html`. The nav links

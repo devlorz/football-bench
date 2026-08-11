@@ -1,9 +1,13 @@
 # The dashboard
 
-Astro, `output: 'static'`, deployed to Cloudflare Pages. The pages are built
-ahead of time and the numbers arrive in the browser from `/api/*`, which a
-Worker route claims on the same hostname — so no origin is a build input and
-nothing is cross-origin. See [ADR-0028](../docs/adr) and
+Astro, `output: 'static'`, deployed as static assets on the same Cloudflare
+Worker that answers `/api/*`. The pages are built ahead of time and the numbers
+arrive in the browser from a relative path on the one hostname — so no origin
+is a build input and nothing is cross-origin. See
+[ADR-0028](../docs/adr/0028-the-dashboard-is-a-static-build-that-fetches-at-runtime.md)
+for the static build,
+[ADR-0029](../docs/adr/0029-the-dashboard-deploys-as-one-worker-serving-both-the-assets-and-the-read-api.md)
+for the deployment that supersedes its topology, and
 [spec 0011](../docs/specs/0011-match-track-dashboard.md).
 
 `public/styles/modernist.css` is the design system, vendored byte-for-byte from

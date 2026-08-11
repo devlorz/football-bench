@@ -183,8 +183,21 @@ describe("the dashboard read API", () => {
   test("carries the cache lifetime the scoring run moves on", async () => {
     const response = await get("/api/leaderboard");
 
-    expect(response.headers.get("cache-control"))
-      .toBe("public, s-maxage=300, stale-while-revalidate=3600");
+    // The edge lifetime, and the stale window ADR-0028 asks for. `max-age` and
+    // not `s-maxage`: Cloudflare disables stale-serving entirely on a response
+    // carrying `s-maxage`, `must-revalidate` or `proxy-revalidate` (RFC 9111
+    // 4.2.4), so the `stale-while-revalidate` beside an `s-maxage` was a
+    // directive that never once took effect. This header is consumed by the
+    // edge and stripped before the response reaches anyone.
+    expect(response.headers.get("cloudflare-cdn-cache-control"))
+      .toBe("max-age=300, stale-while-revalidate=3600");
+
+    // And nothing for the browser to hold. A browser given `s-maxage` and no
+    // `max-age` caches heuristically, which is how a stopped Worker rendered a
+    // cached body and no error line three separate times. The edge is the
+    // cache; the browser asks every time and gets the edge's copy.
+    expect(response.headers.get("cache-control")).toBe("no-cache");
+
     expect(response.headers.get("content-type")).toMatch(/^application\/json/);
   });
 

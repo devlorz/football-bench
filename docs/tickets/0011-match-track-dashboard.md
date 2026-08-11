@@ -160,16 +160,16 @@ work. Doing it by hand once means the deploy is understood before anything autom
       `postgres.js`; if the driver proves awkward the Hyperdrive fallback is reported before it
       is taken, not taken quietly — `postgres.js` reached Supabase on the first deploy and the
       fallback was not needed
-- [ ] Caching is enabled in the Worker configuration and the endpoint's `Cache-Control` is
-      observed in a real response — the header alone does not cache a Worker's response —
-      **cannot be met on `*.workers.dev`; see below**
+- [x] Caching is enabled in the Worker configuration and the endpoint's `Cache-Control` is
+      observed in a real response — the header alone does not cache a Worker's response
 - [x] The Worker's login role is provisioned outside migrations, granted membership in
       `dashboard_read`, and its password held as a Worker secret; the schema names it nowhere
 - [x] A runbook entry covers provisioning and rotating that credential, and states that
       revoking access is one `revoke dashboard_read from`
-- [x] A hosted preview renders chrome and the error line — previews carry no live data, and
-      this is confirmed rather than assumed — **chrome and the error line both confirmed on the
-      hosted site; the "no live data" premise is false on this platform; see below**
+- [ ] A hosted preview renders chrome and the error line — previews carry no live data, and
+      this is confirmed rather than assumed — **not delivered.** Chrome and the error line are
+      both confirmed, but on the production hostname, which is not a preview. A preview that
+      carries no live data does not exist on this topology; see below
 
 ### The deploy
 
@@ -195,20 +195,35 @@ API to the script — which gets the whole property the route existed for: one h
 relative fetch, nothing cross-origin. Reported rather than taken quietly, as the ticket's own
 rule for the Hyperdrive fallback requires.
 
-**Nothing caches `/api/*`, and it cannot here.** Cloudflare's cache is functional for Workers
-on custom domains and for Pages functions on `*.pages.dev`, and not for a Worker on
-`*.workers.dev`. Measured rather than inferred: `/api/leaderboard` comes back with its
-`public, s-maxage=300, stale-while-revalidate=3600` and **no `cf-cache-status` header at all**,
-while `/styles/modernist.css` returns `cf-cache-status: MISS` and then `HIT`. So the asset
-router does cache and the Worker's own responses are not in that path. A custom domain meets
-this criterion without changing a line of configuration.
+**`/api/*` is edge-cached, and the first account of this on the ticket was wrong.** The claim
+that a Worker on `*.workers.dev` cannot cache came from the Cache API page, which describes
+the `caches.default` *runtime* API. It does not describe `[cache] enabled = true`, the Worker
+configuration that makes Cloudflare check the cache before invoking the Worker at all
+(Wrangler 4.69.0+; this repository pins 4.120.1). With it set, `/api/leaderboard` returns
+`cf-cache-status: MISS` and then `HIT`, and a repeated unique query key answers in ~0.04s
+against ~0.25s for a fresh one. Caught by review, and the criterion is met.
 
-**Version previews are not data-free.** `wrangler versions upload` gave a public preview URL
-that holds the *production* secret and answered `/api/leaderboard` with production data. The
-criterion assumed a Pages preview, where the environment is separate. It is not separate here,
-and that is worth knowing before a preview URL is shared. `preview_urls = false` is now set and
-the preview URL that had been open returns 404 — nothing in this deploy needs one, and an open
-public URL answering with production data is not a thing to leave lying about.
+**The `stale-while-revalidate` had never once taken effect.** Cloudflare disables stale-serving
+entirely on a response carrying `s-maxage`, `must-revalidate` or `proxy-revalidate` (RFC 9111
+4.2.4), and the header was `public, s-maxage=300, stale-while-revalidate=3600`. The lifetime is
+now on `cloudflare-cdn-cache-control` with `max-age`, where the stale window works, and
+`Cache-Control` is `no-cache` so the browser holds nothing — which also closes the trap below
+at its source. Recorded in ADR-0029.
+
+**No hosted preview exists, and this criterion is not met.** `wrangler versions upload` gave a
+public preview URL holding the *production* secret, answering `/api/leaderboard` with
+production data — the opposite of the data-free preview the criterion and ADR-0028 assume,
+which was true of Pages previews on their own origins and is not true of a Worker version.
+`preview_urls = false` is set and that URL 404s, but disabling a preview is not delivering one.
+Chrome and the error line were confirmed on the production hostname instead, which is worth
+having and is not the same claim. A custom domain plus a Pages project is what would restore a
+real preview environment.
+
+**The deployed topology now has an ADR.** ADR-0028 mandated Pages plus a Worker route and was
+left standing against a deploy that does neither.
+[ADR-0029](../adr/0029-the-dashboard-deploys-as-one-worker-serving-both-the-assets-and-the-read-api.md)
+supersedes its topology and its preview consequence; ADR-0028 carries the status note, and the
+`dashboard/README.md` opening and the `astro.config.mjs` comment no longer describe Pages.
 
 **The error line was confirmed on the hosted site, by revoking.** With permission, and on a
 site with no readers yet, `revoke dashboard_read from dashboard_worker` was run against

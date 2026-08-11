@@ -84,13 +84,44 @@ psql "postgresql://dashboard_worker.<ref>:$PW@<host>:5432/postgres" \
 
 ### Rotating it
 
-The same two commands, in this order, and no schema changes at all:
+No schema changes at all — but **the naive rotation takes the dashboard down**,
+and for longer than one request. The Worker opens a connection per request, so
+the moment the password changes *every* subsequent request fails, and it keeps
+failing until the new secret is live. That is however long you take between the
+two commands, plus the seconds `wrangler` needs. Have the second command
+written out before running the first.
 
-1. `alter role dashboard_worker with login password '<new>'` — every existing
-   Worker connection is unaffected until it reconnects, and the Worker opens a
-   connection per request, so the window is one request long.
-2. `wrangler secret put DATABASE_URL` with the new string, then
-   `npx wrangler deploy` is **not** needed — a secret takes effect on its own.
+The outage-free version uses two roles and no window at all. Prefer it:
+
+```sh
+# 1. a second login role, membership in the same nologin role
+PW="$(openssl rand -hex 24)"
+PW="$PW" psql "$OWNER_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+create role dashboard_worker_b login;
+\set pw `printf '%s' "$PW"`
+alter role dashboard_worker_b with login password :'pw';
+grant dashboard_read to dashboard_worker_b;
+SQL
+
+# 2. point the Worker at it -- old role still valid, so nothing fails
+printf 'postgresql://dashboard_worker_b.<ref>:%s@<host>:5432/postgres' "$PW" \
+  | npx wrangler secret put DATABASE_URL
+
+# 3. confirm the dashboard is up, then retire the old one
+psql "$OWNER_DATABASE_URL" -c "drop role dashboard_worker"
+```
+
+The next rotation swaps the names back. Nothing is ever without a valid
+credential, so nothing goes dark.
+
+`wrangler secret put` takes effect on its own — `npx wrangler deploy` is **not**
+needed after it.
+
+**Keep the password out of shell history.** `PW="$(openssl rand -hex 24)"`
+never prints it, and `\set pw` reads it from the environment rather than
+putting a literal in the SQL — but the shell still records the command line. Use
+a shell that does not persist history for the session, or `unset PW` and clear
+the history file, before treating the rotation as finished.
 
 Rotate on any suspicion, on any operator leaving, and whenever the password has
 been typed anywhere it could be logged.
@@ -110,18 +141,19 @@ revoke first and confirm the dashboard has gone dark before dropping anything.
 
 ## What this deploy does not do
 
-Both are consequences of `*.workers.dev` and both are fixed by putting the
-Worker on a custom domain, which changes no code and no configuration here.
+- **There is no hosted preview.** A Worker version preview holds the *same
+  secrets as production* and answers with production data on a public URL, so
+  it is not the data-free preview ADR-0028 assumed. `preview_urls = false` is
+  set. Anything to be looked at before a deploy is looked at locally against
+  the seeded Postgres. A custom domain plus a Pages project would restore a
+  real preview environment; nothing else will.
 
-- **Nothing caches `/api/*`.** Cloudflare's cache is functional for Workers on
-  custom domains and for Pages functions on `*.pages.dev`; it is not for a
-  Worker on `*.workers.dev`. The responses carry their `Cache-Control` and
-  nothing at the edge acts on it — verified by the absence of any
-  `cf-cache-status` header on `/api/*`, against `cf-cache-status: HIT` on the
-  static assets, which the asset router does cache.
-- **Version previews are not data-free.** They hold the production secret and
-  answer with production data on a public URL. Treat every preview URL as
-  production until the Worker is somewhere that separates them.
+`/api/*` **is** edge-cached — `[cache] enabled = true` in `wrangler.toml` makes
+Cloudflare check the cache before invoking the Worker, and responses carry
+`cf-cache-status: MISS` then `HIT`. The lifetime is in
+`cloudflare-cdn-cache-control`, not `Cache-Control`; see ADR-0029 for why the
+two are separate headers. To confirm it after a change, request the same unique
+query key twice and compare — a hit is roughly 0.04s against 0.25s cold.
 
 ## Observability
 

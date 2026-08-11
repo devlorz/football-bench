@@ -292,9 +292,10 @@ describe("the Entrant record endpoint on the design's Season", () => {
   test("carries the cache lifetime the scoring run moves on", async () => {
     const response = await get("/api/entrants");
 
-    expect(response.headers.get("cache-control")).toBe(
-      "public, s-maxage=300, stale-while-revalidate=3600"
+    expect(response.headers.get("cloudflare-cdn-cache-control")).toBe(
+      "max-age=300, stale-while-revalidate=3600"
     );
+    expect(response.headers.get("cache-control")).toBe("no-cache");
   });
 });
 

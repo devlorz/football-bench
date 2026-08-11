@@ -20,21 +20,41 @@ export type Query = (
 ) => Promise<Array<Record<string, unknown>>>;
 
 /**
- * How long each answer may be served for, chosen per endpoint because the three
- * do not change on the same clock (ADR-0028). The leaderboard and the Entrant
- * records both move when the daily scoring run writes, and share this one.
+ * The edge caches; the browser does not. Two headers rather than one, because
+ * the two want opposite things.
  *
- * Caching must also be enabled in the Worker's configuration: the header alone
- * does not cache a Worker's response.
+ * `cloudflare-cdn-cache-control` is the edge's lifetime, and it takes
+ * precedence over `cache-control` at Cloudflare before being stripped from
+ * whatever reaches a reader. It carries `max-age` and never `s-maxage`: a
+ * response carrying `s-maxage`, `must-revalidate` or `proxy-revalidate` has
+ * stale-serving disabled outright (RFC 9111 4.2.4), so the
+ * `stale-while-revalidate` that used to sit beside an `s-maxage` was a
+ * directive that never took effect once. Caching must also be enabled in the
+ * Worker's configuration -- the header alone does not cache a Worker's
+ * response.
+ *
+ * `cache-control: no-cache` is what a browser is left holding: nothing. A
+ * browser handed `s-maxage` and no `max-age` caches heuristically, and it did
+ * -- three separate walks rendered a cached body and no error line with the
+ * API dead behind it. `no-cache` means ask every time, and the ask is answered
+ * by the edge copy, so the lifetime above is still what protects the database.
  */
-const SCORED_CACHE = "public, s-maxage=300, stale-while-revalidate=3600";
+const BROWSER_CACHE = "no-cache";
+
+/**
+ * How long each answer may be served for at the edge, chosen per endpoint
+ * because the three do not change on the same clock (ADR-0028). The leaderboard
+ * and the Entrant records both move when the daily scoring run writes, and
+ * share this one.
+ */
+const SCORED_CACHE = "max-age=300, stale-while-revalidate=3600";
 
 /**
  * Sixty seconds and no stale window: Predictions land at the main run, six
  * hours before the deadline, and again at the Fill two hours before, so an hour
  * of stale would show Gaps the Fill has already closed.
  */
-const FIXTURES_CACHE = "public, s-maxage=60";
+const FIXTURES_CACHE = "max-age=60";
 
 export interface LeaderboardEntrant {
   id: string;
@@ -692,11 +712,12 @@ async function entrants(query: Query, season: string): Promise<Response> {
   return json(body, SCORED_CACHE);
 }
 
-function json(body: unknown, cacheControl: string): Response {
+function json(body: unknown, edgeCache: string): Response {
   return new Response(JSON.stringify(body), {
     headers: {
       "content-type": "application/json; charset=utf-8",
-      "cache-control": cacheControl
+      "cloudflare-cdn-cache-control": edgeCache,
+      "cache-control": BROWSER_CACHE
     }
   });
 }

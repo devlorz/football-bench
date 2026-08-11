@@ -25,6 +25,13 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 SEASON = "2026-27"
 
+# Declared so that `wrangler deploy` and `wrangler versions upload` fail with
+# the missing name rather than publishing a Worker whose every endpoint answers
+# 500. The first deploy did exactly that for the minutes between the deploy and
+# the `secret put`.
+[secrets]
+required = ["DATABASE_URL"]
+
 # One hostname, and not the Pages site plus a Worker route spec 0011 describes.
 # A Worker route needs a zone, and `*.pages.dev` is not one -- so `/api/*` on a
 # Pages hostname is only reachable with a custom domain, which this deploy does
@@ -47,6 +54,9 @@ SEASON = "2026-27"
 # after it all passed, so it is recorded rather than diagnosed -- and this is
 # what makes the next one diagnosable.
 [observability]
+enabled = true
+
+[cache]
 enabled = true
 
 [assets]
