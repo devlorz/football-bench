@@ -32,7 +32,33 @@ fi
 sha="$(git rev-parse HEAD)"
 echo "deploying $sha"
 
+# The lease is read *before* anything reaches production, and checked again
+# immediately before the deploy. Reading it only at publish time means two
+# concurrent deploys both change production and then discover the conflict
+# afterwards -- at which point the tag names one of them and the edge is running
+# the other, which is exactly the disagreement the tag exists to prevent.
+#
+# This narrows the race; it does not remove it. Git has no lock to take here, so
+# the window is between the recheck and the deploy returning. What it buys is
+# that the loser finds out and says so, instead of both finishing quietly.
+lease=""
+if [ "${PUSH_TAG:-0}" = "1" ]; then
+  lease="$(git ls-remote origin refs/tags/deployed | cut -f1)"
+  echo "remote tag before deploy: ${lease:-<none>}"
+fi
+
 npm --prefix dashboard run build
+
+if [ "${PUSH_TAG:-0}" = "1" ]; then
+  now="$(git ls-remote origin refs/tags/deployed | cut -f1)"
+  if [ "$now" != "$lease" ]; then
+    echo "refusing to deploy: the remote tag moved while this was building." >&2
+    echo "someone else is deploying. find out what the edge is running" >&2
+    echo "before either of you continues: npx wrangler deployments list" >&2
+    exit 1
+  fi
+fi
+
 npx wrangler deploy --message "$sha"
 
 # Only now, and to the SHA captured before the build rather than to whatever
@@ -41,16 +67,20 @@ git tag -f deployed "$sha"
 echo "tagged deployed -> $sha"
 
 if [ "${PUSH_TAG:-0}" = "1" ]; then
-  # The lease is the remote's current value, read explicitly. Without the
-  # `=<ref>:<oid>` form git looks for a remote-tracking ref that tags do not
-  # have and rejects the push as stale. An empty OID leases "does not exist
-  # yet", which is the first publish.
-  old="$(git ls-remote origin refs/tags/deployed | cut -f1)"
-  git push --force-with-lease="refs/tags/deployed:${old}" \
-    origin "refs/tags/deployed"
-  echo "published the tag (previous remote value: ${old:-<none>})"
-
-  # A rejection here means someone else deployed while this ran, and the tag
-  # now names their commit rather than ours. Two deploys raced; find out which
-  # one the edge is actually running before touching anything.
+  # Leased against the value captured before the deploy, not against whatever
+  # the remote says now -- re-reading here would paper over exactly the race
+  # this is meant to catch. Without the `=<ref>:<oid>` form git looks for a
+  # remote-tracking ref that tags do not have, and rejects the push as stale
+  # info every time. An empty OID leases "does not exist yet", the first
+  # publish.
+  if ! git push --force-with-lease="refs/tags/deployed:${lease}" \
+       origin "refs/tags/deployed"; then
+    echo >&2
+    echo "the tag was published by someone else while this deployed." >&2
+    echo "PRODUCTION HAS BEEN CHANGED BY BOTH. the edge is running whichever" >&2
+    echo "deploy finished last, and the remote tag names the other one." >&2
+    echo "resolve before anything else: npx wrangler deployments list" >&2
+    exit 1
+  fi
+  echo "published the tag (previous remote value: ${lease:-<none>})"
 fi

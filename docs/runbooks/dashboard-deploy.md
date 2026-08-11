@@ -392,18 +392,30 @@ Now clone, and prove the commit is actually there before anything depends on
 it:
 
 ```sh
+HOME_REPO=/Users/leelorz/src/football-bench
+
 # Prefer the remote once the branch is pushed -- then this works from any
-# machine. Until then the local repository is the only place the commits exist.
-SOURCE=/Users/leelorz/src/football-bench
-git ls-remote --exit-code origin "$SHA" >/dev/null 2>&1 && SOURCE=origin
+# machine. `git clone` needs a URL, not the remote's name, and whether the
+# remote actually holds $SHA cannot be asked of `ls-remote`: it matches ref
+# names, not commit ids. So clone it and ask the clone.
+REMOTE_URL="$(git -C "$HOME_REPO" remote get-url origin 2>/dev/null || true)"
 
 # a temporary directory per incident, so a second one does not trip over the
 # leftovers of the first
 WORK="$(mktemp -d)"
-git clone "$SOURCE" "$WORK" && cd "$WORK"
+
+if [ -n "$REMOTE_URL" ] && git clone -q "$REMOTE_URL" "$WORK" 2>/dev/null \
+   && git -C "$WORK" cat-file -e "$SHA^{commit}" 2>/dev/null; then
+  printf 'recovered from the remote\n'
+else
+  rm -rf "$WORK"; WORK="$(mktemp -d)"
+  git clone -q "$HOME_REPO" "$WORK"
+  printf 'the remote does not have it -- recovered from %s\n' "$HOME_REPO"
+fi
+cd "$WORK"
 
 git cat-file -e "$SHA^{commit}" || {
-  printf 'the deployed commit is not in this repository\n'; exit 1; }
+  printf 'the deployed commit is in neither source\n'; exit 1; }
 git log -1 --format='%h %s' "$SHA"
 
 git checkout "$SHA"
@@ -425,11 +437,15 @@ temporary directory about to be deleted, so the tag it just moved dies with it
 means the next incident finds an expired edge history and nothing else:
 
 ```sh
-cd "$SOURCE" 2>/dev/null || cd /Users/leelorz/src/football-bench
+cd "$HOME_REPO"
 git tag -f deployed "$SHA"
-# and publish it once the branch is pushed:
-#   old="$(git ls-remote origin refs/tags/deployed | cut -f1)"
-#   git push --force-with-lease="refs/tags/deployed:${old}" origin refs/tags/deployed
+
+# and publish it, through the same lease the deploy script uses -- a bare
+# --force-with-lease is rejected for tags, which have no remote-tracking ref
+old="$(git ls-remote origin refs/tags/deployed | cut -f1)"
+git push --force-with-lease="refs/tags/deployed:${old}" \
+  origin refs/tags/deployed || printf 'tag not published (no remote yet?)\n'
+
 rm -rf "$WORK"
 ```
 
