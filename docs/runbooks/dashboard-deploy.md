@@ -18,10 +18,23 @@ The assets are built separately and `wrangler` uploads whatever is in
 `dashboard/dist` — a stale `dist` deploys silently, so build first, every time.
 
 ```sh
-cd dashboard && npm run build && cd ..
-npx wrangler deploy --message "$(git rev-parse HEAD)"
-git tag -f deployed HEAD          # the durable record; see below
+# one chain, so a failure stops everything after it
+[ -z "$(git status --porcelain)" ] || { echo 'tree is dirty'; exit 1; } \
+  && SHA="$(git rev-parse HEAD)" \
+  && npm --prefix dashboard run build \
+  && npx wrangler deploy --message "$SHA" \
+  && git tag -f deployed "$SHA" \
+  && echo "deployed and tagged $SHA"
 ```
+
+**Every part of that is load-bearing.** The clean-tree check first, because
+`wrangler` uploads the working tree and not `HEAD` — a dirty tree deploys code
+that no commit describes, and then the tag names a commit that is not what is
+running. `&&` throughout, because these as separate lines in an interactive
+shell let a failed deploy be followed by a tag move, which is the one way to
+get a `deployed` tag pointing at code that was never deployed. And the tag
+moves *last*, after the deploy has returned successfully, to the SHA captured
+before the build rather than to whatever `HEAD` is by then.
 
 **Two records of which commit is running, because Cloudflare knows version IDs
 and nothing about git.**
@@ -33,10 +46,23 @@ own. Ten credential rotations after a deploy, the SHA has fallen off the end of
 the list and the recovery below has nothing to read.
 
 The `deployed` tag is the durable one. It lives in the repository the recovery
-clones from, it survives any number of rotations, and it is one command. Move
-it on every deploy or it lies, which is worse than not existing. `git push
-origin deployed` once the branch is pushed at all — until then it is local,
-like everything else here.
+clones from and it survives any number of rotations. Move it on every deploy or
+it lies, which is worse than not existing — which is why it is inside the chain
+above rather than a step to remember.
+
+**It is on one machine, and that is the real limit of all this.** Once the
+branch is pushed, push the tag after every successful deploy — and note that a
+plain `git push origin deployed` *fails* once the tag has moved, because it is
+not a fast-forward. It needs the force form:
+
+```sh
+git push --force-with-lease origin refs/tags/deployed
+```
+
+`--force-with-lease` rather than `--force` so that a tag someone else moved in
+the meantime is a rejection rather than a silent overwrite: two people
+deploying at once should collide loudly. Until the branch is pushed at all,
+none of this applies and the tag is local, like the commits.
 
 There is no preview step, deliberately. `preview_urls = false` is set, because a
 Worker version preview holds the same secrets as production and would answer a
@@ -327,8 +353,42 @@ clone of the deployed commit — but **clone from the local repository, not from
 commits and the checkout below would fail in the middle of an incident. The
 local repository is the only place the deployed commit exists.
 
-The SHA comes from the `deployed` tag first, because it is the record that does
-not expire:
+Two records, so use both and make them agree. **Ask Cloudflare first, from the
+original repository** — a fresh clone has no `node_modules`, so `npx wrangler`
+there would fetch some floating version instead of the pinned one, or fail
+outright. And not from the newest deployment: `wrangler secret put` creates its
+own, `Source: Secret Change`, whose message is `-`, as does anything else that
+changes configuration without shipping code, so a rotation leaves a
+message-less entry on top. Take the newest message that *is* a SHA, and know
+that this only reaches back ten deployments:
+
+```sh
+# still in /Users/leelorz/src/football-bench, before cloning anything
+EDGE_SHA="$(npx wrangler deployments list 2>/dev/null \
+  | grep -oE '^Message: *[0-9a-f]{40}$' | grep -oE '[0-9a-f]{40}' | tail -1)"
+TAG_SHA="$(git rev-parse deployed 2>/dev/null || true)"
+printf 'tag: %s\nedge: %s\n' "${TAG_SHA:-<none>}" "${EDGE_SHA:-<none>}"
+```
+
+Then resolve the two deliberately, rather than trusting whichever came to hand:
+
+```sh
+if [ -n "$TAG_SHA" ] && [ -n "$EDGE_SHA" ] && [ "$TAG_SHA" != "$EDGE_SHA" ]; then
+  printf 'tag and edge disagree -- stop and find out why\n'; exit 1
+fi
+SHA="${TAG_SHA:-$EDGE_SHA}"
+[ -n "$SHA" ] || { printf 'no deployed commit from either source\n'; exit 1; }
+printf 'deployed commit: %s\n' "$SHA"
+```
+
+A disagreement means the tag was not moved on the last deploy, or was moved
+without one. Neither is a thing to guess about mid-incident: the wrong answer
+redeploys code that is not running. If the tag is missing entirely the edge is
+the fallback, and if both are missing there is nothing to recover to and
+stopping is the correct outcome.
+
+Now clone, and prove the commit is actually there before anything depends on
+it:
 
 ```sh
 # a temporary directory per incident, so a second one does not trip over the
@@ -336,25 +396,6 @@ not expire:
 WORK="$(mktemp -d)"
 git clone /Users/leelorz/src/football-bench "$WORK" && cd "$WORK"
 
-SHA="$(git rev-parse deployed)"
-printf 'deployed commit: %s\n' "$SHA"
-```
-
-If the tag is missing or looks stale, cross-check it against Cloudflare — but
-**not against the newest deployment**. `wrangler secret put` creates its own
-deployment, `Source: Secret Change`, whose message is `-`, as does anything
-else that changes configuration without shipping code; a rotation leaves a
-message-less entry on top. Take the newest message that *is* a SHA, and know
-that this only reaches back ten deployments:
-
-```sh
-npx wrangler deployments list 2>/dev/null \
-  | grep -oE '^Message: *[0-9a-f]{40}$' | grep -oE '[0-9a-f]{40}' | tail -1
-```
-
-Then prove the commit is actually here before anything depends on it:
-
-```sh
 git cat-file -e "$SHA^{commit}" || {
   printf 'the deployed commit is not in this repository\n'; exit 1; }
 git log -1 --format='%h %s' "$SHA"
