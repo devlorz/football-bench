@@ -607,8 +607,16 @@ grant-and-policy pairing is checked.
 - **The ops dialog and the `stB` alternate layout.** Both present in the design file, both
   already switched off in it.
 - **Reference Lines on any ranking.** They belong to the probability layer.
-- **A deploy workflow.** First deploy is by hand; CI is its own slice with nothing yet to
-  protect.
+- **An automated deploy workflow.** First deploy is by hand; CI is its own slice with nothing
+  yet to protect. What is in scope, and was added after the first deploy, is
+  [scripts/deploy-dashboard.sh](../../scripts/deploy-dashboard.sh): an **operator-run** script
+  that is the by-hand deploy, written down once instead of retyped. It exists because the
+  by-hand deploy turned out to have invariants — refuse a dirty tree, rebuild `dist`, move the
+  `deployed` tag only after the deploy succeeds — that a sequence of commands in a runbook kept
+  losing, and because the emergency purge is the same deploy and must not be an approximation
+  of it. Nothing triggers it; a person runs it. The CI slice, when it comes, is what wraps this
+  in something that runs unattended, and it is the slice that owns the cross-machine deploy lock
+  the script deliberately does not have.
 - **Cache purging on write.** Sixty seconds on the endpoint that moves is shorter than the
   machinery a purge hook would cost.
 - **Hosted previews at all.** Originally out of scope only for their *data* — a Pages preview

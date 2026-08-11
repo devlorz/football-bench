@@ -38,9 +38,18 @@ echo "deploying $sha"
 # afterwards -- at which point the tag names one of them and the edge is running
 # the other, which is exactly the disagreement the tag exists to prevent.
 #
-# This narrows the race; it does not remove it. Git has no lock to take here, so
-# the window is between the recheck and the deploy returning. What it buys is
+# ponytail: this narrows the race, it does not prevent it. Two deploys can pass
+# the recheck together and both reach production; only the tag push then fails,
+# so the edge and the durable tag can name different commits. What it buys is
 # that the loser finds out and says so, instead of both finishing quietly.
+#
+# Preventing it needs a mutex both machines can see. The upgrade with no new
+# dependency is an atomic remote ref: `git push origin HEAD:refs/locks/deploy`
+# fails for the second pusher, because ref creation is atomic server-side --
+# take it before the build, delete it at the end, and mind the stale lock left
+# by a crash. Not built, because it needs a remote and this branch is not
+# pushed: there is one operator, one machine, and no second deployer to race.
+# Build it the day a second person or a CI job can deploy.
 lease=""
 if [ "${PUSH_TAG:-0}" = "1" ]; then
   lease="$(git ls-remote origin refs/tags/deployed | cut -f1)"

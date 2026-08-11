@@ -436,18 +436,46 @@ temporary directory about to be deleted, so the tag it just moved dies with it
 — and if this recovery ran because the tag was *missing*, leaving it missing
 means the next incident finds an expired edge history and nothing else:
 
+Repair it **from `$WORK`**, which has just been proven to contain the commit.
+`$HOME_REPO` may not: if this recovery reached the commit through the remote,
+tagging at home would fail on a missing object and leave the durable record
+exactly as broken as it was found.
+
 ```sh
-cd "$HOME_REPO"
+# still in $WORK, still on $SHA
 git tag -f deployed "$SHA"
 
-# and publish it, through the same lease the deploy script uses -- a bare
-# --force-with-lease is rejected for tags, which have no remote-tracking ref
-old="$(git ls-remote origin refs/tags/deployed | cut -f1)"
-git push --force-with-lease="refs/tags/deployed:${old}" \
-  origin refs/tags/deployed || printf 'tag not published (no remote yet?)\n'
+published=0
+if old="$(git ls-remote origin refs/tags/deployed 2>/dev/null | cut -f1)"; then
+  git push --force-with-lease="refs/tags/deployed:${old}" \
+    origin refs/tags/deployed && published=1
+fi
+
+# and the home repository too, when it has the object -- a local tag is the
+# whole record until the branch is pushed
+if git -C "$HOME_REPO" cat-file -e "$SHA^{commit}" 2>/dev/null; then
+  git -C "$HOME_REPO" tag -f deployed "$SHA"
+  printf 'home tag repaired\n'
+  published=1
+else
+  printf 'home repo does not have %s -- fetch it there before deleting %s\n' \
+    "$SHA" "$WORK"
+fi
+
+if [ "$published" = "0" ]; then
+  printf 'THE DURABLE RECORD IS STILL BROKEN. keep %s and fix this before\n' \
+    "$WORK"
+  printf 'the next incident, or the next recovery has nothing to read.\n'
+  exit 1
+fi
 
 rm -rf "$WORK"
 ```
+
+The `exit 1` is the point. A recovery that redeploys the right code and leaves
+the record unrepaired works once and then the edge history expires, ten
+deployments at a time, and the next person has neither. Deleting `$WORK` on the
+way past would throw away the only copy of the commit that was found.
 
 **Push the branch and this gets simpler**, and safer: the clone comes from
 `origin` on any machine, the tag is published rather than local, and the one
