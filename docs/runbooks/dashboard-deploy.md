@@ -54,17 +54,28 @@ history is not the exposure: history records the literal `"$PW"`, not what it
 expands to.)
 
 `$OWNER_URI` below is the owner connection with its password taken out, and
-`PGPASSWORD` is exported once for the session. A `.env` holding
-`DATABASE_URL=postgresql://user:pw@host/db` splits like this:
+`PGPASSWORD` is exported once for the session. Given a `.env` holding
+`DATABASE_URL=postgresql://user:pw@host/db`:
 
 ```sh
-eval "$(node -e '
+set -a; . ./.env; set +a          # DATABASE_URL into the environment
+
+OWNER_URI="$(node -e '
+  const u = new URL(process.env.DATABASE_URL); u.password = "";
+  process.stdout.write(u.toString());
+')"
+export PGPASSWORD="$(node -e '
   const u = new URL(process.env.DATABASE_URL);
-  const pw = u.password; u.password = "";
-  console.log(`export OWNER_URI=${JSON.stringify(u.toString())}`);
-  console.log(`export PGPASSWORD=${JSON.stringify(pw)}`);
+  process.stdout.write(decodeURIComponent(u.password));
 ')"
 ```
+
+Two things that look fussy and are not. **`decodeURIComponent`**, because
+`URL.password` hands back the *percent-encoded* form: a password of `p@ss+word`
+is stored in the URI as `p%40ss%2Bword`, and handing that to `PGPASSWORD`
+authenticates as the wrong string and fails with nothing to suggest why. And
+**no `eval`**, because `eval` of generated text executes whatever the password
+happens to contain; two plain command substitutions cannot.
 
 **Which role is live right now** is a question every command here needs
 answered, so answer it from the database rather than from memory. Everything
@@ -234,19 +245,33 @@ stranded by a half-finished rotation, because in an emergency the one you miss
 is the one that matters.
 
 **The revoke does not empty the cache, and the URLs a reader actually visits
-are cached.** For up to five minutes after the database has stopped answering,
-`/api/leaderboard` keeps returning its cached 200 — so the pages keep showing
-the numbers. If the point of revoking is that nobody sees the data, the revoke
-is half the job:
+are cached.** `/api/leaderboard` keeps returning its cached 200 after the
+database has stopped answering — five minutes of it fresh, and then up to
+another hour that `stale-while-revalidate=3600` allows while the revalidation
+is attempted. `stale-if-error=0` is meant to cut the stale serving short once
+those revalidations start failing, but do not stand on that in an emergency:
+plan for **an hour and five minutes** unless the cache is emptied. If the point
+of revoking is that nobody sees the data, the revoke is half the job.
+
+The purge is a deploy, and **a deploy ships whatever is in the working tree.**
+In an emergency, on whatever machine is to hand, that is how a half-finished
+change or a stale `dashboard/dist` reaches production while everyone is looking
+at the outage. Check before running it:
 
 ```sh
-# invalidate every cached response: the Worker version is part of the cache
-# key, so a new deployment starts from an empty cache
+git status --porcelain          # must be empty
+git rev-parse HEAD              # must be the commit that is deployed
+cd dashboard && npm run build && cd ..   # never deploy a dist you did not build
 npx wrangler deploy
 ```
 
-`cross_version_cache` is left off precisely so this works. There is no zone
-here and therefore no zone purge; redeploying is the purge.
+If the tree is not clean and cannot be made clean quickly, clone the deployed
+commit into a fresh directory and deploy from there. It is faster than
+untangling a mistake made under pressure.
+
+`cross_version_cache` is left off precisely so this works — the Worker version
+is part of the cache key, so a new deployment starts from an empty cache. There
+is no zone here and therefore no zone purge; redeploying is the purge.
 
 Then confirm, and confirm both things — the canonical URL a reader loads *and*
 a unique key the cache cannot answer. The first says readers are dark; the

@@ -192,10 +192,12 @@ describe("the dashboard read API", () => {
     expect(response.headers.get("cloudflare-cdn-cache-control"))
       .toBe("max-age=300, stale-while-revalidate=3600, stale-if-error=0");
 
-    // And nothing for the browser to hold. A browser given `s-maxage` and no
-    // `max-age` caches heuristically, which is how a stopped Worker rendered a
-    // cached body and no error line three separate times. The edge is the
-    // cache; the browser asks every time and gets the edge's copy.
+    // And nothing the browser may reuse without asking first. `no-cache`
+    // permits it to store the response and forbids serving one again without
+    // revalidating -- it is `no-store` that forbids keeping it. A browser given
+    // `s-maxage` and no `max-age` may reuse freely on a heuristic, which is how
+    // a stopped Worker rendered a cached body and no error line three separate
+    // times. The edge is the cache, and it answers the revalidation.
     expect(response.headers.get("cache-control")).toBe("no-cache");
 
     expect(response.headers.get("content-type")).toMatch(/^application\/json/);

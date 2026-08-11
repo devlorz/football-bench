@@ -170,8 +170,9 @@ work. Doing it by hand once means the deploy is understood before anything autom
       `dashboard_read`, and its password held as a Worker secret; the schema names it nowhere
 - [x] A runbook entry covers provisioning and rotating that credential, and states what
       revoking access takes — `revoke dashboard_read from` is the whole of it in the database,
-      but **not the whole of the operation**: the edge keeps serving cached 200s for up to five
-      minutes afterwards, so the revoke is followed by a `wrangler deploy` to empty the cache,
+      but **not the whole of the operation**: the edge keeps serving cached 200s afterwards —
+      five minutes fresh and up to an hour more of `stale-while-revalidate` — so the revoke is
+      followed by a `wrangler deploy` to empty the cache,
       and confirmed on the canonical URL as well as on a unique key. The criterion's "one
       statement" was written before this deploy had a cache; walked, and it is two
 - **Withdrawn** — ~~A hosted preview renders chrome and the error line; previews carry no live
