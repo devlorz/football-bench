@@ -447,6 +447,11 @@ home tag that worked does not mean the remote one did, and treating either as
 flaky network — be cleaned up after as though every other machine could now
 find the commit.
 
+And the remote is addressed **by URL**. Inside `$WORK`, `origin` is whatever
+that clone came from, which on the fallback path is `$HOME_REPO` — so a push to
+`origin` there lands in the local repository and reports the shared record
+repaired while GitHub is untouched.
+
 ```sh
 # still in $WORK, still on $SHA
 git tag -f deployed "$SHA"
@@ -454,26 +459,48 @@ git tag -f deployed "$SHA"
 home_repaired=0
 remote_published=0
 
-# the home repository, when it has the object
+# The home repository, when it has the object -- and the flag is set from what
+# the tag *resolves to* afterwards, not from the exit status of `git tag`.
+# `git tag -f deployed <nonexistent-sha>` returns 0 and leaves a tag that
+# resolves to nothing, so a success message hung off its exit status is a lie
+# waiting to happen. Verified: the message only prints when the tag now names
+# the commit.
 if git -C "$HOME_REPO" cat-file -e "$SHA^{commit}" 2>/dev/null; then
-  git -C "$HOME_REPO" tag -f deployed "$SHA" && home_repaired=1
-  printf 'home tag repaired\n'
+  git -C "$HOME_REPO" tag -f deployed "$SHA" >/dev/null 2>&1
+  if [ "$(git -C "$HOME_REPO" rev-parse -q --verify 'deployed^{commit}' \
+          2>/dev/null)" = "$SHA" ]; then
+    home_repaired=1
+    printf 'home tag repaired\n'
+  else
+    printf 'home tag did NOT end up naming %s\n' "$SHA"
+  fi
 else
   printf 'home repo does not have %s\n' "$SHA"
 fi
 
-# the remote, but only when it is genuinely the shared record -- that is, when
-# it already carries this commit. Pushing the tag to a remote that does not
-# would drag every unpushed commit along with it, which is a decision for a
-# person and not a step in a recovery.
-if git ls-remote origin "refs/tags/deployed" >/dev/null 2>&1 \
-   && git ls-remote origin | grep -q .; then
-  if git branch -r --contains "$SHA" 2>/dev/null | grep -q .; then
-    old="$(git ls-remote origin refs/tags/deployed | cut -f1)"
+# The shared remote, addressed by URL and never by the name `origin`. Inside
+# $WORK, `origin` is whatever this clone came from -- and on the fallback path
+# that is $HOME_REPO, so every check and the push itself would have been
+# answered by the local repository while GitHub stayed stale, and reported as
+# published.
+if [ -z "$REMOTE_URL" ]; then
+  printf 'no shared remote configured\n'
+  remote_published=skip
+else
+  git remote remove shared 2>/dev/null || true
+  git remote add shared "$REMOTE_URL"
+  git fetch -q shared || printf 'the shared remote is unreachable\n'
+
+  # Only publish when the shared remote genuinely carries this commit. Pushing
+  # the tag to one that does not would drag every unpushed commit along with
+  # it to create a shared record that does not exist yet -- a decision for a
+  # person, not a step in a recovery.
+  if git branch -r --contains "$SHA" 2>/dev/null | grep -q '^ *shared/'; then
+    old="$(git ls-remote shared refs/tags/deployed | cut -f1)"
     git push --force-with-lease="refs/tags/deployed:${old}" \
-      origin refs/tags/deployed && remote_published=1
+      shared refs/tags/deployed && remote_published=1
   else
-    printf 'origin does not carry %s -- not pushing the tag.\n' "$SHA"
+    printf '%s does not carry %s -- not pushing the tag.\n' "$REMOTE_URL" "$SHA"
     printf 'push the branch first; that is a decision, not a recovery step.\n'
     remote_published=skip
   fi
