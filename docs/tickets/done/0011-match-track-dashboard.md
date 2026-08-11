@@ -350,9 +350,11 @@ the two runs happen.
 
 ### The manual acceptance walk
 
-Fourteen tests in
+Seventeen tests in
 [test/dashboard-fixtures-api.test.ts](../../test/dashboard-fixtures-api.test.ts) cover the
-endpoint over a real Postgres under `dashboard_read`; `astro check`, `astro build` and
+endpoint over a real Postgres under `dashboard_read` — fourteen when this walk was recorded,
+plus three the review round added: the FPL seat on this endpoint, and both branches of the
+deferred keep/drop rule; `astro check`, `astro build` and
 `tsc --noEmit` are clean; `modernist.css` is still byte-for-byte the vendored file.
 
 Walked in a driven Chrome against the seeded Postgres (`the design's`), in both themes and in
