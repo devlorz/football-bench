@@ -170,10 +170,10 @@ work. Doing it by hand once means the deploy is understood before anything autom
       `dashboard_read`, and its password held as a Worker secret; the schema names it nowhere
 - [x] A runbook entry covers provisioning and rotating that credential, and states what
       revoking access takes — `revoke dashboard_read from` is the whole of it in the database,
-      but **not the whole of the operation**: the edge keeps serving cached 200s for the five
-      minutes they stay fresh — `stale-if-error=0` stops the hour of `stale-while-revalidate`
-      extending that, which was walked — so the revoke is followed by a `wrangler deploy` to
-      empty the cache,
+      but **not the whole of the operation**: the edge keeps serving cached 200s afterwards —
+      proven at sixty seconds for `/api/fixtures`, and to be assumed at an hour and five
+      minutes for the two carrying `stale-while-revalidate` — so the revoke is followed by a
+      `wrangler deploy` to empty the cache,
       and confirmed on the canonical URL as well as on a unique key. The criterion's "one
       statement" was written before this deploy had a cache; walked, and it is two
 - **Withdrawn** — ~~A hosted preview renders chrome and the error line; previews carry no live
@@ -237,8 +237,8 @@ real preview environment.
 `cf-cache-status: HIT`, ran `wrangler deploy`, and the same key came back `MISS`. The Worker
 version is part of the cache key and `cross_version_cache` is off, so this holds as long as
 that stays true. It matters because revoking the grant does not touch a cached 200: without
-the deploy, an emergency revoke leaves readers looking at the data for another five minutes
-while a unique-key check reports 500 and looks like success.
+the deploy, an emergency revoke leaves readers looking at the data for up to another hour and
+five minutes while a unique-key check reports 500 and looks like success.
 
 **`stale-if-error=0` was walked, and it does what it was set for.** Against `/api/fixtures`,
 whose `max-age` is 60 rather than 300 so the entry actually expires inside a minute, with
@@ -257,6 +257,15 @@ and Cloudflare's default is to answer it from the stale entry — indefinitely. 
 stale entry is not served and the error is the answer. The third row is what makes the fourth
 mean anything: it proves an entry existed and was in use right up to expiry, so the 500 is
 stale-serving declining rather than an empty cache.
+
+**This result does not carry over to `/api/leaderboard` or `/api/entrants`, and an earlier
+version of this record wrongly said it did.** `/api/fixtures` was chosen for its sixty-second
+`max-age`, and it also happens to be the one endpoint with *no*
+`stale-while-revalidate` — so its expiry forces a revalidation the reader waits on, which is
+why the error reached them. The other two carry an hour of it, and Cloudflare returns the
+stale response immediately on the first request after expiry and refreshes in the background.
+Whether `stale-if-error=0` shortens that is undocumented and unwalked. Sixty seconds is proven
+for Fixtures; for the other two, assume the hour and five minutes until someone walks it.
 
 Errors are `BYPASS` and not cached, which is the other half of not compounding an outage.
 

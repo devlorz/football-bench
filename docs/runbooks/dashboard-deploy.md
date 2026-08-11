@@ -72,8 +72,13 @@ export PGPASSWORD="$(env -u DATABASE_URL node --env-file=.env -e '
   process.stdout.write(decodeURIComponent(u.password));
 ')"
 
-# say out loud which database this session is now pointed at
-print -r -- "operating on: ${${OWNER_URI#*@}%%/*}"
+# say out loud which database this session is now pointed at. POSIX sh: the
+# userinfo carries the Supabase project ref, and two environments can share a
+# pooler host, so print the user as well as the host -- the host alone does not
+# tell them apart.
+USERINFO=${OWNER_URI#*//}; USERINFO=${USERINFO%%@*}
+HOSTPART=${OWNER_URI#*@}; HOSTPART=${HOSTPART%%/*}
+printf 'operating on: %s at %s\n' "$USERINFO" "$HOSTPART"
 ```
 
 Four things that look fussy and are not.
@@ -273,14 +278,20 @@ is the one that matters.
 **The revoke does not empty the cache, and the URLs a reader actually visits
 are cached.** `/api/leaderboard` keeps returning its cached 200 after the
 database has stopped answering — five minutes of it fresh, and then up to
-another hour that `stale-while-revalidate=3600` would allow while the
-revalidation is attempted. `stale-if-error=0` cuts that second part short — it
-was walked against the live edge, and a warmed entry went from `200 HIT` to
-`500` the moment expiry forced a revalidation the Worker could not answer. So
-the exposure is **the freshness window, five minutes**, and not the hour.
+another hour that `stale-while-revalidate=3600` allows. **Assume the full hour
+and five minutes on `/api/leaderboard` and `/api/entrants`.**
 
-Five minutes of a revoked dashboard still showing the data is five minutes too
-many if that is why you revoked. Empty the cache.
+`stale-if-error=0` was walked and does stop stale-on-error — but on
+`/api/fixtures`, which carries *no* `stale-while-revalidate`, so its expiry
+forces a revalidation the reader waits on and the error reaches them. The other
+two carry an hour of it, and Cloudflare returns the stale response
+*immediately* on the first request after expiry and refreshes in the
+background. Whether `stale-if-error=0` then cuts that window short is not
+documented and has not been walked here, so the Fixtures result does not carry
+over. Plan for the hour on those two; `/api/fixtures` is proven at sixty
+seconds.
+
+Any of it is too long if hiding the data is why you revoked. Empty the cache.
 
 The purge is a deploy, and **a deploy ships whatever is in the working tree.**
 In an emergency, on whatever machine is to hand, that is how a half-finished
@@ -291,8 +302,12 @@ at the outage. Check before running it:
 git status --porcelain          # must be empty
 git rev-parse HEAD              # must be the commit that is deployed
 cd dashboard && npm run build && cd ..   # never deploy a dist you did not build
-npx wrangler deploy
+npx wrangler deploy --message "$(git rev-parse HEAD)"
 ```
+
+The `--message` matters here as much as on an ordinary deploy, and is easier to
+forget: this is the deploy that leaves the running commit unrecorded exactly
+when the next person will need it most.
 
 If the tree is not clean and cannot be made clean quickly, deploy from a fresh
 clone of the deployed commit — but **clone from the local repository, not from
@@ -301,13 +316,27 @@ clone of the deployed commit — but **clone from the local repository, not from
 commits and the checkout below would fail in the middle of an incident. The
 local repository is the only place the deployed commit exists.
 
-The SHA comes from the deploy message, which is why every deploy carries one:
+The SHA comes from the deploy message, which is why every deploy carries one —
+but **not from the newest deployment**. `wrangler secret put` creates its own
+deployment, `Source: Secret Change`, whose message is `-`; so does anything
+else that changes configuration without shipping code. A rotation therefore
+leaves a message-less entry on top. Take the newest message that *is* a SHA:
 
 ```sh
-npx wrangler deployments list        # read the SHA out of the newest message
-SHA=<that sha>
+SHA="$(npx wrangler deployments list 2>/dev/null \
+  | grep -oE '^Message: *[0-9a-f]{40}$' \
+  | grep -oE '[0-9a-f]{40}' | tail -1)"
+printf 'deployed commit: %s\n' "$SHA"
 
-git clone /Users/leelorz/src/football-bench /tmp/fb-purge && cd /tmp/fb-purge
+# a temporary directory per incident, so a second one does not trip over the
+# leftovers of the first
+WORK="$(mktemp -d)"
+git clone /Users/leelorz/src/football-bench "$WORK" && cd "$WORK"
+
+# and prove the commit is actually here before relying on it
+git cat-file -e "$SHA^{commit}" || {
+  printf 'the deployed commit is not in this repository\n'; exit 1; }
+
 git checkout "$SHA"
 npm ci
 npm --prefix dashboard ci
