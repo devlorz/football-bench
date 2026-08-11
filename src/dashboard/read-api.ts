@@ -33,6 +33,15 @@ export type Query = (
  * Worker's configuration -- the header alone does not cache a Worker's
  * response.
  *
+ * `stale-if-error=0` is there because dropping `s-maxage` switched the default
+ * on. Cloudflare serves stale on a Worker error *indefinitely* unless the
+ * response carries `s-maxage`, `must-revalidate` or `proxy-revalidate` -- and
+ * this one deliberately carries none of the three. Without the zero, a Worker
+ * that has lost its database keeps answering 200 from a cache entry that never
+ * expires, which is the failure this dashboard is least able to notice: the
+ * numbers look right and are simply old. Nought seconds of it, so an error is
+ * an error.
+ *
  * `cache-control: no-cache` is what the browser gets. It does not forbid
  * storing the response -- that would be `no-store` -- it forbids reusing one
  * without asking first, which is the property wanted here. A browser handed
@@ -49,14 +58,14 @@ const BROWSER_CACHE = "no-cache";
  * and the Entrant records both move when the daily scoring run writes, and
  * share this one.
  */
-const SCORED_CACHE = "max-age=300, stale-while-revalidate=3600";
+const SCORED_CACHE = "max-age=300, stale-while-revalidate=3600, stale-if-error=0";
 
 /**
  * Sixty seconds and no stale window: Predictions land at the main run, six
  * hours before the deadline, and again at the Fill two hours before, so an hour
  * of stale would show Gaps the Fill has already closed.
  */
-const FIXTURES_CACHE = "max-age=60";
+const FIXTURES_CACHE = "max-age=60, stale-if-error=0";
 
 export interface LeaderboardEntrant {
   id: string;

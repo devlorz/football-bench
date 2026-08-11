@@ -48,10 +48,25 @@ below); nothing in the pages, the seam or the Worker changes either way.
   stale-serving outright on a response carrying `s-maxage`, `must-revalidate` or
   `proxy-revalidate` (RFC 9111 4.2.4), so the `stale-while-revalidate` ADR-0028 asked for
   never once took effect beside the `s-maxage` it was written next to. `cache-control` is
-  `no-cache`, so the browser holds nothing — a browser given `s-maxage` and no `max-age`
-  caches heuristically, and three separate acceptance walks were shown a cached body and no
-  error line with the API dead behind it. The lifetimes themselves are unchanged from
-  ADR-0028: five minutes for the two the scoring run moves, sixty seconds for Fixtures.
+  `no-cache`, which permits the browser to store a response but forbids reusing one without
+  revalidating first — a browser given `s-maxage` and no `max-age` may reuse freely on a
+  heuristic, and three separate acceptance walks were shown a cached body and no error line
+  with the API dead behind it. The edge answers the revalidation.
+
+  The lifetimes also carry `stale-if-error=0`, because dropping `s-maxage` switched on a
+  default that had been suppressed by it: absent `s-maxage`, `must-revalidate` or
+  `proxy-revalidate`, Cloudflare serves stale on Worker error *indefinitely*. A Worker that
+  has lost its database would keep answering 200 from an entry that never expires — numbers
+  that look right and are simply old, which is the failure this dashboard is least able to
+  notice.
+
+  The lifetimes themselves are unchanged from ADR-0028: five minutes for the two the scoring
+  run moves, sixty seconds for Fixtures.
+- **A deploy is the only cache purge there is.** With no zone there is no zone purge. The
+  Worker version is part of the cache key and `cross_version_cache` is left off, so
+  `wrangler deploy` starts from an empty cache — which is what an emergency revoke has to run
+  afterwards if the point is that nobody sees the data, since revoking the grant does not
+  touch a cached 200. The runbook says so at the revoke step.
 - **The built assets are a deploy input.** `wrangler deploy` uploads whatever `dashboard/dist`
   holds, so a stale `dist` deploys silently. Building first is part of the deploy and is
   written down as such in the runbook.

@@ -431,10 +431,15 @@ has stale-serving disabled outright (RFC 9111 §4.2.4), so a `stale-while-revali
 beside an `s-maxage` never takes effect. This corrects the header this section originally
 specified; the lifetimes themselves are unchanged. See ADR-0029.
 
-- `/api/leaderboard` and `/api/entrants` — `max-age=300, stale-while-revalidate=3600`; they
-  move when the daily scoring run writes.
-- `/api/fixtures` — `max-age=60`, no stale window; Predictions land at deadline −6h and again
-  at −2h, and an hour of stale would show Gaps the Fill has already closed.
+- `/api/leaderboard` and `/api/entrants` — `max-age=300, stale-while-revalidate=3600,
+  stale-if-error=0`; they move when the daily scoring run writes.
+- `/api/fixtures` — `max-age=60, stale-if-error=0`, no stale window; Predictions land at
+  deadline −6h and again at −2h, and an hour of stale would show Gaps the Fill has already
+  closed.
+
+`stale-if-error=0` on both because the absence of `s-maxage` switches on a Cloudflare default
+that would otherwise serve stale on Worker error indefinitely — a Worker that has lost its
+database answering 200 with numbers that are simply old.
 
 `Cache-Control` is `no-cache` on all three: the browser must revalidate before reusing a
 response, so a dead API can never hide behind a body the browser kept. The edge answers the

@@ -43,17 +43,42 @@ Two roles, and the split is the point:
   without a window; see below. **The role live today is the unsuffixed
   `dashboard_worker`**, from the first deploy, which predates the two-name
   scheme. The first rotation moves it to `dashboard_worker_a` and it never comes
-  back — every command here matches `dashboard_worker%`, so both shapes are
-  covered and nothing has to be done about it in the meantime.
+  back — every command here names all three, so both shapes are covered and
+  nothing has to be done about it in the meantime.
 
-**Which one is live right now** is a question every command here needs
+**Never put a password in a command line**, the owner's included. `psql
+"postgres://user:pw@host"` puts it in `argv`, where any process on the box can
+read it out of `ps` for as long as the command runs. Split every connection
+string into a URI without a password and a `PGPASSWORD` beside it. (Shell
+history is not the exposure: history records the literal `"$PW"`, not what it
+expands to.)
+
+`$OWNER_URI` below is the owner connection with its password taken out, and
+`PGPASSWORD` is exported once for the session. A `.env` holding
+`DATABASE_URL=postgresql://user:pw@host/db` splits like this:
+
+```sh
+eval "$(node -e '
+  const u = new URL(process.env.DATABASE_URL);
+  const pw = u.password; u.password = "";
+  console.log(`export OWNER_URI=${JSON.stringify(u.toString())}`);
+  console.log(`export PGPASSWORD=${JSON.stringify(pw)}`);
+')"
+```
+
+**Which role is live right now** is a question every command here needs
 answered, so answer it from the database rather than from memory. Everything
 below uses `$LIVE` for it:
 
 ```sh
-LIVE="$(psql "$OWNER_DATABASE_URL" -At -c "
+# `in`, not `like`: `_` is a single-character wildcard in LIKE, so
+# 'dashboard_worker%' also matches names outside this family.
+LIVE="$(psql "$OWNER_URI" -At -c "
   select rolname from pg_roles
-   where rolname like 'dashboard_worker%' and rolcanlogin")"
+   where rolname in ('dashboard_worker',
+                     'dashboard_worker_a',
+                     'dashboard_worker_b')
+     and rolcanlogin")"
 echo "$LIVE"   # expect exactly one name
 ```
 
@@ -75,7 +100,7 @@ start from; a rotation will move it to `_b` and back:
 ROLE=dashboard_worker_a
 PW="$(openssl rand -hex 24)"
 
-ROLE="$ROLE" PW="$PW" psql "$OWNER_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+ROLE="$ROLE" PW="$PW" psql "$OWNER_URI" -v ON_ERROR_STOP=1 <<'SQL'
 \set role `printf '%s' "$ROLE"`
 \set pw   `printf '%s' "$PW"`
 
@@ -121,15 +146,18 @@ is a real rollback and not a hope:
 
 ```sh
 # 0. which one is live, and therefore which one we are moving to
-LIVE="$(psql "$OWNER_DATABASE_URL" -At -c "
+LIVE="$(psql "$OWNER_URI" -At -c "
   select rolname from pg_roles
-   where rolname like 'dashboard_worker%' and rolcanlogin")"
+   where rolname in ('dashboard_worker',
+                     'dashboard_worker_a',
+                     'dashboard_worker_b')
+     and rolcanlogin")"
 NEXT=$([ "$LIVE" = dashboard_worker_a ] \
   && echo dashboard_worker_b || echo dashboard_worker_a)
 PW="$(openssl rand -hex 24)"
 
 # 1. the other login role, membership in the same nologin role
-ROLE="$NEXT" PW="$PW" psql "$OWNER_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+ROLE="$NEXT" PW="$PW" psql "$OWNER_URI" -v ON_ERROR_STOP=1 <<'SQL'
 \set role `printf '%s' "$ROLE"`
 \set pw   `printf '%s' "$PW"`
 create role :"role" login;
@@ -164,7 +192,7 @@ Only with both of those in hand:
 
 ```sh
 # 4. retire the old one
-psql "$OWNER_DATABASE_URL" -c "drop role \"$LIVE\""
+psql "$OWNER_URI" -c "drop role \"$LIVE\""
 ```
 
 Nothing is ever without a valid credential, so nothing goes dark. The next
@@ -184,12 +212,14 @@ which a rotation may have changed since anyone last read this page. Never paste
 a role name in from memory:
 
 ```sh
-psql "$OWNER_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+psql "$OWNER_URI" -v ON_ERROR_STOP=1 <<'SQL'
 do $$
 declare r record;
 begin
   for r in select rolname from pg_roles
-            where rolname like 'dashboard_worker%' loop
+            where rolname in ('dashboard_worker',
+                              'dashboard_worker_a',
+                              'dashboard_worker_b') loop
     execute format('revoke dashboard_read from %I', r.rolname);
   end loop;
 end;
@@ -197,23 +227,44 @@ $$;
 SQL
 ```
 
-Every `dashboard_worker*` role — the live one, the unsuffixed original, and
-anything left over from a half-finished rotation — because in an emergency the
-one you miss is the one that matters.
+All three names, named literally rather than matched — `_` is a
+single-character wildcard in `like`, so `'dashboard_worker%'` would also reach
+roles outside this family. The live one, the unsuffixed original and anything
+stranded by a half-finished rotation, because in an emergency the one you miss
+is the one that matters.
 
-Confirm it went dark before believing it, and confirm it past the cache — an
-ordinary page load can be served from the edge for up to five minutes after the
-Worker has stopped being able to read anything:
+**The revoke does not empty the cache, and the URLs a reader actually visits
+are cached.** For up to five minutes after the database has stopped answering,
+`/api/leaderboard` keeps returning its cached 200 — so the pages keep showing
+the numbers. If the point of revoking is that nobody sees the data, the revoke
+is half the job:
 
 ```sh
-curl -sS -o /dev/null -w '%{http_code}\n' \
-  "https://football-bench.leelorz6.workers.dev/api/leaderboard?rev=$(date +%s)"
-# require: 500
+# invalidate every cached response: the Worker version is part of the cache
+# key, so a new deployment starts from an empty cache
+npx wrangler deploy
 ```
 
+`cross_version_cache` is left off precisely so this works. There is no zone
+here and therefore no zone purge; redeploying is the purge.
+
+Then confirm, and confirm both things — the canonical URL a reader loads *and*
+a unique key the cache cannot answer. The first says readers are dark; the
+second says the Worker is:
+
+```sh
+BASE=https://football-bench.leelorz6.workers.dev/api/leaderboard
+curl -sS -o /dev/null -w 'canonical %{http_code}\n' "$BASE"
+curl -sS -o /dev/null -w 'unique    %{http_code}\n' "$BASE?rev=$(date +%s)"
+# require: 500 from both
+```
+
+A 200 on the canonical URL with a 500 on the unique one means the deploy has
+not landed yet, or did not run — readers are still being served the old data.
+
 The pages then show their one error line. To take the login away as well,
-`drop role` each of the same names — but revoke first and confirm as above
-before dropping anything.
+`drop role` each of the same names — but revoke, invalidate and confirm as
+above before dropping anything.
 
 ## What this deploy does not do
 

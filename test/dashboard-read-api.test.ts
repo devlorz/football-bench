@@ -190,7 +190,7 @@ describe("the dashboard read API", () => {
     // directive that never once took effect. This header is consumed by the
     // edge and stripped before the response reaches anyone.
     expect(response.headers.get("cloudflare-cdn-cache-control"))
-      .toBe("max-age=300, stale-while-revalidate=3600");
+      .toBe("max-age=300, stale-while-revalidate=3600, stale-if-error=0");
 
     // And nothing for the browser to hold. A browser given `s-maxage` and no
     // `max-age` caches heuristically, which is how a stopped Worker rendered a

@@ -293,7 +293,7 @@ describe("the Entrant record endpoint on the design's Season", () => {
     const response = await get("/api/entrants");
 
     expect(response.headers.get("cloudflare-cdn-cache-control")).toBe(
-      "max-age=300, stale-while-revalidate=3600"
+      "max-age=300, stale-while-revalidate=3600, stale-if-error=0"
     );
     expect(response.headers.get("cache-control")).toBe("no-cache");
   });

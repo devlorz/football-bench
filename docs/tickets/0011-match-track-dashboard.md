@@ -155,23 +155,31 @@ work. Doing it by hand once means the deploy is understood before anything autom
 
 **Blocked by:** "The Leaderboard page".
 
-- [x] The Pages site and the Worker are deployed, and a Worker route claims `/api/*` on the
-      Pages hostname so the browser fetches a relative path and nothing is cross-origin —
-      **met by a different shape, reported below:** one Worker serving both, no Pages site
+- [x] One Worker is deployed serving both the built pages and `/api/*`, so the browser fetches
+      a relative path on one hostname and nothing is cross-origin — amended from "the Pages
+      site and a Worker route" per ADR-0029 and the amended spec; see below
 - [x] The Worker runs with `nodejs_compat` and a compatibility date recent enough for
       `postgres.js`; if the driver proves awkward the Hyperdrive fallback is reported before it
       is taken, not taken quietly — `postgres.js` reached Supabase on the first deploy and the
       fallback was not needed
-- [x] Caching is enabled in the Worker configuration and the endpoint's `Cache-Control` is
-      observed in a real response — the header alone does not cache a Worker's response
+- [x] Caching is enabled in the Worker configuration (`[cache] enabled = true`) and the edge
+      lifetime is observed in a real response — `cf-cache-status: MISS` then `HIT`. The
+      lifetime rides `Cloudflare-CDN-Cache-Control` and the reader gets `Cache-Control:
+      no-cache`, amended from a single `Cache-Control` per ADR-0029
 - [x] The Worker's login role is provisioned outside migrations, granted membership in
       `dashboard_read`, and its password held as a Worker secret; the schema names it nowhere
-- [x] A runbook entry covers provisioning and rotating that credential, and states that
-      revoking access is one `revoke dashboard_read from`
-- [ ] A hosted preview renders chrome and the error line — previews carry no live data, and
-      this is confirmed rather than assumed — **not delivered.** Chrome and the error line are
-      both confirmed, but on the production hostname, which is not a preview. A preview that
-      carries no live data does not exist on this topology; see below
+- [x] A runbook entry covers provisioning and rotating that credential, and states what
+      revoking access takes — `revoke dashboard_read from` is the whole of it in the database,
+      but **not the whole of the operation**: the edge keeps serving cached 200s for up to five
+      minutes afterwards, so the revoke is followed by a `wrangler deploy` to empty the cache,
+      and confirmed on the canonical URL as well as on a unique key. The criterion's "one
+      statement" was written before this deploy had a cache; walked, and it is two
+- **Withdrawn** — ~~A hosted preview renders chrome and the error line; previews carry no live
+      data, and this is confirmed rather than assumed.~~ Withdrawn, not deferred. Nothing in this
+      topology can satisfy it: a Worker version preview holds the production secret, so a
+      data-free hosted preview does not exist to be confirmed. Withdrawn from spec 0011 under
+      ADR-0029, and `preview_urls = false`. Chrome and the error line were confirmed on the
+      production hostname instead, which is a different and lesser claim; see below
 
 ### The deploy
 
@@ -209,8 +217,10 @@ against ~0.25s for a fresh one. Caught by review, and the criterion is met.
 entirely on a response carrying `s-maxage`, `must-revalidate` or `proxy-revalidate` (RFC 9111
 4.2.4), and the header was `public, s-maxage=300, stale-while-revalidate=3600`. The lifetime is
 now on `cloudflare-cdn-cache-control` with `max-age`, where the stale window works, and
-`Cache-Control` is `no-cache` so the browser holds nothing — which also closes the trap below
-at its source. Recorded in ADR-0029.
+`Cache-Control` is `no-cache`, which lets the browser store a response but never reuse one
+without revalidating — which also closes the trap below at its source. The lifetimes carry
+`stale-if-error=0` too: without `s-maxage` to suppress it, Cloudflare's default is to serve
+stale on a Worker error indefinitely. Recorded in ADR-0029.
 
 **No hosted preview exists, and this criterion is not met.** `wrangler versions upload` gave a
 public preview URL holding the *production* secret, answering `/api/leaderboard` with
@@ -220,6 +230,18 @@ which was true of Pages previews on their own origins and is not true of a Worke
 Chrome and the error line were confirmed on the production hostname instead, which is worth
 having and is not the same claim. A custom domain plus a Pages project is what would restore a
 real preview environment.
+
+**A deploy is the only purge, and it was walked.** Warmed a key to
+`cf-cache-status: HIT`, ran `wrangler deploy`, and the same key came back `MISS`. The Worker
+version is part of the cache key and `cross_version_cache` is off, so this holds as long as
+that stays true. It matters because revoking the grant does not touch a cached 200: without
+the deploy, an emergency revoke leaves readers looking at the data for another five minutes
+while a unique-key check reports 500 and looks like success.
+
+**`stale-if-error=0` is set and reasoned, and has not been walked.** Proving it needs the
+Worker to fail while a cache entry is live, which means another revoke against production.
+The reasoning is in ADR-0029 and the header is asserted by the tests; the behaviour under a
+real error is not yet demonstrated.
 
 **The deployed topology now has an ADR.** ADR-0028 mandated Pages plus a Worker route and was
 left standing against a deploy that does neither.
