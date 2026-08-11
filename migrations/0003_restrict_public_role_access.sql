@@ -5,15 +5,25 @@
 -- Supabase's default privileges grant anon and authenticated full access to
 -- every new table in public, and PostgREST exposes that schema. Left alone,
 -- anyone holding the anon key -- which is designed to ship inside frontend
--- code -- could insert fabricated Predictions or truncate the attempt ledger.
+-- code -- could insert fabricated Predictions against a Locked Fixture, or
+-- empty the attempt ledger. PostgREST issues CRUD and declared RPC rather than
+-- arbitrary SQL, so TRUNCATE is not on that surface -- and it does not need to
+-- be, because attempts and scores carry no immutability trigger and ordinary
+-- DELETE erases them a row at a time.
 --
--- Row Level Security alone does not close this. TRUNCATE is governed by
--- privilege and not by policy, so a role holding it bypasses the immutability
--- triggers on predictions and manager_states wholesale. Revoking the grant is
+-- Row Level Security alone does not close this. These tables carried no RLS at
+-- all until the block below, so policy had nothing to say about any of it. And
+-- privilege-level operations answer to the grant rather than to a policy --
+-- TRUNCATE among them, which bypasses the immutability triggers on predictions
+-- and manager_states wholesale, for any holder of the role that reaches
+-- Postgres over plain SQL rather than through PostgREST. Revoking the grant is
 -- the load-bearing fix; RLS is defence in depth if a grant is ever restored,
 -- for instance through the Supabase dashboard.
 --
 -- A later migration that adds a table should enable RLS on it in the same file.
+-- If the dashboard reads that table, the same file also needs its grant and its
+-- select policy for dashboard_read (ADR-0027): under RLS a grant without a
+-- policy reads zero rows and reports no error.
 
 do $$
 declare

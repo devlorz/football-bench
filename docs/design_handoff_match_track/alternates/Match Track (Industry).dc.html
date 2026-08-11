@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="stylesheet" href="_ds/industry-a3064679-4560-4ef7-a744-b603a5030fe9/styles.css">
+<script src="_ds/industry-a3064679-4560-4ef7-a744-b603a5030fe9/_ds_bundle.js"></script>
+<style>
+  body { margin:0; background: var(--color-bg); }
+  a { color: var(--color-accent); }
+  a:hover { color: var(--color-accent-700); }
+  .lb-row:hover { background: color-mix(in srgb, var(--color-accent) 9%, transparent); }
+  .cell { padding-left: 20px; }
+  .soft {
+    position: relative; background: transparent; border: 1px solid var(--color-divider); border-radius: 0;
+    background-image:
+      linear-gradient(var(--color-accent),var(--color-accent)),linear-gradient(var(--color-accent),var(--color-accent)),
+      linear-gradient(var(--color-accent),var(--color-accent)),linear-gradient(var(--color-accent),var(--color-accent)),
+      linear-gradient(var(--color-accent),var(--color-accent)),linear-gradient(var(--color-accent),var(--color-accent)),
+      linear-gradient(var(--color-accent),var(--color-accent)),linear-gradient(var(--color-accent),var(--color-accent));
+    background-repeat: no-repeat;
+    background-size: 9px 1px,1px 9px,9px 1px,1px 9px,9px 1px,1px 9px,9px 1px,1px 9px;
+    background-position:
+      left 4px top 8px, left 8px top 4px,
+      right 4px top 8px, right 8px top 4px,
+      left 4px bottom 8px, left 8px bottom 4px,
+      right 4px bottom 8px, right 8px bottom 4px;
+    background-origin: border-box; background-clip: border-box;
+  }
+</style>
+</helmet>
+<div style="min-height:100vh;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);font-size:15px">
+
+  <div class="nav" style="position:sticky;top:0;z-index:20;background:var(--color-bg);padding:14px 28px;gap:28px;align-items:baseline">
+    <div class="nav-brand" style="margin-right:0;display:flex;align-items:baseline;gap:10px">
+      <span style="font-size:18px;letter-spacing:-0.02em">FOOTBALL BENCH</span>
+      <span style="font-family:var(--font-body);font-weight:400;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-accent)">Match track</span>
+    </div>
+    <div style="display:flex;gap:20px;margin-right:auto">
+      <a href="#" onClick="{{ goLeaderboard }}" aria-current="{{ navLeaderboard }}" style="font-size:13px;letter-spacing:0.06em;text-transform:uppercase;font-weight:600">Leaderboard</a>
+      <a href="#" onClick="{{ goFixtures }}" aria-current="{{ navFixtures }}" style="font-size:13px;letter-spacing:0.06em;text-transform:uppercase;font-weight:600">Fixtures</a>
+      <a href="#" onClick="{{ goStats }}" aria-current="{{ navStats }}" style="font-size:13px;letter-spacing:0.06em;text-transform:uppercase;font-weight:600">Model stats</a>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px">
+      <div class="seg">
+        <label class="seg-opt"><input type="radio" name="season" checked="{{ isPre }}" onChange="{{ setPre }}">Pre-season</label>
+        <label class="seg-opt"><input type="radio" name="season" checked="{{ isLive }}" onChange="{{ setLive }}">GW 14</label>
+      </div>
+      <button class="btn btn-secondary" onClick="{{ openOps }}" style="font-size:12px">Ops</button>
+    </div>
+  </div>
+
+  <!-- ══ LEADERBOARD ══ -->
+  <sc-if value="{{ onLeaderboard }}" hint-placeholder-val="{{ true }}">
+  <div style="padding:0 28px 80px">
+
+    <div style="display:grid;grid-template-columns:1fr 320px;gap:48px;border-bottom:1px solid var(--color-divider);padding:40px 0 28px">
+      <div>
+        <h1 style="font-size:44px;letter-spacing:-0.01em;margin:0 0 12px;max-width:16ch">One set of fixtures, one lock</h1>
+        <p style="max-width:56ch;margin:0;color:color-mix(in srgb, var(--color-text) 70%, transparent);font-size:15px;text-wrap:pretty">Every entrant sees the same context for every Premier League fixture and commits a scoreline plus a probability distribution before the gameweek deadline. Nothing is written after the lock.</p>
+      </div>
+      <div class="soft" style="padding:22px 24px;display:flex;flex-direction:column;gap:14px">
+        <div>
+          <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent)">Season</div>
+          <div style="font-family:var(--font-heading);font-weight:600;font-size:24px">2026/27</div>
+        </div>
+        <div>
+          <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent)">Scored fixtures</div>
+          <div style="font-family:var(--font-heading);font-weight:600;font-size:24px">{{ scoredN }}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent)">Through</div>
+          <div style="font-family:var(--font-heading);font-weight:600;font-size:24px">{{ throughLabel }}</div>
+        </div>
+      </div>
+    </div>
+
+    <sc-if value="{{ isPre }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:80px 0;border-bottom:1px solid var(--color-divider);display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start">
+        <div>
+          <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent);margin-bottom:10px">No result yet</div>
+          <h2 style="font-size:34px;margin:0 0 12px;max-width:18ch">The table fills after the first gameweek is settled</h2>
+          <p style="margin:0;max-width:48ch;color:color-mix(in srgb, var(--color-text) 70%, transparent)">Predictions for Gameweek 1 lock at the FPL deadline on Friday 14 August, 18:30 BST. Scoring runs the morning after the last match of the round.</p>
+        </div>
+        <div class="soft" style="padding:24px 26px">
+          <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:14px">Entered for 2026/27</div>
+          <sc-for list="{{ entrants }}" as="e" hint-placeholder-count="9">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--color-divider)">
+              <span style="font-family:var(--font-heading);font-weight:600;font-size:15px">{{ e.name }}</span>
+              <span style="font-size:11px;font-family:var(--font-body);color:color-mix(in srgb, var(--color-text) 55%, transparent)">{{ e.id }}</span>
+            </div>
+          </sc-for>
+          <div style="margin-top:14px;font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">One prompt version, one context arm. Three reference lines run alongside and are never ranked.</div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isLive }}" hint-placeholder-val="{{ true }}">
+    <div>
+      <div style="display:flex;align-items:baseline;gap:16px;padding:22px 0 14px">
+        <h3 style="margin:0;font-size:22px">Ranking</h3>
+        <span style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Sort by</span>
+        <div class="seg">
+          <label class="seg-opt"><input type="radio" name="sortby" checked="{{ sortMatch }}" onChange="{{ setSortMatch }}">Match points</label>
+          <label class="seg-opt"><input type="radio" name="sortby" checked="{{ sortBet }}" onChange="{{ setSortBet }}">Bet points</label>
+        </div>
+        <span style="margin-left:auto;font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">n = {{ scoredN }} fixtures · ranks, does not prove</span>
+      </div>
+
+      <!-- Variant A: ruled table -->
+      <sc-if value="{{ lbA }}" hint-placeholder-val="{{ true }}">
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="width:56px">#</th>
+            <th>Entrant</th>
+            <th>Base model</th>
+            <th style="width:110px">Tier</th>
+            <th style="width:150px;text-align:right">Match points</th>
+            <th style="width:150px;text-align:right">Bet points</th>
+          </tr>
+        </thead>
+        <tbody>
+          <sc-for list="{{ ranked }}" as="r" hint-placeholder-count="9">
+            <tr class="lb-row">
+              <td style="font-family:var(--font-heading);font-weight:600;font-size:18px;color:var(--color-accent)">{{ r.rank }}</td>
+              <td style="font-family:var(--font-heading);font-weight:600;font-size:16px">{{ r.name }}</td>
+              <td style="font-family:var(--font-body);font-size:12px;color:color-mix(in srgb, var(--color-text) 60%, transparent)">{{ r.id }}</td>
+              <td><span class="tag tag-neutral">{{ r.tier }}</span></td>
+              <td style="text-align:right">
+                <div style="display:flex;align-items:center;gap:10px;justify-content:flex-end">
+                  <div style="width:120px;height:8px;background:color-mix(in srgb, var(--color-text) 10%, transparent)">
+                    <div style="height:100%;background:var(--color-accent);width:{{ r.mpPct }}%"></div>
+                  </div>
+                  <span style="font-family:var(--font-heading);font-weight:600;font-size:19px;min-width:44px;display:inline-block">{{ r.mp }}</span>
+                </div>
+              </td>
+              <td style="text-align:right">
+                <div style="display:flex;align-items:center;gap:10px;justify-content:flex-end">
+                  <div style="width:120px;height:8px;background:color-mix(in srgb, var(--color-text) 10%, transparent)">
+                    <div style="height:100%;background:var(--color-neutral-700);width:{{ r.bpPct }}%"></div>
+                  </div>
+                  <span style="font-family:var(--font-heading);font-weight:600;font-size:19px;min-width:44px;display:inline-block">{{ r.bp }}</span>
+                </div>
+              </td>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+      </sc-if>
+
+      <!-- Variant B: editorial stack -->
+      <sc-if value="{{ lbB }}" hint-placeholder-val="{{ false }}">
+      <div style="border-top:1px solid var(--color-divider)">
+        <div style="display:grid;grid-template-columns:78px 1fr 200px 200px;gap:0;padding:10px 0;border-bottom:1px solid var(--color-divider);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent)">
+          <div>Rank</div><div>Entrant</div><div class="cell" style="padding-left:16px">Match points</div><div class="cell" style="padding-left:16px">Bet points</div>
+        </div>
+        <sc-for list="{{ ranked }}" as="r" hint-placeholder-count="9">
+          <div class="lb-row" style="display:grid;grid-template-columns:78px 1fr 200px 200px;align-items:center;border-bottom:1px solid var(--color-divider);padding:14px 0">
+            <div style="font-family:var(--font-heading);font-weight:600;font-size:46px;line-height:1;color:{{ r.rankColor }}">{{ r.rank }}</div>
+            <div>
+              <div style="font-family:var(--font-heading);font-weight:600;font-size:22px;letter-spacing:-0.02em">{{ r.name }}</div>
+              <div style="font-family:var(--font-body);font-size:11px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">{{ r.id }} · {{ r.tier }}</div>
+            </div>
+            <div class="cell" style="padding-left:16px">
+              <div style="font-family:var(--font-heading);font-weight:600;font-size:30px;line-height:1">{{ r.mp }}</div>
+              <div style="height:6px;background:color-mix(in srgb, var(--color-text) 10%, transparent);margin-top:7px;max-width:150px">
+                <div style="height:100%;background:var(--color-accent);width:{{ r.mpPct }}%"></div>
+              </div>
+            </div>
+            <div class="cell" style="padding-left:16px">
+              <div style="font-family:var(--font-heading);font-weight:600;font-size:30px;line-height:1">{{ r.bp }}</div>
+              <div style="height:6px;background:color-mix(in srgb, var(--color-text) 10%, transparent);margin-top:7px;max-width:150px">
+                <div style="height:100%;background:var(--color-neutral-700);width:{{ r.bpPct }}%"></div>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      </sc-if>
+
+      <div style="margin-top:28px;border-top:1px solid var(--color-divider);padding-top:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:32px;font-size:12px;color:color-mix(in srgb, var(--color-text) 65%, transparent)">
+        <p style="margin:0"><strong style="color:var(--color-text)">Match points.</strong> 5 for an exact scoreline, 3 for the right goal difference, 2 for the right outcome, 0 otherwise. Tiers are exclusive.</p>
+        <p style="margin:0"><strong style="color:var(--color-text)">Bet points.</strong> One point per market that settles in the entrant's favour, read off the committed scoreline: result, over/under 2.5, 3.5 and 4.5, both teams to score.</p>
+        <p style="margin:0"><strong style="color:var(--color-text)">What this is not.</strong> Both columns rank; neither separates base models on its own. The evidential layer is the ranked probability score, published with intervals from GW10.</p>
+      </div>
+    </div>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <!-- ══ FIXTURES ══ -->
+  <sc-if value="{{ onFixtures }}" hint-placeholder-val="{{ false }}">
+  <div style="padding:0 28px 80px">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:32px;border-bottom:1px solid var(--color-divider);padding:40px 0 22px">
+      <div>
+        <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent);margin-bottom:8px">{{ gwLabel }}</div>
+        <h1 style="font-size:38px;letter-spacing:-0.01em;margin:0">Fixtures and predictions</h1>
+      </div>
+      <div style="text-align:left;border-left:1px solid var(--color-divider);padding-left:20px">
+        <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent)">Lock</div>
+        <div style="font-family:var(--font-heading);font-weight:600;font-size:20px">{{ lockLabel }}</div>
+        <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 60%, transparent)">{{ lockNote }}</div>
+      </div>
+    </div>
+
+    <sc-if value="{{ isPre }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:34px 0 0">
+        <div style="background:var(--color-accent-100);border-radius:var(--radius-lg);padding:20px 24px;margin-bottom:28px;display:flex;gap:18px;align-items:baseline">
+          <span style="font-family:var(--font-heading);font-weight:600;font-size:15px;color:var(--color-accent-700)">No predictions stored</span>
+          <span style="font-size:13px;color:color-mix(in srgb, var(--color-text) 70%, transparent)">The main run fires six hours before the deadline; a fill run two hours before attempts anything still missing. Contexts are built and hashed at the main run.</span>
+        </div>
+      </div>
+    </sc-if>
+
+    <div style="display:flex;flex-direction:column;gap:0;margin-top:22px">
+      <sc-for list="{{ fixtures }}" as="f" hint-placeholder-count="4">
+        <div style="border-bottom:1px solid var(--color-divider);padding:20px 0 24px">
+          <div style="display:flex;align-items:baseline;gap:18px;margin-bottom:14px">
+            <div style="font-family:var(--font-heading);font-weight:600;font-size:26px;letter-spacing:-0.02em">{{ f.home }} <span style="color:var(--color-accent)">v</span> {{ f.away }}</div>
+            <div style="font-size:12px;font-family:var(--font-body);color:color-mix(in srgb, var(--color-text) 55%, transparent)">{{ f.kickoff }} · fpl_id {{ f.fplId }}</div>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+              <span class="tag tag-neutral">{{ f.statusLabel }}</span>
+            </div>
+          </div>
+
+          <sc-if value="{{ f.hasPreds }}" hint-placeholder-val="{{ true }}">
+
+            <!-- Variant A: entrant rows -->
+            <sc-if value="{{ fxA }}" hint-placeholder-val="{{ true }}">
+            <div>
+              <div style="display:grid;grid-template-columns:190px 1fr 96px 96px;gap:16px;padding:0 0 8px;border-bottom:1px solid var(--color-divider);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 55%, transparent)">
+                <div>Entrant</div><div>Home / Draw / Away</div><div>Score</div><div>Coherent</div>
+              </div>
+              <sc-for list="{{ f.preds }}" as="p" hint-placeholder-count="9">
+                <div style="border-bottom:1px solid var(--color-divider)">
+                  <div style="display:grid;grid-template-columns:190px 1fr 96px 96px;gap:16px;align-items:center;padding:9px 0">
+                    <div style="font-family:var(--font-heading);font-weight:600;font-size:14px">{{ p.name }}</div>
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <div style="display:flex;height:14px;flex:1;max-width:420px;background:color-mix(in srgb, var(--color-text) 8%, transparent)">
+                        <div style="height:100%;background:var(--color-accent);width:{{ p.hPct }}%"></div>
+                        <div style="height:100%;background:var(--color-neutral-400);width:{{ p.dPct }}%"></div>
+                        <div style="height:100%;background:var(--color-neutral-800);width:{{ p.aPct }}%"></div>
+                      </div>
+                      <span style="font-family:var(--font-body);font-size:11px;color:color-mix(in srgb, var(--color-text) 60%, transparent);white-space:nowrap">{{ p.probText }}</span>
+                    </div>
+                    <div style="font-family:var(--font-heading);font-weight:600;font-size:17px">{{ p.scoreText }}</div>
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <span style="font-size:12px;color:{{ p.cohColor }}">{{ p.cohText }}</span>
+                      <button class="btn btn-ghost" onClick="{{ p.toggle }}" style="font-size:11px;margin-left:auto">{{ p.ratLabel }}</button>
+                    </div>
+                  </div>
+                  <sc-if value="{{ p.open }}" hint-placeholder-val="{{ false }}">
+                    <div style="background:var(--color-surface);padding:14px 16px;margin:0 0 10px;border-left:2px solid var(--color-accent)">
+                      <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent);margin-bottom:6px">Rationale · display only, never scored</div>
+                      <div style="font-size:13px;max-width:80ch;text-wrap:pretty">{{ p.rationale }}</div>
+                      <div style="font-family:var(--font-body);font-size:11px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-top:8px">{{ p.meta }}</div>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+            </sc-if>
+
+            <!-- Variant B: consensus + scoreline grid -->
+            <sc-if value="{{ fxB }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-template-columns:1fr 330px;gap:32px;align-items:start">
+              <div>
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-bottom:6px">Field consensus</div>
+                <div style="display:flex;height:26px;background:color-mix(in srgb, var(--color-text) 8%, transparent);margin-bottom:6px">
+                  <div style="height:100%;background:var(--color-accent);width:{{ f.cHPct }}%"></div>
+                  <div style="height:100%;background:var(--color-neutral-400);width:{{ f.cDPct }}%"></div>
+                  <div style="height:100%;background:var(--color-neutral-800);width:{{ f.cAPct }}%"></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-family:var(--font-body);font-size:11px;color:color-mix(in srgb, var(--color-text) 60%, transparent);margin-bottom:20px">
+                  <span>H {{ f.cH }}</span><span>D {{ f.cD }}</span><span>A {{ f.cA }}</span>
+                </div>
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-bottom:8px">Entrants by committed scoreline</div>
+                <div style="display:flex;flex-wrap:wrap;gap:10px">
+                  <sc-for list="{{ f.groups }}" as="g" hint-placeholder-count="5">
+                    <div class="soft" style="padding:12px 16px;min-width:140px">
+                      <div style="font-family:var(--font-heading);font-weight:600;font-size:22px;margin-bottom:4px">{{ g.score }}</div>
+                      <sc-for list="{{ g.names }}" as="n" hint-placeholder-count="2">
+                        <div style="font-size:12px">{{ n }}</div>
+                      </sc-for>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <div class="soft" style="padding:20px 22px">
+                <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-bottom:8px">Most confident on this fixture</div>
+                <sc-for list="{{ f.confident }}" as="c" hint-placeholder-count="3">
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--color-divider)">
+                    <span style="font-family:var(--font-heading);font-weight:600;font-size:14px">{{ c.name }}</span>
+                    <span style="font-family:var(--font-body);font-size:12px">{{ c.text }}</span>
+                  </div>
+                </sc-for>
+                <div style="margin-top:14px;font-size:12px;color:color-mix(in srgb, var(--color-text) 60%, transparent)">{{ f.cohSummary }}</div>
+                <button class="btn btn-secondary btn-block" onClick="{{ f.expand }}" style="margin-top:14px">{{ f.expandLabel }}</button>
+                <sc-if value="{{ f.expanded }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:12px">
+                    <sc-for list="{{ f.preds }}" as="p" hint-placeholder-count="9">
+                      <div style="padding:8px 0;border-bottom:1px solid var(--color-divider)">
+                        <div style="font-family:var(--font-heading);font-weight:600;font-size:13px">{{ p.name }} · {{ p.scoreText }}</div>
+                        <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 70%, transparent);text-wrap:pretty">{{ p.rationale }}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+            </div>
+            </sc-if>
+
+          </sc-if>
+
+          <sc-if value="{{ f.noPreds }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:10px;align-items:center;padding:10px 0;font-size:13px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">
+              <span style="display:inline-block;width:10px;height:10px;background:var(--color-neutral-400)"></span>
+              Nine entrants pending · context not yet built
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ══ MODEL STATS ══ -->
+  <sc-if value="{{ onStats }}" hint-placeholder-val="{{ false }}">
+  <div style="padding:0 28px 80px">
+    <div style="border-bottom:1px solid var(--color-divider);padding:40px 0 22px">
+      <h1 style="font-size:38px;letter-spacing:-0.01em;margin:0 0 6px">Historical record</h1>
+      <p style="margin:0;color:color-mix(in srgb, var(--color-text) 70%, transparent);max-width:60ch">Every settled gameweek, per entrant. Nothing here is back-filled — a gameweek an entrant missed stays missing.</p>
+    </div>
+
+    <sc-if value="{{ isPre }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:70px 0;text-align:left">
+        <h2 style="font-size:30px;margin:0 0 10px;max-width:20ch">No settled gameweeks</h2>
+        <p style="margin:0;max-width:52ch;color:color-mix(in srgb, var(--color-text) 70%, transparent)">The record begins after the first gameweek is declared final by FPL. Provisional numbers are never shown.</p>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isLive }}" hint-placeholder-val="{{ true }}">
+    <div>
+      <!-- Variant A: single entrant deep dive -->
+      <sc-if value="{{ stA }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <div style="display:flex;flex-wrap:wrap;gap:0;margin:18px 0 20px">
+          <sc-for list="{{ entrantTabs }}" as="t" hint-placeholder-count="9">
+            <button onClick="{{ t.select }}" style="border:0;border-radius:0;background:{{ t.bg }};color:{{ t.fg }};font-family:var(--font-heading);font-weight:600;font-size:13px;padding:9px 16px;cursor:pointer;margin:0 8px 10px 0">{{ t.name }}</button>
+          </sc-for>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px">
+          <sc-for list="{{ headline }}" as="k" hint-placeholder-count="4">
+            <div class="soft" style="padding:18px 22px">
+              <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent);margin-bottom:4px">{{ k.label }}</div>
+              <div style="font-family:var(--font-heading);font-weight:600;font-size:32px;line-height:1">{{ k.value }}</div>
+              <div style="font-size:11px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-top:3px">{{ k.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 380px;gap:32px;align-items:start;margin-bottom:34px">
+          <div>
+            <h4 style="margin:0 0 10px">Cumulative match points</h4>
+            <svg viewBox="0 0 880 260" style="width:100%;height:auto;display:block">
+              <g>
+                <sc-for list="{{ gridLines }}" as="gl" hint-placeholder-count="5">
+                  <line x1="{{ gl.x1 }}" y1="{{ gl.y }}" x2="{{ gl.x2 }}" y2="{{ gl.y }}" stroke="#1d1f20" stroke-opacity="0.14"></line>
+                </sc-for>
+                <sc-for list="{{ yTicks }}" as="t" hint-placeholder-count="5">
+                  <text x="0" y="{{ t.y }}" font-size="11" fill="#1d1f20" fill-opacity="0.5" font-family="var(--font-body)">{{ t.label }}</text>
+                </sc-for>
+                <sc-for list="{{ xTicks }}" as="t" hint-placeholder-count="7">
+                  <text x="{{ t.x }}" y="256" font-size="11" fill="#1d1f20" fill-opacity="0.5" font-family="var(--font-body)" text-anchor="middle">{{ t.label }}</text>
+                </sc-for>
+                <sc-for list="{{ otherLines }}" as="l" hint-placeholder-count="8">
+                  <path d="{{ l.d }}" fill="none" stroke="#1d1f20" stroke-opacity="0.2" stroke-width="1.5"></path>
+                </sc-for>
+                <path d="{{ mainLine }}" fill="none" stroke="#5980a6" stroke-width="3"></path>
+              </g>
+            </svg>
+            <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-top:4px">Selected entrant in accent; the other eight in grey.</div>
+          </div>
+
+          <div>
+            <h4 style="margin:0 0 10px">Score-tier breakdown</h4>
+            <div style="display:flex;height:34px;margin-bottom:10px">
+              <sc-for list="{{ tiers }}" as="t" hint-placeholder-count="4">
+                <div style="height:100%;background:{{ t.color }};width:{{ t.pct }}%"></div>
+              </sc-for>
+            </div>
+            <sc-for list="{{ tiers }}" as="t" hint-placeholder-count="4">
+              <div style="display:grid;grid-template-columns:14px 1fr 60px 60px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--color-divider)">
+                <span style="width:12px;height:12px;display:inline-block;background:{{ t.color }}"></span>
+                <span style="font-size:13px">{{ t.label }}</span>
+                <span style="font-family:var(--font-heading);font-weight:600;font-size:15px;text-align:right">{{ t.count }}</span>
+                <span style="font-family:var(--font-body);font-size:12px;text-align:right;color:color-mix(in srgb, var(--color-text) 55%, transparent)">{{ t.pctText }}</span>
+              </div>
+            </sc-for>
+
+            <h4 style="margin:26px 0 10px">Bet slip market hit rate</h4>
+            <sc-for list="{{ markets }}" as="m" hint-placeholder-count="5">
+              <div style="padding:7px 0;border-bottom:1px solid var(--color-divider)">
+                <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px">
+                  <span>{{ m.label }}</span>
+                  <span style="font-family:var(--font-body);font-size:12px">{{ m.text }}</span>
+                </div>
+                <div style="height:8px;background:color-mix(in srgb, var(--color-text) 10%, transparent)">
+                  <div style="height:100%;background:var(--color-accent);width:{{ m.pct }}%"></div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <h4 style="margin:0 0 10px">Per-gameweek record</h4>
+        <table class="table">
+          <thead>
+            <tr>
+              <th style="width:70px">GW</th><th style="width:90px">Fixtures</th>
+              <th style="text-align:right">Match pts</th><th style="text-align:right">Bet pts</th>
+              <th style="text-align:right">Exact</th><th style="text-align:right">Outcome</th>
+              <th style="text-align:right">RPS</th><th style="text-align:right">Gaps</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ gwRows }}" as="g" hint-placeholder-count="14">
+              <tr>
+                <td style="font-family:var(--font-heading);font-weight:600">{{ g.gw }}</td>
+                <td style="color:color-mix(in srgb, var(--color-text) 60%, transparent)">{{ g.n }}</td>
+                <td style="text-align:right;font-family:var(--font-heading);font-weight:600">{{ g.mp }}</td>
+                <td style="text-align:right">{{ g.bp }}</td>
+                <td style="text-align:right">{{ g.exact }}</td>
+                <td style="text-align:right">{{ g.outcome }}</td>
+                <td style="text-align:right;font-family:var(--font-body);font-size:12px">{{ g.rps }}</td>
+                <td style="text-align:right;color:{{ g.gapColor }}">{{ g.gaps }}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+      </sc-if>
+
+      <!-- Variant B: all-entrant comparison sheet -->
+      <sc-if value="{{ stB }}" hint-placeholder-val="{{ false }}">
+      <div style="padding-top:22px">
+        <h4 style="margin:0 0 12px">Cumulative match points, all entrants</h4>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+          <sc-for list="{{ smallMultiples }}" as="s" hint-placeholder-count="9">
+            <div class="soft" style="padding:18px 20px">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+                <span style="font-family:var(--font-heading);font-weight:600;font-size:16px">{{ s.name }}</span>
+                <span style="font-family:var(--font-heading);font-weight:600;font-size:20px;color:var(--color-accent)">{{ s.mp }}</span>
+              </div>
+              <svg viewBox="0 0 260 70" style="width:100%;height:auto;display:block">
+                <path d="{{ s.d }}" fill="none" stroke="#5980a6" stroke-width="2"></path>
+                <path d="{{ s.medianD }}" fill="none" stroke="#1d1f20" stroke-opacity="0.25" stroke-width="1.5" stroke-dasharray="3 3"></path>
+              </svg>
+              <div style="display:flex;height:10px;margin-top:10px">
+                <sc-for list="{{ s.tiers }}" as="t" hint-placeholder-count="4">
+                  <div style="height:100%;background:{{ t.color }};width:{{ t.pct }}%"></div>
+                </sc-for>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-family:var(--font-body);font-size:11px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-top:6px">
+                <span>exact {{ s.exact }}</span><span>bet {{ s.bp }}</span><span>rps {{ s.rps }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <h4 style="margin:30px 0 10px">Match points by gameweek</h4>
+        <div style="overflow-x:auto">
+          <table class="table">
+            <thead>
+              <tr>
+                <th style="width:70px">GW</th>
+                <sc-for list="{{ entrants }}" as="e" hint-placeholder-count="9">
+                  <th style="text-align:right">{{ e.short }}</th>
+                </sc-for>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{ matrixRows }}" as="r" hint-placeholder-count="14">
+                <tr>
+                  <td style="font-family:var(--font-heading);font-weight:600">{{ r.gw }}</td>
+                  <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="9">
+                    <td style="text-align:right;font-family:var(--font-body);font-size:12px;background:{{ c.bg }}">{{ c.v }}</td>
+                  </sc-for>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      </sc-if>
+    </div>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <!-- ══ OPS DIALOG ══ -->
+  <sc-if value="{{ opsOpen }}" hint-placeholder-val="{{ false }}">
+    <div class="dialog-backdrop" onClick="{{ closeOps }}">
+      <div class="dialog" style="width:min(620px,100%)" onClick="{{ stop }}">
+        <div class="dialog-title">Run health</div>
+        <div class="dialog-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+            <sc-for list="{{ opsStats }}" as="o" hint-placeholder-count="4">
+              <div class="soft" style="padding:16px 18px">
+                <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent)">{{ o.label }}</div>
+                <div style="font-family:var(--font-heading);font-weight:600;font-size:18px">{{ o.value }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px">Gaps by cause, season to date</div>
+          <sc-for list="{{ gapCauses }}" as="g" hint-placeholder-count="4">
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--color-divider);font-size:13px">
+              <span style="font-family:var(--font-body)">{{ g.kind }}</span>
+              <span>{{ g.detail }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div class="dialog-actions">
+          <button class="btn btn-secondary" onClick="{{ closeOps }}">Close</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:980}}">
+class Component extends DCLogic {
+  state = { page: 'leaderboard', variant: 'a', season: 'gw14', sortBy: 'match', ops: false, openRat: '', entrant: 'gemini/v1', expanded: '' };
+
+  hash(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  rng(seed) { let x = this.hash(seed); return () => { x = (Math.imul(x, 1664525) + 1013904223) >>> 0; return x / 4294967296; }; }
+
+  ENTRANTS() {
+    return [
+      { id: 'gemini/v1', name: 'Gemini 3 Pro', short: 'GEM', tier: 'Frontier', mp: 231, bp: 356, e: 22, g: 25, o: 23, rps: 0.181, gaps: 1, repairs: 4 },
+      { id: 'claude/v1', name: 'Claude Opus 5', short: 'CLA', tier: 'Frontier', mp: 226, bp: 349, e: 21, g: 25, o: 23, rps: 0.184, gaps: 0, repairs: 2 },
+      { id: 'gpt/v1', name: 'GPT-5', short: 'GPT', tier: 'Frontier', mp: 219, bp: 361, e: 19, g: 24, o: 26, rps: 0.186, gaps: 2, repairs: 6 },
+      { id: 'grok/v1', name: 'Grok 4', short: 'GRK', tier: 'First-party', mp: 208, bp: 338, e: 18, g: 22, o: 26, rps: 0.192, gaps: 3, repairs: 9 },
+      { id: 'deepseek/v1', name: 'DeepSeek V4', short: 'DSK', tier: 'Open-weight', mp: 201, bp: 330, e: 17, g: 22, o: 25, rps: 0.195, gaps: 4, repairs: 11 },
+      { id: 'qwen/v1', name: 'Qwen3 Max', short: 'QWN', tier: 'Open-weight', mp: 197, bp: 327, e: 16, g: 21, o: 27, rps: 0.197, gaps: 5, repairs: 14 },
+      { id: 'kimi/v1', name: 'Kimi K2', short: 'KIM', tier: 'Open-weight', mp: 192, bp: 319, e: 15, g: 21, o: 27, rps: 0.201, gaps: 6, repairs: 12 },
+      { id: 'glm/v1', name: 'GLM-5', short: 'GLM', tier: 'Open-weight', mp: 186, bp: 311, e: 14, g: 20, o: 28, rps: 0.205, gaps: 8, repairs: 17 },
+      { id: 'minimax/v1', name: 'MiniMax M2', short: 'MMX', tier: 'Open-weight', mp: 174, bp: 298, e: 12, g: 18, o: 30, rps: 0.213, gaps: 11, repairs: 21 }
+    ];
+  }
+
+  GW_N() { return [10, 10, 10, 10, 9, 10, 10, 10, 10, 9, 10, 10, 10, 9]; }
+  N() { return 137; }
+
+  perGW(entrant) {
+    if (!this._pg) this._pg = {};
+    if (this._pg[entrant.id]) return this._pg[entrant.id];
+    const ns = this.GW_N(), r = this.rng(entrant.id + ':mp');
+    const avg = entrant.mp / this.N();
+    let vals = ns.map(n => Math.max(0, Math.round(n * avg + (r() - 0.5) * n * 1.1)));
+    let diff = entrant.mp - vals.reduce((a, b) => a + b, 0);
+    let i = 0;
+    while (diff !== 0) { const k = i % vals.length; if (diff > 0) { vals[k]++; diff--; } else if (vals[k] > 0) { vals[k]--; diff++; } i++; }
+    this._pg[entrant.id] = vals;
+    return vals;
+  }
+
+  cum(vals) { let t = 0; return vals.map(v => (t += v)); }
+
+  path(series, w, h, maxY, padL, padB) {
+    const pt = 8, pr = 6;
+    const x = i => padL + i * (w - padL - pr) / (series.length - 1);
+    const y = v => h - padB - (v / maxY) * (h - padB - pt);
+    return series.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1)).join(' ');
+  }
+
+  FIXTURES_LIVE() {
+    return [
+      { fplId: 141, home: 'Arsenal', away: 'Chelsea', kickoff: 'Sat 5 Dec, 12:30', base: [0.48, 0.26, 0.26] },
+      { fplId: 142, home: 'Liverpool', away: 'Brighton', kickoff: 'Sat 5 Dec, 15:00', base: [0.58, 0.22, 0.20] },
+      { fplId: 143, home: 'Manchester City', away: 'Everton', kickoff: 'Sat 5 Dec, 15:00', base: [0.72, 0.17, 0.11] },
+      { fplId: 144, home: 'Newcastle', away: 'Aston Villa', kickoff: 'Sat 5 Dec, 17:30', base: [0.45, 0.27, 0.28] },
+      { fplId: 145, home: 'Tottenham', away: 'Fulham', kickoff: 'Sun 6 Dec, 14:00', base: [0.52, 0.25, 0.23] },
+      { fplId: 146, home: 'Bournemouth', away: 'Wolves', kickoff: 'Sun 6 Dec, 14:00', base: [0.49, 0.26, 0.25] },
+      { fplId: 147, home: 'Brentford', away: 'Crystal Palace', kickoff: 'Sun 6 Dec, 14:00', base: [0.41, 0.29, 0.30] },
+      { fplId: 148, home: 'West Ham', away: 'Leeds', kickoff: 'Sun 6 Dec, 16:30', base: [0.44, 0.28, 0.28] },
+      { fplId: 149, home: 'Burnley', away: 'Sunderland', kickoff: 'Mon 7 Dec, 20:00', base: [0.38, 0.29, 0.33] },
+      { fplId: 150, home: "Nottingham Forest", away: 'Sheffield United', kickoff: 'Mon 7 Dec, 20:00', base: [0.55, 0.25, 0.20] }
+    ];
+  }
+
+  FIXTURES_PRE() {
+    return [
+      { fplId: 1, home: 'Liverpool', away: 'Bournemouth', kickoff: 'Fri 14 Aug, 20:00' },
+      { fplId: 2, home: 'Aston Villa', away: 'Newcastle', kickoff: 'Sat 15 Aug, 12:30' },
+      { fplId: 3, home: 'Brighton', away: 'Fulham', kickoff: 'Sat 15 Aug, 15:00' },
+      { fplId: 4, home: 'Tottenham', away: 'Burnley', kickoff: 'Sat 15 Aug, 15:00' },
+      { fplId: 5, home: 'Nottingham Forest', away: 'Brentford', kickoff: 'Sun 16 Aug, 14:00' },
+      { fplId: 6, home: 'Chelsea', away: 'Crystal Palace', kickoff: 'Sun 16 Aug, 16:30' }
+    ];
+  }
+
+  RATIONALES() {
+    return [
+      '{H} have taken 13 of the last 15 points at home and {A} concede first in most away games. A narrow home win is the modal path.',
+      'Both sides are missing a first-choice centre-back. The draw is underpriced by form alone, but {H} still shade it on shot volume.',
+      '{A} have the better underlying numbers over the last five, though the venue swing is large enough to keep this close to even.',
+      'Head-to-head has produced three or more goals in four of the last five meetings; the total matters more here than the winner.',
+      '{H} rotate ahead of midweek, which trims the home edge. Distribution is deliberately flatter than the venue prior suggests.',
+      '{A} are promoted and have not yet won away from home. The prior does most of the work; the scoreline follows the prior.',
+      'Form over the rolling five-match window favours {H}, but two of those came against sides now in the bottom three.',
+      '{H} keep clean sheets at a high rate and {A} carry little threat from open play. A low-scoring home win fits both.',
+      'No prior meeting in the top flight, so the estimate leans on prior-season position and the promoted flag for {A}.',
+      '{A} have the away record to make this uncomfortable, and {H} have dropped points from leading positions three times.',
+      'Injuries listed for two of {H}\u2019s highest-priced players. That is the main reason the home probability sits below the venue baseline.',
+      'Nothing in the context separates these sides. Probabilities are close to the league-wide home prior and the scoreline is the modal one.'
+    ];
+  }
+
+  buildFixtures() {
+    if (this.state.season !== 'gw14') return this.FIXTURES_PRE().map(f => ({ ...f, hasPreds: false, noPreds: true, statusLabel: 'Awaiting predictions', preds: [], groups: [], confident: [] }));
+    if (this._fx) return this._fx;
+    const ents = this.ENTRANTS(), rats = this.RATIONALES();
+    const HS = ['2-1', '1-0', '2-0', '3-1', '3-0'], DS = ['1-1', '2-2', '0-0'], AS = ['1-2', '0-1', '0-2'];
+    this._fx = this.FIXTURES_LIVE().map((f, fi) => {
+      const preds = ents.map((e, ei) => {
+        const r = this.rng(e.id + ':' + f.fplId);
+        let p = f.base.map(b => Math.max(0.03, b + (r() - 0.5) * 0.14));
+        const s = p.reduce((a, b) => a + b, 0); p = p.map(v => v / s);
+        const argmax = p.indexOf(Math.max(...p));
+        const pick = r() < 0.82 ? argmax : (r() < 0.5 ? 0 : 2);
+        const pool = pick === 0 ? HS : pick === 1 ? DS : AS;
+        const score = pool[Math.floor(r() * pool.length)];
+        const gs = score.split('-').map(Number);
+        const implied = gs[0] > gs[1] ? 0 : gs[0] === gs[1] ? 1 : 2;
+        const coherent = implied === argmax;
+        return {
+          key: fi + ':' + ei, id: e.id, name: e.name,
+          hPct: +(p[0] * 100).toFixed(1), dPct: +(p[1] * 100).toFixed(1), aPct: +(p[2] * 100).toFixed(1),
+          probText: p.map(v => v.toFixed(2)).join(' / '),
+          scoreText: score, top: Math.max(...p),
+          cohText: coherent ? 'Yes' : 'No', cohColor: coherent ? 'color-mix(in srgb, var(--color-text) 55%, transparent)' : '#416180',
+          rationale: rats[(fi * 3 + ei) % rats.length].split('{H}').join(f.home).split('{A}').join(f.away),
+          meta: 'context ' + this.hash(f.fplId + e.id).toString(16).slice(0, 10) + ' · attempts 0 · locked before deadline'
+        };
+      });
+      const avg = [0, 1, 2].map(i => preds.reduce((a, p) => a + [p.hPct, p.dPct, p.aPct][i], 0) / preds.length);
+      const byScore = {};
+      preds.forEach(p => { (byScore[p.scoreText] = byScore[p.scoreText] || []).push(p.name); });
+      const groups = Object.keys(byScore).sort((a, b) => byScore[b].length - byScore[a].length).map(k => ({ score: k, names: byScore[k] }));
+      const confident = preds.slice().sort((a, b) => b.top - a.top).slice(0, 4).map(p => ({ name: p.name, text: (p.top * 100).toFixed(0) + '% · ' + p.scoreText }));
+      const incoh = preds.filter(p => p.cohText === 'No').length;
+      return {
+        ...f, hasPreds: true, noPreds: false, statusLabel: '9 of 9 predicted', preds, groups, confident,
+        cHPct: +avg[0].toFixed(1), cDPct: +avg[1].toFixed(1), cAPct: +avg[2].toFixed(1),
+        cH: (avg[0] / 100).toFixed(2), cD: (avg[1] / 100).toFixed(2), cA: (avg[2] / 100).toFixed(2),
+        cohSummary: incoh === 0 ? 'All nine coherent: the modal outcome matches the committed scoreline.' : incoh + ' entrant(s) incoherent — the scoreline implies a different outcome than the probabilities.'
+      };
+    });
+    return this._fx;
+  }
+
+  selected() { return this.ENTRANTS().find(e => e.id === this.state.entrant) || this.ENTRANTS()[0]; }
+
+  renderVals() {
+    const st = this.state, ents = this.ENTRANTS(), n = this.N(), live = st.season === 'gw14';
+    const set = o => this.setState(o);
+
+    const maxMp = Math.max(...ents.map(e => e.mp)), maxBp = Math.max(...ents.map(e => e.bp));
+    const ranked = ents.slice().sort((a, b) => st.sortBy === 'bet' ? b.bp - a.bp : b.mp - a.mp)
+      .map((e, i) => ({ ...e, rank: i + 1, mpPct: +(e.mp / maxMp * 100).toFixed(1), bpPct: +(e.bp / maxBp * 100).toFixed(1), rankColor: i === 0 ? '#5980a6' : '#1d1f20' }));
+
+    const fixtures = this.buildFixtures().map(f => ({
+      ...f,
+      expanded: st.expanded === String(f.fplId),
+      expandLabel: st.expanded === String(f.fplId) ? 'Hide rationales' : 'Read all nine rationales',
+      expand: () => set({ expanded: st.expanded === String(f.fplId) ? '' : String(f.fplId) }),
+      preds: (f.preds || []).map(p => ({
+        ...p, open: st.openRat === p.key,
+        ratLabel: st.openRat === p.key ? 'Hide' : 'Why',
+        toggle: () => set({ openRat: st.openRat === p.key ? '' : p.key })
+      }))
+    }));
+
+    // stats
+    const sel = this.selected();
+    const cumSel = this.cum(this.perGW(sel));
+    const maxY = 260;
+    const mainLine = this.path(cumSel, 880, 260, maxY, 44, 30);
+    const otherLines = ents.filter(e => e.id !== sel.id).map(e => ({ d: this.path(this.cum(this.perGW(e)), 880, 260, maxY, 44, 30) }));
+    const gridLines = [0, 65, 130, 195, 260].map(v => ({ x1: 40, x2: 876, y: 230 - (v / maxY) * 222 }));
+    const yTicks = [0, 65, 130, 195, 260].map(v => ({ y: 234 - (v / maxY) * 222, label: String(v) }));
+    const xTicks = [0, 2, 4, 6, 8, 10, 12, 13].map(i => ({ x: 44 + i * (880 - 50) / 13, label: 'GW' + (i + 1) }));
+
+    const miss = n - sel.e - sel.g - sel.o;
+    const tierDefs = [
+      { label: 'Exact score · 5 pts', count: sel.e, color: '#5980a6' },
+      { label: 'Goal difference · 3 pts', count: sel.g, color: '#94bce3' },
+      { label: 'Outcome only · 2 pts', count: sel.o, color: '#b7b7ba' },
+      { label: 'No points', count: miss, color: '#5d5d60' }
+    ];
+    const tiers = tierDefs.map(t => ({ ...t, pct: +(t.count / n * 100).toFixed(1), pctText: (t.count / n * 100).toFixed(0) + '%' }));
+
+    const mkNames = ['Match result', 'Over/under 2.5', 'Over/under 3.5', 'Over/under 4.5', 'Both teams to score'];
+    const mr = this.rng(sel.id + ':mkt');
+    let rates = mkNames.map(() => mr());
+    const base = sel.bp / (5 * n);
+    let spread = rates.map(v => base + (v - 0.5) * 0.2);
+    const adj = base - spread.reduce((a, b) => a + b, 0) / 5;
+    spread = spread.map(v => Math.min(0.95, Math.max(0.15, v + adj)));
+    const markets = mkNames.map((label, i) => ({ label, pct: +(spread[i] * 100).toFixed(1), text: Math.round(spread[i] * n) + ' / ' + n + ' · ' + (spread[i] * 100).toFixed(0) + '%' }));
+
+    const gwn = this.GW_N(), selGw = this.perGW(sel), gr = this.rng(sel.id + ':row');
+    const gwRows = gwn.map((cnt, i) => {
+      const bp = Math.round(cnt * sel.bp / n + (gr() - 0.5) * 4);
+      const ex = Math.max(0, Math.round(cnt * sel.e / n + (gr() - 0.6)));
+      const oc = Math.min(cnt, Math.max(0, Math.round(cnt * (sel.e + sel.g + sel.o) / n + (gr() - 0.5) * 1.6)));
+      const gaps = i < 2 ? 0 : (gr() < sel.gaps / 30 ? 1 : 0);
+      return {
+        gw: 'GW ' + (i + 1), n: cnt, mp: selGw[i], bp, exact: ex, outcome: oc + ' / ' + cnt,
+        rps: (sel.rps + (gr() - 0.5) * 0.05).toFixed(3), gaps,
+        gapColor: gaps ? '#416180' : 'color-mix(in srgb, var(--color-text) 40%, transparent)'
+      };
+    });
+
+    const medianSeries = this.cum(this.GW_N().map((cnt, i) => {
+      const vs = ents.map(e => this.perGW(e)[i]).sort((a, b) => a - b); return vs[4];
+    }));
+    const medianD = this.path(medianSeries, 260, 70, maxY, 4, 6);
+    const smallMultiples = ents.map(e => {
+      const m = n - e.e - e.g - e.o;
+      return {
+        name: e.name, mp: e.mp, bp: e.bp, exact: e.e, rps: e.rps.toFixed(3),
+        d: this.path(this.cum(this.perGW(e)), 260, 70, maxY, 4, 6), medianD,
+        tiers: [
+          { color: '#5980a6', pct: +(e.e / n * 100).toFixed(1) },
+          { color: '#94bce3', pct: +(e.g / n * 100).toFixed(1) },
+          { color: '#b7b7ba', pct: +(e.o / n * 100).toFixed(1) },
+          { color: '#5d5d60', pct: +(m / n * 100).toFixed(1) }
+        ]
+      };
+    });
+
+    const allGw = ents.map(e => this.perGW(e));
+    const flat = allGw.flat(), lo = Math.min(...flat), hi = Math.max(...flat);
+    const matrixRows = gwn.map((cnt, i) => ({
+      gw: 'GW ' + (i + 1),
+      cells: allGw.map(v => {
+        const t = (v[i] - lo) / Math.max(1, hi - lo);
+        return { v: v[i], bg: 'color-mix(in srgb, #5980a6 ' + (t * 26).toFixed(0) + '%, transparent)' };
+      })
+    }));
+
+    return {
+      // nav
+      goLeaderboard: e => { e.preventDefault(); set({ page: 'leaderboard' }); },
+      goFixtures: e => { e.preventDefault(); set({ page: 'fixtures' }); },
+      goStats: e => { e.preventDefault(); set({ page: 'stats' }); },
+      navLeaderboard: st.page === 'leaderboard' ? 'page' : 'false',
+      navFixtures: st.page === 'fixtures' ? 'page' : 'false',
+      navStats: st.page === 'stats' ? 'page' : 'false',
+      onLeaderboard: st.page === 'leaderboard', onFixtures: st.page === 'fixtures', onStats: st.page === 'stats',
+      isPre: !live, isLive: live,
+      setPre: () => set({ season: 'pre' }), setLive: () => set({ season: 'gw14' }),
+      isA: st.variant === 'a', isB: st.variant === 'b',
+      setA: () => set({ variant: 'a' }), setB: () => set({ variant: 'b' }),
+      lbA: false, lbB: true,
+      fxA: true, fxB: false,
+      stA: true, stB: false,
+      openOps: () => set({ ops: true }), closeOps: () => set({ ops: false }), opsOpen: st.ops,
+      stop: e => e.stopPropagation(),
+
+      // leaderboard
+      entrants: ents, ranked,
+      scoredN: live ? String(n) : '0',
+      throughLabel: live ? 'GW 14' : '—',
+      sortMatch: st.sortBy === 'match', sortBet: st.sortBy === 'bet',
+      setSortMatch: () => set({ sortBy: 'match' }), setSortBet: () => set({ sortBy: 'bet' }),
+
+      // fixtures
+      fixtures,
+      gwLabel: live ? 'Gameweek 15' : 'Gameweek 1',
+      lockLabel: live ? 'Fri 4 Dec, 18:30' : 'Fri 14 Aug, 18:30',
+      lockNote: live ? 'All ten fixtures locked at this deadline' : 'Predictions have not run yet',
+
+      // stats
+      entrantTabs: ents.map(e => ({
+        name: e.name, select: () => set({ entrant: e.id }),
+        bg: e.id === st.entrant ? '#5980a6' : 'transparent',
+        fg: e.id === st.entrant ? '#f2f2f3' : '#1d1f20'
+      })),
+      headline: [
+        { label: 'Match points', value: String(sel.mp), note: 'rank ' + (ranked.findIndex(r => r.id === sel.id) + 1) + ' of 9' },
+        { label: 'Bet points', value: String(sel.bp), note: (sel.bp / n).toFixed(2) + ' per fixture' },
+        { label: 'RPS', value: sel.rps.toFixed(3), note: 'lower is better' },
+        { label: 'Gaps', value: String(sel.gaps), note: sel.repairs + ' repairs used' }
+      ],
+      mainLine, otherLines, gridLines, yTicks, xTicks,
+      tiers, markets, gwRows, smallMultiples, matrixRows,
+
+      // ops
+      opsStats: [
+        { label: 'Last fetch', value: '06:00 UTC · ok' },
+        { label: 'Last predict run', value: 'GW15 main · complete' },
+        { label: 'Fill run', value: 'scheduled −2h' },
+        { label: 'Last score run', value: '10:00 UTC · 9 fixtures' }
+      ],
+      gapCauses: [
+        { kind: 'provider', detail: '18 · pinned provider unavailable' },
+        { kind: 'schema', detail: '9 · probabilities outside tolerance' },
+        { kind: 'timeout', detail: '7 · no response within limit' },
+        { kind: 'refusal', detail: '6 · task declined' }
+      ]
+    };
+  }
+}
+
+</script>
+</body>
+</html>

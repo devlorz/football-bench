@@ -583,4 +583,43 @@ describe("the benchmark database", () => {
     const stored = await client.query("select bank from manager_states");
     expect(stored.rows).toEqual([{ bank: 45 }]);
   });
+
+  test("pairs every dashboard_read grant with a select policy", async () => {
+    const role = await client.query<{ rolcanlogin: boolean }>(
+      "select rolcanlogin from pg_roles where rolname = 'dashboard_read'"
+    );
+    // A privilege role and nothing else (ADR-0027): the Worker's login role is
+    // provisioned outside migrations and granted membership in this one.
+    expect(role.rows).toEqual([{ rolcanlogin: false }]);
+
+    const namesOf = async (sql: string): Promise<string[]> =>
+      (await client.query<{ relname: string }>(sql)).rows
+        .map(({ relname }) => relname);
+
+    const granted = await namesOf(
+      `select c.relname
+         from pg_class c
+         join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind = 'r'
+          and has_table_privilege('dashboard_read', c.oid, 'select')
+        order by c.relname`
+    );
+    const policied = await namesOf(
+      `select c.relname
+         from pg_policy p
+         join pg_class c on c.oid = p.polrelid
+        where p.polcmd = 'r'
+          and 'dashboard_read'::regrole = any(p.polroles)
+        order by c.relname`
+    );
+
+    // Row Level Security is on every table here, so a grant without a policy
+    // selects zero rows and reports no error. The two lists being equal is what
+    // makes that failure loud, and a later migration adding a table the
+    // dashboard reads has to carry both halves to keep it that way.
+    expect(granted).toEqual([
+      "contexts", "fixtures", "gameweeks", "models", "predictions", "scores"
+    ]);
+    expect(policied).toEqual(granted);
+  });
 });

@@ -1,0 +1,285 @@
+---
+import Page from "../layouts/Page.astro";
+---
+<Page title="Leaderboard — Football Bench, match track" current="leaderboard">
+  {/*
+    Everything below that is not a number is in the built HTML: the headings,
+    the labels, the column headers and both explanations of what the ranking
+    means. Only the figures wait on the fetch, so a reader sees the structure of
+    the page before its data.
+  */}
+  <section class="hero">
+    <div>
+      <h1>One set of fixtures, one lock</h1>
+      <p>
+        Every Entrant sees the same context for every Premier League Fixture and
+        commits a scoreline plus a probability distribution before the Gameweek
+        deadline. Nothing is written after the Lock.
+      </p>
+    </div>
+    <div class="soft stats">
+      <div>
+        <div class="stat-label">Season</div>
+        <div class="stat-value" id="stat-season">&nbsp;</div>
+      </div>
+      <div>
+        <div class="stat-label">Scored fixtures</div>
+        <div class="stat-value" id="stat-settled">&nbsp;</div>
+      </div>
+      <div>
+        <div class="stat-label">Through</div>
+        <div class="stat-value" id="stat-through">&nbsp;</div>
+      </div>
+    </div>
+  </section>
+
+  <p class="error" id="error" hidden>
+    The leaderboard could not be read. Nothing is being retried.
+  </p>
+
+  {/* The Season that has not been scored yet. Hidden until the response says
+      so, which is `throughGw` being null and not an empty list of Entrants. */}
+  <section class="preseason" id="preseason" hidden>
+    <div>
+      <div class="kicker">No result yet</div>
+      <h2>The table fills after the first Gameweek is settled</h2>
+      <p id="lock-note"></p>
+    </div>
+    <div class="soft entered">
+      <div class="entered-title" id="entered-title">Entered</div>
+      <div id="entered-rows"></div>
+      <div class="entered-note">
+        One Prompt Version, one context arm. Three Reference Lines run alongside
+        and are never ranked.
+      </div>
+    </div>
+  </section>
+
+  <section id="ranking">
+    <div class="rankbar">
+      <h2>Ranking</h2>
+      <span class="muted" id="sort-label">Sort by</span>
+      {/* A radio group and not two buttons: it is one choice with two answers,
+          and the design system styles exactly that. */}
+      <div class="seg" role="group" aria-labelledby="sort-label">
+        <label class="seg-opt">
+          <input type="radio" name="sort" value="match" checked />
+          Match points
+        </label>
+        <label class="seg-opt">
+          <input type="radio" name="sort" value="bet" />
+          Bet points
+        </label>
+      </div>
+      <span class="ranknote muted" id="ranknote"></span>
+    </div>
+
+    <div class="lbbody" role="table" aria-label="Ranking">
+      {/* The design's ruled list is four columns of divs, which reaches a
+          screen reader as four unrelated runs of text. The roles put the table
+          back without putting a `<table>` back: the layout is untouched and the
+          column a figure sits under is announced with it. */}
+      <div class="lbhead" role="row">
+        <div role="columnheader">Rank</div>
+        <div role="columnheader">Entrant</div>
+        <div class="cell" role="columnheader">Match points</div>
+        <div class="cell" role="columnheader">Bet points</div>
+      </div>
+      <div id="rows" role="rowgroup">
+        {/* Still blocks over the same grid the real rows use. Nine, because
+            nine is what the roster is and a loading state that guesses a
+            different height moves the page when the data lands. */}
+        {Array.from({ length: 9 }).map(() => (
+          <div class="lbrow lbrow-skeleton" aria-hidden="true">
+            <div class="skeleton"></div>
+            <div class="skeleton"></div>
+            <div class="skeleton"></div>
+            <div class="skeleton"></div>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    {/* Both qualifications at the length the scorer wrote them. The panel grows
+        to fit the sentence; the sentence is never cut to fit the panel. */}
+    <div class="qualifications">
+      <p id="qual-match"></p>
+      <p id="qual-bet"></p>
+    </div>
+
+    <div class="footnotes">
+      <p>
+        <strong>Match Points.</strong> 5 for an exact scoreline, 3 for the right
+        goal difference, 2 for the right Outcome, 0 otherwise. Tiers are
+        exclusive.
+      </p>
+      <p>
+        <strong>Bet Points.</strong> One point per market that settles in the
+        Entrant's favour, read off the committed scoreline: result, over/under
+        2.5, 3.5 and 4.5, both teams to score.
+      </p>
+      <p>
+        <strong>What this is not.</strong> Both columns rank; neither separates
+        Base Models on its own. The evidential layer is the ranked probability
+        score.
+      </p>
+    </div>
+  </section>
+
+  {/* Inside the layout's document, not after it: a `<script>` written as a
+      sibling of `<Page>` is emitted after `</html>`, which every browser
+      repairs and no static artifact should need repairing. */}
+  <script is:inline>
+  (() => {
+    const $ = (id) => document.getElementById(id);
+    const text = (node, value) => { node.textContent = value; };
+
+    const SORTS = { match: "matchPoints", bet: "betPoints" };
+
+    // The choice is in the URL so the link is copyable and a reload holds it,
+    // and it is written with `replaceState` rather than `pushState`: sorting is
+    // a view toggle, not navigation, and Back is expected to leave the page
+    // rather than walk backwards through sort clicks.
+    // `Object.hasOwn` and not `in`: `in` answers for everything on the
+    // prototype too, so `?sort=toString` would be taken as a sort, order the
+    // table by a method, and leave neither radio selected.
+    const sortFromUrl = () => {
+      const asked = new URL(location.href).searchParams.get("sort");
+      return Object.hasOwn(SORTS, asked) ? asked : "match";
+    };
+
+    let sort = sortFromUrl();
+    let body = null;
+
+    for (const input of document.querySelectorAll('input[name="sort"]')) {
+      input.checked = input.value === sort;
+      input.addEventListener("change", () => {
+        sort = input.value;
+        const url = new URL(location.href);
+        url.searchParams.set("sort", sort);
+        history.replaceState(null, "", url);
+        render();
+      });
+    }
+
+    const seasonLabel = (season) => season.replace("-", "/");
+
+    const lockLabel = (iso) =>
+      new Date(iso).toLocaleString(undefined, {
+        weekday: "long", day: "numeric", month: "long",
+        hour: "2-digit", minute: "2-digit"
+      });
+
+    const div = (className, value, role) => {
+      const node = document.createElement("div");
+      node.className = className;
+      if (value !== undefined) node.textContent = value;
+      if (role !== undefined) node.role = role;
+      return node;
+    };
+
+    const bar = (kind, value, max) => {
+      const track = div("bar bar-" + kind);
+      const fill = document.createElement("span");
+      // Against the leader of that column, so a bar reads as the size of a gap.
+      // A field of noughts has no leader and draws no fill rather than dividing
+      // by zero.
+      fill.style.width = (max > 0 ? (value / max) * 100 : 0) + "%";
+      track.append(fill);
+      return track;
+    };
+
+    const valueCell = (kind, value, max) => {
+      const cell = div("cell", undefined, "cell");
+      cell.append(div("lb-value", String(value)), bar(kind, value, max));
+      return cell;
+    };
+
+    function renderRanking() {
+      const key = SORTS[sort];
+      const ranked = [...body.entrants].sort((a, b) => b[key] - a[key]);
+      const most = (field) =>
+        Math.max(0, ...body.entrants.map((entrant) => entrant[field]));
+      const mostMatch = most("matchPoints");
+      const mostBet = most("betPoints");
+
+      const rows = document.createDocumentFragment();
+      ranked.forEach((entrant, index) => {
+        const row = div("lbrow", undefined, "row");
+        const name = div("", undefined, "cell");
+        name.append(
+          div("lb-name", entrant.name),
+          // The Base Model Class beside the id, so a reader knows whether they
+          // are reading an Open-weight Base Model or a Frontier one.
+          div("lb-id", entrant.baseModelClass
+            ? entrant.id + " · " + entrant.baseModelClass
+            : entrant.id)
+        );
+        row.append(
+          div("lb-rank", String(index + 1), "cell"),
+          name,
+          valueCell("match", entrant.matchPoints, mostMatch),
+          valueCell("bet", entrant.betPoints, mostBet)
+        );
+        rows.append(row);
+      });
+      $("rows").replaceChildren(rows);
+
+      // The Season's settled Fixtures and not any Entrant's own count: one
+      // Entrant's Gap cannot move the figure the whole ranking is presented
+      // against.
+      text($("ranknote"),
+        "n = " + body.settledFixtures + " fixtures · ranks, does not prove");
+      text($("qual-match"), body.matchPointsQualification ?? "");
+      text($("qual-bet"), body.betPointsQualification ?? "");
+    }
+
+    function renderPreSeason() {
+      text($("entered-title"), "Entered for " + seasonLabel(body.season));
+      text($("lock-note"), body.nextLock
+        ? "Predictions for Gameweek " + body.nextLock.gw + " lock at the FPL "
+          + "deadline on " + lockLabel(body.nextLock.deadlineAt)
+          + ". Scoring runs after the last match of the round."
+        : "Scoring runs after the last match of the round.");
+
+      const rows = document.createDocumentFragment();
+      for (const entrant of body.entrants) {
+        const row = div("entered-row");
+        row.append(div("entered-name", entrant.name), div("lb-id", entrant.id));
+        rows.append(row);
+      }
+      $("entered-rows").replaceChildren(rows);
+    }
+
+    function render() {
+      // Null `throughGw` is the whole of the pre-season test. An empty list of
+      // Entrants cannot tell a Season that has not started from a read that
+      // returned nothing.
+      const pre = body.throughGw === null;
+      $("preseason").hidden = !pre;
+      $("ranking").hidden = pre;
+
+      text($("stat-season"), seasonLabel(body.season));
+      text($("stat-settled"), String(body.settledFixtures));
+      text($("stat-through"), pre ? "—" : "GW " + body.throughGw);
+
+      if (pre) renderPreSeason(); else renderRanking();
+    }
+
+    // A relative path: the Worker route claims `/api/*` on this hostname, so
+    // nothing is cross-origin and no origin was a build input.
+    fetch("/api/leaderboard")
+      .then((response) => {
+        if (!response.ok) throw new Error(String(response.status));
+        return response.json();
+      })
+      .then((json) => { body = json; render(); })
+      .catch(() => {
+        // One line, and nothing retries.
+        $("error").hidden = false;
+        $("ranking").hidden = true;
+        $("preseason").hidden = true;
+      });
+  })();
+  </script>
+</Page>

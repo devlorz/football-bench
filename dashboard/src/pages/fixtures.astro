@@ -1,0 +1,281 @@
+---
+import Page from "../layouts/Page.astro";
+---
+<Page title="Fixtures — Football Bench, match track" current="fixtures">
+  {/*
+    The chrome, the headings and the column headers are in the built HTML.
+    Only the Gameweek, the Lock and the Predictions wait on the fetch.
+  */}
+  <section class="fxhero">
+    <div>
+      <div class="kicker" id="gw-label">&nbsp;</div>
+      <h1>Fixtures and predictions</h1>
+    </div>
+    <div class="fxlock">
+      <div class="stat-label">Lock</div>
+      <div class="fxlock-time" id="lock-time">&nbsp;</div>
+      <div class="muted fxlock-note" id="lock-note"></div>
+    </div>
+  </section>
+
+  <p class="error" id="error" hidden>
+    The fixtures could not be read. Nothing is being retried.
+  </p>
+
+  {/* The pending state, and the page reads it off its own body: every
+      Prediction slot of the Gameweek empty. It is never read off `throughGw`,
+      which stays null through the whole of a Gameweek 1 that has been Locked,
+      played and not yet scored — the four days a page gating on it would spend
+      hiding the Predictions it exists to show. */}
+  <div class="fx-banner" id="pending" hidden>
+    <span class="fx-banner-title">No predictions stored</span>
+    {/* The pre-lock wording, which is the built-HTML default because it is the
+        state this banner exists for. Once the Lock has passed, both runs are in
+        the past and saying they fire would be false — so the instant swaps it,
+        which is the one thing spec 0011 uses the instant for. */}
+    <span id="pending-note">
+      The main run fires six hours before the deadline; a fill run two hours
+      before attempts anything still missing. Contexts are built and hashed at
+      the main run.
+    </span>
+  </div>
+
+  {/* A Gameweek with no Fixture at all: before the schedule is read, there is
+      nothing to list and nothing pending. */}
+  <p class="muted fx-empty" id="empty" hidden>
+    No fixtures have been published for this gameweek yet.
+  </p>
+
+  <div id="fixtures">
+    {/* Still blocks over the grid the real blocks use. No animation and no
+        radius: the loading state is not where either arrives. */}
+    {Array.from({ length: 4 }).map(() => (
+      <div class="fx fx-skeleton" aria-hidden="true">
+        <div class="skeleton skeleton-title"></div>
+        <div class="skeleton"></div>
+      </div>
+    ))}
+  </div>
+
+  <script is:inline>
+  (() => {
+    const $ = (id) => document.getElementById(id);
+
+    const div = (className, value, role) => {
+      const node = document.createElement("div");
+      node.className = className;
+      if (value !== undefined) node.textContent = value;
+      if (role !== undefined) node.role = role;
+      return node;
+    };
+
+    const when = (iso) =>
+      new Date(iso).toLocaleString(undefined, {
+        weekday: "short", day: "numeric", month: "short",
+        hour: "2-digit", minute: "2-digit"
+      });
+
+    // Only one rationale is open at a time, so the page does not grow under a
+    // reader. It is deliberately not in the URL: the sort choice and the
+    // selected Entrant are what a copied link carries, and an open disclosure
+    // is not a view of the page worth sending anyone.
+    let openPanel = null;
+    const disclose = (button, panel) => {
+      const open = panel.hidden;
+      if (openPanel && openPanel.panel !== panel) {
+        openPanel.panel.hidden = true;
+        openPanel.button.textContent = "Why";
+        openPanel.button.setAttribute("aria-expanded", "false");
+      }
+      panel.hidden = !open;
+      button.textContent = open ? "Hide" : "Why";
+      button.setAttribute("aria-expanded", String(open));
+      openPanel = open ? { button, panel } : null;
+    };
+
+    const probabilityBar = (probs) => {
+      const bar = div("fxbar");
+      for (const [outcome, kind] of [["H", "h"], ["D", "d"], ["A", "a"]]) {
+        const part = document.createElement("span");
+        part.className = "fxbar-" + kind;
+        part.style.width = probs[outcome] * 100 + "%";
+        bar.append(part);
+      }
+      return bar;
+    };
+
+    const probabilityText = (probs) =>
+      ["H", "D", "A"].map((outcome) => probs[outcome].toFixed(2)).join(" / ");
+
+    function predictionRow(fixture, slot, index) {
+      const row = div("fxrow", undefined, "row");
+      const { entrant, prediction } = slot;
+      row.append(div("fx-name", entrant.name, "cell"));
+
+      const split = div("fx-split", undefined, "cell");
+      split.append(
+        probabilityBar(prediction.probs),
+        div("fx-probs", probabilityText(prediction.probs))
+      );
+      row.append(
+        split,
+        div("fx-score",
+          prediction.predHome + "–" + prediction.predAway, "cell")
+      );
+
+      const coherence = div("fx-coherence", undefined, "cell");
+      // The argmax of the probabilities against the Outcome the committed
+      // scoreline implies, decided in the read layer by the comparison the
+      // scorer uses. Incoherent reads as a flag, in the danger colour.
+      const verdict = div(
+        prediction.coherent ? "" : "danger",
+        prediction.coherent ? "Yes" : "No"
+      );
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "btn btn-ghost fx-why";
+      button.textContent = "Why";
+      const panelId = "rationale-" + fixture.fplId + "-" + index;
+      button.setAttribute("aria-expanded", "false");
+      button.setAttribute("aria-controls", panelId);
+      button.setAttribute(
+        "aria-label", "Why — " + entrant.name + ", " + fixture.homeTeam
+          + " v " + fixture.awayTeam
+      );
+      coherence.append(verdict, button);
+      row.append(coherence);
+
+      // The panel is a cell of the row it belongs to, spanning every column,
+      // rather than a div between the table and its rows: a generic element
+      // there breaks the structure the roles just put back.
+      const panel = div("rationale", undefined, "cell");
+      panel.id = panelId;
+      panel.hidden = true;
+      panel.append(
+        div("kicker", "Rationale · display only, never scored"),
+        div("rationale-body", prediction.rationale ?? ""),
+        // Repairs and never "attempts": zero means the Prediction was valid on
+        // the first attempt, not that it was never asked for. The Lock is
+        // stated rather than left to be trusted.
+        div("rationale-meta muted",
+          "context " + prediction.contextHash
+          + " · Repairs " + prediction.repairs
+          + " · stored before the deadline")
+      );
+      button.addEventListener("click", () => disclose(button, panel));
+      row.append(panel);
+      return row;
+    }
+
+    function fixtureBlock(fixture) {
+      const block = document.createElement("article");
+      block.className = "fx";
+
+      const title = div("fx-title");
+      const teams = div("fx-teams");
+      const versus = document.createElement("span");
+      versus.className = "fx-v";
+      versus.textContent = "v";
+      teams.append(fixture.homeTeam + " ", versus, " " + fixture.awayTeam);
+      const filled = fixture.slots.filter((slot) => slot.prediction).length;
+      const tag = div("tag tag-neutral",
+        filled + " of " + fixture.slots.length + " predicted");
+      title.append(
+        teams,
+        div("fx-when muted", when(fixture.kickoffAt)
+          + " · fpl_id " + fixture.fplId),
+        tag
+      );
+      block.append(title);
+
+      // Every slot empty is the pending state for this Fixture, and it is
+      // stated rather than left as an empty table.
+      if (filled === 0) {
+        const pending = div("fx-pending muted");
+        pending.append(
+          div("fx-pending-mark"),
+          document.createTextNode(
+            fixture.slots.length + " entrants pending · context not yet built")
+        );
+        block.append(pending);
+        return block;
+      }
+
+      const table = div("fxtable", undefined, "table");
+      table.setAttribute(
+        "aria-label",
+        "Predictions for " + fixture.homeTeam + " v " + fixture.awayTeam
+      );
+      // The design's grid of divs reaches a screen reader as four unrelated
+      // runs of text. The roles put the table back without putting a `<table>`
+      // back: the layout is untouched and the column a figure sits under is
+      // announced with it.
+      const head = div("fxhead", undefined, "row");
+      head.append(
+        div("", "Entrant", "columnheader"),
+        div("", "Home / Draw / Away", "columnheader"),
+        div("", "Score", "columnheader"),
+        div("", "Coherent", "columnheader")
+      );
+      table.append(head);
+
+      // Every Entrant, in the same order on every Fixture. A Gap is a slot with
+      // nothing in it rather than a row that is not there.
+      fixture.slots.forEach((slot, index) => {
+        if (!slot.prediction) {
+          const row = div("fxrow fxrow-gap", undefined, "row");
+          row.append(
+            div("fx-name", slot.entrant.name, "cell"),
+            div("fx-gap muted", "No prediction stored", "cell")
+          );
+          table.append(row);
+          return;
+        }
+        table.append(predictionRow(fixture, slot, index));
+      });
+
+      block.append(table);
+      return block;
+    }
+
+    function render(body) {
+      $("gw-label").textContent =
+        body.gw === null ? "No gameweek" : "Gameweek " + body.gw;
+      $("lock-time").textContent =
+        body.deadlineAt === null ? "—" : when(body.deadlineAt);
+
+      const committed = body.fixtures.some(
+        (fixture) => fixture.slots.some((slot) => slot.prediction)
+      );
+      const count = body.fixtures.length;
+      $("lock-note").textContent = committed
+        ? count + (count === 1 ? " fixture" : " fixtures")
+          + " locked at this deadline"
+        : "Predictions have not run yet";
+
+      if (body.lockPassed) {
+        $("pending-note").textContent =
+          "Both runs are behind this deadline — the main run six hours before "
+          + "it and the fill two hours before — and nothing was stored.";
+      }
+      $("pending").hidden = committed || count === 0;
+      $("empty").hidden = count > 0;
+      $("fixtures").replaceChildren(...body.fixtures.map(fixtureBlock));
+    }
+
+    // A relative path: the Worker route claims `/api/*` on this hostname, so
+    // nothing is cross-origin and no origin was a build input.
+    fetch("/api/fixtures")
+      .then((response) => {
+        if (!response.ok) throw new Error(String(response.status));
+        return response.json();
+      })
+      .then(render)
+      .catch(() => {
+        // One line, and nothing retries.
+        $("error").hidden = false;
+        $("fixtures").replaceChildren();
+      });
+  })();
+  </script>
+</Page>

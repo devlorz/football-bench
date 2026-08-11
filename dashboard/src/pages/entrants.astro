@@ -1,0 +1,432 @@
+---
+import Page from "../layouts/Page.astro";
+---
+<Page title="Entrant record — Football Bench, match track" current="entrants">
+  {/*
+    Everything that is not a number is in the built HTML: the headings, the
+    four headline labels, the chart's frame and the table's column headers.
+    Only the figures wait on the fetch.
+  */}
+  <section class="sthero">
+    <h1>Historical record</h1>
+    <p>
+      Every settled Gameweek, per Entrant. Nothing here is back-filled — a
+      Gameweek an Entrant missed stays missing.
+    </p>
+  </section>
+
+  <p class="error" id="error" hidden>
+    The entrant records could not be read. Nothing is being retried.
+  </p>
+
+  {/* Null `throughGw` and not an empty list of Entrants: an empty array cannot
+      tell a Season that has not started from a read that returned nothing. */}
+  <section class="preseason stpre" id="preseason" hidden>
+    <div>
+      <div class="kicker">No result yet</div>
+      <h2>No settled gameweeks</h2>
+      <p>
+        The record begins after the first Gameweek is settled and scored.
+        Provisional numbers are never shown.
+      </p>
+    </div>
+  </section>
+
+  <section id="record">
+    {/* One button per Entrant, built from the response: switching is a
+        re-render of everything below and costs no second request. */}
+    <div class="sttabs" id="tabs" role="group" aria-label="Entrant"></div>
+
+    <div class="stkpi">
+      <div class="soft">
+        <div class="stat-label">Match points</div>
+        <div class="stat-value" id="kpi-match">&nbsp;</div>
+        <div class="muted stnote" id="kpi-match-note"></div>
+      </div>
+      <div class="soft">
+        <div class="stat-label">Bet points</div>
+        <div class="stat-value" id="kpi-bet">&nbsp;</div>
+        <div class="muted stnote">One point per market won</div>
+      </div>
+      <div class="soft">
+        <div class="stat-label">RPS</div>
+        <div class="stat-value" id="kpi-rps">&nbsp;</div>
+        <div class="muted stnote">Ranked probability score · lower is better</div>
+      </div>
+      <div class="soft">
+        <div class="stat-label">Gaps</div>
+        <div class="stat-value" id="kpi-gaps">&nbsp;</div>
+        <div class="muted stnote">Fixtures with no prediction stored</div>
+      </div>
+    </div>
+
+    <div class="stcharts">
+      <div>
+        <h4 class="sth4">Cumulative match points</h4>
+        {/* The domains follow the data and are computed below, so nothing is
+            clipped at Gameweek 14 or at Gameweek 30. The figures themselves are
+            in the table underneath, which is what a screen reader reads. */}
+        <svg
+          class="stchart"
+          id="chart"
+          viewBox="0 0 880 260"
+          role="img"
+          aria-label="Cumulative match points per gameweek"
+        ></svg>
+        <div class="muted stchart-note">
+          Selected entrant in accent; the other eight in grey.
+        </div>
+      </div>
+
+      <div>
+        <h4 class="sth4">Score-tier breakdown</h4>
+        <div class="stbar" id="tier-bar"></div>
+        <div id="tier-rows"></div>
+
+        <h4 class="sth4-spaced">Bet slip market hit rate</h4>
+        <div id="market-rows"></div>
+      </div>
+    </div>
+
+    <h4 class="sth4">Per-gameweek record</h4>
+    {/* Its own scroll container, so the table can be wider than a phone without
+        the page ever scrolling sideways. */}
+    <div class="sttable">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>GW</th>
+            <th>Fixtures</th>
+            <th class="num">Match pts</th>
+            <th class="num">Bet pts</th>
+            <th class="num">Exact</th>
+            <th class="num">Outcome</th>
+            <th class="num">RPS</th>
+            <th class="num">Gaps</th>
+          </tr>
+        </thead>
+        <tbody id="gw-rows">
+          {/* Still blocks over the same grid the real rows use. */}
+          {Array.from({ length: 8 }).map(() => (
+            <tr class="strow-skeleton" aria-hidden="true">
+              <td colspan="8"><div class="skeleton"></div></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {/* Bundled rather than `is:inline`, unlike the other two pages: it is the
+      one page whose script has a part worth a test, and an inline script can
+      import nothing. The chart's two domains live in `chart-domain.ts` and are
+      tested there; everything else here is DOM. */}
+  <script>
+  import { across, ceiling } from "../chart-domain.js";
+  import type {
+    EntrantRecord, EntrantsBody
+  } from "../../../src/dashboard/read-api.js";
+
+  (() => {
+    // Every id below is in the built HTML above, so the element is there.
+    const $ = (id: string): HTMLElement => document.getElementById(id)!;
+
+    const div = (className: string, value?: string): HTMLDivElement => {
+      const node = document.createElement("div");
+      node.className = className;
+      if (value !== undefined) node.textContent = value;
+      return node;
+    };
+
+    // The design's own labels for the tiers and the five markets. The keys are
+    // the scorer's; an unnamed market renders as its key rather than as
+    // nothing, so a new leg on the slip is visible the day it appears.
+    const TIERS: Record<number, { label: string; fill: string }> = {
+      5: { label: "Exact score · 5 pts", fill: "var(--tier-5)" },
+      3: { label: "Goal difference · 3 pts", fill: "var(--tier-3)" },
+      2: { label: "Outcome only · 2 pts", fill: "var(--tier-2)" },
+      0: { label: "No points", fill: "var(--tier-0)" }
+    };
+    const MARKETS: Record<string, string> = {
+      result: "Match result",
+      "over_under_2.5": "Over/under 2.5",
+      "over_under_3.5": "Over/under 3.5",
+      "over_under_4.5": "Over/under 4.5",
+      btts: "Both teams to score"
+    };
+
+    // The selected Entrant is in the URL so the link is copyable and a reload
+    // holds it, and it is written with `replaceState` for the reason the sort
+    // choice is: picking an Entrant is a view of one page, not navigation, and
+    // Back is expected to leave rather than walk back through nine choices.
+    let body: EntrantsBody | null = null;
+    let selected = new URL(location.href).searchParams.get("entrant");
+
+    const remember = (id: string): void => {
+      selected = id;
+      const url = new URL(location.href);
+      if (url.searchParams.get("entrant") === id) return;
+      url.searchParams.set("entrant", id);
+      history.replaceState(null, "", url);
+    };
+
+    const percent = (count: number, total: number): number =>
+      total > 0 ? (count / total) * 100 : 0;
+
+    /* ── the chart ──────────────────────────────────────────────────────── */
+
+    // The design's plot area: inset 44 left, 30 bottom, 8 top, 6 right of an
+    // 880 × 260 viewBox.
+    const PLOT = { left: 44, right: 874, top: 8, bottom: 230 };
+
+    /** One point per Gameweek the Entrant has a row for, in Gameweek order. */
+    const cumulative = (entrant: EntrantRecord) => {
+      let running = 0;
+      return entrant.gameweeks.map((week) => ({
+        gw: week.gw,
+        total: (running += week.matchPoints)
+      }));
+    };
+
+    const svg = (
+      name: string,
+      attributes: Record<string, string | number>
+    ): SVGElement => {
+      const node =
+        document.createElementNS("http://www.w3.org/2000/svg", name);
+      for (const [key, value] of Object.entries(attributes)) {
+        node.setAttribute(key, String(value));
+      }
+      return node;
+    };
+
+    function renderChart(entrant: EntrantRecord, field: EntrantRecord[]) {
+      const chart = $("chart");
+      const weeks = entrant.gameweeks;
+      chart.replaceChildren();
+      if (weeks.length === 0) return;
+
+      const series = field.map(cumulative);
+      const top = ceiling(
+        Math.max(...series.map((each) => each.at(-1)?.total ?? 0))
+      );
+      const span = PLOT.bottom - PLOT.top;
+      const y = (value: number) => PLOT.bottom - (value / top) * span;
+      // By the Gameweek's own number, so every line is read against one axis
+      // whatever rows each Entrant has.
+      const first = weeks[0]!.gw;
+      const last = weeks.at(-1)!.gw;
+      const x = (gw: number) =>
+        PLOT.left + across(gw, first, last) * (PLOT.right - PLOT.left);
+
+      const path = (points: { gw: number; total: number }[]) =>
+        points.map(({ gw, total }, index) =>
+          (index === 0 ? "M" : "L") + x(gw) + " " + y(total)).join(" ");
+
+      for (let tick = 0; tick <= 4; tick += 1) {
+        const value = (top / 4) * tick;
+        chart.append(
+          svg("line", {
+            x1: PLOT.left - 4, x2: PLOT.right, y1: y(value), y2: y(value),
+            stroke: "currentColor", "stroke-opacity": 0.14
+          })
+        );
+        const label = svg("text", {
+          x: 0, y: y(value) + 4, "font-size": 11,
+          fill: "currentColor", "fill-opacity": 0.5
+        });
+        label.textContent = String(Math.round(value));
+        chart.append(label);
+      }
+
+      // At most eight labels however long the Season is, so Gameweek 30 reads
+      // as easily as Gameweek 14.
+      const every = Math.ceil(weeks.length / 8);
+      weeks.forEach((week, index) => {
+        if (index % every !== 0 && index !== weeks.length - 1) return;
+        // The first and last labels sit on the plot's own edges, so a centred
+        // one would hang over the viewBox and be cut in half. Only the ends
+        // need it; everything between is centred on its Gameweek.
+        const label = svg("text", {
+          x: x(week.gw), y: 256, "font-size": 11,
+          "text-anchor": index === 0
+            ? "start"
+            : index === weeks.length - 1 ? "end" : "middle",
+          fill: "currentColor", "fill-opacity": 0.5
+        });
+        label.textContent = "GW" + week.gw;
+        chart.append(label);
+      });
+
+      field.forEach((each, index) => {
+        if (each.id === entrant.id) return;
+        chart.append(svg("path", {
+          d: path(series[index]!), fill: "none", stroke: "currentColor",
+          "stroke-opacity": 0.2, "stroke-width": 1.5
+        }));
+      });
+      // Last, so the selected line is drawn over the field rather than under it.
+      chart.append(svg("path", {
+        d: path(cumulative(entrant)), fill: "none",
+        stroke: "var(--color-accent)", "stroke-width": 3
+      }));
+      chart.setAttribute(
+        "aria-label",
+        "Cumulative match points per gameweek, " + entrant.name
+        + " against the other entrants"
+      );
+    }
+
+    /* ── the panels ─────────────────────────────────────────────────────── */
+
+    function renderTiers(entrant: EntrantRecord) {
+      const bar = document.createDocumentFragment();
+      const rows = document.createDocumentFragment();
+      for (const tier of entrant.tiers) {
+        const { label, fill } = TIERS[tier.points]!;
+        // `n` is null only before the Season is scored, and this panel is
+        // not on screen then; a nought denominator draws a nought bar.
+        const share = percent(tier.count, entrant.n ?? 0);
+
+        const part = div("");
+        part.style.background = fill;
+        part.style.width = share + "%";
+        bar.append(part);
+
+        const row = div("strow");
+        const swatch = div("stswatch");
+        swatch.style.background = fill;
+        row.append(
+          swatch,
+          div("", label),
+          div("stcount", String(tier.count)),
+          div("muted stpct", Math.round(share) + "%")
+        );
+        rows.append(row);
+      }
+      $("tier-bar").replaceChildren(bar);
+      $("tier-rows").replaceChildren(rows);
+    }
+
+    function renderMarkets(entrant: EntrantRecord) {
+      const rows = document.createDocumentFragment();
+      for (const market of entrant.markets) {
+        const row = div("stmarket");
+        const head = div("stmarket-head");
+        head.append(
+          div("", MARKETS[market.market] ?? market.market),
+          // Both sides of the fraction: a rate says nothing about what it was
+          // taken over.
+          div("stmarket-count",
+            market.hits + " / " + market.n + " · "
+            + Math.round(percent(market.hits, market.n)) + "%")
+        );
+        const track = div("stmarket-bar");
+        const fill = div("");
+        fill.style.width = percent(market.hits, market.n) + "%";
+        track.append(fill);
+        row.append(head, track);
+        rows.append(row);
+      }
+      $("market-rows").replaceChildren(rows);
+    }
+
+    function renderTable(entrant: EntrantRecord) {
+      const rows = document.createDocumentFragment();
+      for (const week of entrant.gameweeks) {
+        const row = document.createElement("tr");
+        const cell = (value: string, className?: string): HTMLElement => {
+          const node = document.createElement("td");
+          node.textContent = value;
+          if (className) node.className = className;
+          return node;
+        };
+        row.append(
+          cell("GW " + week.gw, "stgw"),
+          cell(String(week.fixtures), "muted"),
+          cell(String(week.matchPoints), "num stgw"),
+          cell(String(week.betPoints), "num"),
+          cell(String(week.exact), "num"),
+          // Over the Fixtures the Entrant settled, not the Fixtures the Lock
+          // owned: the two differ by exactly what it Gapped.
+          cell(week.outcome + " / " + week.settled, "num"),
+          // No mean where nothing settled, which is not a nought.
+          cell(week.rps === null ? "—" : week.rps.toFixed(3), "num strps"),
+          // Absence is as visible as poor performance.
+          cell(String(week.gaps), week.gaps > 0 ? "num danger" : "num muted")
+        );
+        rows.append(row);
+      }
+      $("gw-rows").replaceChildren(rows);
+    }
+
+    function renderTabs(field: EntrantRecord[], selectedId: string) {
+      const tabs = document.createDocumentFragment();
+      for (const entrant of field) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "sttab";
+        button.textContent = entrant.name;
+        const current = entrant.id === selectedId;
+        button.classList.toggle("sttab-on", current);
+        button.setAttribute("aria-pressed", String(current));
+        button.addEventListener("click", () => {
+          remember(entrant.id);
+          render();
+        });
+        tabs.append(button);
+      }
+      $("tabs").replaceChildren(tabs);
+    }
+
+    function render() {
+      const data = body;
+      if (data === null) return;
+
+      const pre = data.throughGw === null;
+      $("preseason").hidden = !pre;
+      $("record").hidden = pre;
+      if (pre) return;
+
+      // An id that is not on the roster — a stale link, or a seat that left —
+      // falls back to the first Entrant rather than rendering nothing.
+      const entrant = data.entrants.find((each) => each.id === selected)
+        ?? data.entrants[0];
+      if (!entrant) return;
+      // The link is corrected to the Entrant actually on screen, so a stale id
+      // is not copied on to the next reader still saying it.
+      remember(entrant.id);
+
+      renderTabs(data.entrants, entrant.id);
+      $("kpi-match").textContent = String(entrant.matchPoints);
+      $("kpi-match-note").textContent =
+        entrant.n + " settled fixtures · through GW " + data.throughGw;
+      $("kpi-bet").textContent = String(entrant.betPoints);
+      $("kpi-rps").textContent =
+        entrant.rps === null ? "—" : entrant.rps.toFixed(3);
+      $("kpi-gaps").textContent = String(entrant.gaps);
+      $("kpi-gaps").classList.toggle("danger", (entrant.gaps ?? 0) > 0);
+
+      renderChart(entrant, data.entrants);
+      renderTiers(entrant);
+      renderMarkets(entrant);
+      renderTable(entrant);
+    }
+
+    // A relative path: the Worker route claims `/api/*` on this hostname, so
+    // nothing is cross-origin and no origin was a build input.
+    fetch("/api/entrants")
+      .then((response) => {
+        if (!response.ok) throw new Error(String(response.status));
+        return response.json();
+      })
+      .then((json: EntrantsBody) => { body = json; render(); })
+      .catch(() => {
+        // One line, and nothing retries.
+        $("error").hidden = false;
+        $("record").hidden = true;
+        $("preseason").hidden = true;
+      });
+  })();
+  </script>
+</Page>

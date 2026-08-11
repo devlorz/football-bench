@@ -1,0 +1,127 @@
+---
+/**
+ * The chrome every page of the dashboard wears: the sheets, the theme, the
+ * header and the nav. A page supplies its title and which nav link it is.
+ *
+ * The three links are the design's three pages. Two of them land in later
+ * slices and 404 until they do.
+ */
+interface Props {
+  title: string;
+  current: "leaderboard" | "fixtures" | "entrants";
+}
+
+const { title, current } = Astro.props;
+
+const LINKS = [
+  { key: "leaderboard", href: "/", label: "Leaderboard" },
+  { key: "fixtures", href: "/fixtures", label: "Fixtures" },
+  // "Entrant record" and not the design's "Model stats": the glossary forbids
+  // the second and spec 0011 renames the page.
+  { key: "entrants", href: "/entrants", label: "Entrant record" }
+] as const;
+---
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    {/* Vendored whole and never edited, so the next version of the design
+        system can be dropped over it; everything this site changes is in the
+        second sheet. */}
+    <link rel="stylesheet" href="/styles/modernist.css" />
+    <link rel="stylesheet" href="/styles/overrides.css" />
+    {/* Before the first paint and before the sheets have any say: a theme
+        applied after render is a flash of the other one on every page load. */}
+    <script is:inline>
+      document.documentElement.dataset.theme =
+        localStorage.getItem("theme") === "dark" ? "dark" : "light";
+    </script>
+  </head>
+  <body>
+    <header class="nav" id="nav">
+      <div class="nav-brand">
+        <span class="brand-name">FOOTBALL BENCH</span>
+        <span class="brand-track">Match track</span>
+      </div>
+      <nav class="navlinks" id="navlinks">
+        {LINKS.map(({ key, href, label }) => (
+          <a href={href} aria-current={key === current ? "page" : undefined}>
+            {label}
+          </a>
+        ))}
+      </nav>
+      <div class="navtools">
+        <button
+          class="btn btn-ghost btn-icon burger"
+          id="burger"
+          type="button"
+          aria-label="Menu"
+          aria-expanded="false"
+          aria-controls="navlinks"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18"></path><path d="M3 12h18"></path><path d="M3 18h18"></path></svg>
+        </button>
+        <button
+          class="btn btn-ghost btn-icon"
+          id="theme"
+          type="button"
+          aria-label="Switch theme"
+        >
+          <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+          <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+        </button>
+      </div>
+    </header>
+    <main class="page">
+      <slot />
+    </main>
+
+    <script is:inline>
+      // The two controls in the chrome share no state with each other or with
+      // anything on the page: each is local to the element it sits in.
+      (() => {
+        const root = document.documentElement;
+        const nav = document.getElementById("nav");
+        const burger = document.getElementById("burger");
+        const theme = document.getElementById("theme");
+
+        // The icon says which theme the click leads to, and the name has to say
+        // the same thing: a control called "Switch theme" whatever it is about
+        // to do leaves a reader who cannot see the icon with no way to tell
+        // which theme they are in. Named here rather than in the markup so the
+        // stored theme, which is only known once this runs, is what it reads.
+        const name = () => {
+          const label = root.dataset.theme === "dark"
+            ? "Switch to light theme"
+            : "Switch to dark theme";
+          theme.setAttribute("aria-label", label);
+          theme.title = label;
+        };
+        name();
+
+        theme.addEventListener("click", () => {
+          const dark = root.dataset.theme !== "dark";
+          root.dataset.theme = dark ? "dark" : "light";
+          // Held here rather than in the URL: the choice belongs to the reader
+          // across every page and every visit, not to the link they copy.
+          localStorage.setItem("theme", dark ? "dark" : "light");
+          name();
+        });
+
+        const setMenu = (open) => {
+          nav.classList.toggle("menu-open", open);
+          burger.setAttribute("aria-expanded", String(open));
+        };
+        burger.addEventListener("click", () => {
+          setMenu(!nav.classList.contains("menu-open"));
+        });
+        // Picking a link closes it, so nobody is left with a menu over the page
+        // they asked for. The click still navigates.
+        for (const link of document.querySelectorAll("#navlinks a")) {
+          link.addEventListener("click", () => setMenu(false));
+        }
+      })();
+    </script>
+  </body>
+</html>

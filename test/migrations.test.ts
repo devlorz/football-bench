@@ -249,7 +249,8 @@ describe("applying migrations", () => {
       "0013_per_entrant_fpl_contexts.sql",
       "0014_fpl_runs.sql",
       "0015_full_fpl_player_stats.sql",
-      "0016_unscheduled_fixtures.sql"
+      "0016_unscheduled_fixtures.sql",
+      "0017_dashboard_read_role.sql"
     ]);
     const backfill = await client.query<{
       observed_at: Date;
