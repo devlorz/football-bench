@@ -18,23 +18,21 @@ The assets are built separately and `wrangler` uploads whatever is in
 `dashboard/dist` — a stale `dist` deploys silently, so build first, every time.
 
 ```sh
-# one chain, so a failure stops everything after it
-[ -z "$(git status --porcelain)" ] || { echo 'tree is dirty'; exit 1; } \
-  && SHA="$(git rev-parse HEAD)" \
-  && npm --prefix dashboard run build \
-  && npx wrangler deploy --message "$SHA" \
-  && git tag -f deployed "$SHA" \
-  && echo "deployed and tagged $SHA"
+./scripts/deploy-dashboard.sh
 ```
 
-**Every part of that is load-bearing.** The clean-tree check first, because
-`wrangler` uploads the working tree and not `HEAD` — a dirty tree deploys code
-that no commit describes, and then the tag names a commit that is not what is
-running. `&&` throughout, because these as separate lines in an interactive
-shell let a failed deploy be followed by a tag move, which is the one way to
-get a `deployed` tag pointing at code that was never deployed. And the tag
-moves *last*, after the deploy has returned successfully, to the SHA captured
-before the build rather than to whatever `HEAD` is by then.
+**One script rather than a sequence to retype**, because the sequence has
+invariants that kept getting lost when it was written out in prose and then
+approximated somewhere else: it refuses a dirty tree, because `wrangler`
+uploads the working tree and not `HEAD`; it builds `dashboard/dist`, because
+that is a deploy input and a stale one deploys silently; and it moves the
+`deployed` tag *only after* the deploy returns, to the SHA captured before the
+build. A tag that moved after a failed deploy names a commit that never ran,
+which is worse than no tag at all, because the recovery below trusts it.
+
+Read [scripts/deploy-dashboard.sh](../../scripts/deploy-dashboard.sh) — it is
+short, and it is the authority. Every other place in this document that
+deploys calls it.
 
 **Two records of which commit is running, because Cloudflare knows version IDs
 and nothing about git.**
@@ -51,18 +49,23 @@ it lies, which is worse than not existing — which is why it is inside the chai
 above rather than a step to remember.
 
 **It is on one machine, and that is the real limit of all this.** Once the
-branch is pushed, push the tag after every successful deploy — and note that a
-plain `git push origin deployed` *fails* once the tag has moved, because it is
-not a fast-forward. It needs the force form:
+branch is pushed, publish the tag on every deploy:
 
 ```sh
-git push --force-with-lease origin refs/tags/deployed
+PUSH_TAG=1 ./scripts/deploy-dashboard.sh
 ```
 
-`--force-with-lease` rather than `--force` so that a tag someone else moved in
-the meantime is a rejection rather than a silent overwrite: two people
-deploying at once should collide loudly. Until the branch is pushed at all,
-none of this applies and the tag is local, like the commits.
+That path is in the script because getting it right is not obvious. A plain
+`git push origin deployed` fails once the tag has moved — it is not a
+fast-forward — and a bare `--force-with-lease` is *also* rejected, because a
+lease with no explicit value wants a remote-tracking ref and tags do not have
+one. The script reads the remote's current value with `git ls-remote` and
+leases against it explicitly, so a tag someone else moved in the meantime is a
+loud rejection rather than a silent overwrite. Two people deploying at once
+should collide.
+
+Until the branch is pushed at all, `PUSH_TAG` has nothing to publish to and the
+tag is local, like the commits.
 
 There is no preview step, deliberately. `preview_urls = false` is set, because a
 Worker version preview holds the same secrets as production and would answer a
@@ -330,21 +333,19 @@ seconds.
 
 Any of it is too long if hiding the data is why you revoked. Empty the cache.
 
-The purge is a deploy, and **a deploy ships whatever is in the working tree.**
-In an emergency, on whatever machine is to hand, that is how a half-finished
-change or a stale `dashboard/dist` reaches production while everyone is looking
-at the outage. Check before running it:
+The purge is a deploy, and it is the *same* deploy — same script, same
+invariants, same tag move:
 
 ```sh
-git status --porcelain          # must be empty
-git rev-parse HEAD              # must be the commit that is deployed
-cd dashboard && npm run build && cd ..   # never deploy a dist you did not build
-npx wrangler deploy --message "$(git rev-parse HEAD)"
+./scripts/deploy-dashboard.sh          # PUSH_TAG=1 once the branch is pushed
 ```
 
-The `--message` matters here as much as on an ordinary deploy, and is easier to
-forget: this is the deploy that leaves the running commit unrecorded exactly
-when the next person will need it most.
+It matters more here, not less. This is the deploy run in a hurry on whatever
+machine is to hand, so it is the one where a half-finished change or a stale
+`dashboard/dist` would reach production while everyone is looking at the
+outage, and the one whose running commit would otherwise go unrecorded exactly
+when the next person needs it. The script refuses a dirty tree rather than
+asking anyone to read `git status` and judge under pressure.
 
 If the tree is not clean and cannot be made clean quickly, deploy from a fresh
 clone of the deployed commit — but **clone from the local repository, not from
@@ -391,10 +392,15 @@ Now clone, and prove the commit is actually there before anything depends on
 it:
 
 ```sh
+# Prefer the remote once the branch is pushed -- then this works from any
+# machine. Until then the local repository is the only place the commits exist.
+SOURCE=/Users/leelorz/src/football-bench
+git ls-remote --exit-code origin "$SHA" >/dev/null 2>&1 && SOURCE=origin
+
 # a temporary directory per incident, so a second one does not trip over the
 # leftovers of the first
 WORK="$(mktemp -d)"
-git clone /Users/leelorz/src/football-bench "$WORK" && cd "$WORK"
+git clone "$SOURCE" "$WORK" && cd "$WORK"
 
 git cat-file -e "$SHA^{commit}" || {
   printf 'the deployed commit is not in this repository\n'; exit 1; }
@@ -403,19 +409,34 @@ git log -1 --format='%h %s' "$SHA"
 git checkout "$SHA"
 npm ci
 npm --prefix dashboard ci
-npm --prefix dashboard run build
-npx wrangler deploy --message "$SHA"
+./scripts/deploy-dashboard.sh
 ```
 
 A clone has no `node_modules` in either place, so both installs come first —
 and `npm ci` rather than `npm install`, so the pinned `wrangler` is the one
 that runs. `wrangler` reads the same OAuth credentials from the home directory,
-so no login is needed.
+so no login is needed. The deploy is the same script as everywhere else, which
+is what moves the tag and records the message; a detached `HEAD` at `$SHA` is a
+clean tree, so its guard is satisfied.
 
-**Push the branch and this gets simpler**, and safer: a clone from `origin`
-works from any machine, and the local repository stops being a single point of
-failure for the recovery path. Until then this procedure only works on the one
-machine that holds the commits.
+**Then repair the durable record in the source repository.** The clone is a
+temporary directory about to be deleted, so the tag it just moved dies with it
+— and if this recovery ran because the tag was *missing*, leaving it missing
+means the next incident finds an expired edge history and nothing else:
+
+```sh
+cd "$SOURCE" 2>/dev/null || cd /Users/leelorz/src/football-bench
+git tag -f deployed "$SHA"
+# and publish it once the branch is pushed:
+#   old="$(git ls-remote origin refs/tags/deployed | cut -f1)"
+#   git push --force-with-lease="refs/tags/deployed:${old}" origin refs/tags/deployed
+rm -rf "$WORK"
+```
+
+**Push the branch and this gets simpler**, and safer: the clone comes from
+`origin` on any machine, the tag is published rather than local, and the one
+laptop holding these commits stops being the single point of failure for the
+whole recovery path.
 
 `cross_version_cache` is left off precisely so this works — the Worker version
 is part of the cache key, so a new deployment starts from an empty cache. There
