@@ -170,9 +170,10 @@ work. Doing it by hand once means the deploy is understood before anything autom
       `dashboard_read`, and its password held as a Worker secret; the schema names it nowhere
 - [x] A runbook entry covers provisioning and rotating that credential, and states what
       revoking access takes — `revoke dashboard_read from` is the whole of it in the database,
-      but **not the whole of the operation**: the edge keeps serving cached 200s afterwards —
-      five minutes fresh and up to an hour more of `stale-while-revalidate` — so the revoke is
-      followed by a `wrangler deploy` to empty the cache,
+      but **not the whole of the operation**: the edge keeps serving cached 200s for the five
+      minutes they stay fresh — `stale-if-error=0` stops the hour of `stale-while-revalidate`
+      extending that, which was walked — so the revoke is followed by a `wrangler deploy` to
+      empty the cache,
       and confirmed on the canonical URL as well as on a unique key. The criterion's "one
       statement" was written before this deploy had a cache; walked, and it is two
 - **Withdrawn** — ~~A hosted preview renders chrome and the error line; previews carry no live
@@ -236,14 +237,30 @@ real preview environment.
 `cf-cache-status: HIT`, ran `wrangler deploy`, and the same key came back `MISS`. The Worker
 version is part of the cache key and `cross_version_cache` is off, so this holds as long as
 that stays true. It matters because revoking the grant does not touch a cached 200: without
-the deploy, an emergency revoke leaves readers looking at the data for another hour and five
-minutes — five fresh, and the hour `stale-while-revalidate` allows —
+the deploy, an emergency revoke leaves readers looking at the data for another five minutes
 while a unique-key check reports 500 and looks like success.
 
-**`stale-if-error=0` is set and reasoned, and has not been walked.** Proving it needs the
-Worker to fail while a cache entry is live, which means another revoke against production.
-The reasoning is in ADR-0029 and the header is asserted by the tests; the behaviour under a
-real error is not yet demonstrated.
+**`stale-if-error=0` was walked, and it does what it was set for.** Against `/api/fixtures`,
+whose `max-age` is 60 rather than 300 so the entry actually expires inside a minute, with
+permission and with the grant restored by a trap so a failure anywhere still put it back:
+
+| Step | Result |
+|---|---|
+| Warm a unique key | `200` · `cf-cache-status: HIT` |
+| `revoke dashboard_read`, then a *different* unique key with no entry | `500` · `BYPASS` — the Worker is genuinely dead |
+| The warmed key, still inside `max-age` | `200` · `HIT` — a real cache entry, still being served |
+| The warmed key once `max-age` has passed | `500` · `BYPASS` |
+| And again | `500` · `BYPASS` |
+
+The fourth row is the claim. Without the directive that request is a revalidation that fails,
+and Cloudflare's default is to answer it from the stale entry — indefinitely. With it, the
+stale entry is not served and the error is the answer. The third row is what makes the fourth
+mean anything: it proves an entry existed and was in use right up to expiry, so the 500 is
+stale-serving declining rather than an empty cache.
+
+Errors are `BYPASS` and not cached, which is the other half of not compounding an outage.
+
+Roughly ninety seconds dark. All six paths and the grant were verified back afterwards.
 
 **The deployed topology now has an ADR.** ADR-0028 mandated Pages plus a Worker route and was
 left standing against a deploy that does neither.

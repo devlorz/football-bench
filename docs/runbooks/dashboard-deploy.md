@@ -256,11 +256,14 @@ is the one that matters.
 **The revoke does not empty the cache, and the URLs a reader actually visits
 are cached.** `/api/leaderboard` keeps returning its cached 200 after the
 database has stopped answering — five minutes of it fresh, and then up to
-another hour that `stale-while-revalidate=3600` allows while the revalidation
-is attempted. `stale-if-error=0` is meant to cut the stale serving short once
-those revalidations start failing, but do not stand on that in an emergency:
-plan for **an hour and five minutes** unless the cache is emptied. If the point
-of revoking is that nobody sees the data, the revoke is half the job.
+another hour that `stale-while-revalidate=3600` would allow while the
+revalidation is attempted. `stale-if-error=0` cuts that second part short — it
+was walked against the live edge, and a warmed entry went from `200 HIT` to
+`500` the moment expiry forced a revalidation the Worker could not answer. So
+the exposure is **the freshness window, five minutes**, and not the hour.
+
+Five minutes of a revoked dashboard still showing the data is five minutes too
+many if that is why you revoked. Empty the cache.
 
 The purge is a deploy, and **a deploy ships whatever is in the working tree.**
 In an emergency, on whatever machine is to hand, that is how a half-finished

@@ -58,7 +58,9 @@ below); nothing in the pages, the seam or the Worker changes either way.
   `proxy-revalidate`, Cloudflare serves stale on Worker error *indefinitely*. A Worker that
   has lost its database would keep answering 200 from an entry that never expires — numbers
   that look right and are simply old, which is the failure this dashboard is least able to
-  notice.
+  notice. Walked against the live edge rather than taken from the documentation: a warmed
+  entry served `200 HIT` right up to expiry with the grant revoked, and `500 BYPASS` from the
+  moment expiry made a revalidation necessary.
 
   The lifetimes themselves are unchanged from ADR-0028: five minutes for the two the scoring
   run moves, sixty seconds for Fixtures.
