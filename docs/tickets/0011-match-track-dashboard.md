@@ -3,7 +3,7 @@
 Six tracer-bullet slices that put the first reader in front of the benchmark: a seeded Season,
 a read-only API, three pages, and one deploy done by hand. Source:
 [spec 0011](../specs/0011-match-track-dashboard.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0001–0028](../adr/), especially
+[CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0001–0029](../adr/), especially
 [ADR 0027](../adr/0027-the-read-api-reaches-postgres-directly-under-a-select-only-role.md) and
 [ADR 0028](../adr/0028-the-dashboard-is-a-static-build-that-fetches-at-runtime.md).
 Design of record: [docs/design_handoff_match_track](../design_handoff_match_track/).
@@ -75,8 +75,10 @@ the harness together, and every later endpoint is an addition to a path that alr
       asserted with a Gap present
 - [x] `throughGw` is `null` on a Season with nothing scored, and the nine entered Entrants are
       still returned
-- [x] The response carries `public, s-maxage=300, stale-while-revalidate=3600`, and an unknown
-      path is a `404`
+- [x] The response carries the scored lifetime with an hour of stale, and an unknown path is a
+      `404` — the header was `public, s-maxage=300, stale-while-revalidate=3600` when this was
+      ticked and is now `Cloudflare-CDN-Cache-Control: max-age=300, stale-while-revalidate=3600`
+      with `Cache-Control: no-cache`; see the deploy slice and ADR-0029
 
 ## The Leaderboard page
 
@@ -237,9 +239,10 @@ claim as well as the criterion, and both are now demonstrated rather than assert
 confirmation the Entrant slice asked for. With the grant revoked, an *ordinary* reload of the
 hosted page rendered the cached pre-season body and no error line at all. Only
 cache-bypassing reload showed the truth. The response carries `s-maxage` and no `max-age` and
-the browser heuristically caches it; deploying changed nothing about that. Nothing here
-changes the header ADR-0028 chose, but anyone walking a failure state on this site must
-bypass the cache or they will be looking at a lie.
+the browser heuristically caches it; deploying changed nothing about that. **Fixed since, at
+the source:** `Cache-Control` is now `no-cache` and the lifetime moved to
+`Cloudflare-CDN-Cache-Control` (ADR-0029), so the browser revalidates every load and this trap
+is closed. The walk above was done before that.
 
 **Two things the deploy found and fixed.** Both were invisible until it was deployed, which is
 the argument for doing the first one by hand.
@@ -283,7 +286,8 @@ the two runs happen.
 - [x] The Lock note counts the Fixtures actually in the Gameweek rather than asserting ten
 - [x] The page does not read `throughGw`: with Gameweek 1 locked and unscored it shows the
       committed Predictions, not the pre-season state
-- [x] The response carries `public, s-maxage=60` with no stale window
+- [x] The response carries sixty seconds with no stale window — `public, s-maxage=60` when this
+      was ticked, now `Cloudflare-CDN-Cache-Control: max-age=60` with `Cache-Control: no-cache`
 - [x] The manual acceptance checklist has been walked and its result recorded on the ticket
 
 ### The manual acceptance walk
@@ -331,8 +335,8 @@ deadline behind the clock on a database that was re-seeded straight after.
 **One thing to know before the next walk.** After re-seeding, a page can render the *previous*
 Season's numbers: the endpoint's `Cache-Control` carries `s-maxage` and no `max-age`, and a
 browser will heuristically cache such a response. A reload with the cache bypassed shows the
-truth. Worth confirming against a real edge in the deploy slice — it is the header ADR-0028
-chose, and nothing here changes it.
+truth. **Confirmed against a real edge in the deploy slice and then fixed there:**
+`Cache-Control` is now `no-cache` (ADR-0029), so this no longer applies to a walk done today.
 
 Two additions the design does not name, both stated here rather than left to be found:
 
@@ -371,7 +375,8 @@ behind all of it. Switching Entrant redraws everything at once and costs no seco
       the tier bar, the market list and every table row together
 - [x] A non-zero Gap count renders in the danger colour, a Gapped Gameweek stays in the table,
       and the page states that nothing is back-filled
-- [x] The response carries `public, s-maxage=300, stale-while-revalidate=3600`
+- [x] The response carries the scored lifetime with an hour of stale — as the leaderboard's,
+      and moved to `Cloudflare-CDN-Cache-Control` with it
 - [x] At 375px the per-Gameweek table scrolls inside its own wrapper and the page does not
       scroll sideways
 - [x] The manual acceptance checklist has been walked and its result recorded on the ticket
@@ -427,8 +432,8 @@ thing they fix. Worth a look if the phone layout is ever revisited.
 **The browser cache cost time again**, exactly as the Fixtures slice recorded. With the Worker
 stopped, an ordinary reload rendered the *cached* body and no error line at all; the error
 state only appeared on a cache-bypassing reload. The response carries `s-maxage` and no
-`max-age` and a browser heuristically caches it. Nothing here changes the header ADR-0028
-chose; it stays a thing to confirm against a real edge in the deploy slice.
+`max-age` and a browser heuristically caches it. **Confirmed at the edge in the deploy slice
+and fixed there** — `Cache-Control` is now `no-cache` (ADR-0029).
 
 **Three things the walk found and fixed.**
 

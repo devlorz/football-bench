@@ -39,11 +39,10 @@ required = ["DATABASE_URL"]
 # property the route existed for: the browser fetches a relative path, no origin
 # is a build input, and nothing is cross-origin.
 #
-# What it costs, reported rather than taken quietly: Cloudflare's cache is
-# functional on custom domains and on `*.pages.dev`, and not on `*.workers.dev`.
-# The endpoints still carry their `Cache-Control`, and nothing at the edge acts
-# on it here. That is the one acceptance criterion this deploy cannot meet, and
-# a custom domain meets it without changing a line of this file.
+# What it costs is the hosted preview, and only that: a Worker version preview
+# holds the production secret, so `preview_urls` is off below and there is no
+# data-free preview to look at. Caching is unaffected and works here -- see
+# `[cache]` below. Recorded in ADR-0029, which supersedes ADR-0028's topology.
 #
 # `run_worker_first` is the whole routing rule: `/api/*` reaches the Worker, and
 # every other path is an asset. Without it the assets are tried first and an

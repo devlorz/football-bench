@@ -33,11 +33,13 @@ export type Query = (
  * Worker's configuration -- the header alone does not cache a Worker's
  * response.
  *
- * `cache-control: no-cache` is what a browser is left holding: nothing. A
- * browser handed `s-maxage` and no `max-age` caches heuristically, and it did
- * -- three separate walks rendered a cached body and no error line with the
- * API dead behind it. `no-cache` means ask every time, and the ask is answered
- * by the edge copy, so the lifetime above is still what protects the database.
+ * `cache-control: no-cache` is what the browser gets. It does not forbid
+ * storing the response -- that would be `no-store` -- it forbids reusing one
+ * without asking first, which is the property wanted here. A browser handed
+ * `s-maxage` and no `max-age` may reuse freely on a heuristic, and it did:
+ * three separate walks rendered a cached body and no error line with the API
+ * dead behind it. Now every load asks, the ask is answered by the edge copy,
+ * and the lifetime above is still what protects the database.
  */
 const BROWSER_CACHE = "no-cache";
 

@@ -33,8 +33,18 @@ caveat off them, and it must not.
 
 ## Solution
 
-Three public pages on Cloudflare Pages, reading a read-only Cloudflare Worker at `/api/*`,
-built to the Modernist design of record.
+Three public pages served as static assets by a Cloudflare Worker, reading that same Worker's
+read-only API at `/api/*`, built to the Modernist design of record.
+
+> Amended after the first deploy. This document originally put the pages on Cloudflare Pages
+> with a Worker route claiming `/api/*` on the Pages hostname. A Worker route needs a zone and
+> `*.pages.dev` is not one, so that topology needs a custom domain, which the first deploy did
+> not have. One Worker serving both keeps every property the route was chosen for — one
+> hostname, a relative fetch, nothing cross-origin, no origin as a build input. See
+> [ADR-0029](../adr/0029-the-dashboard-deploys-as-one-worker-serving-both-the-assets-and-the-read-api.md),
+> which supersedes the topology in ADR-0028. Story 56 is unchanged and still met; story 55 is
+> unchanged. The consequences run through §Caching and §The pages below, and cost the hosted
+> preview outright.
 
 - **Leaderboard** — the nine Entrants ranked Season-to-date, by Match Points or Bet Points,
   with the qualification under it and the Fixture count behind it.
@@ -414,20 +424,30 @@ same file, alongside the `enable row level security` migration 0003 already requ
 
 ### Caching
 
-Per ADR-0028, lifetimes are per endpoint because the three do not change on the same clock:
+Per ADR-0028, lifetimes are per endpoint because the three do not change on the same clock.
+They are carried on `Cloudflare-CDN-Cache-Control`, which the edge consumes and strips, and
+they use `max-age` — a response carrying `s-maxage`, `must-revalidate` or `proxy-revalidate`
+has stale-serving disabled outright (RFC 9111 §4.2.4), so a `stale-while-revalidate` written
+beside an `s-maxage` never takes effect. This corrects the header this section originally
+specified; the lifetimes themselves are unchanged. See ADR-0029.
 
-- `/api/leaderboard` and `/api/entrants` — `public, s-maxage=300, stale-while-revalidate=3600`;
-  they move when the daily scoring run writes.
-- `/api/fixtures` — `public, s-maxage=60`, no stale window; Predictions land at deadline −6h
-  and again at −2h, and an hour of stale would show Gaps the Fill has already closed.
+- `/api/leaderboard` and `/api/entrants` — `max-age=300, stale-while-revalidate=3600`; they
+  move when the daily scoring run writes.
+- `/api/fixtures` — `max-age=60`, no stale window; Predictions land at deadline −6h and again
+  at −2h, and an hour of stale would show Gaps the Fill has already closed.
 
-Caching must be enabled in the Worker's configuration; the header alone does not cache a
-Worker's response.
+`Cache-Control` is `no-cache` on all three: the browser must revalidate before reusing a
+response, so a dead API can never hide behind a body the browser kept. The edge answers the
+revalidation, so the lifetimes above are what protect the database.
+
+Caching must be enabled in the Worker's configuration — `[cache] enabled = true`, Wrangler
+4.69.0 or above — because the header alone does not cache a Worker's response.
 
 ### The pages
 
-Astro, `output: 'static'`, three routes, deployed to Pages. A Worker route claims `/api/*` on
-the same hostname so the browser fetches a relative path and no origin is a build input. Local
+Astro, `output: 'static'`, three routes, built to `build.format: 'file'` and served as static
+assets by the Worker itself, which takes `/api/*` ahead of them via `run_worker_first`. One
+hostname, so the browser fetches a relative path and no origin is a build input. Local
 development reaches the same path through a dev proxy.
 
 Interactivity is local to the element it sits in: the sort control, the Entrant selector, the
@@ -586,8 +606,15 @@ grant-and-policy pairing is checked.
   protect.
 - **Cache purging on write.** Sixty seconds on the endpoint that moves is shorter than the
   machinery a purge hook would cost.
-- **Live data on hosted Pages previews.** They render chrome and the error line and prove the
-  build; anything to be looked at is looked at locally against the seeded Postgres.
+- **Hosted previews at all.** Originally out of scope only for their *data* — a Pages preview
+  would render chrome and the error line and prove the build. Under ADR-0029 there is no
+  preview environment to have: a Worker version preview holds the production secret, so it
+  would answer a public URL with production data, and `preview_urls = false` is set. **The
+  acceptance criterion asking for a data-free hosted preview is withdrawn**, not deferred:
+  nothing in this topology can satisfy it. Anything to be looked at is looked at locally
+  against the seeded Postgres, which is what every other state already required. A custom
+  domain with a Pages project is what would bring a real preview environment back, and it is
+  the reason to want one.
 - **Browser and visual regression tests.**
 - **Paired Difference intervals, Brier, accuracy and the Comparison Anchor.** Written by the
   scorer, not on any of these three pages.
