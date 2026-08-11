@@ -58,23 +58,32 @@ expands to.)
 `DATABASE_URL=postgresql://user:pw@host/db`:
 
 ```sh
-set -a; . ./.env; set +a          # DATABASE_URL into the environment
-
-OWNER_URI="$(node -e '
+OWNER_URI="$(node --env-file=.env -e '
   const u = new URL(process.env.DATABASE_URL); u.password = "";
   process.stdout.write(u.toString());
 ')"
-export PGPASSWORD="$(node -e '
+export PGPASSWORD="$(node --env-file=.env -e '
   const u = new URL(process.env.DATABASE_URL);
   process.stdout.write(decodeURIComponent(u.password));
 ')"
 ```
 
-Two things that look fussy and are not. **`decodeURIComponent`**, because
-`URL.password` hands back the *percent-encoded* form: a password of `p@ss+word`
-is stored in the URI as `p%40ss%2Bword`, and handing that to `PGPASSWORD`
-authenticates as the wrong string and fails with nothing to suggest why. And
-**no `eval`**, because `eval` of generated text executes whatever the password
+Three things that look fussy and are not.
+
+**`node --env-file`, not `set -a; . ./.env`.** Sourcing runs `.env` as a shell
+script, so anything in it that looks like a command substitution executes; and
+`set -a` exports every name it contains — the owner `DATABASE_URL` among them —
+into every process started for the rest of the session. Here `.env` is read by
+`node`, parsed as `.env` and not as shell, and only for the one command that
+needs it. The single thing deliberately exported afterwards is `PGPASSWORD`,
+because `psql` reads it from the environment by design.
+
+**`decodeURIComponent`**, because `URL.password` hands back the
+*percent-encoded* form: a password of `p@ss+word` is stored in the URI as
+`p%40ss%2Bword`, and handing that to `PGPASSWORD` authenticates as the wrong
+string and fails with nothing to suggest why.
+
+**No `eval`**, because `eval` of generated text executes whatever the password
 happens to contain; two plain command substitutions cannot.
 
 **Which role is live right now** is a question every command here needs
@@ -265,9 +274,22 @@ cd dashboard && npm run build && cd ..   # never deploy a dist you did not build
 npx wrangler deploy
 ```
 
-If the tree is not clean and cannot be made clean quickly, clone the deployed
-commit into a fresh directory and deploy from there. It is faster than
-untangling a mistake made under pressure.
+If the tree is not clean and cannot be made clean quickly, deploy from a fresh
+clone of the deployed commit. A clone has no `node_modules`, in either place,
+so both installs come first — and `npm ci` rather than `npm install`, so the
+pinned `wrangler` is the one that runs:
+
+```sh
+git clone <repo> /tmp/fb-purge && cd /tmp/fb-purge
+git checkout <deployed-commit>
+npm ci
+npm --prefix dashboard ci
+npm --prefix dashboard run build
+npx wrangler deploy
+```
+
+It is faster than untangling a mistake made under pressure. `wrangler` reads
+the same OAuth credentials from the home directory, so no login is needed.
 
 `cross_version_cache` is left off precisely so this works — the Worker version
 is part of the cache key, so a new deployment starts from an empty cache. There

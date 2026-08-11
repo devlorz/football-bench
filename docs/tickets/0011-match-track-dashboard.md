@@ -236,7 +236,8 @@ real preview environment.
 `cf-cache-status: HIT`, ran `wrangler deploy`, and the same key came back `MISS`. The Worker
 version is part of the cache key and `cross_version_cache` is off, so this holds as long as
 that stays true. It matters because revoking the grant does not touch a cached 200: without
-the deploy, an emergency revoke leaves readers looking at the data for another five minutes
+the deploy, an emergency revoke leaves readers looking at the data for another hour and five
+minutes — five fresh, and the hour `stale-while-revalidate` allows —
 while a unique-key check reports 500 and looks like success.
 
 **`stale-if-error=0` is set and reasoned, and has not been walked.** Proving it needs the
