@@ -1,5 +1,14 @@
-name = "football-benchmark-dashboard"
+# The name is the hostname: this deploys to `<name>.<subdomain>.workers.dev`,
+# and that one hostname serves the pages and `/api/*` both.
+name = "football-bench"
 main = "src/dashboard/worker.ts"
+workers_dev = true
+
+# Off, because a version preview here is not the data-free thing spec 0011
+# assumes: `wrangler versions upload` gave a public URL that held the production
+# secret and answered `/api/leaderboard` with production data. Nothing in this
+# deploy needs one, so the URL is not left open.
+preview_urls = false
 
 # `postgres.js` opens a TCP socket and reaches for `node:` built-ins, so it runs
 # on a Worker only under `nodejs_compat` and a compatibility date recent enough
@@ -16,6 +25,30 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 SEASON = "2026-27"
 
-# The route claiming `/api/*` on the Pages hostname, so the browser fetches a
-# relative path and nothing is cross-origin, is set in the first deploy. It is
-# left out here rather than guessed: the hostname does not exist yet.
+# One hostname, and not the Pages site plus a Worker route spec 0011 describes.
+# A Worker route needs a zone, and `*.pages.dev` is not one -- so `/api/*` on a
+# Pages hostname is only reachable with a custom domain, which this deploy does
+# not have. Serving the built pages from the Worker itself gets the same
+# property the route existed for: the browser fetches a relative path, no origin
+# is a build input, and nothing is cross-origin.
+#
+# What it costs, reported rather than taken quietly: Cloudflare's cache is
+# functional on custom domains and on `*.pages.dev`, and not on `*.workers.dev`.
+# The endpoints still carry their `Cache-Control`, and nothing at the edge acts
+# on it here. That is the one acceptance criterion this deploy cannot meet, and
+# a custom domain meets it without changing a line of this file.
+#
+# `run_worker_first` is the whole routing rule: `/api/*` reaches the Worker, and
+# every other path is an asset. Without it the assets are tried first and an
+# `/api` path that matches no file falls through by accident rather than by
+# configuration.
+# A 500 from `/api/entrants` on the first deploy could not be explained, because
+# nothing kept the log. Twenty sequential and twenty-four concurrent requests
+# after it all passed, so it is recorded rather than diagnosed -- and this is
+# what makes the next one diagnosable.
+[observability]
+enabled = true
+
+[assets]
+directory = "./dashboard/dist"
+run_worker_first = ["/api/*"]

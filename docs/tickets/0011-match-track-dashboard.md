@@ -153,19 +153,90 @@ work. Doing it by hand once means the deploy is understood before anything autom
 
 **Blocked by:** "The Leaderboard page".
 
-- [ ] The Pages site and the Worker are deployed, and a Worker route claims `/api/*` on the
-      Pages hostname so the browser fetches a relative path and nothing is cross-origin
-- [ ] The Worker runs with `nodejs_compat` and a compatibility date recent enough for
+- [x] The Pages site and the Worker are deployed, and a Worker route claims `/api/*` on the
+      Pages hostname so the browser fetches a relative path and nothing is cross-origin —
+      **met by a different shape, reported below:** one Worker serving both, no Pages site
+- [x] The Worker runs with `nodejs_compat` and a compatibility date recent enough for
       `postgres.js`; if the driver proves awkward the Hyperdrive fallback is reported before it
-      is taken, not taken quietly
+      is taken, not taken quietly — `postgres.js` reached Supabase on the first deploy and the
+      fallback was not needed
 - [ ] Caching is enabled in the Worker configuration and the endpoint's `Cache-Control` is
-      observed in a real response — the header alone does not cache a Worker's response
-- [ ] The Worker's login role is provisioned outside migrations, granted membership in
+      observed in a real response — the header alone does not cache a Worker's response —
+      **cannot be met on `*.workers.dev`; see below**
+- [x] The Worker's login role is provisioned outside migrations, granted membership in
       `dashboard_read`, and its password held as a Worker secret; the schema names it nowhere
-- [ ] A runbook entry covers provisioning and rotating that credential, and states that
+- [x] A runbook entry covers provisioning and rotating that credential, and states that
       revoking access is one `revoke dashboard_read from`
-- [ ] A hosted preview renders chrome and the error line — previews carry no live data, and
-      this is confirmed rather than assumed
+- [x] A hosted preview renders chrome and the error line — previews carry no live data, and
+      this is confirmed rather than assumed — **chrome and the error line both confirmed on the
+      hosted site; the "no live data" premise is false on this platform; see below**
+
+### The deploy
+
+Live at **<https://football-bench.leelorz6.workers.dev>**, against the production Supabase.
+Runbook: [docs/runbooks/dashboard-deploy.md](../runbooks/dashboard-deploy.md).
+
+Production was at migration 0016, so `0017_dashboard_read_role.sql` was applied as part of
+this. `dashboard_worker` was then created by hand with a generated password, granted
+`dashboard_read`, and its connection string put in as a Worker secret — the password is in no
+file in this repository and was never printed.
+
+Production holds the real Season and nothing scored: 38 Gameweeks, nine Entrants, no `scores`
+row. Every page therefore renders its pre-season state, which is the correct state and was
+confirmed in a driven Chrome on the hosted URL — the Leaderboard's Lock and entered roster,
+the Fixtures page's Gameweek 1 with the "No predictions stored" banner and nine pending slots,
+and the Entrant record's "No settled gameweeks". `baseModelClass` is null throughout, because
+it is written by the seed and the seed never runs against a deployed database.
+
+**One Worker, not Pages plus a route.** A Worker route needs a zone and `*.pages.dev` is not
+one, so `/api/*` on a Pages hostname requires a custom domain this deploy does not have. The
+Worker serves `dashboard/dist` as static assets and `run_worker_first = ["/api/*"]` sends the
+API to the script — which gets the whole property the route existed for: one hostname, a
+relative fetch, nothing cross-origin. Reported rather than taken quietly, as the ticket's own
+rule for the Hyperdrive fallback requires.
+
+**Nothing caches `/api/*`, and it cannot here.** Cloudflare's cache is functional for Workers
+on custom domains and for Pages functions on `*.pages.dev`, and not for a Worker on
+`*.workers.dev`. Measured rather than inferred: `/api/leaderboard` comes back with its
+`public, s-maxage=300, stale-while-revalidate=3600` and **no `cf-cache-status` header at all**,
+while `/styles/modernist.css` returns `cf-cache-status: MISS` and then `HIT`. So the asset
+router does cache and the Worker's own responses are not in that path. A custom domain meets
+this criterion without changing a line of configuration.
+
+**Version previews are not data-free.** `wrangler versions upload` gave a public preview URL
+that holds the *production* secret and answered `/api/leaderboard` with production data. The
+criterion assumed a Pages preview, where the environment is separate. It is not separate here,
+and that is worth knowing before a preview URL is shared. `preview_urls = false` is now set and
+the preview URL that had been open returns 404 — nothing in this deploy needs one, and an open
+public URL answering with production data is not a thing to leave lying about.
+
+**The error line was confirmed on the hosted site, by revoking.** With permission, and on a
+site with no readers yet, `revoke dashboard_read from dashboard_worker` was run against
+production. All three endpoints turned 500 and the Leaderboard rendered its one error line —
+*"The leaderboard could not be read. Nothing is being retried."* — with the chrome intact, the
+headline strip empty and no spinner. `grant dashboard_read to dashboard_worker` restored it
+and all three endpoints returned 200. Roughly a minute dark. This walks the runbook's revoke
+claim as well as the criterion, and both are now demonstrated rather than asserted.
+
+**The browser cache caught it a third time, and this time against a real edge** — which is the
+confirmation the Entrant slice asked for. With the grant revoked, an *ordinary* reload of the
+hosted page rendered the cached pre-season body and no error line at all. Only
+cache-bypassing reload showed the truth. The response carries `s-maxage` and no `max-age` and
+the browser heuristically caches it; deploying changed nothing about that. Nothing here
+changes the header ADR-0028 chose, but anyone walking a failure state on this site must
+bypass the cache or they will be looking at a lie.
+
+**Two things the deploy found and fixed.** Both were invisible until it was deployed, which is
+the argument for doing the first one by hand.
+
+- Every nav click cost a 307. Astro's directory build gives `/fixtures/index.html`, the nav
+  links to `/fixtures`, and the asset router redirects one to the other. `build.format: "file"`
+  removes the hop. The old redirect survived in the edge cache for a few minutes after the fix
+  deployed, which is its own small lesson about verifying a fix through a cache.
+- Nothing kept a log. A single 500 from `/api/entrants` minutes after the first deploy could
+  not be explained afterwards; twenty sequential and twenty-four concurrent requests since have
+  all returned 200. `[observability]` is now on, so the next one is diagnosable. Recorded as
+  unexplained rather than written off.
 
 ## Fixtures and the committed Predictions
 

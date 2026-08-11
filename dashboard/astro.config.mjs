@@ -8,6 +8,12 @@ export default defineConfig({
   // to know where the API lives.
   output: "static",
 
+  // `dist/fixtures.html` rather than `dist/fixtures/index.html`. The nav links
+  // to `/fixtures`, and the Worker's asset router answers a directory build
+  // with a 307 to `/fixtures/` -- so every nav click on the deployed site cost
+  // a redirect. Found by deploying, which is what doing it by hand is for.
+  build: { format: "file" },
+
   vite: {
     server: {
       // Locally there is no Worker route to do that, so `astro dev` proxies the

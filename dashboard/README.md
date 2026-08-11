@@ -28,9 +28,23 @@ DATABASE_URL=postgres://localhost/football_bench SEASON=2026-27 npm run dev:api
 cd dashboard && npm run dev
 ```
 
-`src/cli/dev-api.ts` stands in for `wrangler dev` until the deploy slice adds
-it. It shares `handleDashboardRequest` with the Worker and differs only in the
-wiring either side, which is what the seam exists for.
+`src/cli/dev-api.ts` stands in for `wrangler dev`. It shares
+`handleDashboardRequest` with the Worker and differs only in the wiring either
+side, which is what the seam exists for.
+
+## Deploying it
+
+Live at <https://football-bench.leelorz6.workers.dev> — one Worker serving the
+built pages and `/api/*` both, not a Pages site with a route beside it. Build
+first, because `wrangler` uploads whatever `dashboard/dist` holds:
+
+```sh
+cd dashboard && npm run build && cd ..
+npx wrangler deploy
+```
+
+The credential it runs on, how to rotate it, and what this deploy shape does
+not do: [docs/runbooks/dashboard-deploy.md](../docs/runbooks/dashboard-deploy.md).
 
 ## Before a slice that touches a page is complete
 

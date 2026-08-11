@@ -33,7 +33,8 @@
     "@types/pg": "8.15.6",
     "tsx": "4.20.6",
     "typescript": "5.9.3",
-    "vitest": "4.1.10"
+    "vitest": "4.1.10",
+    "wrangler": "4.120.1"
   },
   "engines": {
     "node": "^22 || >=24"
