@@ -441,41 +441,71 @@ Repair it **from `$WORK`**, which has just been proven to contain the commit.
 tagging at home would fail on a missing object and leave the durable record
 exactly as broken as it was found.
 
+Two records to repair, and **two separate answers about whether they were**. A
+home tag that worked does not mean the remote one did, and treating either as
+"repaired" lets a failed push — a lease conflict, an expired credential, a
+flaky network — be cleaned up after as though every other machine could now
+find the commit.
+
 ```sh
 # still in $WORK, still on $SHA
 git tag -f deployed "$SHA"
 
-published=0
-if old="$(git ls-remote origin refs/tags/deployed 2>/dev/null | cut -f1)"; then
-  git push --force-with-lease="refs/tags/deployed:${old}" \
-    origin refs/tags/deployed && published=1
-fi
+home_repaired=0
+remote_published=0
 
-# and the home repository too, when it has the object -- a local tag is the
-# whole record until the branch is pushed
+# the home repository, when it has the object
 if git -C "$HOME_REPO" cat-file -e "$SHA^{commit}" 2>/dev/null; then
-  git -C "$HOME_REPO" tag -f deployed "$SHA"
+  git -C "$HOME_REPO" tag -f deployed "$SHA" && home_repaired=1
   printf 'home tag repaired\n'
-  published=1
 else
-  printf 'home repo does not have %s -- fetch it there before deleting %s\n' \
-    "$SHA" "$WORK"
+  printf 'home repo does not have %s\n' "$SHA"
 fi
 
-if [ "$published" = "0" ]; then
-  printf 'THE DURABLE RECORD IS STILL BROKEN. keep %s and fix this before\n' \
-    "$WORK"
-  printf 'the next incident, or the next recovery has nothing to read.\n'
+# the remote, but only when it is genuinely the shared record -- that is, when
+# it already carries this commit. Pushing the tag to a remote that does not
+# would drag every unpushed commit along with it, which is a decision for a
+# person and not a step in a recovery.
+if git ls-remote origin "refs/tags/deployed" >/dev/null 2>&1 \
+   && git ls-remote origin | grep -q .; then
+  if git branch -r --contains "$SHA" 2>/dev/null | grep -q .; then
+    old="$(git ls-remote origin refs/tags/deployed | cut -f1)"
+    git push --force-with-lease="refs/tags/deployed:${old}" \
+      origin refs/tags/deployed && remote_published=1
+  else
+    printf 'origin does not carry %s -- not pushing the tag.\n' "$SHA"
+    printf 'push the branch first; that is a decision, not a recovery step.\n'
+    remote_published=skip
+  fi
+fi
+```
+
+Then decide, and **fail closed**:
+
+```sh
+if [ "$home_repaired" = "0" ]; then
+  printf 'THE LOCAL RECORD IS STILL BROKEN.\n'
+elif [ "$remote_published" = "0" ]; then
+  printf 'THE REMOTE RECORD IS STILL BROKEN -- other machines see the old tag.\n'
+fi
+
+if [ "$home_repaired" = "0" ] || [ "$remote_published" = "0" ]; then
+  printf 'keep %s and fix this before the next incident, or the next\n' "$WORK"
+  printf 'recovery has nothing to read.\n'
   exit 1
 fi
 
 rm -rf "$WORK"
 ```
 
-The `exit 1` is the point. A recovery that redeploys the right code and leaves
-the record unrepaired works once and then the edge history expires, ten
-deployments at a time, and the next person has neither. Deleting `$WORK` on the
-way past would throw away the only copy of the commit that was found.
+The `exit 1` is the point, and so is the split. A recovery that redeploys the
+right code and leaves either record unrepaired works once; then the edge
+history expires ten deployments at a time and the next person has nothing.
+Deleting `$WORK` on the way past would throw away the only copy of the commit
+that was found. `remote_published=skip` is the one case that is not a failure:
+origin does not have this work at all yet, so there is no shared record to
+break, and pushing thirty-odd commits to create one is not something a recovery
+decides on its own.
 
 **Push the branch and this gets simpler**, and safer: the clone comes from
 `origin` on any machine, the tag is published rather than local, and the one
