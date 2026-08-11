@@ -19,8 +19,13 @@ The assets are built separately and `wrangler` uploads whatever is in
 
 ```sh
 cd dashboard && npm run build && cd ..
-npx wrangler deploy
+npx wrangler deploy --message "$(git rev-parse HEAD)"
 ```
+
+**The `--message` is not decoration.** It is the only record of which commit is
+running: Cloudflare knows version IDs and nothing about git. `npx wrangler
+deployments list` reads it back, and the emergency fallback below needs it.
+Deploying without it leaves the next incident guessing.
 
 There is no preview step, deliberately. `preview_urls = false` is set, because a
 Worker version preview holds the same secrets as production and would answer a
@@ -58,17 +63,29 @@ expands to.)
 `DATABASE_URL=postgresql://user:pw@host/db`:
 
 ```sh
-OWNER_URI="$(node --env-file=.env -e '
+OWNER_URI="$(env -u DATABASE_URL node --env-file=.env -e '
   const u = new URL(process.env.DATABASE_URL); u.password = "";
   process.stdout.write(u.toString());
 ')"
-export PGPASSWORD="$(node --env-file=.env -e '
+export PGPASSWORD="$(env -u DATABASE_URL node --env-file=.env -e '
   const u = new URL(process.env.DATABASE_URL);
   process.stdout.write(decodeURIComponent(u.password));
 ')"
+
+# say out loud which database this session is now pointed at
+print -r -- "operating on: ${${OWNER_URI#*@}%%/*}"
 ```
 
-Three things that look fussy and are not.
+Four things that look fussy and are not.
+
+**`env -u DATABASE_URL`.** Node gives a variable already in the environment
+precedence over the same name in `--env-file` — verified, not assumed: with
+`FOO` exported, `node --env-file` reads the exported one. So an operator who
+exported a dev or staging `DATABASE_URL` earlier in the session gets *that*
+database, silently, and the provisioning or revocation lands somewhere it was
+never meant to. `env -u` removes the name for the length of the one command.
+The line printing the host is the cheap confirmation that it worked; read it
+before running anything below.
 
 **`node --env-file`, not `set -a; . ./.env`.** Sourcing runs `.env` as a shell
 script, so anything in it that looks like a command substitution executes; and
@@ -278,21 +295,35 @@ npx wrangler deploy
 ```
 
 If the tree is not clean and cannot be made clean quickly, deploy from a fresh
-clone of the deployed commit. A clone has no `node_modules`, in either place,
-so both installs come first — and `npm ci` rather than `npm install`, so the
-pinned `wrangler` is the one that runs:
+clone of the deployed commit — but **clone from the local repository, not from
+`origin`**. As of this writing the dashboard work is not pushed: `git branch -r
+--contains HEAD` is empty, so a clone from GitHub contains none of these
+commits and the checkout below would fail in the middle of an incident. The
+local repository is the only place the deployed commit exists.
+
+The SHA comes from the deploy message, which is why every deploy carries one:
 
 ```sh
-git clone <repo> /tmp/fb-purge && cd /tmp/fb-purge
-git checkout <deployed-commit>
+npx wrangler deployments list        # read the SHA out of the newest message
+SHA=<that sha>
+
+git clone /Users/leelorz/src/football-bench /tmp/fb-purge && cd /tmp/fb-purge
+git checkout "$SHA"
 npm ci
 npm --prefix dashboard ci
 npm --prefix dashboard run build
-npx wrangler deploy
+npx wrangler deploy --message "$SHA"
 ```
 
-It is faster than untangling a mistake made under pressure. `wrangler` reads
-the same OAuth credentials from the home directory, so no login is needed.
+A clone has no `node_modules` in either place, so both installs come first —
+and `npm ci` rather than `npm install`, so the pinned `wrangler` is the one
+that runs. `wrangler` reads the same OAuth credentials from the home directory,
+so no login is needed.
+
+**Push the branch and this gets simpler**, and safer: a clone from `origin`
+works from any machine, and the local repository stops being a single point of
+failure for the recovery path. Until then this procedure only works on the one
+machine that holds the commits.
 
 `cross_version_cache` is left off precisely so this works — the Worker version
 is part of the cache key, so a new deployment starts from an empty cache. There
