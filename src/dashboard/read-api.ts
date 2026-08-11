@@ -36,7 +36,7 @@ const SCORED_CACHE = "public, s-maxage=300, stale-while-revalidate=3600";
  */
 const FIXTURES_CACHE = "public, s-maxage=60";
 
-interface LeaderboardEntrant {
+export interface LeaderboardEntrant {
   id: string;
   name: string;
   baseModelClass: string | null;
@@ -48,6 +48,21 @@ interface LeaderboardEntrant {
    * the Season's: the two differ by exactly what the Entrant Gapped.
    */
   n: number | null;
+}
+
+/**
+ * What `/api/leaderboard` answers with. Exported for the same reason
+ * `FixturesBody` and `EntrantsBody` are: a body the tests describe for
+ * themselves is a body they can go on describing after this one has changed.
+ */
+export interface LeaderboardBody {
+  season: string;
+  throughGw: number | null;
+  nextLock: { gw: number; deadlineAt: string } | null;
+  settledFixtures: number;
+  matchPointsQualification: string | null;
+  betPointsQualification: string | null;
+  entrants: LeaderboardEntrant[];
 }
 
 /**
@@ -257,7 +272,7 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
     return stored;
   };
 
-  return json({
+  const body: LeaderboardBody = {
     season,
     throughGw,
     nextLock: lock
@@ -274,7 +289,9 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
     betPointsQualification:
       qualification("bet_qualification", BET_POINTS_QUALIFICATION),
     entrants
-  }, SCORED_CACHE);
+  };
+
+  return json(body, SCORED_CACHE);
 }
 
 export interface SlotPrediction {

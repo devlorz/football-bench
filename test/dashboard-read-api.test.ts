@@ -4,7 +4,7 @@ import { resetSchema } from "./schema-fixture.js";
 import { workerDriver } from "./worker-driver.js";
 import { seedSeason } from "../src/seed-season.js";
 import {
-  handleDashboardRequest, type Query
+  handleDashboardRequest, type LeaderboardBody, type Query
 } from "../src/dashboard/read-api.js";
 import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
 import {
@@ -33,25 +33,6 @@ const SETTLED_FIXTURES = 13 * 10 + 9;
 
 /** The seed's one Gapped Entrant, and the settled Fixture it never answered. */
 const GAPPED = "minimax/v1";
-
-interface LeaderboardEntrant {
-  id: string;
-  name: string;
-  baseModelClass: string | null;
-  matchPoints: number | null;
-  betPoints: number | null;
-  n: number | null;
-}
-
-interface LeaderboardBody {
-  season: string;
-  throughGw: number | null;
-  nextLock: { gw: number; deadlineAt: string } | null;
-  settledFixtures: number;
-  matchPointsQualification: string | null;
-  betPointsQualification: string | null;
-  entrants: LeaderboardEntrant[];
-}
 
 describe("the dashboard read API", () => {
   /** Seeds and rebuilds. Nothing reads through this one. */
