@@ -233,6 +233,14 @@ Chrome and the error line were confirmed on the production hostname instead, whi
 having and is not the same claim. A custom domain plus a Pages project is what would restore a
 real preview environment.
 
+**Which commit is running is recorded twice, because one of the two expires.** Every deploy
+carries `--message "$(git rev-parse HEAD)"` and moves a `deployed` git tag. The message is the
+convenient record and `wrangler deployments list` reads it straight back — but that command
+shows only the ten most recent deployments and `wrangler secret put` creates one of its own, so
+ten credential rotations after a deploy the SHA has fallen off the end. The tag does not
+expire, lives in the repository the recovery clones from, and was walked: cloned the local
+repo, `git rev-parse deployed` resolved, and the commit checked out.
+
 **A deploy is the only purge, and it was walked.** Warmed a key to
 `cf-cache-status: HIT`, ran `wrangler deploy`, and the same key came back `MISS`. The Worker
 version is part of the cache key and `cross_version_cache` is off, so this holds as long as

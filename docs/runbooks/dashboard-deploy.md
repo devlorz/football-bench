@@ -20,12 +20,23 @@ The assets are built separately and `wrangler` uploads whatever is in
 ```sh
 cd dashboard && npm run build && cd ..
 npx wrangler deploy --message "$(git rev-parse HEAD)"
+git tag -f deployed HEAD          # the durable record; see below
 ```
 
-**The `--message` is not decoration.** It is the only record of which commit is
-running: Cloudflare knows version IDs and nothing about git. `npx wrangler
-deployments list` reads it back, and the emergency fallback below needs it.
-Deploying without it leaves the next incident guessing.
+**Two records of which commit is running, because Cloudflare knows version IDs
+and nothing about git.**
+
+The `--message` is the convenient one: `npx wrangler deployments list` reads it
+straight back. It is also the perishable one — that command shows only the ten
+most recent deployments, and `wrangler secret put` creates a deployment of its
+own. Ten credential rotations after a deploy, the SHA has fallen off the end of
+the list and the recovery below has nothing to read.
+
+The `deployed` tag is the durable one. It lives in the repository the recovery
+clones from, it survives any number of rotations, and it is one command. Move
+it on every deploy or it lies, which is worse than not existing. `git push
+origin deployed` once the branch is pushed at all — until then it is local,
+like everything else here.
 
 There is no preview step, deliberately. `preview_urls = false` is set, because a
 Worker version preview holds the same secrets as production and would answer a
@@ -316,26 +327,37 @@ clone of the deployed commit — but **clone from the local repository, not from
 commits and the checkout below would fail in the middle of an incident. The
 local repository is the only place the deployed commit exists.
 
-The SHA comes from the deploy message, which is why every deploy carries one —
-but **not from the newest deployment**. `wrangler secret put` creates its own
-deployment, `Source: Secret Change`, whose message is `-`; so does anything
-else that changes configuration without shipping code. A rotation therefore
-leaves a message-less entry on top. Take the newest message that *is* a SHA:
+The SHA comes from the `deployed` tag first, because it is the record that does
+not expire:
 
 ```sh
-SHA="$(npx wrangler deployments list 2>/dev/null \
-  | grep -oE '^Message: *[0-9a-f]{40}$' \
-  | grep -oE '[0-9a-f]{40}' | tail -1)"
-printf 'deployed commit: %s\n' "$SHA"
-
 # a temporary directory per incident, so a second one does not trip over the
 # leftovers of the first
 WORK="$(mktemp -d)"
 git clone /Users/leelorz/src/football-bench "$WORK" && cd "$WORK"
 
-# and prove the commit is actually here before relying on it
+SHA="$(git rev-parse deployed)"
+printf 'deployed commit: %s\n' "$SHA"
+```
+
+If the tag is missing or looks stale, cross-check it against Cloudflare — but
+**not against the newest deployment**. `wrangler secret put` creates its own
+deployment, `Source: Secret Change`, whose message is `-`, as does anything
+else that changes configuration without shipping code; a rotation leaves a
+message-less entry on top. Take the newest message that *is* a SHA, and know
+that this only reaches back ten deployments:
+
+```sh
+npx wrangler deployments list 2>/dev/null \
+  | grep -oE '^Message: *[0-9a-f]{40}$' | grep -oE '[0-9a-f]{40}' | tail -1
+```
+
+Then prove the commit is actually here before anything depends on it:
+
+```sh
 git cat-file -e "$SHA^{commit}" || {
   printf 'the deployed commit is not in this repository\n'; exit 1; }
+git log -1 --format='%h %s' "$SHA"
 
 git checkout "$SHA"
 npm ci
