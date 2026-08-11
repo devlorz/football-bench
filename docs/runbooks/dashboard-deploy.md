@@ -461,12 +461,16 @@ remote_published=0
 
 # The home repository, when it has the object -- and the flag is set from what
 # the tag *resolves to* afterwards, not from the exit status of `git tag`.
-# `git tag -f <existing-tag> <nonexistent-sha>` returns 0, prints "Updated
-# tag", and leaves the tag resolving to nothing -- the old value is gone and
-# the exit status says it went well. Reproduced on git 2.50.1 in a scratch
-# repository, and once by accident on this one. So a success message hung off
-# `git tag`'s exit status is a lie waiting to happen; the flag comes from what
-# the tag resolves to afterwards.
+# A missing object is usually refused: `git tag -f <tag> <nonexistent-sha>`
+# exits 128 and leaves the old value alone. The exception is the **all-zero
+# null OID**, which git reads as "delete this ref": it prints "Updated tag",
+# exits **0**, and the tag is simply gone. Reproduced on git 2.50.1 -- and once
+# by accident on this repository, which is how its `deployed` tag was lost.
+#
+# So the exit status is not enough on its own, and $SHA here comes from a
+# `wrangler` message or another repository's tag rather than from anything that
+# validated it. The flag is set from what the tag resolves to afterwards, which
+# is right in every case and does not depend on knowing which one this is.
 if git -C "$HOME_REPO" cat-file -e "$SHA^{commit}" 2>/dev/null; then
   git -C "$HOME_REPO" tag -f deployed "$SHA" >/dev/null 2>&1
   if [ "$(git -C "$HOME_REPO" rev-parse -q --verify 'deployed^{commit}' \
