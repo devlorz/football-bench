@@ -467,10 +467,16 @@ remote_published=0
 # exits **0**, and the tag is simply gone. Reproduced on git 2.50.1 -- and once
 # by accident on this repository, which is how its `deployed` tag was lost.
 #
-# So the exit status is not enough on its own, and $SHA here comes from a
-# `wrangler` message or another repository's tag rather than from anything that
-# validated it. The flag is set from what the tag resolves to afterwards, which
-# is right in every case and does not depend on knowing which one this is.
+# That is not reachable from here: $SHA has already passed `cat-file -e` twice
+# by this point, in $WORK and again on the line above, and `cat-file -e` refuses
+# the null OID (exit 128) like any other missing object. The value that broke
+# this repository's tag came from a hand-run experiment, not from this flow.
+#
+# The postcondition check is kept as defence in depth rather than as a guard on
+# an unvalidated $SHA. Reading what the tag resolves to costs one command and
+# is correct for any way the write could fail -- a ref lock held by another
+# process, a full disk, a broken symbolic ref -- none of which the exit status
+# of the two commands above would have told us about.
 if git -C "$HOME_REPO" cat-file -e "$SHA^{commit}" 2>/dev/null; then
   git -C "$HOME_REPO" tag -f deployed "$SHA" >/dev/null 2>&1
   if [ "$(git -C "$HOME_REPO" rev-parse -q --verify 'deployed^{commit}' \
