@@ -498,6 +498,54 @@ describe("running a Gameweek for the whole FPL roster", () => {
     expect(bodies.rows[0]!.body).not.toContain("£13.0m");
   });
 
+  test("plays the roster the opening committed and no Exhibition beside it", async () => {
+    await openTheTrack();
+    // An Exhibition Run replays the Season from the Gameweek the track opened
+    // at, so it leaves a Manager State standing at that Gameweek too — and the
+    // roster is read from `manager_states`, where nothing said which of those
+    // rows was a seat. Its own carried state is not this run's business.
+    await client.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values (
+         'exhibition/late', 'Late Arrival', 'vendor/late', 'vendor',
+         $1, 'exhibition'
+       )`,
+      [FPL_PROMPT_VERSION]
+    );
+    await client.query(
+      `insert into manager_states (
+         model_id, season, gw, squad, team_sheet, bank, free_transfers, hits,
+         chips_used, chip_active, attempts_used, predicted_at
+       )
+       select
+         'exhibition/late', season, gw, squad, team_sheet, bank,
+         free_transfers, hits, chips_used, chip_active, attempts_used,
+         '2026-09-30T11:30:00Z'
+         from manager_states
+        where model_id = $1 and gw = 1`,
+      [seatId(BASE_MODELS[0]!)]
+    );
+
+    const { outcome, calls } = await run();
+
+    expect(outcome).toEqual({
+      kind: "played",
+      gameweek: 2,
+      played: BASE_MODELS.map(seatId),
+      standing: [],
+      missing: []
+    });
+    expect(calls.map(({ baseModel }) => baseModel).sort())
+      .toEqual([...BASE_MODELS].sort());
+    const states = await client.query<{ model_id: string }>(
+      "select model_id from manager_states where gw = 2 order by model_id"
+    );
+    expect(states.rows).toEqual(
+      BASE_MODELS.map((baseModel) => ({ model_id: seatId(baseModel) }))
+    );
+  });
+
   test("refuses a roster the opening committed but models no longer holds", async () => {
     await openTheTrack();
     // One seat leaves the FPL track's Prompt Version after opening on it. It

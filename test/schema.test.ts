@@ -38,6 +38,45 @@ describe("the benchmark database", () => {
     );
   }
 
+  test("stores an Exhibition beside the roles that were already there", async () => {
+    await client.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values
+         (
+           'entrant/one', 'One', 'vendor/one', 'provider',
+           'match/2026-27-v2', 'entrant'
+         ),
+         (
+           'reference/elo', 'Elo', 'reference/elo', 'reference',
+           'match/2026-27-v2', 'reference'
+         ),
+         (
+           'exhibition/late', 'Late Arrival', 'vendor/late', 'provider',
+           'match/2026-27-v2', 'exhibition'
+         )`
+    );
+
+    const stored = await client.query<{ id: string; role: string }>(
+      "select id, role from models order by id"
+    );
+    expect(stored.rows).toEqual([
+      { id: "entrant/one", role: "entrant" },
+      { id: "exhibition/late", role: "exhibition" },
+      { id: "reference/elo", role: "reference" }
+    ]);
+
+    // The check widened by exactly one word; anything else is still refused.
+    await expect(client.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values (
+         'guest/one', 'Guest', 'vendor/guest', 'provider',
+         'match/2026-27-v2', 'guest'
+       )`
+    )).rejects.toMatchObject({ code: "23514" });
+  });
+
   test("builds every table in the write-path schema", async () => {
     const result = await client.query<{ table_name: string }>(
       `select table_name

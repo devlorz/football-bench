@@ -29,11 +29,11 @@ every scheduled job still selects exactly the roster it did before.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] A `models` row with `role = 'exhibition'` is storable; `'entrant'` and `'reference'` behave exactly as before, and any other role is still refused
-- [ ] With an Exhibition row present at the frozen Prompt Version, the predict work query, the scheduled pre-flight roster, the FPL opening's nine-seat check, the FPL run's roster and the Gap alert all return what they returned without it — proven behaviourally, not by convention
-- [ ] The pre-flight refusal check can target a single Exhibition model by id, calling it with the real prompt shape against a real Fixture and reporting parseable output, refusal or transport error, with the resolved provider and model
-- [ ] Targeting a model id that is missing or whose role is not `'exhibition'` is refused with a message naming the problem
-- [ ] Adding the row and pre-flighting it requires no code change beyond this ticket — the door in is data
+- [x] A `models` row with `role = 'exhibition'` is storable; `'entrant'` and `'reference'` behave exactly as before, and any other role is still refused
+- [x] With an Exhibition row present at the frozen Prompt Version, the predict work query, the scheduled pre-flight roster, the FPL opening's nine-seat check, the FPL run's roster and the Gap alert all return what they returned without it — proven behaviourally, not by convention
+- [x] The pre-flight refusal check can target a single Exhibition model by id, calling it with the real prompt shape against a real Fixture and reporting parseable output, refusal or transport error, with the resolved provider and model
+- [x] Targeting a model id that is missing or whose role is not `'exhibition'` is refused with a message naming the problem
+- [x] Adding the row and pre-flighting it requires no code change beyond this ticket — the door in is data
 
 ## Match Exhibition replay, end to end
 

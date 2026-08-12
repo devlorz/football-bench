@@ -6,6 +6,10 @@ import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
 import type { HttpRequest } from "../src/http.js";
 import { preflightBaseModels } from "../src/preflight/preflight-base-models.js";
+import {
+  firstMessageText,
+  type CapturedTurn
+} from "./sent-context.js";
 
 const { Client } = pg;
 const openRouterResponseUrl = new URL(
@@ -251,7 +255,7 @@ describe("pre-flight for the Base Model roster", () => {
       results: Array.from({ length: 9 }, (_, offset) => {
         const index = offset + 1;
         return {
-          entrantId: `entrant/${index}`,
+          modelId: `entrant/${index}`,
           baseModel: `vendor/base-model-${index}`,
           status: "parseable",
           detail: null,
@@ -326,7 +330,7 @@ describe("pre-flight for the Base Model roster", () => {
       calls: 9,
       ok: false,
       first: {
-        entrantId: "entrant/1",
+        modelId: "entrant/1",
         baseModel: "vendor/base-model-1",
         status: "refusal",
         detail: "I cannot provide betting predictions.",
@@ -401,7 +405,7 @@ describe("pre-flight for the Base Model roster", () => {
 
     expect(report.ok).toBe(false);
     expect(report.results[0]).toEqual({
-      entrantId: "entrant/1",
+      modelId: "entrant/1",
       baseModel: "vendor/base-model-1",
       status: "parseable",
       detail: "OpenRouter did not identify a selected model.",
@@ -489,7 +493,7 @@ describe("pre-flight for the Base Model roster", () => {
       ok: false,
       results: [
         {
-          entrantId: "entrant/1",
+          modelId: "entrant/1",
           baseModel: "vendor/base-model-1",
           status: "parseable",
           detail: "OpenRouter did not identify a selected provider. OpenRouter did not identify a selected model.",
@@ -498,7 +502,7 @@ describe("pre-flight for the Base Model roster", () => {
           rawBody: missingProviderBody
         },
         {
-          entrantId: "entrant/2",
+          modelId: "entrant/2",
           baseModel: "vendor/base-model-2",
           status: "unparseable",
           detail: "Response must be valid JSON. OpenRouter did not identify a selected model.",
@@ -507,7 +511,7 @@ describe("pre-flight for the Base Model roster", () => {
           rawBody: unparseableBody
         },
         {
-          entrantId: "entrant/3",
+          modelId: "entrant/3",
           baseModel: "vendor/base-model-3",
           status: "transport_error",
           detail: "OpenRouter returned HTTP 503.",
@@ -516,7 +520,7 @@ describe("pre-flight for the Base Model roster", () => {
           rawBody: httpErrorBody
         },
         {
-          entrantId: "entrant/4",
+          modelId: "entrant/4",
           baseModel: "vendor/base-model-4",
           status: "transport_error",
           detail: "OpenRouter call failed: connection reset.",
@@ -631,8 +635,233 @@ describe("pre-flight for the Base Model roster", () => {
 
     expect(report.ok).toBe(true);
     expect(called).toHaveLength(9);
-    expect(report.results.map(({ entrantId }) => entrantId))
+    expect(report.results.map(({ modelId }) => modelId))
       .toEqual(Array.from({ length: 9 }, (_u, n) => `entrant/${n + 1}`));
+  });
+
+  test("checks one Exhibition on its own, at the frozen Prompt Version", async () => {
+    // A late-arriving Base Model joins as data — one row — and the check that
+    // it will answer at all is the same check the roster passed, aimed at it.
+    await client.query(
+      `insert into models (
+         id, name, base_model, provider, quantization, prompt_version, role
+       ) values (
+         'exhibition/late', 'Late Arrival', 'vendor/late', 'late-provider',
+         'fp8', 'match/2026-27-v2', 'exhibition'
+       )`
+    );
+    const requests: HttpRequest[] = [];
+
+    const report = await preflightBaseModels({
+      database: client,
+      season: "2026-27",
+      fixtureId: 1,
+      exhibitionModelId: "exhibition/late",
+      apiKey: "test-key",
+      http: async (url, options) => {
+        requests.push({ url, ...options! });
+        return {
+          status: 200,
+          body: JSON.stringify({
+            model: "vendor/late",
+            openrouter_metadata: {
+              endpoints: {
+                available: [{
+                  provider: "Late Provider",
+                  model: "vendor/late-20260901",
+                  selected: true
+                }]
+              }
+            },
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  fixture_id: 1,
+                  probs: { H: 0.6, D: 0.24, A: 0.16 },
+                  score: { home: 2, away: 1 },
+                  rationale: "Pre-flight answer."
+                })
+              }
+            }]
+          })
+        };
+      }
+    });
+
+    // One call, and it is the real prompt shape against a real Fixture: the
+    // nine Entrants are not called at all, so no roster is paid for.
+    expect(requests).toHaveLength(1);
+    const sent = JSON.parse(requests[0]!.body!) as {
+      model: string;
+      messages: CapturedTurn[];
+      provider: unknown;
+    };
+    expect(sent.model).toBe("vendor/late");
+    expect(sent.provider).toEqual({
+      order: ["late-provider"],
+      allow_fallbacks: false,
+      quantizations: ["fp8"]
+    });
+    expect(firstMessageText(sent.messages)).toContain(
+      "Fixture ID: 1\nHome: Arsenal\nAway: Coventry City"
+    );
+    expect(report.ok).toBe(true);
+    expect(report.results).toEqual([{
+      modelId: "exhibition/late",
+      baseModel: "vendor/late",
+      status: "parseable",
+      detail: null,
+      resolvedProvider: "Late Provider",
+      resolvedModel: "vendor/late-20260901",
+      rawBody: null
+    }]);
+  });
+
+  test("refuses a targeted model that is missing or is not an Exhibition", async () => {
+    let calls = 0;
+    const target = async (exhibitionModelId: string) =>
+      preflightBaseModels({
+        database: client,
+        season: "2026-27",
+        fixtureId: 1,
+        exhibitionModelId,
+        apiKey: "test-key",
+        http: async () => {
+          calls += 1;
+          throw new Error("HTTP must not run");
+        }
+      });
+
+    // A typo must not replay the Season as a real Entrant, so the role is
+    // named in the refusal rather than the id merely being reported absent.
+    await expect(target("exhibition/typo")).rejects.toThrow(
+      "exhibition/typo has no row in models"
+    );
+    await expect(target("entrant/1")).rejects.toThrow(
+      "entrant/1 has role 'entrant', not 'exhibition'"
+    );
+    expect(calls).toBe(0);
+  });
+
+  test("refuses an Exhibition that is not at the Match Prompt Version", async () => {
+    // The prompt this sends is the Season's frozen Match prompt and nothing
+    // else can be configured (ADR-0001). A row saying it is at some other
+    // Prompt Version would be pre-flighted at the frozen one anyway, leaving
+    // the row's stated identity and the thing actually tested disagreeing.
+    await client.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values (
+         'exhibition/fpl', 'Late Arrival', 'vendor/late', 'vendor',
+         'fpl/2026-27-v2', 'exhibition'
+       )`
+    );
+    let calls = 0;
+
+    await expect(preflightBaseModels({
+      database: client,
+      season: "2026-27",
+      fixtureId: 1,
+      exhibitionModelId: "exhibition/fpl",
+      apiKey: "test-key",
+      http: async () => {
+        calls += 1;
+        throw new Error("HTTP must not run");
+      }
+    })).rejects.toThrow(
+      "exhibition/fpl is at Prompt Version fpl/2026-27-v2, not "
+      + "match/2026-27-v2"
+    );
+    expect(calls).toBe(0);
+  });
+
+  test("refuses a pre-flight that names both targets or neither", async () => {
+    let calls = 0;
+    const http = async () => {
+      calls += 1;
+      throw new Error("HTTP must not run");
+    };
+    const shared = {
+      database: client,
+      season: "2026-27",
+      fixtureId: 1,
+      apiKey: "test-key",
+      http
+    };
+
+    // One mode or the other, never a blend: a count beside an id would be a
+    // number about a roster this run is not checking, and neither would ask
+    // for a roster of no stated size at all.
+    await expect(preflightBaseModels({
+      ...shared,
+      expectedEntrantCount: 9,
+      exhibitionModelId: "exhibition/late"
+    } as unknown as Parameters<typeof preflightBaseModels>[0])).rejects.toThrow(
+      "Pre-flight checks the roster or one Exhibition, not both"
+    );
+    await expect(preflightBaseModels(
+      shared as unknown as Parameters<typeof preflightBaseModels>[0]
+    )).rejects.toThrow(
+      "Pre-flight needs an Entrant count or an Exhibition model id"
+    );
+    expect(calls).toBe(0);
+  });
+
+  test("leaves an Exhibition Run out of the roster it checks", async () => {
+    // An Exhibition carries this track's frozen Prompt Version, so the count
+    // check would read ten seats and refuse a correctly configured pre-flight
+    // if the role were not what selects the roster.
+    await client.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values (
+         'exhibition/late', 'Late Arrival', 'vendor/late', 'vendor',
+         'match/2026-27-v2', 'exhibition'
+       )`
+    );
+    const called: string[] = [];
+
+    const report = await preflightBaseModels({
+      database: client,
+      season: "2026-27",
+      fixtureId: 1,
+      expectedEntrantCount: 9,
+      apiKey: "test-key",
+      http: async (_url, options) => {
+        const request = JSON.parse(options?.body ?? "{}") as { model: string };
+        called.push(request.model);
+        return {
+          status: 200,
+          body: JSON.stringify({
+            model: request.model,
+            openrouter_metadata: {
+              endpoints: {
+                available: [{
+                  provider: `Resolved ${request.model}`,
+                  model: request.model,
+                  selected: true
+                }]
+              }
+            },
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  fixture_id: 1,
+                  probs: { H: 0.6, D: 0.24, A: 0.16 },
+                  score: { home: 2, away: 1 },
+                  rationale: "Pre-flight answer."
+                })
+              }
+            }]
+          })
+        };
+      }
+    });
+
+    expect(report.ok).toBe(true);
+    expect(report.results.map(({ modelId }) => modelId))
+      .toEqual(Array.from({ length: 9 }, (_u, n) => `entrant/${n + 1}`));
+    expect(called).not.toContain("vendor/late");
   });
 
   test("replays a byte-exact successful OpenRouter response observed in pre-flight", async () => {
@@ -653,7 +882,7 @@ describe("pre-flight for the Base Model roster", () => {
     });
 
     expect(report.results[0]).toEqual({
-      entrantId: "entrant/1",
+      modelId: "entrant/1",
       baseModel: "vendor/base-model-1",
       status: "parseable",
       detail: null,

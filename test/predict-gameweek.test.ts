@@ -1353,6 +1353,53 @@ describe("predicting a Gameweek", () => {
     expect(attempted.rows).toEqual([{ model_id: "entrant/v1" }]);
   });
 
+  test("leaves an Exhibition Run out of the work and out of the alert", async () => {
+    // An Exhibition Run carries this track's frozen Prompt Version, so Prompt
+    // Version cannot tell it from an Entrant — only the role can, and every
+    // scheduled query already asks for `role = 'entrant'`. Proven here rather
+    // than asserted: the row is present and the official run is unchanged by
+    // it, both in what it calls and in what it pages about.
+    await client.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values (
+         'exhibition/late', 'Late Arrival', 'vendor/late', 'vendor',
+         'match/2026-27-v2', 'exhibition'
+       )`
+    );
+    const called: string[] = [];
+
+    const alert = await predictGameweek({
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      concurrency: 2,
+      apiKey: "test-key",
+      now: () => new Date("2026-08-21T17:29:00Z"),
+      http: async (_url, options) => {
+        called.push((JSON.parse(options?.body ?? "{}") as {
+          model: string;
+        }).model);
+        return { status: 503, body: "{\"error\":\"provider unavailable\"}" };
+      }
+    });
+
+    expect(called).toEqual(["openai/gpt-5.2"]);
+    // The Entrant's own Gap is reported, and it is the only one: the
+    // Exhibition has no Prediction for this Fixture either, and is not a Gap.
+    expect(alert?.gaps).toEqual([{
+      entrantId: "entrant/v1",
+      entrantName: "Tracer Entrant",
+      fixtureId: 1,
+      fixture: "Arsenal v Coventry City",
+      cause: "provider"
+    }]);
+    const attempted = await client.query<{ model_id: string }>(
+      "select distinct model_id from attempts order by model_id"
+    );
+    expect(attempted.rows).toEqual([{ model_id: "entrant/v1" }]);
+  });
+
   test("refuses a roster that holds only the other track's seats", async () => {
     // Nine FPL seats and no Match seat is a misconfiguration, not an empty
     // Gameweek. Counting the seats without asking which track they belong to

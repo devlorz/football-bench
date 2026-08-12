@@ -149,6 +149,11 @@ export async function loadStartingGameweek(
  * the opening has already checked it against nine — `startFplTrack` refuses a
  * roster of any other size and commits all of them or none. What is wanted
  * downstream is *which* Entrants, and only the opening knows that.
+ *
+ * The role is asked for because an Exhibition Run replays the Season from the
+ * same opening Gameweek and leaves a Manager State standing there too
+ * (ADR-0032). Holding a state at the opening is no longer the same thing as
+ * being a seat, so the seats are what this selects.
  */
 export async function loadStartedRoster(
   database: Database,
@@ -156,10 +161,11 @@ export async function loadStartedRoster(
   startingGameweek: number
 ): Promise<string[]> {
   const result = await database.query<{ model_id: string }>(
-    `select model_id
-       from manager_states
-      where season = $1 and gw = $2
-      order by model_id`,
+    `select s.model_id
+       from manager_states s
+       join models m on m.id = s.model_id
+      where s.season = $1 and s.gw = $2 and m.role = 'entrant'
+      order by s.model_id`,
     [season, startingGameweek]
   );
   return result.rows.map((row) => row.model_id);

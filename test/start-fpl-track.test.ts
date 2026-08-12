@@ -439,18 +439,24 @@ describe("starting the FPL track for all nine Entrants", () => {
   });
 
   test("seats one Entrant per Base Model and leaves every other row alone", async () => {
-    // Three rows that are not this track's seats, each for its own reason: a
+    // Rows that are not this track's seats, each for its own reason: a
     // Reference Line is not ranked and cannot manage a Squad, a Match-track
     // Entrant is a different Prompt Version's seat, and the second seat on an
     // existing Base Model is the replication ADR-0003 declined — one seat per
     // Base Model is what makes the FPL ranking a demonstration.
+    //
+    // The Exhibition is the hardest of them: this track's Prompt Version on a
+    // Base Model already seated, so if the role were not what selects the
+    // roster it would be refused as a duplicate seat and counted as a tenth.
     await client.query(
       `insert into models (
          id, name, base_model, provider, prompt_version, role
        ) values
          ('reference/home', 'Home prior', 'none', 'none', $1, 'reference'),
          ('match/base-1', 'Match seat', 'vendor/base-1', 'vendor',
-          'match/2026-27-v2', 'entrant')`,
+          'match/2026-27-v2', 'entrant'),
+         ('exhibition/base-1', 'Late Arrival', 'vendor/base-1', 'vendor',
+          $1, 'exhibition')`,
       [FPL_PROMPT_VERSION]
     );
 

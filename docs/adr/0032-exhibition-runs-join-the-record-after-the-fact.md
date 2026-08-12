@@ -38,10 +38,18 @@ Gameweek N" label wherever Exhibition results are shown.
 ## Consequences
 
 - One migration widens the `models.role` check to admit `'exhibition'`. Every job that
-  calls or counts competitors already filters `role = 'entrant'` (predict, fill, gap alert,
-  FPL start/run, preflight), and so does the dashboard's read API — so Exhibition rows are
-  invisible to every scheduled job and every surface with no further code, and every
+  calls or counts competitors by reading `models` already filters `role = 'entrant'`
+  (predict, fill, gap alert, FPL start/run, preflight), and so does the dashboard's read
+  API — so Exhibition rows are invisible to those with no further code, and every
   **future** reader of `models` inherits the obligation to filter by role.
+
+  One reader was not among them, and the seat ticket found it: `loadStartedRoster` derives
+  the FPL run's and scorer's roster from `manager_states` at the opening Gameweek, not from
+  `models`, so it had no role to filter. An FPL Exhibition replays from that same opening
+  Gameweek and leaves a Manager State standing there, which the reader counted as a seat —
+  making `runFplGameweek` refuse the roster outright. It now joins `models` and selects
+  `role = 'entrant'`. The obligation therefore reaches further than reading `models`: any
+  reader that derives who the competitors are, by whatever route, must ask the role.
 - The scorer (spec 0002, landed) already does most of what an Exhibition needs: its
   per-Entrant metric loop writes rows for any model holding Predictions, while its
   Comparison Anchor, complete-case intersection and declared intervals are computed over

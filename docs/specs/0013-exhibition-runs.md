@@ -40,8 +40,11 @@ Entrant, whose shared sections were frozen before that Gameweek's deadline.
 
 Honesty is inherited, not added: `predicted_at` and `attempted_at` post-date the deadlines
 they cover, and that stored fact is what derives the "ran after Gameweek N" label wherever
-Exhibition results appear. Every scheduled job already filters `role = 'entrant'`, so the
-official pipeline is blind to Exhibition rows by construction. The readable rankings will
+Exhibition results appear. Every scheduled job that reads `models` already filters
+`role = 'entrant'`, so the official pipeline is blind to Exhibition rows by construction —
+except where it derives the competitors by another route: the FPL run's roster comes from
+`manager_states` at the opening Gameweek, and the seat ticket had to teach it the role
+(ADR-0032). The readable rankings will
 show Exhibition Runs ranked and labelled; the statistical layer — Comparison Anchor,
 complete-case intersection, published intervals — never sees them (ADR-0032; already true
 of the landed scorer, proven and kept true by the work this spec tickets).

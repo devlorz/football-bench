@@ -5,6 +5,9 @@ import {
   parseAttemptTrigger,
   type AttemptTrigger
 } from "../predictions/prediction-trigger.js";
+import type {
+  PreflightTarget
+} from "../preflight/preflight-base-models.js";
 
 export interface FetchJobConfig {
   databaseUrl: string;
@@ -92,13 +95,12 @@ export interface DryRunJobConfig extends DailyFetchJobConfig {
   concurrency: number;
 }
 
-export interface PreflightJobConfig {
+export type PreflightJobConfig = {
   databaseUrl: string;
   season: string;
   fixtureId: number;
-  expectedEntrantCount: number;
   openRouterApiKey: string;
-}
+} & PreflightTarget;
 
 function required(environment: NodeJS.ProcessEnv, name: string): string {
   const value = environment[name];
@@ -319,14 +321,36 @@ export function readPreflightJobConfig(
   const databaseUrl = required(environment, "DATABASE_URL");
   const season = requiredSeason(environment);
   const fixtureId = Number(required(environment, "FIXTURE_ID"));
-  const expectedEntrantCount = Number(
-    required(environment, "EXPECTED_ENTRANT_COUNT")
-  );
   const openRouterApiKey = required(environment, "OPENROUTER_API_KEY");
+  // One Exhibition, or the roster — never both, because an Exhibition is not
+  // on the roster and there is nothing for a count to mean beside it. Refused
+  // rather than resolved by precedence: an operator who set both stated two
+  // different intentions, and dropping one of them silently would run the
+  // check they did not mean while telling them nothing.
+  const exhibitionModelId = environment.EXHIBITION_MODEL_ID?.trim() || null;
+  const entrantCount = environment.EXPECTED_ENTRANT_COUNT?.trim() || null;
 
   if (!Number.isInteger(fixtureId) || fixtureId < 1) {
     throw new Error("FIXTURE_ID must be a positive integer");
   }
+  if (exhibitionModelId !== null && entrantCount !== null) {
+    throw new Error(
+      "EXHIBITION_MODEL_ID and EXPECTED_ENTRANT_COUNT cannot both be set"
+    );
+  }
+  if (exhibitionModelId !== null) {
+    return {
+      databaseUrl,
+      season,
+      fixtureId,
+      exhibitionModelId,
+      openRouterApiKey
+    };
+  }
+
+  const expectedEntrantCount = Number(
+    required(environment, "EXPECTED_ENTRANT_COUNT")
+  );
   if (!Number.isInteger(expectedEntrantCount) || expectedEntrantCount < 1) {
     throw new Error("EXPECTED_ENTRANT_COUNT must be a positive integer");
   }

@@ -21,7 +21,12 @@ interface FixtureRow extends MatchPromptFixture {
   gw: number;
 }
 
-interface EntrantRow {
+/**
+ * One `models` row this pre-flight will call. Deliberately not named for a
+ * role: the same shape carries an Entrant of the roster and an Exhibition Run,
+ * and an Exhibition is not a competitor on the leaderboard.
+ */
+interface CalledRow {
   id: string;
   base_model: string;
   provider: string;
@@ -36,7 +41,7 @@ export type PreflightStatus =
   | "transport_error";
 
 export interface PreflightResult {
-  entrantId: string;
+  modelId: string;
   baseModel: string;
   status: PreflightStatus;
   detail: string | null;
@@ -58,14 +63,28 @@ export interface PreflightReport {
   results: PreflightResult[];
 }
 
-export interface PreflightBaseModelsOptions {
+/**
+ * What one pre-flight is aimed at: the whole roster, counted, or one
+ * Exhibition model by id (ADR-0032). A late-arriving Base Model should surface
+ * a content-policy refusal before a Season's worth of calls is paid for, and
+ * it is not on the roster to be swept up by the scheduled check.
+ *
+ * Exactly one of the two, which is what the union says: a count beside an id
+ * is a number about a roster this run is not checking, and neither is a roster
+ * of no stated size. The absent side is spelled out as `undefined` so that
+ * naming both is a type error rather than a silently ignored field.
+ */
+export type PreflightTarget =
+  | { expectedEntrantCount: number; exhibitionModelId?: undefined }
+  | { exhibitionModelId: string; expectedEntrantCount?: undefined };
+
+export type PreflightBaseModelsOptions = {
   database: Database;
   season: string;
   fixtureId: number;
-  expectedEntrantCount: number;
   apiKey: string;
   http: HttpFetcher;
-}
+} & PreflightTarget;
 
 function sha256(body: string): string {
   return createHash("sha256").update(body, "utf8").digest("hex");
@@ -106,19 +125,19 @@ async function archiveResponse(
 
 async function callBaseModel(options: {
   database: Database;
-  entrant: EntrantRow;
+  model: CalledRow;
   fixture: FixtureRow;
   contextData: MatchContextData;
   apiKey: string;
   http: HttpFetcher;
 }): Promise<PreflightResult> {
-  const { database, entrant, fixture, contextData, apiKey, http } = options;
+  const { database, model, fixture, contextData, apiKey, http } = options;
   const request = openRouterRequest(
     apiKey,
     {
-      baseModel: entrant.base_model,
-      provider: entrant.provider,
-      quantization: entrant.quantization
+      baseModel: model.base_model,
+      provider: model.provider,
+      quantization: model.quantization
     },
     buildMatchContext(fixture, contextData)
   );
@@ -132,8 +151,8 @@ async function callBaseModel(options: {
     body = response.body;
   } catch (error) {
     return {
-      entrantId: entrant.id,
-      baseModel: entrant.base_model,
+      modelId: model.id,
+      baseModel: model.base_model,
       status: "transport_error",
       detail: `OpenRouter call failed: ${errorText(error)}.`,
       resolvedProvider: null,
@@ -144,8 +163,8 @@ async function callBaseModel(options: {
 
   if (status < 200 || status >= 300) {
     return {
-      entrantId: entrant.id,
-      baseModel: entrant.base_model,
+      modelId: model.id,
+      baseModel: model.base_model,
       status: "transport_error",
       detail: `OpenRouter returned HTTP ${status}.`,
       resolvedProvider: null,
@@ -154,13 +173,13 @@ async function callBaseModel(options: {
     };
   }
 
-  await archiveResponse(database, entrant.base_model, body);
+  await archiveResponse(database, model.base_model, body);
 
   const parsed = parseOpenRouterResponse(body);
   if (parsed === null) {
     return {
-      entrantId: entrant.id,
-      baseModel: entrant.base_model,
+      modelId: model.id,
+      baseModel: model.base_model,
       status: "transport_error",
       detail: "OpenRouter returned an unexpected response shape.",
       resolvedProvider: null,
@@ -174,8 +193,8 @@ async function callBaseModel(options: {
   const routingDetail = metadataDetail(resolvedProvider, resolvedModel);
   if (parsed.refusal !== null) {
     return {
-      entrantId: entrant.id,
-      baseModel: entrant.base_model,
+      modelId: model.id,
+      baseModel: model.base_model,
       status: "refusal",
       detail: joinDetails(parsed.refusal, routingDetail),
       resolvedProvider,
@@ -185,8 +204,8 @@ async function callBaseModel(options: {
   }
   if (parsed.content === null) {
     return {
-      entrantId: entrant.id,
-      baseModel: entrant.base_model,
+      modelId: model.id,
+      baseModel: model.base_model,
       status: "unparseable",
       detail: joinDetails(
         "OpenRouter returned no message content.",
@@ -204,8 +223,8 @@ async function callBaseModel(options: {
 
   if (!validation.ok) {
     return {
-      entrantId: entrant.id,
-      baseModel: entrant.base_model,
+      modelId: model.id,
+      baseModel: model.base_model,
       status: "unparseable",
       detail: joinDetails(validation.message, routingDetail),
       resolvedProvider,
@@ -215,8 +234,8 @@ async function callBaseModel(options: {
   }
 
   return {
-    entrantId: entrant.id,
-    baseModel: entrant.base_model,
+    modelId: model.id,
+    baseModel: model.base_model,
     status: "parseable",
     detail: routingDetail,
     resolvedProvider,
@@ -225,14 +244,66 @@ async function callBaseModel(options: {
   };
 }
 
+/**
+ * The one Exhibition row the operator named, or a refusal saying which of the
+ * three things is wrong with the id: no such row, a row that is not an
+ * Exhibition, or one that is not at the Prompt Version this actually sends. A
+ * typo must not put an Entrant through this door, and a row cannot claim one
+ * Prompt Version while being tested at another — the frozen Match prompt is
+ * the only thing this builds and there is no way to configure it (ADR-0001).
+ */
+async function loadExhibition(
+  database: Database,
+  modelId: string
+): Promise<CalledRow> {
+  const result = await database.query<CalledRow & { role: string }>(
+    `select id, base_model, provider, quantization, prompt_version, role
+       from models
+      where id = $1`,
+    [modelId]
+  );
+  const model = result.rows[0];
+  if (model === undefined) {
+    throw new Error(`${modelId} has no row in models`);
+  }
+  if (model.role !== "exhibition") {
+    throw new Error(
+      `${modelId} has role '${model.role}', not 'exhibition'`
+    );
+  }
+  if (model.prompt_version !== MATCH_PROMPT_VERSION) {
+    throw new Error(
+      `${modelId} is at Prompt Version ${model.prompt_version}, `
+      + `not ${MATCH_PROMPT_VERSION}`
+    );
+  }
+  return model;
+}
+
 export async function preflightBaseModels({
   database,
   season,
   fixtureId,
   expectedEntrantCount,
+  exhibitionModelId,
   apiKey,
   http
 }: PreflightBaseModelsOptions): Promise<PreflightReport> {
+  // The union says one target or the other, and this says it again at the
+  // boundary. Not for the CLI, which refuses both and neither while reading
+  // the environment: for a programmatic caller reaching this directly, where
+  // an ignored count or an unstated roster size would otherwise be silent.
+  if (expectedEntrantCount !== undefined && exhibitionModelId !== undefined) {
+    throw new Error(
+      "Pre-flight checks the roster or one Exhibition, not both"
+    );
+  }
+  if (expectedEntrantCount === undefined && exhibitionModelId === undefined) {
+    throw new Error(
+      "Pre-flight needs an Entrant count or an Exhibition model id"
+    );
+  }
+
   const fixtureResult = await database.query<FixtureRow>(
     `select fpl_id, gw, home_team, away_team, kickoff_at
        from fixtures
@@ -244,23 +315,32 @@ export async function preflightBaseModels({
     throw new Error(`Fixture ${fixtureId} does not exist in Season ${season}`);
   }
 
-  // The Match track's seats, told from the FPL track's by Prompt Version:
-  // both mark a competitor with `role = 'entrant'` in the same table. The
-  // count is still checked, and against the same number as before, so a
-  // roster short of a Base Model is still refused before the first call.
-  const entrants = await database.query<EntrantRow>(
-    `select id, base_model, provider, quantization, prompt_version
-       from models
-      where role = 'entrant' and prompt_version = $1
-      order by id`,
-    [MATCH_PROMPT_VERSION]
-  );
-  if (entrants.rows.length !== expectedEntrantCount) {
-    throw new Error(
-      `Pre-flight requires exactly ${expectedEntrantCount} Entrants at `
-      + `Prompt Version ${MATCH_PROMPT_VERSION}; `
-      + `found ${entrants.rows.length}`
+  // Either the roster, or the one Exhibition the operator aimed this at. The
+  // prompt, the Fixture and the call path are the same either way — what an
+  // Exhibition changes is only which rows are called, never how.
+  let checked: CalledRow[];
+  if (exhibitionModelId !== undefined) {
+    checked = [await loadExhibition(database, exhibitionModelId)];
+  } else {
+    // The Match track's seats, told from the FPL track's by Prompt Version:
+    // both mark a competitor with `role = 'entrant'` in the same table. The
+    // count is still checked, and against the same number as before, so a
+    // roster short of a Base Model is still refused before the first call.
+    const entrants = await database.query<CalledRow>(
+      `select id, base_model, provider, quantization, prompt_version
+         from models
+        where role = 'entrant' and prompt_version = $1
+        order by id`,
+      [MATCH_PROMPT_VERSION]
     );
+    if (entrants.rows.length !== expectedEntrantCount) {
+      throw new Error(
+        `Pre-flight requires exactly ${expectedEntrantCount} Entrants at `
+        + `Prompt Version ${MATCH_PROMPT_VERSION}; `
+        + `found ${entrants.rows.length}`
+      );
+    }
+    checked = entrants.rows;
   }
 
   const contextData = await loadMatchContextData(
@@ -269,10 +349,10 @@ export async function preflightBaseModels({
     fixture.gw
   );
   const results: PreflightResult[] = [];
-  for (const entrant of entrants.rows) {
+  for (const model of checked) {
     results.push(await callBaseModel({
       database,
-      entrant,
+      model,
       fixture,
       contextData,
       apiKey,
