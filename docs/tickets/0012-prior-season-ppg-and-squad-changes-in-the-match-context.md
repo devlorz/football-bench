@@ -112,11 +112,30 @@ Document numbers 0012, 0030 and 0031 are re-checked for collisions at merge, per
 
 **Blocked by:** Tickets 1 and 3.
 
-- [ ] `contexts`, `predictions` and `attempts` re-verified zero on the live database
+- [x] `contexts`, `predictions` and `attempts` re-verified zero on the live database
       immediately before merge — or the work ships as a v3, not an edit
-- [ ] The pinned SHA moves exactly once, with the contract test asserting the new pair
-- [ ] Pre-flight 9/9 parseable, `ok: true`, no substitutions, before the first Lock
-- [ ] A dated report in the reports directory records both runs' roster resolution and
+
+      Read live on 2026-08-12 and again after the pre-flight runs: zero on all three,
+      nine `entrant` rows all on `match/2026-27-v2`. The work ships as an edit to v2.
+- [x] The pinned SHA moves exactly once, with the contract test asserting the new pair
+
+      `1dfeafb…` → `cb518985c6232420cc0a2abf3f4d05a6e988779a1d0871eac05af368e2b6fbbf`,
+      one edit covering both additions.
+- [x] Pre-flight 9/9 parseable, `ok: true`, no substitutions, before the first Lock
+
+      Run against a local throwaway Postgres, not the live database — the operator's
+      call. The cluster was not seeded: it was built by `db:migrate`, `fetch:history`,
+      `fetch:xg-history` and the daily `fetch` against the same real sources on the same
+      day, so the prompt bytes and all nine calls are real. What it does not certify is
+      the live database's own state, and migration 0018 is still unapplied there with
+      `origin/main` three commits behind — deploy steps that remain outstanding.
+
+      The first run was 8/9: Qwen3.7 Max 404'd on a quantization pin its single provider
+      no longer publishes. Unrelated to this spec, live on the real roster too, and fixed
+      by dropping that one seat's pin. The re-run is 9/9 with no substitutions.
+- [x] A dated report in the reports directory records both runs' roster resolution and
       the freeze counts, in the style of its predecessors
+
+      [2026-08-12-prior-season-ppg-squad-changes-preflight.md](../reports/2026-08-12-prior-season-ppg-squad-changes-preflight.md)
 - [ ] The per-call token cost of the additions is read from recorded attempts after
       Gameweek 1 — measured, not estimated
