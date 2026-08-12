@@ -2,7 +2,7 @@
 
 Companion to the same day's
 [pre-flight](./2026-08-12-prior-season-ppg-squad-changes-preflight.md)
-([tickets 0012](../tickets/0012-prior-season-ppg-and-squad-changes-in-the-match-context.md),
+([tickets 0012](../tickets/done/0012-prior-season-ppg-and-squad-changes-in-the-match-context.md),
 [spec 0012](../specs/0012-prior-season-ppg-and-squad-changes-in-the-match-context.md)).
 The pre-flight proved the amended context parses on all nine seats; this asks the next
 question — **what the additions actually change in the Predictions** — by running the whole

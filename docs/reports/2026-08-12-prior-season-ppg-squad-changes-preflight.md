@@ -1,6 +1,6 @@
 # Base Model pre-flight, prior-Season PPG and Squad Changes — 2026-08-12
 
-Ticket: **Freeze verification: one amendment, one pre-flight** ([tickets 0012](../tickets/0012-prior-season-ppg-and-squad-changes-in-the-match-context.md), [spec 0012](../specs/0012-prior-season-ppg-and-squad-changes-in-the-match-context.md))
+Ticket: **Freeze verification: one amendment, one pre-flight** ([tickets 0012](../tickets/done/0012-prior-season-ppg-and-squad-changes-in-the-match-context.md), [spec 0012](../specs/0012-prior-season-ppg-and-squad-changes-in-the-match-context.md))
 
 Each club's prior-Season rate now rides under its final-position line, and the transfer
 window's real squad movement renders as a section of its own. Both landed inside the
