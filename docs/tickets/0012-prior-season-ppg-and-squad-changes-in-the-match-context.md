@@ -23,13 +23,13 @@ fetched or stored.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] Both club sections carry the line, every Gameweek, under the final-position line
-- [ ] Figures verified against hand-computed rates from the stored 2025-26 record by
+- [x] Both club sections carry the line, every Gameweek, under the final-position line
+- [x] Figures verified against hand-computed rates from the stored 2025-26 record by
       exact-string assertions at the pure context-builder seam, per the existing
       historical-context test prior art
-- [ ] A promoted club's line is verified to carry its Championship figures, with the
+- [x] A promoted club's line is verified to carry its Championship figures, with the
       division named only by the sibling line above
-- [ ] No query, migration or fetch changes; no rate is stored anywhere
+- [x] No query, migration or fetch changes; no rate is stored anywhere
 
 ## 2. The Squad Change pipeline: fetch, archive, store
 

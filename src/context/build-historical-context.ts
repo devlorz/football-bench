@@ -315,9 +315,29 @@ function priorSeasonLine(
     };
   }
   const promoted = division === "Championship";
+  const canonical = footballDataTeamName(team);
+  // The club's rows inside the division the line above names, and only those:
+  // a rate mixing two divisions would be the normalisation ADR-0030 refuses.
+  const clubMatches = divisionMatches.filter((match) =>
+    includesTeam(match, canonical)
+  );
+  const formatPointsPerGame = (of: HistoricalMatch[]): string => {
+    const record = teamRecord(of, canonical);
+    return record.played === 0
+      ? "unavailable"
+      : ((record.wins * 3 + record.draws) / record.played).toFixed(2);
+  };
   return {
     line: `Prior-Season final position: ${ordinal(position)} in `
-      + `${priorSeason} ${division}; promoted: ${promoted ? "yes" : "no"}.`,
+      + `${priorSeason} ${division}; promoted: ${promoted ? "yes" : "no"}.`
+      + `\nPrior-Season points per game: `
+      + `${formatPointsPerGame(clubMatches)} overall, `
+      + `${formatPointsPerGame(clubMatches.filter((match) =>
+        footballDataTeamName(match.home_team) === canonical
+      ))} home, `
+      + `${formatPointsPerGame(clubMatches.filter((match) =>
+        footballDataTeamName(match.away_team) === canonical
+      ))} away.`,
     promoted
   };
 }

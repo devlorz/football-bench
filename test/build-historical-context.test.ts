@@ -3,6 +3,36 @@ import {
   buildHistoricalContext,
   type HistoricalMatch
 } from "../src/context/build-historical-context.js";
+import { archivedBody } from "./archived-fixture.js";
+
+/**
+ * The archived 2025-26 football-data division, as the rows the prediction path
+ * stores: only the columns a record line is built from.
+ */
+async function archivedSeason(
+  name: string,
+  division: HistoricalMatch["division"]
+): Promise<HistoricalMatch[]> {
+  const [header = "", ...rows] = (await archivedBody(name)).trim().split(/\r?\n/);
+  const columns = header.split(",");
+  const field = (fields: string[], column: string): string =>
+    fields[columns.indexOf(column)] ?? "";
+  return rows
+    .map((row) => row.split(","))
+    .filter((fields) => field(fields, "HomeTeam") !== "")
+    .map((fields) => {
+      const [day, month, year] = field(fields, "Date").split("/");
+      return {
+        season: "2025-26",
+        division,
+        played_on: new Date(`${year}-${month}-${day}T00:00:00.000Z`),
+        home_team: field(fields, "HomeTeam"),
+        away_team: field(fields, "AwayTeam"),
+        home_goals: Number(field(fields, "FTHG")),
+        away_goals: Number(field(fields, "FTAG"))
+      };
+    });
+}
 
 function match(
   season: string,
@@ -57,6 +87,7 @@ describe("building historical Match context", () => {
       "",
       "Arsenal",
       "Prior-Season final position: 1st in 2025-26 Premier League; promoted: no.",
+      "Prior-Season points per game: 2.50 overall, 3.00 home, 2.00 away.",
       "Current-Season overall: 1 played, 1W 0D 0L, GF 2, GA 0, "
         + "shots unavailable, on target unavailable, xG unavailable.",
       "Current-Season home split: no home matches played.",
@@ -76,6 +107,7 @@ describe("building historical Match context", () => {
       "",
       "Coventry City",
       "Prior-Season final position: 1st in 2025-26 Championship; promoted: yes.",
+      "Prior-Season points per game: 2.50 overall, 3.00 home, 2.00 away.",
       "Premier League history: none in stored data; promoted from the Championship.",
       "Current-Season overall: no matches played.",
       "Current-Season home split: no home matches played.",
@@ -95,6 +127,88 @@ describe("building historical Match context", () => {
       "Head-to-head history:",
       "No prior meeting in stored data."
     ].join("\n"));
+  });
+
+  test("rates both clubs' prior Season, each in its own division", () => {
+    // Hand-computed from the rows below. Arsenal: home W D L = 4 pts over 3,
+    // away W W L = 6 over 3, overall 10 over 6. Coventry, in the Championship:
+    // home W L = 3 over 2, away D W L = 4 over 3, overall 7 over 5.
+    const matches = [
+      match("2025-26", "Premier League", "2025-08-10", "Arsenal", "Chelsea", 2, 0),
+      match("2025-26", "Premier League", "2025-09-10", "Arsenal", "Everton", 1, 1),
+      match("2025-26", "Premier League", "2025-10-10", "Arsenal", "Fulham", 0, 1),
+      match("2025-26", "Premier League", "2025-11-10", "Liverpool", "Arsenal", 1, 2),
+      match("2025-26", "Premier League", "2025-12-10", "Tottenham", "Arsenal", 0, 1),
+      match("2025-26", "Premier League", "2026-01-10", "Everton", "Arsenal", 2, 0),
+      // Stray second-division rows for a Premier League club: the rate must
+      // stay inside the division the position line names.
+      match("2025-26", "Championship", "2026-02-01", "Hull", "Arsenal", 2, 0),
+      match("2025-26", "Championship", "2026-03-01", "Arsenal", "Stoke", 1, 1),
+      match("2025-26", "Championship", "2025-08-01", "Coventry", "Hull", 1, 0),
+      match("2025-26", "Championship", "2025-09-01", "Coventry", "Stoke", 1, 2),
+      match("2025-26", "Championship", "2025-10-01", "Ipswich", "Coventry", 2, 2),
+      match("2025-26", "Championship", "2025-11-01", "Watford", "Coventry", 0, 3),
+      match("2025-26", "Championship", "2025-12-01", "Wrexham", "Coventry", 1, 0)
+    ];
+
+    const context = buildHistoricalContext({
+      season: "2026-27",
+      asOf: new Date("2026-08-21T17:30:00.000Z"),
+      homeTeam: "Arsenal",
+      awayTeam: "Coventry City",
+      matches
+    });
+
+    expect(context).toContain([
+      "Prior-Season final position: 1st in 2025-26 Premier League; promoted: no.",
+      "Prior-Season points per game: 1.67 overall, 1.33 home, 2.00 away."
+    ].join("\n"));
+    // The promoted club's own Championship rates, unnormalised, with the
+    // division named only by the line above.
+    expect(context).toContain([
+      "Prior-Season final position: 1st in 2025-26 Championship; promoted: yes.",
+      "Prior-Season points per game: 1.40 overall, 1.50 home, 1.33 away."
+    ].join("\n"));
+  });
+
+  test("rates the real stored 2025-26 record, each club in its own division", async () => {
+    const context = buildHistoricalContext({
+      season: "2026-27",
+      asOf: new Date("2026-08-21T17:30:00.000Z"),
+      homeTeam: "Tottenham",
+      awayTeam: "Coventry City",
+      matches: [
+        ...await archivedSeason("football-data-2526-E0.csv.gz", "Premier League"),
+        ...await archivedSeason("football-data-2526-E1.csv.gz", "Championship")
+      ]
+    });
+
+    // ADR-0030's motivating figures: 41 points over 38, 15 at home over 19,
+    // 26 away over 19 — the away-better-than-home inversion.
+    expect(context).toContain([
+      "Prior-Season final position: 17th in 2025-26 Premier League; promoted: no.",
+      "Prior-Season points per game: 1.08 overall, 0.79 home, 1.37 away."
+    ].join("\n"));
+    // The promoted club's real Championship season — 95 points over 46 — beside
+    // it, unnormalised, with the division named only by the line above.
+    expect(context).toContain([
+      "Prior-Season final position: 1st in 2025-26 Championship; promoted: yes.",
+      "Prior-Season points per game: 2.07 overall, 2.39 home, 1.74 away."
+    ].join("\n"));
+  });
+
+  test("states a venue with no stored prior-Season match rather than dividing by zero", () => {
+    expect(buildHistoricalContext({
+      season: "2026-27",
+      asOf: new Date("2026-08-21T17:30:00.000Z"),
+      homeTeam: "Arsenal",
+      awayTeam: "Everton",
+      matches: [
+        match("2025-26", "Premier League", "2025-08-10", "Arsenal", "Everton", 2, 0)
+      ]
+    })).toContain(
+      "Prior-Season points per game: 3.00 overall, 3.00 home, unavailable away."
+    );
   });
 
   test("carries both sides' shots and xG on a form line", () => {
