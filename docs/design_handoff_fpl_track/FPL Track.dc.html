@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/modernist-a4b238fd-710d-4e6d-b9e6-8001cf1af62f/styles.css">
+<script src="_ds/modernist-a4b238fd-710d-4e6d-b9e6-8001cf1af62f/_ds_bundle.js"></script>
+<style>
+html,body{margin:0;padding:0}
+a{color:var(--color-accent);text-decoration:none}
+a:hover{color:var(--color-accent-600)}
+:root{
+  --pitch:var(--color-neutral-900);
+  --color-accent:#7f2ea8; --color-accent-2:#9b4dc4;
+  --color-accent-100:#f6effa; --color-accent-200:#ead9f3; --color-accent-300:#d8bbe9;
+  --color-accent-400:#b98ad6; --color-accent-500:#9b4dc4; --color-accent-600:#6c2291;
+  --color-accent-700:#57157a; --color-accent-800:#420f5c; --color-accent-900:#37003c;
+  --color-accent-2-100:#f6effa; --color-accent-2-800:#420f5c;
+}
+body:has(.dark){background:#171615}
+.dark{
+  --color-bg:#201e1d; --color-surface:#2d2b2b; --color-text:#f3f2f2;
+  --color-divider:color-mix(in srgb,#f3f2f2 34%,transparent);
+  --pitch:#141312;
+  --color-neutral-100:#2d2b2b; --color-neutral-200:#444141; --color-neutral-300:#605d5d;
+  --color-neutral-400:#7d7979; --color-neutral-500:#9b9797; --color-neutral-600:#bab6b6;
+  --color-neutral-700:#d7d3d3; --color-neutral-800:#eae7e7; --color-neutral-900:#f8f4f4;
+  --color-accent:#a95ccd; --color-accent-600:#c084dd;
+  --color-accent-100:#420f5c; --color-accent-200:#57157a; --color-accent-300:#6c2291;
+  --color-accent-700:#d8bbe9; --color-accent-800:#ead9f3; --color-accent-900:#f6effa;
+  --color-accent-2-100:#420f5c; --color-accent-2-800:#ead9f3;
+}
+.dark .seg-opt:has(input:checked){color:#201e1d}
+.app{container-type:inline-size}
+.menu-btn{display:none}
+.menu-panel{display:none}
+@container (max-width:760px){
+  .hdr{flex-wrap:nowrap !important;gap:0 12px !important;padding:0 16px;align-items:center !important}
+  .hdr .nav-brand{font-size:15px}
+  .hdr .tab{display:none !important}
+  .menu-btn{display:inline-flex !important}
+  .menu-panel{display:block !important}
+  .hdr .meta{display:none}
+  .hdr button.btn{margin:0 0 0 6px;align-self:center !important}
+  .hdr .btn{margin-left:6px !important}
+  .hdr .tab~.btn{margin-left:auto !important}
+  .hdr .btn~.btn{margin-left:6px !important}
+  .pg{padding:22px 16px 60px}
+  .pg h1{font-size:28px}
+  .side,.two,.cards3{grid-template-columns:1fr !important}
+  .stat6{grid-template-columns:repeat(2,1fr) !important}
+  .side aside{border-bottom:2px solid var(--color-divider);margin-bottom:6px}
+  .lb-table th:nth-child(n+6),.lb-table td:nth-child(n+6){display:none}
+  .table th,.table td{padding:8px 6px;font-size:13px}
+  .hdrow{flex-wrap:wrap;gap:12px}
+  .hdrow .seg{margin-left:0 !important}
+}
+</style>
+</helmet>
+<div style="{{ shell }}">
+<div class="app {{ theme }}" style="{{ appStyle }}">
+
+  <header class="hdr" style="display:flex;align-items:stretch;gap:32px;flex-wrap:nowrap;border-bottom:2px solid var(--color-divider);padding:0 28px;background:var(--color-bg)">
+    <span class="nav-brand" style="letter-spacing:-0.02em;align-self:center;margin-right:0;display:flex;align-items:baseline;gap:10px;flex:none;white-space:nowrap">
+      <span>FOOTBALL BENCH</span>
+      <span style="font-size:13px;font-weight:400;letter-spacing:.18em;text-transform:uppercase;color:var(--color-accent);white-space:nowrap">FPL Track</span>
+    </span>
+    <button class="tab" onClick="{{ goLeaderboard }}" style="{{ tabLeaderboard }}" style-hover="color:var(--color-accent)">Leaderboard</button>
+    <button class="tab" onClick="{{ goSquads }}" style="{{ tabSquads }}" style-hover="color:var(--color-accent)">Latest squads</button>
+    <button class="tab" onClick="{{ goStats }}" style="{{ tabStats }}" style-hover="color:var(--color-accent)">Model stats</button>
+    <span class="meta" style="margin-left:auto;align-self:center;font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.55;text-align:right">Season 2026/27 · GW4 settled · 9 entrants</span>
+    <button onClick="{{ toggleTheme }}" class="btn btn-secondary btn-icon" style="align-self:center;justify-content:center" title="{{ themeLabel }}" aria-label="{{ themeLabel }}">
+      <sc-if value="{{ isDark }}" hint-placeholder-val="{{ true }}">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+      </sc-if>
+      <sc-if value="{{ isLight }}" hint-placeholder-val="{{ true }}">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+      </sc-if>
+    </button>
+    <button onClick="{{ toggleMenu }}" class="btn btn-secondary btn-icon menu-btn" style="align-self:center;justify-content:center" aria-label="Menu">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18"></path><path d="M3 12h18"></path><path d="M3 18h18"></path></svg>
+    </button>
+  </header>
+
+  <sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ false }}">
+    <nav class="menu-panel" style="border-bottom:2px solid var(--color-divider);background:var(--color-surface)">
+      <sc-for list="{{ menuItems }}" as="i" hint-placeholder-count="3">
+        <button onClick="{{ i.go }}" style="{{ i.css }}">{{ i.label }}</button>
+      </sc-for>
+    </nav>
+  </sc-if>
+
+
+  <main class="pg" style="max-width:1240px;margin:0 auto;padding:34px 28px 80px">
+
+    <!-- ── LEADERBOARD ─────────────────────────────────────────── -->
+    <sc-if value="{{ isLeaderboard }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <div class="hdrow" style="display:flex;align-items:flex-end;gap:24px;margin-bottom:6px">
+          <h1 style="font-size:46px;margin:0;letter-spacing:-0.03em">FPL points ranking</h1>
+          <span style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.55;padding-bottom:9px">Cumulative, Gameweeks 1–4</span>
+          <div class="seg" style="margin-left:auto">
+            <label class="seg-opt"><input type="radio" name="lbv" checked="{{ lbIsTable }}" onChange="{{ setLbTable }}"><span>Table</span></label>
+            <label class="seg-opt"><input type="radio" name="lbv" checked="{{ lbIsRace }}" onChange="{{ setLbRace }}"><span>Race</span></label>
+            <label class="seg-opt"><input type="radio" name="lbv" checked="{{ lbIsCards }}" onChange="{{ setLbCards }}"><span>Cards</span></label>
+          </div>
+        </div>
+        <hr class="hr" style="margin:14px 0 0">
+
+        <!-- alternate A — table -->
+        <sc-if value="{{ lbIsTable }}" hint-placeholder-val="{{ true }}">
+          <table class="table lb-table" style="margin-top:20px">
+            <thead>
+              <tr>
+                <th style="width:56px">Rank</th>
+                <th style="width:34px"></th>
+                <th>Entrant</th>
+                <th style="width:96px;text-align:right">GW4</th>
+                <th style="width:120px;text-align:right">Total</th>
+                <th style="width:120px;text-align:right">Squad value</th>
+                <th style="width:110px">Chips left</th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{ rows }}" as="r" hint-placeholder-count="9">
+                <tr>
+                  <td style="font-family:var(--font-heading);font-weight:800;font-size:20px">{{ r.rank }}</td>
+                  <td style="font-size:12px;font-weight:600;{{ r.deltaStyle }}">{{ r.delta }}</td>
+                  <td>
+                    <div style="font-family:var(--font-heading);font-weight:800;font-size:16px;line-height:1.2">{{ r.name }}</div>
+                    <div style="font-size:11px;opacity:.55;margin-top:1px">{{ r.baseModel }}</div>
+                  </td>
+                  <td style="text-align:right;font-variant-numeric:tabular-nums">{{ r.gw }}</td>
+                  <td style="text-align:right;font-family:var(--font-heading);font-weight:800;font-size:18px;font-variant-numeric:tabular-nums">{{ r.total }}</td>
+                  <td style="text-align:right;font-variant-numeric:tabular-nums;opacity:.75">{{ r.value }}</td>
+                  <td><span class="tag tag-neutral">{{ r.chipsLeft }}</span></td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+          <p style="margin-top:14px;font-size:12px;opacity:.55;max-width:70ch">Δ is the change against the cumulative snapshot at GW3. Points are net of Hits. Reference Lines do not appear here — they produce probabilities, not a Squad.</p>
+        </sc-if>
+
+        <!-- alternate B — race -->
+        <sc-if value="{{ lbIsRace }}" hint-placeholder-val="{{ true }}">
+          <div class="two" style="margin-top:24px;display:grid;grid-template-columns:1fr 260px;gap:32px">
+            <div style="border:1px solid var(--color-divider);padding:20px 22px 10px;background:var(--color-surface)">
+              <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.55;margin-bottom:10px">Cumulative points by Gameweek</div>
+              <div style="position:relative">
+                <svg viewBox="0 0 640 300" style="width:100%;height:auto;display:block">
+                  <g stroke="var(--color-divider)" stroke-width="1">
+                    <line x1="0" y1="280" x2="470" y2="280"></line>
+                    <line x1="0" y1="210" x2="470" y2="210" opacity=".4"></line>
+                    <line x1="0" y1="140" x2="470" y2="140" opacity=".4"></line>
+                    <line x1="0" y1="70" x2="470" y2="70" opacity=".4"></line>
+                  </g>
+                  <sc-for list="{{ raceLines }}" as="l" hint-placeholder-count="9">
+                    <polyline points="{{ l.points }}" fill="none" stroke="{{ l.stroke }}" stroke-width="{{ l.width }}" stroke-dasharray="{{ l.dash }}"></polyline>
+                  </sc-for>
+                </svg>
+                <sc-for list="{{ raceLabels }}" as="l" hint-placeholder-count="9">
+                  <span style="{{ l.css }}">{{ l.text }}</span>
+                </sc-for>
+                <div style="position:absolute;left:0;right:26%;bottom:-2px;display:flex;justify-content:space-between;font-size:10px;opacity:.5">
+                  <span>GW1</span><span>GW2</span><span>GW3</span><span>GW4</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.55;margin-bottom:10px">Standings</div>
+              <sc-for list="{{ rows }}" as="r" hint-placeholder-count="9">
+                <div style="display:flex;align-items:baseline;gap:10px;padding:9px 0;border-bottom:1px solid var(--color-divider)">
+                  <span style="width:18px;font-family:var(--font-heading);font-weight:800;opacity:.5">{{ r.rank }}</span>
+                  <span style="font-family:var(--font-heading);font-weight:800;font-size:14px">{{ r.name }}</span>
+                  <span style="margin-left:auto;font-variant-numeric:tabular-nums;font-weight:600">{{ r.total }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- alternate C — cards -->
+        <sc-if value="{{ lbIsCards }}" hint-placeholder-val="{{ true }}">
+          <div class="cards3" style="margin-top:24px;display:grid;grid-template-columns:repeat(3,1fr);gap:2px;background:var(--color-divider)">
+            <sc-for list="{{ rows }}" as="r" hint-placeholder-count="9">
+              <div style="background:var(--color-bg);padding:20px 20px 18px;display:flex;flex-direction:column;gap:10px;min-height:186px">
+                <div style="display:flex;align-items:baseline;gap:10px">
+                  <span style="font-family:var(--font-heading);font-weight:800;font-size:40px;line-height:1;letter-spacing:-0.04em;{{ r.rankColor }}">{{ r.rank }}</span>
+                  <span style="font-size:12px;font-weight:600;{{ r.deltaStyle }}">{{ r.delta }}</span>
+                  <span style="margin-left:auto;font-family:var(--font-heading);font-weight:800;font-size:28px;letter-spacing:-0.03em;font-variant-numeric:tabular-nums">{{ r.total }}</span>
+                </div>
+                <div style="font-family:var(--font-heading);font-weight:800;font-size:18px;letter-spacing:-0.01em">{{ r.name }}</div>
+                <div style="font-size:11px;opacity:.55">{{ r.baseModel }}</div>
+                <div style="margin-top:auto;display:flex;gap:8px;flex-wrap:wrap">
+                  <span class="tag tag-accent">GW4 {{ r.gw }}</span>
+                  <span class="tag tag-neutral">£{{ r.value }}</span>
+                  <span class="tag tag-neutral">{{ r.chipsLeft }} chips</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <!-- ── SQUADS ──────────────────────────────────────────────── -->
+    <sc-if value="{{ isSquads }}" hint-placeholder-val="{{ true }}">
+      <div class="side" style="display:grid;grid-template-columns:236px 1fr;gap:36px;align-items:start">
+        <aside>
+          <div class="pick-label" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.55;margin-bottom:8px">Entrant</div>
+          <sc-for list="{{ picker }}" as="m" hint-placeholder-count="9">
+            <button onClick="{{ m.select }}" style="{{ m.style }}">
+              <span style="opacity:.5;width:16px;font-size:12px">{{ m.rank }}</span>
+              <span style="flex:1;text-align:left">{{ m.name }}</span>
+              <span style="font-variant-numeric:tabular-nums;opacity:.6;font-size:12px">{{ m.total }}</span>
+            </button>
+          </sc-for>
+        </aside>
+
+        <section>
+          <div class="hdrow" style="display:flex;align-items:flex-end;gap:20px">
+            <div>
+              <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-accent);margin-bottom:4px">Team Sheet · Gameweek 4</div>
+              <h1 style="font-size:40px;margin:0;letter-spacing:-0.03em">{{ sel.name }}</h1>
+              <div style="font-size:12px;opacity:.55;margin-top:4px">{{ sel.baseModel }} · {{ sel.provider }} · locked {{ sel.lockedAt }}</div>
+            </div>
+            <div class="seg" style="margin-left:auto">
+              <label class="seg-opt"><input type="radio" name="sqv" checked="{{ isPitch }}" onChange="{{ setPitch }}"><span>Pitch</span></label>
+              <label class="seg-opt"><input type="radio" name="sqv" checked="{{ isList }}" onChange="{{ setList }}"><span>List</span></label>
+            </div>
+          </div>
+          <hr class="hr" style="margin:16px 0 0">
+
+          <div class="stat6" style="display:grid;grid-template-columns:repeat(6,1fr);gap:2px;background:var(--color-divider);margin:20px 0 24px">
+            <sc-for list="{{ selStats }}" as="s" hint-placeholder-count="6">
+              <div style="background:var(--color-bg);padding:12px 14px">
+                <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;opacity:.55">{{ s.label }}</div>
+                <div style="font-family:var(--font-heading);font-weight:800;font-size:22px;letter-spacing:-0.02em;margin-top:2px;{{ s.color }}">{{ s.value }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <sc-if value="{{ isPitch }}" hint-placeholder-val="{{ true }}">
+            <div>
+              <div style="position:relative;background:var(--pitch);padding:30px 24px 34px;overflow:hidden">
+                <svg viewBox="0 0 100 62" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;opacity:.28" stroke="#ffffff" stroke-width=".25" fill="none">
+                  <rect x="1" y="1" width="98" height="60"></rect>
+                  <rect x="28" y="1" width="44" height="14"></rect>
+                  <rect x="41" y="1" width="18" height="6"></rect>
+                  <path d="M40 15 A 12 7 0 0 0 60 15"></path>
+                  <line x1="1" y1="58" x2="99" y2="58"></line>
+                  <path d="M36 58 A 16 9 0 0 0 64 58"></path>
+                </svg>
+                <div style="position:relative;display:flex;flex-direction:column;gap:22px">
+                  <sc-for list="{{ pitchRows }}" as="row" hint-placeholder-count="4">
+                    <div style="display:flex;justify-content:center;gap:16px;flex-wrap:wrap">
+                      <sc-for list="{{ row.players }}" as="p" hint-placeholder-count="4">
+                        <div style="width:104px;position:relative">
+                          <div style="display:flex;justify-content:center;margin-bottom:-2px">
+                            <div style="{{ p.shirt }}">{{ p.club }}</div>
+                          </div>
+                          <div style="background:var(--color-bg);border:1px solid var(--pitch)">
+                            <div style="font-family:var(--font-heading);font-weight:800;font-size:12px;line-height:1.2;padding:5px 7px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.name }}</div>
+                            <div style="{{ p.plate }}">
+                              <span style="opacity:.75">{{ p.fixture }}</span>
+                              <span style="font-family:var(--font-heading);font-weight:800">{{ p.pts }}</span>
+                            </div>
+                          </div>
+                          <span style="{{ p.badge }}">{{ p.role }}</span>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:18px;background:var(--color-surface);border-top:2px solid var(--pitch);padding:16px 24px">
+                <span style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;opacity:.55;flex:none">Bench</span>
+                <div style="display:flex;gap:16px;flex-wrap:wrap">
+                  <sc-for list="{{ bench }}" as="p" hint-placeholder-count="4">
+                    <div style="width:104px;position:relative">
+                      <div style="display:flex;justify-content:center;margin-bottom:-2px">
+                        <div style="{{ p.shirt }}">{{ p.club }}</div>
+                      </div>
+                      <div style="background:var(--color-bg);border:1px solid var(--pitch)">
+                        <div style="font-family:var(--font-heading);font-weight:800;font-size:12px;line-height:1.2;padding:5px 7px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.name }}</div>
+                        <div style="{{ p.plate }}">
+                          <span style="opacity:.75">{{ p.order }}</span>
+                          <span style="font-family:var(--font-heading);font-weight:800">{{ p.pts }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isList }}" hint-placeholder-val="{{ true }}">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th style="width:60px">Pos</th><th>Player</th><th style="width:70px">Club</th>
+                  <th style="width:90px;text-align:right">Price</th>
+                  <th style="width:110px;text-align:right">Selling price</th>
+                  <th style="width:80px;text-align:right">GW4</th>
+                  <th style="width:120px">Role</th>
+                </tr>
+              </thead>
+              <tbody>
+                <sc-for list="{{ squadList }}" as="p" hint-placeholder-count="15">
+                  <tr style="{{ p.rowStyle }}">
+                    <td style="font-size:11px;letter-spacing:.06em;opacity:.6">{{ p.pos }}</td>
+                    <td style="font-family:var(--font-heading);font-weight:800">{{ p.name }}</td>
+                    <td style="font-size:12px;opacity:.6">{{ p.club }}</td>
+                    <td style="text-align:right;font-variant-numeric:tabular-nums">{{ p.price }}</td>
+                    <td style="text-align:right;font-variant-numeric:tabular-nums;opacity:.7">{{ p.sell }}</td>
+                    <td style="text-align:right;font-variant-numeric:tabular-nums">{{ p.pts }}</td>
+                    <td><span class="{{ p.tagClass }}">{{ p.role }}</span></td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </sc-if>
+
+          <div class="two" style="margin-top:26px;display:grid;grid-template-columns:1fr 1fr;gap:32px">
+            <div>
+              <h4 style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;opacity:.7;margin-bottom:10px">Transfers into GW4</h4>
+              <sc-for list="{{ selTransfers }}" as="t" hint-placeholder-count="2">
+                <div style="display:flex;align-items:baseline;gap:10px;padding:8px 0;border-bottom:1px solid var(--color-divider);font-size:14px">
+                  <span style="opacity:.5;text-decoration:line-through">{{ t.out }}</span>
+                  <span style="color:var(--color-accent);font-weight:600">→</span>
+                  <span style="font-family:var(--font-heading);font-weight:800">{{ t.in }}</span>
+                  <span style="margin-left:auto;font-size:12px;opacity:.6">{{ t.cost }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div>
+              <h4 style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;opacity:.7;margin-bottom:10px">Validation</h4>
+              <div style="font-size:14px;line-height:1.7">
+                <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--color-divider);padding:6px 0"><span style="opacity:.6">Repairs used</span><span>{{ sel.repairs }} of 3</span></div>
+                <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--color-divider);padding:6px 0"><span style="opacity:.6">Rolled over</span><span>{{ sel.rolledOver }}</span></div>
+                <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--color-divider);padding:6px 0"><span style="opacity:.6">Last violation</span><span>{{ sel.violation }}</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </sc-if>
+
+    <!-- ── STATS ───────────────────────────────────────────────── -->
+    <sc-if value="{{ isStats }}" hint-placeholder-val="{{ true }}">
+      <div class="side" style="display:grid;grid-template-columns:236px 1fr;gap:36px;align-items:start">
+        <aside>
+          <div class="pick-label" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.55;margin-bottom:8px">Entrant</div>
+          <sc-for list="{{ picker }}" as="m" hint-placeholder-count="9">
+            <button onClick="{{ m.select }}" style="{{ m.style }}">
+              <span style="opacity:.5;width:16px;font-size:12px">{{ m.rank }}</span>
+              <span style="flex:1;text-align:left">{{ m.name }}</span>
+              <span style="font-variant-numeric:tabular-nums;opacity:.6;font-size:12px">{{ m.total }}</span>
+            </button>
+          </sc-for>
+        </aside>
+
+        <section>
+          <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-accent);margin-bottom:4px">Historical record · Gameweeks 1–4</div>
+          <h1 style="font-size:40px;margin:0;letter-spacing:-0.03em">{{ sel.name }}</h1>
+          <hr class="hr" style="margin:16px 0 26px">
+
+          <div class="two" style="display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--color-divider)">
+            <div style="background:var(--color-bg);padding:20px 22px">
+              <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.55;margin-bottom:16px">Points per Gameweek</div>
+              <div style="display:flex;align-items:flex-end;gap:18px;height:170px">
+                <sc-for list="{{ gwBars }}" as="b" hint-placeholder-count="4">
+                  <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:stretch;height:100%">
+                    <div style="font-family:var(--font-heading);font-weight:800;font-size:15px;text-align:center;margin-bottom:5px">{{ b.pts }}</div>
+                    <div style="{{ b.style }}"></div>
+                    <div style="font-size:11px;opacity:.55;text-align:center;margin-top:6px">{{ b.gw }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="background:var(--color-bg);padding:20px 22px">
+              <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.55;margin-bottom:16px">Squad value &amp; bank</div>
+              <div style="position:relative">
+              <svg viewBox="0 0 360 170" style="width:100%;height:auto;display:block">
+                <line x1="40" y1="140" x2="352" y2="140" stroke="var(--color-divider)" stroke-width="1"></line>
+                <line x1="40" y1="36" x2="352" y2="36" stroke="var(--color-divider)" stroke-width="1" opacity=".45"></line>
+                <polyline points="{{ valueLine }}" fill="none" stroke="var(--color-accent)" stroke-width="2"></polyline>
+                <polyline points="{{ bankLine }}" fill="none" stroke="var(--color-neutral-600)" stroke-width="2" stroke-dasharray="4 3"></polyline>
+                <g font-size="10" font-family="Archivo" fill="var(--color-text)" opacity=".55">
+                  <text x="36" y="162">GW1</text><text x="132" y="162">GW2</text><text x="228" y="162">GW3</text><text x="322" y="162">GW4</text>
+                </g>
+              </svg>
+              <sc-for list="{{ chartAxis }}" as="a" hint-placeholder-count="2">
+                <span style="{{ a.css }}">{{ a.text }}</span>
+              </sc-for>
+              </div>
+              <div style="display:flex;gap:20px;font-size:11px;margin-top:8px">
+                <sc-for list="{{ chartLegend }}" as="l" hint-placeholder-count="2">
+                  <span style="display:flex;align-items:center;gap:6px"><span style="{{ l.swatch }}"></span>{{ l.label }}<strong style="font-weight:600">{{ l.value }}</strong></span>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:34px">
+            <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.55;margin-bottom:12px">Chip usage — first set expires at the GW19 deadline</div>
+            <div style="display:flex;gap:2px;background:var(--color-divider);border:1px solid var(--color-divider)">
+              <sc-for list="{{ chipCells }}" as="c" hint-placeholder-count="38">
+                <div style="{{ c.style }}" title="{{ c.title }}"></div>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:22px;margin-top:12px;flex-wrap:wrap">
+              <sc-for list="{{ chipLegend }}" as="c" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:8px;font-size:12px">
+                  <span style="{{ c.swatch }}"></span>
+                  <span style="font-weight:600">{{ c.name }}</span>
+                  <span style="opacity:.55">{{ c.when }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div class="two" style="margin-top:36px;display:grid;grid-template-columns:1fr 1fr;gap:36px">
+            <div>
+              <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.55;margin-bottom:10px">Captain picks</div>
+              <table class="table">
+                <thead><tr><th style="width:56px">GW</th><th>Captain</th><th style="width:72px">Vice</th><th style="width:88px;text-align:right">Returned</th></tr></thead>
+                <tbody>
+                  <sc-for list="{{ captains }}" as="c" hint-placeholder-count="4">
+                    <tr>
+                      <td style="opacity:.55">{{ c.gw }}</td>
+                      <td style="font-family:var(--font-heading);font-weight:800">{{ c.name }}</td>
+                      <td style="font-size:12px;opacity:.6">{{ c.vice }}</td>
+                      <td style="text-align:right;font-variant-numeric:tabular-nums;{{ c.color }}">{{ c.returned }}</td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+            <div>
+              <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.55;margin-bottom:10px">Transfer history</div>
+              <table class="table">
+                <thead><tr><th style="width:56px">GW</th><th>Out</th><th>In</th><th style="width:70px;text-align:right">Cost</th></tr></thead>
+                <tbody>
+                  <sc-for list="{{ transferLog }}" as="t" hint-placeholder-count="6">
+                    <tr>
+                      <td style="opacity:.55">{{ t.gw }}</td>
+                      <td style="opacity:.6;text-decoration:line-through">{{ t.out }}</td>
+                      <td style="font-family:var(--font-heading);font-weight:800">{{ t.in }}</td>
+                      <td style="text-align:right;{{ t.color }}">{{ t.cost }}</td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div style="margin-top:36px;border-top:2px solid var(--color-divider);padding-top:16px;display:flex;gap:40px;flex-wrap:wrap">
+            <sc-for list="{{ operatorStats }}" as="s" hint-placeholder-count="4">
+              <div>
+                <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;opacity:.55">{{ s.label }}</div>
+                <div style="font-family:var(--font-heading);font-weight:800;font-size:20px;margin-top:2px">{{ s.value }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </div>
+    </sc-if>
+
+  </main>
+</div>
+<template id="__bundler_thumbnail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#7f2ea8"></rect><text x="50" y="50" font-family="Archivo, sans-serif" font-size="26" font-weight="800" fill="#ffffff" text-anchor="middle" dominant-baseline="central">FPL</text></svg></template>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+class Component extends DCLogic {
+  state = { page: "leaderboard", lb: "table", sel: 0, squadView: "pitch", dark: false, mobile: false, menu: false };
+
+  static POOL = [
+    { n: "Raya", c: "ARS", p: "GKP", pr: 5.6, pts: 6 },
+    { n: "Sánchez", c: "CHE", p: "GKP", pr: 5.0, pts: 2 },
+    { n: "Pickford", c: "EVE", p: "GKP", pr: 5.5, pts: 8 },
+    { n: "Verbruggen", c: "BHA", p: "GKP", pr: 4.5, pts: 3 },
+    { n: "Petrović", c: "BOU", p: "GKP", pr: 4.5, pts: 5 },
+    { n: "Gabriel", c: "ARS", p: "DEF", pr: 6.2, pts: 9 },
+    { n: "Saliba", c: "ARS", p: "DEF", pr: 6.0, pts: 6 },
+    { n: "Van Dijk", c: "LIV", p: "DEF", pr: 6.3, pts: 2 },
+    { n: "Gvardiol", c: "MCI", p: "DEF", pr: 6.1, pts: 7 },
+    { n: "Timber", c: "ARS", p: "DEF", pr: 5.8, pts: 12 },
+    { n: "Muñoz", c: "CRY", p: "DEF", pr: 5.6, pts: 4 },
+    { n: "Lacroix", c: "CRY", p: "DEF", pr: 5.0, pts: 1 },
+    { n: "Burn", c: "NEW", p: "DEF", pr: 4.9, pts: 6 },
+    { n: "Aina", c: "NFO", p: "DEF", pr: 5.0, pts: 2 },
+    { n: "Milenković", c: "NFO", p: "DEF", pr: 5.0, pts: 5 },
+    { n: "Van Hecke", c: "BHA", p: "DEF", pr: 4.6, pts: 3 },
+    { n: "Salah", c: "LIV", p: "MID", pr: 14.5, pts: 13 },
+    { n: "Palmer", c: "CHE", p: "MID", pr: 10.4, pts: 8 },
+    { n: "Saka", c: "ARS", p: "MID", pr: 10.0, pts: 11 },
+    { n: "Semenyo", c: "BOU", p: "MID", pr: 7.7, pts: 9 },
+    { n: "B. Fernandes", c: "MUN", p: "MID", pr: 9.4, pts: 4 },
+    { n: "Gakpo", c: "LIV", p: "MID", pr: 7.6, pts: 6 },
+    { n: "Mbeumo", c: "MUN", p: "MID", pr: 8.2, pts: 7 },
+    { n: "Rogers", c: "AVL", p: "MID", pr: 7.0, pts: 2 },
+    { n: "Kudus", c: "TOT", p: "MID", pr: 6.6, pts: 5 },
+    { n: "Sarr", c: "CRY", p: "MID", pr: 6.5, pts: 10 },
+    { n: "Enzo", c: "CHE", p: "MID", pr: 6.6, pts: 3 },
+    { n: "Haaland", c: "MCI", p: "FWD", pr: 15.1, pts: 15 },
+    { n: "Watkins", c: "AVL", p: "FWD", pr: 9.0, pts: 5 },
+    { n: "Wood", c: "NFO", p: "FWD", pr: 7.5, pts: 8 },
+    { n: "Isak", c: "LIV", p: "FWD", pr: 10.5, pts: 6 },
+    { n: "Mateta", c: "CRY", p: "FWD", pr: 7.5, pts: 2 },
+    { n: "Cunha", c: "MUN", p: "FWD", pr: 8.0, pts: 4 },
+    { n: "Welbeck", c: "BHA", p: "FWD", pr: 6.5, pts: 7 }
+  ];
+
+  static MODELS = [
+    { name: "Gemini 3 Pro", id: "gemini/v1", base: "google/gemini-3-pro-preview", prov: "Google", gws: [55, 57, 69, 72], value: 101.2, bank: 0.8, ft: 1, repairs: 0, rolled: "No", violation: "—", chips: [{ k: "Wildcard", gw: 3, c: "var(--color-accent)" }], form: "3-4-3" },
+    { name: "Claude Opus 5", id: "claude/v1", base: "anthropic/claude-opus-5", prov: "Anthropic", gws: [62, 54, 71, 58], value: 100.9, bank: 1.4, ft: 2, repairs: 1, rolled: "No", violation: "bench order", chips: [], form: "3-5-2" },
+    { name: "GPT-5", id: "gpt/v1", base: "openai/gpt-5", prov: "OpenAI", gws: [58, 61, 66, 55], value: 100.6, bank: 0.2, ft: 1, repairs: 0, rolled: "No", violation: "—", chips: [{ k: "Triple Captain", gw: 2, c: "var(--color-accent-700)" }], form: "4-4-2" },
+    { name: "Grok 4.1", id: "grok/v1", base: "x-ai/grok-4.1", prov: "xAI", gws: [51, 58, 60, 62], value: 100.3, bank: 2.1, ft: 0, repairs: 2, rolled: "No", violation: "club limit", chips: [], form: "4-3-3" },
+    { name: "DeepSeek V4", id: "deepseek/v1", base: "deepseek/deepseek-v4", prov: "DeepInfra · fp8", gws: [60, 49, 63, 57], value: 100.1, bank: 0.5, ft: 1, repairs: 0, rolled: "No", violation: "—", chips: [{ k: "Bench Boost", gw: 4, c: "var(--color-neutral-800)" }], form: "3-4-3" },
+    { name: "Qwen3 Max", id: "qwen/v1", base: "qwen/qwen3-max", prov: "Fireworks · fp8", gws: [57, 52, 58, 54], value: 99.8, bank: 1.9, ft: 3, repairs: 1, rolled: "No", violation: "budget", chips: [], form: "5-3-2" },
+    { name: "GLM-5", id: "glm/v1", base: "z-ai/glm-5", prov: "Novita · fp8", gws: [49, 55, 61, 53], value: 99.6, bank: 0.7, ft: 1, repairs: 3, rolled: "GW2", violation: "formation", chips: [{ k: "Free Hit", gw: 2, c: "var(--color-neutral-600)" }], form: "4-4-2" },
+    { name: "Kimi K2.5", id: "kimi/v1", base: "moonshot/kimi-k2.5", prov: "Together · fp8", gws: [53, 47, 59, 50], value: 99.4, bank: 3.2, ft: 5, repairs: 1, rolled: "No", violation: "duplicate player", chips: [], form: "3-5-2" },
+    { name: "MiniMax M2", id: "minimax/v1", base: "minimax/minimax-m2", prov: "Novita · fp8", gws: [44, 51, 54, 48], value: 99.1, bank: 0.9, ft: 2, repairs: 2, rolled: "GW3", violation: "squad size", chips: [], form: "4-3-3" }
+  ];
+
+  static FORMS = { "3-4-3": [3, 4, 3], "4-4-2": [4, 4, 2], "3-5-2": [3, 5, 2], "4-3-3": [4, 3, 3], "5-3-2": [5, 3, 2] };
+
+  group(pos) { return Component.POOL.filter((p) => p.p === pos); }
+
+  squadFor(i) {
+    const m = Component.MODELS[i];
+    const take = (pos, n, off) => {
+      const g = this.group(pos);
+      return Array.from({ length: n }, (_, k) => g[(off + k) % g.length]);
+    };
+    const [d, mid, f] = Component.FORMS[m.form];
+    const gks = take("GKP", 2, i);
+    const defs = take("DEF", 5, i);
+    const mids = take("MID", 5, i * 2);
+    const fwds = take("FWD", 3, i);
+    const starters = { GKP: [gks[0]], DEF: defs.slice(0, d), MID: mids.slice(0, mid), FWD: fwds.slice(0, f) };
+    const bench = [gks[1], ...defs.slice(d), ...mids.slice(mid), ...fwds.slice(f)];
+    const outfield = [...starters.DEF, ...starters.MID, ...starters.FWD].slice().sort((a, b) => b.pr - a.pr);
+    return { m, starters, bench, captain: outfield[0], vice: outfield[1], all: [...gks, ...defs, ...mids, ...fwds] };
+  }
+
+  cumulative(gws) { return gws.reduce((a, b) => a + b, 0); }
+
+  standings() {
+    const rows = Component.MODELS.map((m, i) => ({
+      i, m, total: this.cumulative(m.gws), prev: this.cumulative(m.gws.slice(0, 3))
+    }));
+    const byPrev = rows.slice().sort((a, b) => b.prev - a.prev);
+    rows.sort((a, b) => b.total - a.total);
+    return rows.map((r, k) => ({ ...r, rank: k + 1, prevRank: byPrev.findIndex((x) => x.i === r.i) + 1 }));
+  }
+
+  renderVals() {
+    const st = this.standings();
+    const page = this.state.page;
+    const sq = this.squadFor(this.state.sel);
+    const m = sq.m;
+    const tab = (key, label) => "appearance:none;border:0;background:transparent;cursor:pointer;font-family:var(--font-heading);font-weight:800;font-size:14px;padding:20px 0;margin-right:0;letter-spacing:-0.01em;"
+      + (page === key
+        ? "color:var(--color-accent);box-shadow:inset 0 -3px 0 var(--color-accent)"
+        : "color:var(--color-text);opacity:.6");
+
+    const rows = st.map((r) => {
+      const d = r.prevRank - r.rank;
+      return {
+        rank: r.rank,
+        delta: d === 0 ? "–" : (d > 0 ? "▲" + d : "▼" + Math.abs(d)),
+        deltaStyle: d === 0 ? "opacity:.35" : (d > 0 ? "color:var(--color-accent)" : "color:var(--color-neutral-600)"),
+        rankColor: r.rank === 1 ? "color:var(--color-accent)" : "",
+        name: r.m.name,
+        baseModel: r.m.base,
+        gw: r.m.gws[3],
+        total: r.total,
+        value: r.m.value.toFixed(1),
+        chipsLeft: 8 - r.m.chips.length
+      };
+    });
+
+    const maxTotal = Math.max(...st.map((r) => r.total));
+    const px = (k) => 8 + k * 154;
+    const py = (v) => 280 - (v / maxTotal) * 250;
+    const raceLines = st.map((r) => {
+      let c = 0;
+      const pts = r.m.gws.map((g, k) => { c += g; return px(k) + "," + py(c); }).join(" ");
+      const top = r.rank <= 3;
+      return {
+        points: pts,
+        stroke: r.rank === 1 ? "var(--color-accent)" : (top ? "var(--color-neutral-800)" : "var(--color-neutral-500)"),
+        width: r.rank === 1 ? 3 : (top ? 2 : 1.25),
+        dash: r.rank === 2 ? "0" : (r.rank === 3 ? "6 4" : "0"),
+        end: py(c), name: r.m.name, rank: r.rank
+      };
+    });
+    let cursor = -99;
+    const spaced = raceLines.slice().sort((a, b) => a.end - b.end).map((l) => {
+      const y = Math.max(l.end, cursor + 17);
+      cursor = y;
+      return { ...l, labelY: y };
+    });
+    const raceLabels = spaced.map((l) => ({
+      text: l.name,
+      css: "position:absolute;left:76%;top:" + ((l.labelY / 300) * 100).toFixed(2) + "%;transform:translateY(-50%);"
+        + "font-size:11px;white-space:nowrap;font-family:var(--font-heading);"
+        + (l.rank === 1
+          ? "font-weight:800;color:var(--color-accent)"
+          : (l.rank <= 3 ? "font-weight:800;color:var(--color-text)" : "font-weight:400;color:var(--color-text);opacity:.6"))
+    }));
+
+    const SHIRT_CLIP = "polygon(0% 20%, 22% 0%, 36% 9%, 64% 9%, 78% 0%, 100% 20%, 87% 36%, 81% 27%, 81% 100%, 19% 100%, 19% 27%, 13% 36%)";
+    const shirtFill = (p, cap) => cap ? "var(--color-accent)" : (p.p === "GKP" ? "var(--color-neutral-400)" : "var(--color-neutral-200)");
+    const shirtStyle = (p, cap, small) => "width:" + (small ? 46 : 58) + "px;height:" + (small ? 40 : 50) + "px;"
+      + "clip-path:" + SHIRT_CLIP + ";background:" + shirtFill(p, cap) + ";"
+      + "display:flex;align-items:flex-end;justify-content:center;padding-bottom:5px;"
+      + "font-family:var(--font-heading);font-weight:800;font-size:10px;letter-spacing:.04em;"
+      + "color:" + (cap ? "var(--color-bg)" : "var(--color-neutral-800)");
+    const plate = (cap) => "display:flex;justify-content:space-between;align-items:center;padding:3px 7px;font-size:11px;"
+      + "border-top:1px solid var(--color-neutral-300);"
+      + (cap ? "background:var(--color-accent);color:var(--color-bg)" : "background:var(--color-neutral-100)");
+    const badge = (role) => role
+      ? "position:absolute;top:-2px;right:8px;background:var(--color-accent);color:var(--color-bg);font-size:10px;font-weight:800;font-family:var(--font-heading);width:17px;height:17px;display:flex;align-items:center;justify-content:center;border:1px solid var(--color-bg)"
+      : "display:none";
+    const OPP = { ARS: "BRE (H)", CHE: "BHA (A)", EVE: "CRY (H)", BHA: "CHE (H)", BOU: "NEW (A)", LIV: "ARS (A)", MCI: "FUL (H)", CRY: "EVE (A)", NEW: "BOU (H)", NFO: "AVL (A)", MUN: "TOT (H)", AVL: "NFO (H)", TOT: "MUN (A)" };
+    const dress = (p) => {
+      const role = p === sq.captain ? "C" : (p === sq.vice ? "V" : "");
+      return {
+        name: p.n, club: p.c, pts: p.pts, role, badge: badge(role),
+        fixture: OPP[p.c] || "—",
+        shirt: shirtStyle(p, role === "C", false),
+        plate: plate(role === "C")
+      };
+    };
+
+    const pitchRows = ["GKP", "DEF", "MID", "FWD"].map((k) => ({ players: sq.starters[k].map(dress) }));
+    const bench = sq.bench.map((p, k) => ({
+      name: p.n, club: p.c, pts: p.pts, shirt: shirtStyle(p, false, true), plate: plate(false),
+      order: k === 0 ? "GK" : String(k)
+    }));
+
+    const sell = (p) => (p.pr - 0.2).toFixed(1);
+    const startersFlat = [...sq.starters.GKP, ...sq.starters.DEF, ...sq.starters.MID, ...sq.starters.FWD];
+    const squadList = [...startersFlat, ...sq.bench].map((p) => {
+      const benchIdx = sq.bench.indexOf(p);
+      const role = p === sq.captain ? "Captain" : (p === sq.vice ? "Vice" : (benchIdx >= 0 ? (benchIdx === 0 ? "Bench GK" : "Bench " + benchIdx) : "Starter"));
+      return {
+        pos: p.p, name: p.n, club: p.c, price: "£" + p.pr.toFixed(1), sell: "£" + sell(p), pts: p.pts, role,
+        tagClass: p === sq.captain ? "tag tag-accent" : (benchIdx >= 0 ? "tag tag-neutral" : "tag tag-outline"),
+        rowStyle: benchIdx >= 0 ? "opacity:.62" : ""
+      };
+    });
+
+    const activeChip = m.chips.find((c) => c.gw === 4);
+    const selStats = [
+      { label: "GW4 points", value: m.gws[3], color: "color:var(--color-accent)" },
+      { label: "Season total", value: this.cumulative(m.gws), color: "" },
+      { label: "Squad value", value: "£" + m.value.toFixed(1), color: "" },
+      { label: "In the bank", value: "£" + m.bank.toFixed(1), color: "" },
+      { label: "Free transfers", value: m.ft, color: "" },
+      { label: "Chip", value: activeChip ? activeChip.k : "None", color: activeChip ? "color:var(--color-accent)" : "opacity:.45" }
+    ];
+
+    const ownedSet = new Set(sq.all);
+    const selTransfers = [sq.starters.MID[0], sq.starters.FWD[0]].map((incoming, k) => {
+      const candidates = this.group(incoming.p).filter((p) => !ownedSet.has(p));
+      const outgoing = candidates[(this.state.sel + k) % (candidates.length || 1)];
+      return {
+        out: outgoing ? outgoing.n : "—",
+        in: incoming.n,
+        cost: k === 0 || m.ft > 0 ? "Free transfer" : "−4 Hit"
+      };
+    });
+
+    const maxGw = Math.max(...m.gws);
+    const gwBars = m.gws.map((g, k) => ({
+      gw: "GW" + (k + 1), pts: g,
+      style: "height:" + Math.round((g / maxGw) * 130) + "px;background:" + (k === 3 ? "var(--color-accent)" : "var(--color-neutral-800)")
+    }));
+
+    const vx = (k) => 46 + k * 96;
+    const vSeries = m.gws.map((_, k) => m.value - 0.6 + k * 0.2);
+    const bSeries = m.gws.map((_, k) => m.bank + 0.4 - k * 0.1);
+    const scale = (s) => {
+      const lo = Math.min(...s), hi = Math.max(...s), span = (hi - lo) || 1;
+      return (v) => 128 - ((v - lo) / span) * 92;
+    };
+    const vy = scale(vSeries), by = scale(bSeries);
+    const valueLine = vSeries.map((v, k) => vx(k) + "," + vy(v).toFixed(1)).join(" ");
+    const bankLine = bSeries.map((v, k) => vx(k) + "," + by(v).toFixed(1)).join(" ");
+    const chartLegend = [
+      { label: "Squad value", value: "£" + vSeries[3].toFixed(1), swatch: "width:14px;height:2px;background:var(--color-accent);display:inline-block" },
+      { label: "Bank", value: "£" + bSeries[3].toFixed(1), swatch: "width:14px;height:2px;background:var(--color-neutral-600);display:inline-block" }
+    ];
+    const axisCss = (y) => "position:absolute;left:1%;top:" + ((y / 170) * 100).toFixed(2) + "%;transform:translateY(-50%);"
+      + "font-size:10px;opacity:.55;white-space:nowrap";
+    const chartAxis = [
+      { text: "£" + Math.max(...vSeries).toFixed(1), css: axisCss(36) },
+      { text: "£" + Math.min(...vSeries).toFixed(1), css: axisCss(128) }
+    ];
+
+    const chipCells = Array.from({ length: 38 }, (_, k) => {
+      const gw = k + 1;
+      const played = m.chips.find((c) => c.gw === gw);
+      const past = gw <= 4;
+      return {
+        title: played ? played.k + " · GW" + gw : "GW" + gw,
+        style: "flex:1;height:30px;background:" + (played ? played.c : (past ? "var(--color-neutral-300)" : "var(--color-bg)"))
+          + (gw === 19 ? ";box-shadow:inset -2px 0 0 var(--color-accent)" : "")
+      };
+    });
+    const chipLegend = m.chips.length
+      ? m.chips.map((c) => ({ name: c.k, when: "played GW" + c.gw, swatch: "width:14px;height:14px;background:" + c.c + ";display:inline-block" }))
+      : [{ name: "No chips played", when: "8 remaining across both halves", swatch: "width:14px;height:14px;background:var(--color-neutral-300);display:inline-block" }];
+
+    const armband = [...sq.starters.MID, ...sq.starters.FWD].slice().sort((a, b) => b.pr - a.pr);
+    const captains = m.gws.map((g, k) => {
+      const c = armband[k % Math.min(3, armband.length)];
+      const v = armband.find((x) => x !== c) || c;
+      const ret = Math.max(2, Math.round(g / 9)) * 2;
+      return { gw: "GW" + (k + 1), name: c.n, vice: v.n, returned: ret, color: ret >= 12 ? "color:var(--color-accent)" : "opacity:.7" };
+    });
+
+    const owned = new Set(sq.all);
+    const transferLog = [];
+    for (let gw = 2; gw <= 4; gw += 1) {
+      const incoming = sq.all[(this.state.sel * 3 + gw * 2) % sq.all.length];
+      const candidates = this.group(incoming.p).filter((p) => !owned.has(p));
+      const outgoing = candidates[(this.state.sel + gw) % (candidates.length || 1)];
+      if (!outgoing) { continue; }
+      const hit = gw === 3 && this.state.sel % 3 === 0;
+      transferLog.push({
+        gw: "GW" + gw, out: outgoing.n, in: incoming.n,
+        cost: hit ? "−4" : "Free",
+        color: hit ? "color:var(--color-accent);font-weight:600" : "opacity:.6"
+      });
+    }
+
+    const operatorStats = [
+      { label: "Repairs, season", value: m.repairs },
+      { label: "Roll overs", value: m.rolled === "No" ? 0 : 1 },
+      { label: "Hits taken", value: transferLog.filter((t) => t.cost === "−4").length * 4 },
+      { label: "Gaps", value: 0 },
+      { label: "Prompt version", value: "fpl-v1" }
+    ];
+
+    const picker = st.map((r) => ({
+      rank: r.rank, name: r.m.name, total: r.total,
+      select: () => this.setState({ sel: r.i }),
+      style: "display:flex;align-items:center;gap:8px;width:100%;appearance:none;cursor:pointer;text-align:left;padding:9px 10px;font-family:var(--font-heading);font-weight:800;font-size:13px;border:0;border-bottom:1px solid var(--color-divider);"
+        + (r.i === this.state.sel
+          ? "background:var(--color-accent);color:var(--color-bg)"
+          : "background:transparent;color:var(--color-text)")
+    }));
+
+    return {
+      shell: this.state.mobile
+        ? "background:var(--color-neutral-300);padding:28px 0;min-height:100vh;display:flex;justify-content:center;align-items:flex-start"
+        : "",
+      appStyle: this.state.mobile
+        ? "width:402px;min-height:820px;max-height:820px;overflow:auto;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);box-shadow:var(--shadow-lg)"
+        : "min-height:100vh;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)",
+      deviceLabel: this.state.mobile ? "Desktop" : "Mobile",
+      toggleDevice: () => this.setState((s) => ({ mobile: !s.mobile })),
+      theme: this.state.dark ? "dark" : "",
+      themeLabel: this.state.dark ? "Switch to light" : "Switch to dark",
+      isDark: this.state.dark, isLight: !this.state.dark,
+      menuOpen: this.state.menu,
+      toggleMenu: () => this.setState((s) => ({ menu: !s.menu })),
+      menuItems: [["leaderboard", "Leaderboard"], ["squads", "Latest squads"], ["stats", "Model stats"]].map(([key, label]) => ({
+        label,
+        go: () => this.setState({ page: key, menu: false }),
+        css: "display:block;width:100%;text-align:left;appearance:none;border:0;border-bottom:1px solid var(--color-divider);cursor:pointer;"
+          + "font-family:var(--font-heading);font-weight:800;font-size:15px;padding:14px 16px;background:transparent;"
+          + (page === key ? "color:var(--color-accent)" : "color:var(--color-text)")
+      })),
+      toggleTheme: () => this.setState((s) => ({ dark: !s.dark })),
+      isLeaderboard: page === "leaderboard", isSquads: page === "squads", isStats: page === "stats",
+      goLeaderboard: () => this.setState({ page: "leaderboard" }),
+      goSquads: () => this.setState({ page: "squads" }),
+      goStats: () => this.setState({ page: "stats" }),
+      tabLeaderboard: tab("leaderboard"), tabSquads: tab("squads"), tabStats: tab("stats"),
+      lbIsTable: this.state.lb === "table", lbIsRace: this.state.lb === "race", lbIsCards: this.state.lb === "cards",
+      setLbTable: () => this.setState({ lb: "table" }),
+      setLbRace: () => this.setState({ lb: "race" }),
+      setLbCards: () => this.setState({ lb: "cards" }),
+      isPitch: this.state.squadView === "pitch", isList: this.state.squadView === "list",
+      setPitch: () => this.setState({ squadView: "pitch" }),
+      setList: () => this.setState({ squadView: "list" }),
+      rows, raceLines, raceLabels, picker,
+      sel: { name: m.name, baseModel: m.base, provider: m.prov, lockedAt: "Fri 18:30 UTC", repairs: m.repairs, rolledOver: m.rolled, violation: m.violation },
+      selStats, pitchRows, bench, squadList, selTransfers,
+      gwBars, valueLine, bankLine, chartLegend, chartAxis, chipCells, chipLegend, captains, transferLog, operatorStats
+    };
+  }
+}
+</script>
+</body>
+</html>
