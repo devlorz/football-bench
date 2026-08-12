@@ -43,8 +43,8 @@ they cover, and that stored fact is what derives the "ran after Gameweek N" labe
 Exhibition results appear. Every scheduled job already filters `role = 'entrant'`, so the
 official pipeline is blind to Exhibition rows by construction. The readable rankings will
 show Exhibition Runs ranked and labelled; the statistical layer — Comparison Anchor,
-complete-case intersection, published intervals — never sees them (ADR-0032, binding on
-the scorer and read-API extension this spec tickets).
+complete-case intersection, published intervals — never sees them (ADR-0032; already true
+of the landed scorer, proven and kept true by the work this spec tickets).
 
 ---
 
@@ -206,13 +206,15 @@ The production entrant call path, unchanged: OpenRouter, `provider.order` with o
 
 ### Scoring and the dashboard
 
-The scorer (spec 0002) and the dashboard's read API (spec 0011) both exist and both select
-`role = 'entrant'`, so Exhibition rows are invisible to them until extended. This spec
-extends both: the scorer writes the same readable metrics for Exhibition Predictions, the
-readable tables show Exhibition Runs ranked with their "ran after Gameweek N" label, and
-the Anchor, the intersection and the declared intervals continue to select from the roster
-alone — that exclusion is recorded in ADR-0032 and restated here so neither surface can
-claim ignorance of it.
+The scorer (spec 0002) and the dashboard's read API (spec 0011) both exist, and they sit on
+opposite sides of the line this spec cares about. The scorer's per-Entrant metric loop
+writes rows for any model holding Predictions, while its Anchor, intersection and declared
+intervals are computed over the roster alone — so an Exhibition Run is scored readably and
+excluded statistically the day its Predictions land, and this spec's work there is proof,
+not change. The read API selects the roster, so the extension is the surface: the readable
+tables show Exhibition Runs ranked with their "ran after Gameweek N" label, while every
+statistical figure keeps selecting from the roster — that exclusion is recorded in ADR-0032
+and restated here so no surface can claim ignorance of it.
 
 ---
 

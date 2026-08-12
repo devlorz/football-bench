@@ -91,11 +91,13 @@ splice: one Entrant's body, another's Manager State.
 
 ## Exhibition on the scoreboard: scored, labelled, never statistical
 
-**What to build:** The scorer and the dashboard see Exhibition Runs. A scoring run writes
-the same readable metrics for an Exhibition model's Predictions that it writes for the
-roster's, the readable Match Points and Bet Points tables show the Exhibition Run ranked
-among the Entrants under a "ran after Gameweek N" label, and every statistical figure the
-dashboard publishes is provably identical with the Exhibition present and absent.
+**What to build:** The dashboard shows Exhibition Runs, and the scorer is proven around
+them. The scorer's per-Entrant loop already writes readable metrics for any model holding
+Predictions and computes its statistical layer over the roster alone — this ticket pins
+both facts with tests rather than convention. The read API is where the code changes: the
+readable Match Points and Bet Points tables show the Exhibition Run ranked among the
+Entrants under a "ran after Gameweek N" label, and every statistical figure the dashboard
+publishes is provably identical with the Exhibition present and absent.
 
 **Blocked by:** Match Exhibition replay, end to end.
 

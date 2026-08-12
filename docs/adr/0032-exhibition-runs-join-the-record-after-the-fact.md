@@ -37,17 +37,19 @@ Gameweek N" label wherever Exhibition results are shown.
 
 ## Consequences
 
-- One migration widens the `models.role` check to admit `'exhibition'`. Every existing read
-  path already filters `role = 'entrant'` (predict, fill, gap alert, FPL start/run,
-  preflight, the scorer, the dashboard's read API), so Exhibition rows are invisible to
-  every scheduled job and every surface with no further code — and every **future** reader
-  of `models` inherits the obligation to filter by role.
-- The scorer and the dashboard's read API (specs 0002 and 0011, both landed) select
-  `role = 'entrant'` today and therefore ignore Exhibition rows until extended. The
-  extension carries two requirements: score Exhibition rows with the same metrics, and
-  exclude them from Comparison Anchor selection, the complete-case intersection, and the
-  eight published intervals. Exhibition Runs appear ranked, with their label, on the
-  readable Match Points and Bet Points tables only.
+- One migration widens the `models.role` check to admit `'exhibition'`. Every job that
+  calls or counts competitors already filters `role = 'entrant'` (predict, fill, gap alert,
+  FPL start/run, preflight), and so does the dashboard's read API — so Exhibition rows are
+  invisible to every scheduled job and every surface with no further code, and every
+  **future** reader of `models` inherits the obligation to filter by role.
+- The scorer (spec 0002, landed) already does most of what an Exhibition needs: its
+  per-Entrant metric loop writes rows for any model holding Predictions, while its
+  Comparison Anchor, complete-case intersection and declared intervals are computed over
+  the `role = 'entrant'` roster alone. An Exhibition Run is therefore scored readably and
+  excluded statistically from the day its Predictions land — a fact to prove with tests,
+  not to build. What must be extended is the surface: the dashboard's read API selects the
+  roster, so showing Exhibition Runs ranked, with their label, on the readable Match Points
+  and Bet Points tables only, is that extension's work.
 - An Exhibition Gap is recorded like any other but alerts nobody; the Gap alert's roster
   filter already excludes it.
 - The Exhibition harness takes only a `model_id`; the row itself — base model, provider,
@@ -56,6 +58,6 @@ Gameweek N" label wherever Exhibition results are shown.
 - The FPL splice depends on the rendered structure of the frozen Prompt Version (heading-
   delimited Manager State block, blank-line terminators). A future Prompt Version that
   changes that structure must revisit the splice.
-- Until the scorer and read-API extension lands, an Exhibition Run stores Predictions and
-  Manager States but holds no `scores` rows and appears on no surface — recorded, invisible,
-  and waiting, which is the safe failure mode.
+- Until the read-API extension lands, an Exhibition Run stores Predictions, Manager States
+  and — from the next scoring run — `scores` rows, but appears on no surface: recorded,
+  invisible, and waiting, which is the safe failure mode.
