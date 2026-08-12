@@ -20,6 +20,7 @@
     "predict:scheduled": "tsx src/cli/predict-scheduled.ts",
     "test": "vitest run",
     "predict:preview": "tsx src/cli/predict-preview.ts",
+    "context:show": "tsx src/cli/show-context.ts",
     "seed": "tsx src/cli/seed.ts",
     "dev:api": "tsx src/cli/dev-api.ts"
   },
