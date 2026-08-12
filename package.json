@@ -13,6 +13,7 @@
     "fpl:start": "tsx src/cli/fpl-start.ts",
     "fpl:scheduled": "tsx src/cli/fpl-scheduled.ts",
     "fpl:rehearse": "tsx src/cli/fpl-rehearse.ts",
+    "exhibition:replay": "tsx src/cli/exhibition-replay.ts",
     "preflight": "tsx src/cli/preflight.ts",
     "match:rehearse": "tsx src/cli/rehearse-scoring.ts",
     "match:score": "tsx src/cli/score.ts",

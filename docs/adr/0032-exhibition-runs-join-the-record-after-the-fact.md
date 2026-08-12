@@ -50,6 +50,11 @@ Gameweek N" label wherever Exhibition results are shown.
   making `runFplGameweek` refuse the roster outright. It now joins `models` and selects
   `role = 'entrant'`. The obligation therefore reaches further than reading `models`: any
   reader that derives who the competitors are, by whatever route, must ask the role.
+- The Lock refusal is absent from the Exhibition path, and the shared Match attempt engine
+  reads that off the called row's role rather than off a parameter its caller passes. An
+  Entrant answering after its deadline has missed it and the attempt says so; an Exhibition
+  Run answers after every deadline by construction. One fact, one place: a boolean asking to
+  skip the Lock would be a second place for the role to be contradicted.
 - The scorer (spec 0002, landed) already does most of what an Exhibition needs: its
   per-Entrant metric loop writes rows for any model holding Predictions, while its
   Comparison Anchor, complete-case intersection and declared intervals are computed over

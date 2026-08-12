@@ -10,7 +10,7 @@
  * a slow item holds up nothing but itself: what the workers share is the wait,
  * which is the whole point when there is one Lock to finish inside.
  *
- * `predictGameweek` deliberately does not use this. Its loop stops early on a
+ * `attemptMatchCalls` deliberately does not use this. Its loop stops early on a
  * persistence failure rather than running to the end, because an attempt
  * ledger that cannot be written makes every remaining call unrecordable — a
  * different rule, not a variation on this one.

@@ -95,6 +95,15 @@ export interface DryRunJobConfig extends DailyFetchJobConfig {
   concurrency: number;
 }
 
+/**
+ * What an Exhibition replay reads: the one row it replays, and nothing about
+ * which Gameweeks to cover. The run resolves the Settled ones itself (ADR-0032),
+ * so there is no Gameweek here to disagree with the record.
+ */
+export interface ExhibitionJobConfig extends ScheduledEntrantJobConfig {
+  exhibitionModelId: string;
+}
+
 export type PreflightJobConfig = {
   databaseUrl: string;
   season: string;
@@ -312,6 +321,21 @@ export function readDryRunJobConfig(
     gameweek,
     at,
     concurrency
+  };
+}
+
+/**
+ * The Match track's own concurrency bound is reused rather than given a
+ * variable of its own: an Exhibition Run makes the same calls over the same
+ * prompts, so a second knob would be a second answer to a question the Match
+ * track has already answered.
+ */
+export function readExhibitionJobConfig(
+  environment: NodeJS.ProcessEnv
+): ExhibitionJobConfig {
+  return {
+    ...readScheduledPredictJobConfig(environment),
+    exhibitionModelId: required(environment, "EXHIBITION_MODEL_ID")
   };
 }
 

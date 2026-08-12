@@ -44,15 +44,15 @@ Interrupt it, re-run it, and it finishes the remainder without touching what exi
 
 **Blocked by:** The Exhibition seat: the role, the blindness proof, and the door in.
 
-- [ ] The job takes only a model id and reads identity from its row, refusing an id that is missing or not an Exhibition
-- [ ] Every covered Fixture's Prediction references the existing shared `contexts` row — same id, same hash — so what the model saw is verifiable against what the roster saw
-- [ ] Calls go through the production path: OpenRouter with the pinned provider and quantization, fallbacks disabled, the Season's frozen Prompt Version, prompt-only JSON with three Repairs, the same failure taxonomy
-- [ ] Only Settled Gameweeks are covered, and the job resolves them itself rather than taking a range
-- [ ] A Fixture whose calls all fail is a recorded Gap: never retried by a later run, alerting nobody
-- [ ] Re-running attempts only Fixtures without a Prediction and changes no existing row
-- [ ] Every call is logged in `attempts` with resolved provider, model, latency, tokens and raw response, under trigger `'manual'`; Exhibition identity is the join to the model's role
-- [ ] Fixtures fan out concurrently under the existing concurrency bound, and one Fixture failing leaves the rest complete
-- [ ] An end-to-end pass in a throwaway Postgres with a scripted model proves the slice: Predictions land, a scripted failure becomes a Gap, and a second run is a no-op
+- [x] The job takes only a model id and reads identity from its row, refusing an id that is missing or not an Exhibition
+- [x] Every covered Fixture's Prediction references the existing shared `contexts` row — same id, same hash — so what the model saw is verifiable against what the roster saw
+- [x] Calls go through the production path: OpenRouter with the pinned provider and quantization, fallbacks disabled, the Season's frozen Prompt Version, prompt-only JSON with three Repairs, the same failure taxonomy
+- [x] Only Settled Gameweeks are covered, and the job resolves them itself rather than taking a range
+- [x] A Fixture whose calls all fail is a recorded Gap: never retried by a later run, alerting nobody
+- [x] Re-running attempts only Fixtures without a Prediction and changes no existing row
+- [x] Every call is logged in `attempts` with resolved provider, model, latency, tokens and raw response, under trigger `'manual'`; Exhibition identity is the join to the model's role
+- [x] Fixtures fan out concurrently under the existing concurrency bound, and one Fixture failing leaves the rest complete
+- [x] An end-to-end pass in a throwaway Postgres with a scripted model proves the slice: Predictions land, a scripted failure becomes a Gap, and a second run is a no-op
 
 ## The splice: one Entrant's body, another's Manager State
 

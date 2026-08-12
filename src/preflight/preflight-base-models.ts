@@ -14,24 +14,15 @@ import {
   type MatchContextData
 } from "../predictions/build-match-context.js";
 import { validatePrediction } from "../predictions/validate-prediction.js";
+import {
+  loadExhibition,
+  type CalledRow
+} from "../exhibition/exhibition-model.js";
 
 type Database = Pick<Client, "query">;
 
 interface FixtureRow extends MatchPromptFixture {
   gw: number;
-}
-
-/**
- * One `models` row this pre-flight will call. Deliberately not named for a
- * role: the same shape carries an Entrant of the roster and an Exhibition Run,
- * and an Exhibition is not a competitor on the leaderboard.
- */
-interface CalledRow {
-  id: string;
-  base_model: string;
-  provider: string;
-  prompt_version: string;
-  quantization: string | null;
 }
 
 export type PreflightStatus =
@@ -242,42 +233,6 @@ async function callBaseModel(options: {
     resolvedModel,
     rawBody: routingDetail === null ? null : body
   };
-}
-
-/**
- * The one Exhibition row the operator named, or a refusal saying which of the
- * three things is wrong with the id: no such row, a row that is not an
- * Exhibition, or one that is not at the Prompt Version this actually sends. A
- * typo must not put an Entrant through this door, and a row cannot claim one
- * Prompt Version while being tested at another — the frozen Match prompt is
- * the only thing this builds and there is no way to configure it (ADR-0001).
- */
-async function loadExhibition(
-  database: Database,
-  modelId: string
-): Promise<CalledRow> {
-  const result = await database.query<CalledRow & { role: string }>(
-    `select id, base_model, provider, quantization, prompt_version, role
-       from models
-      where id = $1`,
-    [modelId]
-  );
-  const model = result.rows[0];
-  if (model === undefined) {
-    throw new Error(`${modelId} has no row in models`);
-  }
-  if (model.role !== "exhibition") {
-    throw new Error(
-      `${modelId} has role '${model.role}', not 'exhibition'`
-    );
-  }
-  if (model.prompt_version !== MATCH_PROMPT_VERSION) {
-    throw new Error(
-      `${modelId} is at Prompt Version ${model.prompt_version}, `
-      + `not ${MATCH_PROMPT_VERSION}`
-    );
-  }
-  return model;
 }
 
 export async function preflightBaseModels({

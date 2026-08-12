@@ -186,6 +186,13 @@ model's id. It resolves the covered Gameweeks itself — Settled ones only — r
 taking a range. Phase 1 implements the Match track; phase 2 adds the FPL track behind a
 track argument, replaying from the recorded starting Gameweek of the real track.
 
+Settled is read off the record, never off the clock (CONTEXT.md), and on the Match track the
+record is `fixtures.result` — the same thing scoring reads. A Gameweek is covered when it
+holds stored Match contexts and every non-deferred Fixture locked into it has a result; a
+deferred Fixture is passed over because it will never gain one, and a Gameweek left holding
+it would otherwise stay unreplayable for the rest of the Season. The FPL track reads its own
+Settled-ness from stored per-player points, as its context builder already does.
+
 Both phases are resumable by re-running: the Match side attempts only Fixtures without a
 Prediction; the FPL side continues from the last stored Manager State. Neither retries a
 recorded Gap — within a Gameweek the run's own Repairs are the only retries, as on the
