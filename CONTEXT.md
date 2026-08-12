@@ -97,6 +97,12 @@ together with the reason it failed. Three are allowed, and the number used is re
 The second scheduled prediction run, which attempts only Gaps before the Lock and reuses the
 stored context. A manually started equivalent is a manual fill.
 
+**Squad Change**:
+A real club signing a player (a Signing) or letting one go (a Departure) during a transfer
+window, as the public record states it. A fact about a club, never an Entrant action — an
+Entrant changes its Squad only through Transfers.
+_Avoid_: transfer (a Transfer is the FPL track's swap and nothing else)
+
 ### Fantasy
 
 **Squad**:
