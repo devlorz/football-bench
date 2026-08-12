@@ -7,6 +7,10 @@ import {
 import { fetchFplPlayerPoints } from "../fpl/fetch-player-points.js";
 import { scoreFplGameweek } from "../fpl/score-fpl-gameweek.js";
 import { fetchUnderstatSeasonXg } from "../understat/fetch-season-xg.js";
+import {
+  fetchSquadChanges,
+  type FetchSquadChangesResult
+} from "../squad-changes/fetch-squad-changes.js";
 import { errorText } from "../error-text.js";
 import type { HttpFetcher } from "../http.js";
 
@@ -29,9 +33,20 @@ export type DailyXgOutcome =
   | { stored: true }
   | { stored: false; failure: string };
 
+/**
+ * Squad Changes are enrichment on the same terms as xG (ADR-0031): a Wikipedia
+ * outage degrades the section to a stated absence and must never cost a
+ * Gameweek of Predictions. A day outside the render gate stores nothing and is
+ * not a failure.
+ */
+export type DailySquadChangeOutcome =
+  | FetchSquadChangesResult
+  | { stored: false; failure: string };
+
 export interface DailyFetchResult {
   fpl: FetchFplDailyResult;
   xg: DailyXgOutcome;
+  squadChanges: DailySquadChangeOutcome;
 }
 
 export class StaleFootballDataSeasonError extends Error {
@@ -159,6 +174,17 @@ export async function runDailyFetch({
   } catch (error) {
     xg = { stored: false, failure: errorText(error) };
   }
+  let squadChanges: DailySquadChangeOutcome;
+  try {
+    squadChanges = await fetchSquadChanges({
+      database,
+      season,
+      http,
+      now: () => observedAt
+    });
+  } catch (error) {
+    squadChanges = { stored: false, failure: errorText(error) };
+  }
   if (errors.length === 1) {
     throw errors[0];
   }
@@ -168,5 +194,5 @@ export async function runDailyFetch({
   if (fpl === undefined) {
     throw new Error("Daily FPL fetch completed without a result");
   }
-  return { fpl, xg };
+  return { fpl, xg, squadChanges };
 }

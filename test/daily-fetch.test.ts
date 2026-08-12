@@ -11,6 +11,10 @@ const { Client } = pg;
 
 const UNDERSTAT_LEAGUE_DATA_URL = "https://understat.com/getLeagueData/EPL/2026";
 
+const SUMMER_TRANSFERS_URL =
+  "https://en.wikipedia.org/w/index.php"
+  + "?title=List_of_English_football_transfers_summer_2026&action=raw";
+
 const UNDERSTAT_LEAGUE_BODY = JSON.stringify({
   dates: [{
     id: "29001",
@@ -21,6 +25,40 @@ const UNDERSTAT_LEAGUE_BODY = JSON.stringify({
     isResult: true
   }]
 });
+
+/**
+ * Every source the daily fetch reaches, answered from the archived fixtures.
+ * A test that cares about one of them overrides that entry and leaves the
+ * rest alone.
+ */
+async function sourceResponses(
+  overrides: [string, string][] = []
+): Promise<Map<string, string>> {
+  return new Map([
+    [
+      "https://fantasy.premierleague.com/api/bootstrap-static/",
+      await archivedBody("fpl-bootstrap-2026-27.json.gz")
+    ],
+    [
+      "https://fantasy.premierleague.com/api/fixtures/",
+      await archivedBody("fpl-fixtures-2026-27.json.gz")
+    ],
+    [
+      "https://www.football-data.co.uk/mmz4281/2526/E0.csv",
+      await archivedBody("football-data-2526-E0.csv.gz")
+    ],
+    [
+      "https://www.football-data.co.uk/mmz4281/2526/E1.csv",
+      await archivedBody("football-data-2526-E1.csv.gz")
+    ],
+    [UNDERSTAT_LEAGUE_DATA_URL, UNDERSTAT_LEAGUE_BODY],
+    [
+      SUMMER_TRANSFERS_URL,
+      await archivedBody("wikipedia-transfers-summer-2026.txt.gz")
+    ],
+    ...overrides
+  ]);
+}
 
 describe("the daily fetch", () => {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
@@ -38,31 +76,13 @@ describe("the daily fetch", () => {
     await client.query(
       `truncate
          historical_matches, fpl_players, fixtures, gameweeks, raw_snapshots,
-         understat_match_xg
+         understat_match_xg, squad_changes
        restart identity cascade`
     );
   });
 
   test("re-running unchanged source data duplicates neither rows nor snapshots", async () => {
-    const responses = new Map([
-      [
-        "https://fantasy.premierleague.com/api/bootstrap-static/",
-        await archivedBody("fpl-bootstrap-2026-27.json.gz")
-      ],
-      [
-        "https://fantasy.premierleague.com/api/fixtures/",
-        await archivedBody("fpl-fixtures-2026-27.json.gz")
-      ],
-      [
-        "https://www.football-data.co.uk/mmz4281/2526/E0.csv",
-        await archivedBody("football-data-2526-E0.csv.gz")
-      ],
-      [
-        "https://www.football-data.co.uk/mmz4281/2526/E1.csv",
-        await archivedBody("football-data-2526-E1.csv.gz")
-      ],
-      [UNDERSTAT_LEAGUE_DATA_URL, UNDERSTAT_LEAGUE_BODY]
-    ]);
+    const responses = await sourceResponses();
     const options = {
       database: client,
       season: "2026-27",
@@ -86,7 +106,7 @@ describe("the daily fetch", () => {
          (select count(*)::int from historical_matches) as matches`
     );
     expect(stored.rows).toEqual([{
-      snapshots: 5,
+      snapshots: 6,
       gameweeks: 38,
       fixtures: 380,
       players: 563,
@@ -100,24 +120,11 @@ describe("the daily fetch", () => {
     );
     const validBootstrapBody = JSON.stringify(bootstrap);
     bootstrap.events[0].deadline_time = 42;
-    const responses = new Map([
+    const responses = await sourceResponses([
       [
         "https://fantasy.premierleague.com/api/bootstrap-static/",
         JSON.stringify(bootstrap)
-      ],
-      [
-        "https://fantasy.premierleague.com/api/fixtures/",
-        await archivedBody("fpl-fixtures-2026-27.json.gz")
-      ],
-      [
-        "https://www.football-data.co.uk/mmz4281/2526/E0.csv",
-        await archivedBody("football-data-2526-E0.csv.gz")
-      ],
-      [
-        "https://www.football-data.co.uk/mmz4281/2526/E1.csv",
-        await archivedBody("football-data-2526-E1.csv.gz")
-      ],
-      [UNDERSTAT_LEAGUE_DATA_URL, UNDERSTAT_LEAGUE_BODY]
+      ]
     ]);
     const options = {
       database: client,
@@ -153,31 +160,14 @@ describe("the daily fetch", () => {
          (select count(*)::int from fpl_players) as players`
     );
     expect(recovered.rows).toEqual([{
-      snapshots: 6,
+      snapshots: 7,
       matches: 932,
       players: 563
     }]);
   });
 
   test("survives an Understat outage and reports the missing xG", async () => {
-    const responses = new Map([
-      [
-        "https://fantasy.premierleague.com/api/bootstrap-static/",
-        await archivedBody("fpl-bootstrap-2026-27.json.gz")
-      ],
-      [
-        "https://fantasy.premierleague.com/api/fixtures/",
-        await archivedBody("fpl-fixtures-2026-27.json.gz")
-      ],
-      [
-        "https://www.football-data.co.uk/mmz4281/2526/E0.csv",
-        await archivedBody("football-data-2526-E0.csv.gz")
-      ],
-      [
-        "https://www.football-data.co.uk/mmz4281/2526/E1.csv",
-        await archivedBody("football-data-2526-E1.csv.gz")
-      ]
-    ]);
+    const responses = await sourceResponses();
 
     const result = await runDailyFetch({
       database: client,
@@ -204,36 +194,17 @@ describe("the daily fetch", () => {
   });
 
   test("stores current-Season xG alongside the rest of the daily fetch", async () => {
-    const responses = new Map([
-      [
-        "https://fantasy.premierleague.com/api/bootstrap-static/",
-        await archivedBody("fpl-bootstrap-2026-27.json.gz")
-      ],
-      [
-        "https://fantasy.premierleague.com/api/fixtures/",
-        await archivedBody("fpl-fixtures-2026-27.json.gz")
-      ],
-      [
-        "https://www.football-data.co.uk/mmz4281/2526/E0.csv",
-        await archivedBody("football-data-2526-E0.csv.gz")
-      ],
-      [
-        "https://www.football-data.co.uk/mmz4281/2526/E1.csv",
-        await archivedBody("football-data-2526-E1.csv.gz")
-      ],
-      [
-        "https://understat.com/getLeagueData/EPL/2026",
-        JSON.stringify({
-          dates: [{
-            id: "29001",
-            datetime: "2026-08-15 11:30:00",
-            h: { title: "Liverpool" },
-            a: { title: "Bournemouth" },
-            xG: { h: "2.31", a: "0.78" },
-            isResult: true
-          }]
-        })
-      ]
+    const responses = await sourceResponses([
+      [UNDERSTAT_LEAGUE_DATA_URL, JSON.stringify({
+        dates: [{
+          id: "29001",
+          datetime: "2026-08-15 11:30:00",
+          h: { title: "Liverpool" },
+          a: { title: "Bournemouth" },
+          xG: { h: "2.31", a: "0.78" },
+          isResult: true
+        }]
+      })]
     ]);
 
     const result = await runDailyFetch({
@@ -258,26 +229,40 @@ describe("the daily fetch", () => {
     }]);
   });
 
-  test("fails after the Lock when football-data still targets the prior Season", async () => {
-    const responses = new Map([
-      [
-        "https://fantasy.premierleague.com/api/bootstrap-static/",
-        await archivedBody("fpl-bootstrap-2026-27.json.gz")
-      ],
-      [
-        "https://fantasy.premierleague.com/api/fixtures/",
-        await archivedBody("fpl-fixtures-2026-27.json.gz")
-      ],
-      [
-        "https://www.football-data.co.uk/mmz4281/2526/E0.csv",
-        await archivedBody("football-data-2526-E0.csv.gz")
-      ],
-      [
-        "https://www.football-data.co.uk/mmz4281/2526/E1.csv",
-        await archivedBody("football-data-2526-E1.csv.gz")
-      ],
-      [UNDERSTAT_LEAGUE_DATA_URL, UNDERSTAT_LEAGUE_BODY]
+  test("stores the upcoming Gameweek's Squad Changes while the section renders", async () => {
+    const responses = await sourceResponses();
+
+    const result = await runDailyFetch({
+      database: client,
+      season: "2026-27",
+      footballDataSeason: "2025-26",
+      now: () => new Date("2026-08-21T17:00:00.000Z"),
+      http: async (url) => ({
+        status: 200,
+        body: responses.get(url) ?? ""
+      })
+    });
+
+    expect(result.squadChanges).toMatchObject({ stored: true, gameweek: 1 });
+    const signings = await client.query(
+      `select player
+         from squad_changes
+        where season = '2026-27' and gw = 1
+          and club = 'Spurs' and direction = 'in'
+        order by dated_on, player`
+    );
+    expect(signings.rows).toEqual([
+      { player: "Jan Paul van Hecke" },
+      { player: "Andy Robertson" },
+      { player: "Marcos Senesi" },
+      { player: "Martin D\u00fabravka" },
+      { player: "Mateus Fernandes" },
+      { player: "Sandro Tonali" }
     ]);
+  });
+
+  test("fails after the Lock when football-data still targets the prior Season", async () => {
+    const responses = await sourceResponses();
 
     await expect(runDailyFetch({
       database: client,

@@ -46,17 +46,28 @@ consumer.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] A local fetch stores the upcoming Gameweek's Squad Change partition and archives
+- [x] A local fetch stores the upcoming Gameweek's Squad Change partition and archives
       the page bytes; re-fetching replaces only that partition
-- [ ] The parser's fixture is a real archived copy of the page, pinned by checksum, and
+- [x] The parser's fixture is a real archived copy of the page, pinned by checksum, and
       parsing it yields the five Spurs Signings with their stated fees — two of them
       `free` — and Departures including a labelled loan
-- [ ] An unknown club spelling fails the fetch with a validation error naming the
+
+      The archived page (fetched 2026-08-12,
+      `6eba252a5c89f5ff4f6db4b3b6863d44bd07a40643149164104dbd4513b2d803`) states
+      **six** Spurs Signings, three of them free: it also carries Martin Dúbravka
+      from Burnley, free, 1 July 2026, which the spec's example block and ADR 0031's
+      "five players" do not. The £229.5m of ADR 0031 is the three fee signings and is
+      unaffected. Asserted as the page states it, per spec 0012's own rule that the
+      fixture proves the published format rather than the remembered one.
+
+      A stored fee is the page's own spelling — `Free`, `Undisclosed`, `£92.5m`. The
+      section's lower-case `free`/`undisclosed` is presentation and is ticket 3's.
+- [x] An unknown club spelling fails the fetch with a validation error naming the
       spelling, before anything is stored — the Understat alias precedent
-- [ ] A row observed at or after its Gameweek's Lock is refused by the database, and a
+- [x] A row observed at or after its Gameweek's Lock is refused by the database, and a
       deadline correction cannot move a Lock across an existing partition — both
       asserted at the schema seam the way the FPL snapshot triggers are
-- [ ] Days outside the gate fetch nothing and touch no stored Squad Change row
+- [x] Days outside the gate fetch nothing and touch no stored Squad Change row
 
 ## 3. The Squad Changes section renders
 

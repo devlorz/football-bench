@@ -25,7 +25,7 @@ describe("the benchmark database", () => {
       `truncate
          predictions, contexts, fixtures, manager_states, attempts, scores,
          models, gameweeks, raw_snapshots, historical_matches, fpl_players,
-         fpl_player_points
+         fpl_player_points, squad_changes
        restart identity cascade`
     );
   });
@@ -63,6 +63,7 @@ describe("the benchmark database", () => {
       // Bookkeeping for the migration runner, not part of the write path.
       "schema_migrations",
       "scores",
+      "squad_changes",
       "understat_match_xg"
     ]);
   });
@@ -254,6 +255,43 @@ describe("the benchmark database", () => {
         where season = '2026-27' and gw = 1`
     )).rejects.toMatchObject({
       constraint: "gameweek_deadline_preserves_fpl_snapshot_lock"
+    });
+  });
+
+  test("rejects a Squad Change observed at or after its Gameweek deadline", async () => {
+    await storeGameweek();
+
+    await expect(client.query(
+      `insert into squad_changes (
+         season, gw, club, direction, player, counterpart_club,
+         fee, loan, dated_on, observed_at
+       ) values (
+         '2026-27', 1, 'Spurs', 'in', 'Sandro Tonali', 'Newcastle United',
+         '£92.5m', false, '2026-07-06', '2026-08-21T17:30:00Z'
+       )`
+    )).rejects.toMatchObject({
+      constraint: "squad_change_precedes_deadline"
+    });
+  });
+
+  test("rejects moving a deadline across an existing Squad Change", async () => {
+    await storeGameweek();
+    await client.query(
+      `insert into squad_changes (
+         season, gw, club, direction, player, counterpart_club,
+         fee, loan, dated_on, observed_at
+       ) values (
+         '2026-27', 1, 'Spurs', 'in', 'Sandro Tonali', 'Newcastle United',
+         '£92.5m', false, '2026-07-06', '2026-08-21T17:00:00Z'
+       )`
+    );
+
+    await expect(client.query(
+      `update gameweeks
+          set deadline_at = '2026-08-21T17:00:00Z'
+        where season = '2026-27' and gw = 1`
+    )).rejects.toMatchObject({
+      constraint: "gameweek_deadline_preserves_squad_change_lock"
     });
   });
 

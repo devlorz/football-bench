@@ -24,6 +24,15 @@ try {
       + `"xG unavailable" until the next successful fetch: ${result.xg.failure}`
     );
   }
+  // A day outside the render gate stores nothing and says nothing; only a
+  // failure inside it is worth a line.
+  if (!result.squadChanges.stored && "failure" in result.squadChanges) {
+    console.warn(
+      `Squad Changes unavailable for ${config.season}; the section will state `
+      + `its absence until the next successful fetch: `
+      + result.squadChanges.failure
+    );
+  }
 } finally {
   await database.end();
 }
