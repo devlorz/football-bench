@@ -13,6 +13,13 @@ export interface TransferWindow {
   name: string;
   /** English Wikipedia's article title for the window's transfer list. */
   page: string;
+  /**
+   * The previous window's close, which is the page's own scope and so the date
+   * the section states its membership from. Not `opensOn`: the page lists every
+   * move made since the last window shut, including the out-of-window free
+   * agents that arrive between the two.
+   */
+  since: Date;
   opensOn: Date;
   closesOn: Date;
 }
@@ -26,12 +33,14 @@ export const TRANSFER_WINDOWS: readonly TransferWindow[] = [
   {
     name: "summer-2026",
     page: "List of English football transfers summer 2026",
+    since: new Date("2026-02-02T00:00:00Z"),
     opensOn: new Date("2026-06-15T00:00:00Z"),
     closesOn: new Date("2026-09-01T00:00:00Z")
   },
   {
     name: "winter-2026-27",
     page: "List of English football transfers winter 2026–27",
+    since: new Date("2026-09-01T00:00:00Z"),
     opensOn: new Date("2027-01-01T00:00:00Z"),
     closesOn: new Date("2027-02-02T00:00:00Z")
   }

@@ -117,6 +117,38 @@ describe("the Match Prompt Version", () => {
             news: "",
             news_added: null
           }
+        ],
+        // An amount, a fee stated in words and a loan, against a club with no
+        // movement at all: between them every shape the section can take, so
+        // the pinned hash moves if any of them is reformatted.
+        squadChanges: [
+          {
+            club: "Arsenal",
+            direction: "in" as const,
+            player: "Signed Player",
+            counterpart_club: "Newcastle United",
+            fee: "£92.5m",
+            loan: false,
+            dated_on: new Date("2026-07-06T00:00:00Z")
+          },
+          {
+            club: "Arsenal",
+            direction: "in" as const,
+            player: "Free Player",
+            counterpart_club: "Burnley",
+            fee: "Free",
+            loan: false,
+            dated_on: new Date("2026-07-01T00:00:00Z")
+          },
+          {
+            club: "Arsenal",
+            direction: "out" as const,
+            player: "Loaned Player",
+            counterpart_club: "Hull City",
+            fee: null,
+            loan: true,
+            dated_on: new Date("2026-08-01T00:00:00Z")
+          }
         ]
       }
     );

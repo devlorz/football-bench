@@ -8,6 +8,10 @@ import {
   type FplPlayer
 } from "../context/build-fpl-context.js";
 import {
+  buildSquadChangesContext,
+  type SquadChangeRow
+} from "../context/build-squad-changes-context.js";
+import {
   matchContext,
   type MatchPromptFixture
 } from "./openrouter-entrant.js";
@@ -66,6 +70,7 @@ export interface MatchContextData {
   deadline: Date;
   historicalMatches: HistoricalMatch[];
   fplPlayers: FplPlayer[];
+  squadChanges: SquadChangeRow[];
 }
 
 export async function loadMatchContextData(
@@ -110,11 +115,20 @@ export async function loadMatchContextData(
       order by team_name, price_tenths desc, fpl_id`,
     [season, gameweek]
   );
+  // Only the Gameweek's own partition: the fetch writes one per rendering
+  // Gameweek, and a Gameweek outside the gate simply has none.
+  const squadChanges = await database.query<SquadChangeRow>(
+    `select club, direction, player, counterpart_club, fee, loan, dated_on
+       from squad_changes
+      where season = $1 and gw = $2`,
+    [season, gameweek]
+  );
   return {
     season,
     deadline,
     historicalMatches: joinXg(historicalMatches.rows, storedXg.rows),
-    fplPlayers: fplPlayers.rows
+    fplPlayers: fplPlayers.rows,
+    squadChanges: squadChanges.rows
   };
 }
 
@@ -140,7 +154,15 @@ export function buildMatchContext(
         homeTeam: fixture.home_team,
         awayTeam: fixture.away_team,
         players: data.fplPlayers
+      }),
+      // Undefined outside the render gate, and then the section is absent
+      // rather than empty.
+      buildSquadChangesContext({
+        deadline: data.deadline,
+        homeTeam: fixture.home_team,
+        awayTeam: fixture.away_team,
+        changes: data.squadChanges
       })
-    ].join("\n\n")
+    ].filter((section) => section !== undefined).join("\n\n")
   );
 }

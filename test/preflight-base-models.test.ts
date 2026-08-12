@@ -73,6 +73,21 @@ describe("pre-flight for the Base Model roster", () => {
            'a', null, '', null, '2026-08-21T17:00:00Z'
          )`
     );
+    await client.query(
+      `insert into squad_changes (
+         season, gw, club, direction, player, counterpart_club,
+         fee, loan, dated_on, observed_at
+       ) values
+         (
+           '2026-27', 1, 'Arsenal', 'in', 'Signed Player',
+           'Newcastle United', '£92.5m', false, '2026-07-06',
+           '2026-08-21T17:00:00Z'
+         ),
+         (
+           '2026-27', 1, 'Arsenal', 'out', 'Loaned Player', 'Hull City',
+           null, true, '2026-08-01', '2026-08-21T17:00:00Z'
+         )`
+    );
     for (let index = 1; index <= 9; index += 1) {
       await client.query(
         `insert into models (
@@ -140,6 +155,16 @@ describe("pre-flight for the Base Model roster", () => {
       "Five highest-priced players:",
       "- Coventry Player | FWD | £6.0m | status: available",
       "Players not fully available: none; all listed players are available.",
+      "",
+      "Squad changes since 2 Feb 2026:",
+      "",
+      "Arsenal",
+      "In: Signed Player (from Newcastle United, £92.5m)",
+      "Out: Loaned Player (to Hull City) (loan)",
+      "",
+      "Coventry City",
+      "In: none recorded",
+      "Out: none recorded",
       "",
       "Return only JSON with fixture_id, probs (H, D, A), score (home, away), and rationale.",
       "The first character must be { and the last character must be }.",

@@ -81,15 +81,23 @@ Signing as visible at the gate's last Gameweek as at its first.
 
 **Blocked by:** Ticket 2.
 
-- [ ] Every rendering shape asserted by exact string at the pure context-builder seam:
+- [x] Every rendering shape asserted by exact string at the pure context-builder seam:
       ordering, the loan label, `none recorded`, the stated absence, and the section's
       absence outside the gate
-- [ ] The gate pinned by arithmetic against the stored deadlines: Gameweek 5 in and 6
+
+      The counterpart club renders as the row stores it — `Newcastle United`, not the
+      spec example block's `Newcastle`. Shortening it would need an alias table for
+      counterparts, which ADR 0031 and migration 0018 both refuse on purpose: most
+      counterparts are EFL or foreign clubs no table covers, so shortening the handful
+      that are Premier League clubs would make one column inconsistent to buy nothing.
+      The example block is illustrative — it already states five Spurs Signings where
+      the page states six.
+- [x] The gate pinned by arithmetic against the stored deadlines: Gameweek 5 in and 6
       out, Gameweek 26 in and 27 out, and Gameweek 19's one-day winter section
       asserted as correct behaviour
-- [ ] Membership carries no recency test — a Signing dated at the window's open renders
+- [x] Membership carries no recency test — a Signing dated at the window's open renders
       at the gate's last Gameweek
-- [ ] Missing Squad Change data degrades the context to its stated absence and blocks
+- [x] Missing Squad Change data degrades the context to its stated absence and blocks
       no Prediction
 
 ## 4. Freeze verification: one amendment, one pre-flight
