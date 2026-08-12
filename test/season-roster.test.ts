@@ -62,11 +62,16 @@ describe("entering the Season Roster", () => {
       });
 
       // ADR-0009: an open-weight seat served at another precision is another
-      // model, so every one of them is pinned — and nothing else is.
+      // model, so every one of them is pinned — and nothing else is. Qwen3.7
+      // Max is the single exception, for the reason recorded beside it in
+      // `src/season-roster.ts`: one endpoint exists for that Base Model, so
+      // the provider pin fixes the precision on its own, and the stale `fp8`
+      // filter matched nothing and 404'd the seat.
+      const unpinnedOpenWeight = new Set(["match/qwen3.7-max"]);
       for (const row of rows) {
-        expect([row.id, row.quantization === null]).toEqual([
-          row.id, row.config.baseModelClass !== "Open-weight"
-        ]);
+        const pinned = row.config.baseModelClass === "Open-weight"
+          && !unpinnedOpenWeight.has(row.id);
+        expect([row.id, row.quantization !== null]).toEqual([row.id, pinned]);
       }
     });
 

@@ -108,7 +108,15 @@ export const SEASON_ROSTER: readonly Entrant[] = [
   {
     id: "match/qwen3.7-max", name: "Qwen3.7 Max",
     baseModel: "qwen/qwen3.7-max", provider: "alibaba",
-    quantization: "fp8",
+    // The one open-weight seat with no quantization pin, and it is not a
+    // weakening of ADR-0009. OpenRouter lists exactly one endpoint for this
+    // Base Model -- Alibaba's -- and its published quantization moved from
+    // `fp8` to `unknown` between 2026-07-29 and 2026-08-12, so an `fp8`
+    // filter now matches nothing and the seat answers HTTP 404 rather than
+    // serving. Where a Base Model has a single endpoint the provider pin
+    // already fixes the precision the pin was there to fix; pin it again the
+    // day a second endpoint appears.
+    quantization: null,
     canonicalSlug: "qwen/qwen3.7-max-20260520",
     baseModelClass: "Open-weight"
   },
@@ -122,7 +130,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
 ];
 
 /** When the operator last checked these seats against OpenRouter's catalog. */
-const CATALOG_CHECKED_AT = "2026-07-29";
+const CATALOG_CHECKED_AT = "2026-08-12";
 
 /**
  * Upserts the nine Entrant rows for `season`'s Prompt Version, and nothing
