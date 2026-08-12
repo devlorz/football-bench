@@ -38,6 +38,15 @@ The Entrants included in Season-wide comparisons. One per track: every `models` 
 and both tracks' seats hold the same role. No exclusion within a track is representable.
 Removing an Entrant would require a new recorded decision, ADR and storage representation.
 
+**Exhibition Run**:
+A retrospective run of a Base Model that arrived after the Season began: it is shown the
+stored contexts of already-played Gameweeks and its results are recorded after the fact.
+An Exhibition Run appears on the readable rankings with a label naming when it ran, but it
+is not part of the Season Roster, never selects or joins a Comparison Anchor, never enters
+the complete-case intersection or a published interval, and supports no claim of forecasting
+skill — its Base Model may already know the results.
+_Avoid_: backfill (a Gap is never back-filled, and an Exhibition Run fills none)
+
 ### Forecasting
 
 **Fixture**:
