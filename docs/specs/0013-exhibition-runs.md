@@ -80,11 +80,13 @@ of the landed scorer, proven and kept true by the work this spec tickets).
 8. As an operator, I want each call validated and repaired exactly as a real Entrant's —
    same JSON shape, same three Repairs, same failure taxonomy — so that repair behaviour is
    comparable across roles.
-9. As an operator, I want a Fixture whose calls all fail recorded as a Gap for the
-   Exhibition model, never retried in a later run and never alerting anyone, so that absence
-   is recorded honestly and pages nobody.
-10. As an operator, I want re-running the job to attempt only Fixtures the model has no
-    Prediction for, so that a crashed or interrupted run is resumed by running it again.
+9. As an operator, I want a Fixture the asking has ended on — its failure one no Repair
+   addresses, or its last Repair spent — recorded as a Gap for the Exhibition model, never
+   retried in a later run and never alerting anyone, so that absence is recorded honestly
+   and pages nobody.
+10. As an operator, I want a Fixture left mid-ask — a repairable failure with its Repairs
+    unspent — asked again from the top as a new ask, so that a crashed or interrupted run is
+    resumed by running it again.
 11. As an auditor, I want every call logged in `attempts` with its resolved provider, model
     version, latency, tokens and raw response, so that an Exhibition attempt is as traceable
     as a real one.
@@ -207,8 +209,8 @@ Fixture was locked into (ADR-0013).
 One replay runs at a time, under an advisory lock, and a second refuses rather than returning
 quietly — two runs would select the same unanswered Fixtures and pay for the same calls.
 
-Both phases are resumable by re-running: the Match side attempts only Fixtures without a
-Prediction; the FPL side continues from the last stored Manager State. Neither retries a
+Both phases are resumable by re-running: the Match side asks again where an ask was left
+unfinished; the FPL side continues from the last stored Manager State. Neither retries a
 recorded Gap — within a Gameweek the run's own Repairs are the only retries, as on the
 official tracks. What a recorded Gap is, the Match side reads off the ledger rather than
 assuming: an attempt whose cause no Repair addresses, or one that spent the last Repair. A
