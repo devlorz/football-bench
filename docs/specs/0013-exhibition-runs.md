@@ -193,10 +193,21 @@ deferred Fixture is passed over because it will never gain one, and a Gameweek l
 it would otherwise stay unreplayable for the rest of the Season. The FPL track reads its own
 Settled-ness from stored per-player points, as its context builder already does.
 
+Within a covered Gameweek the replay calls only Fixtures that were played and whose Lock
+already belongs to that Gameweek. The Lock is read, never assigned: the shared call path fills
+an absent one in, and a run months after the fact must not be what decides which Gameweek a
+Fixture was locked into (ADR-0013).
+
+One replay runs at a time, under an advisory lock, and a second refuses rather than returning
+quietly — two runs would select the same unanswered Fixtures and pay for the same calls.
+
 Both phases are resumable by re-running: the Match side attempts only Fixtures without a
 Prediction; the FPL side continues from the last stored Manager State. Neither retries a
 recorded Gap — within a Gameweek the run's own Repairs are the only retries, as on the
-official tracks.
+official tracks. What a recorded Gap is, the Match side reads off the ledger rather than
+assuming: an attempt whose cause no Repair addresses, or one that spent the last Repair. A
+Fixture a crash left mid-Repair is owed the asks it never got, so the next run finishes it
+instead of counting it as a Gap it never earned.
 
 ### The splice (phase 2)
 

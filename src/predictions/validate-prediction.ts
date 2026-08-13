@@ -31,9 +31,22 @@ export interface ValidPrediction {
   rationale: string;
 }
 
+/**
+ * The failures a Repair can address: the ask was answered, just not validly.
+ *
+ * Every other cause an attempt records — a provider error, a timeout, a rate
+ * limit, a refusal, a missed deadline — is where the asking stops, because
+ * repeating the same prompt is not what would fix it. Named as a list because
+ * a reader of the attempt ledger needs to tell "this ask is still owed a
+ * Repair" from "this ask is finished", and that question has one answer.
+ */
+export const REPAIRABLE_KINDS = ["schema", "probs_sum"] as const;
+
+export type RepairableKind = (typeof REPAIRABLE_KINDS)[number];
+
 export type PredictionValidation =
   | { ok: true; prediction: ValidPrediction }
-  | { ok: false; kind: "schema" | "probs_sum"; message: string };
+  | { ok: false; kind: RepairableKind; message: string };
 
 export function predictionRepairMessage(
   validationMessage: string,

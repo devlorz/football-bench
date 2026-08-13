@@ -49,6 +49,7 @@ interface WorkItemRow extends FixtureRow {
   base_model: string;
   provider: string;
   quantization: string | null;
+  role: string;
 }
 
 function sha256(value: string): string {
@@ -153,7 +154,7 @@ export async function predictGameweek({
   const work = await database.query<WorkItemRow>(
     `select
        f.fpl_id, f.home_team, f.away_team, f.kickoff_at,
-       m.id as entrant_id, m.base_model, m.provider, m.quantization
+       m.id as entrant_id, m.base_model, m.provider, m.quantization, m.role
       from fixtures f
       cross join models m
       where f.season = $1
@@ -211,7 +212,9 @@ export async function predictGameweek({
       base_model: item.base_model,
       provider: item.provider,
       quantization: item.quantization,
-      role: "entrant",
+      // The stored role, not the literal this query filters on: what decides
+      // whether the Lock refuses is the column, so the column is what travels.
+      role: item.role,
       fpl_id: item.fpl_id,
       context
     };

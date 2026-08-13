@@ -381,6 +381,151 @@ describe("replaying the Match track as an Exhibition Run", () => {
     ).toEqual(ledger.rows);
   });
 
+  test("passes over a Fixture that was never played", async () => {
+    // Withdrawn from the calendar after the roster was shown it, so it holds a
+    // stored context and will never gain a result. Unlocked, too: a replay that
+    // called it would also be the run that assigned its canonical Lock, months
+    // after the Gameweek it names.
+    await client.query(
+      `insert into fixtures (
+         season, fpl_id, gw, home_team, away_team, kickoff_at, deferred
+       ) values (
+         '2026-27', 4, 1, 'Leeds', 'Burnley', '2026-08-22T16:30:00Z', true
+       );
+       insert into contexts (season, gw, track, fpl_id, hash, body) values
+         ('2026-27', 1, 'match', 4, ${quoted(bodyHash(4))},
+          ${quoted(storedBody(4))})`
+    );
+    const called: number[] = [];
+
+    const gameweeks = await replayMatchExhibition({
+      database: client,
+      season: "2026-27",
+      exhibitionModelId: "exhibition/late",
+      concurrency: 2,
+      apiKey: "test-key",
+      now: () => RAN_AT,
+      http: async (_url, options) => {
+        const fixtureId = requestedFixtureId(options?.body ?? "{}");
+        called.push(fixtureId);
+        return { status: 200, body: answeredPrediction(fixtureId) };
+      }
+    });
+
+    expect(gameweeks).toEqual([1]);
+    expect(called.sort()).toEqual([1, 2]);
+    const unplayed = await client.query(
+      `select f.locked_in_gw,
+              (select count(*) from attempts a where a.fpl_id = 4) as attempts
+         from fixtures f
+        where f.season = '2026-27' and f.fpl_id = 4`
+    );
+    expect(unplayed.rows).toEqual([{ locked_in_gw: null, attempts: "0" }]);
+  });
+
+  test("resumes a Fixture whose Repairs a crash left unspent", async () => {
+    await client.query(
+      `insert into attempts (
+         model_id, season, gw, track, fpl_id, attempt_no, ok, error_kind,
+         trigger, attempted_at
+       ) values
+         (
+           'exhibition/late', '2026-27', 1, 'match', 1, 0, false, 'schema',
+           'manual', '2026-09-30T12:00:00Z'
+         ),
+         (
+           'exhibition/late', '2026-27', 1, 'match', 2, 0, false, 'provider',
+           'manual', '2026-09-30T12:00:00Z'
+         )`
+    );
+    const called: number[] = [];
+
+    await replayMatchExhibition({
+      database: client,
+      season: "2026-27",
+      exhibitionModelId: "exhibition/late",
+      concurrency: 1,
+      apiKey: "test-key",
+      now: () => RAN_AT,
+      http: async (_url, options) => {
+        const fixtureId = requestedFixtureId(options?.body ?? "{}");
+        called.push(fixtureId);
+        return { status: 200, body: answeredPrediction(fixtureId) };
+      }
+    });
+
+    // Fixture 1's stored failure is one a Repair addresses and it had Repairs
+    // left, so the run still owes it an ask. Fixture 2's provider failure is
+    // where the run stopped asking: a recorded Gap, never retried.
+    expect(called).toEqual([1]);
+    expect(
+      (await client.query(
+        `select fpl_id from predictions where model_id = 'exhibition/late'`
+      )).rows
+    ).toEqual([{ fpl_id: 1 }]);
+  });
+
+  test("leaves a Fixture alone once its Repairs are spent", async () => {
+    await client.query(
+      `insert into attempts (
+         model_id, season, gw, track, fpl_id, attempt_no, ok, error_kind,
+         trigger, attempted_at
+       )
+       select 'exhibition/late', '2026-27', 1, 'match', 1, attempt_no, false,
+              'probs_sum', 'manual', '2026-09-30T12:00:00Z'
+         from generate_series(0, 3) as attempt_no`
+    );
+    const called: number[] = [];
+
+    await replayMatchExhibition({
+      database: client,
+      season: "2026-27",
+      exhibitionModelId: "exhibition/late",
+      concurrency: 1,
+      apiKey: "test-key",
+      now: () => RAN_AT,
+      http: async (_url, options) => {
+        const fixtureId = requestedFixtureId(options?.body ?? "{}");
+        called.push(fixtureId);
+        return { status: 200, body: answeredPrediction(fixtureId) };
+      }
+    });
+
+    expect(called).toEqual([2]);
+  });
+
+  test("refuses to run beside another replay", async () => {
+    const other = new Client({ connectionString: process.env.DATABASE_URL });
+    await other.connect();
+    let calls = 0;
+    try {
+      await other.query("select pg_advisory_lock(8150530)");
+
+      await expect(replayMatchExhibition({
+        database: client,
+        season: "2026-27",
+        exhibitionModelId: "exhibition/late",
+        concurrency: 1,
+        apiKey: "test-key",
+        now: () => RAN_AT,
+        http: async (_url, options) => {
+          calls += 1;
+          return {
+            status: 200,
+            body: answeredPrediction(requestedFixtureId(options!.body!))
+          };
+        }
+      })).rejects.toThrow(
+        "Another Exhibition replay is running; this one would pay for the "
+        + "same calls twice"
+      );
+    } finally {
+      await other.end();
+    }
+
+    expect(calls).toBe(0);
+  });
+
   test("refuses a model id that is missing or is not an Exhibition", async () => {
     await client.query(
       `insert into models (

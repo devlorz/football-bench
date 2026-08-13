@@ -20,12 +20,41 @@ export async function whileHoldingLock<T>(
   key: number,
   work: () => Promise<T[]>
 ): Promise<T[]> {
+  return holdingLock(database, key, work, () => []);
+}
+
+/**
+ * The same lock, for a job nobody polls: an operator-triggered run that would
+ * pay a provider twice for the same answers if it started beside its twin.
+ *
+ * It refuses rather than returning nothing, because the two answers are not
+ * interchangeable here. A poll that ran nothing is the ordinary case; an
+ * operator who asked for a run and got silence would read it as the work
+ * already being done.
+ */
+export async function whileHoldingLockOrRefuse<T>(
+  database: Database,
+  key: number,
+  refusal: string,
+  work: () => Promise<T>
+): Promise<T> {
+  return holdingLock(database, key, work, () => {
+    throw new Error(refusal);
+  });
+}
+
+async function holdingLock<T>(
+  database: Database,
+  key: number,
+  work: () => Promise<T>,
+  whenHeldElsewhere: () => T
+): Promise<T> {
   const lock = await database.query<{ acquired: boolean }>(
     "select pg_try_advisory_lock($1) as acquired",
     [key]
   );
   if (lock.rows[0]?.acquired !== true) {
-    return [];
+    return whenHeldElsewhere();
   }
 
   try {

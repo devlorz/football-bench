@@ -14,6 +14,13 @@ export interface CalledRow {
   provider: string;
   prompt_version: string;
   quantization: string | null;
+  /**
+   * The stored role, carried rather than left behind once checked: what a call
+   * is entitled to — the Lock above all — is decided by this column, and a
+   * caller restating it as a literal would be a second place for it to be
+   * wrong.
+   */
+  role: string;
 }
 
 /**
@@ -29,7 +36,7 @@ export async function loadExhibition(
   database: Database,
   modelId: string
 ): Promise<CalledRow> {
-  const result = await database.query<CalledRow & { role: string }>(
+  const result = await database.query<CalledRow>(
     `select id, base_model, provider, quantization, prompt_version, role
        from models
       where id = $1`,

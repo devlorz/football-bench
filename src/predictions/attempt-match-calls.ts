@@ -175,9 +175,10 @@ async function recordProviderFailure(options: {
  * `'deadline'` and no Prediction; an Exhibition Run answers after every
  * deadline by construction, which is the feature and not a miss (ADR-0032).
  * Honesty there rests on `predicted_at` and `attempted_at` post-dating the
- * deadlines they cover, which is what derives the "ran after Gameweek N" label
- * downstream — so a Lock refusal would refuse the whole feature, and a boolean
- * asking to skip it would be a second place for the role to be contradicted.
+ * deadlines they cover, which is what derives the "ran after Gameweek N"
+ * label downstream — so a Lock refusal would refuse the whole feature, and a
+ * boolean asking to skip it would be a second place for the role to be
+ * contradicted.
  */
 async function recordPredictionResult(options: {
   database: Database;
