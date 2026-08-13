@@ -81,7 +81,9 @@ import Page from "../layouts/Page.astro";
           column a figure sits under is announced with it. */}
       <div class="lbhead" role="row">
         <div role="columnheader">Rank</div>
-        <div role="columnheader">Entrant</div>
+        {/* Not "Entrant": an Exhibition Run is ranked in this column too, and
+            says so on its own row. */}
+        <div role="columnheader">Base Model</div>
         <div class="cell" role="columnheader">Match points</div>
         <div class="cell" role="columnheader">Bet points</div>
       </div>
@@ -105,6 +107,9 @@ import Page from "../layouts/Page.astro";
     <div class="qualifications">
       <p id="qual-match"></p>
       <p id="qual-bet"></p>
+      {/* Empty unless the table holds an Exhibition Run, and never written from
+          here: the sentence is the API's, beside the row that needs it. */}
+      <p id="qual-exhibition"></p>
     </div>
 
     <div class="footnotes">
@@ -211,9 +216,17 @@ import Page from "../layouts/Page.astro";
           div("lb-name", entrant.name),
           // The Base Model Class beside the id, so a reader knows whether they
           // are reading an Open-weight Base Model or a Frontier one.
-          div("lb-id", entrant.baseModelClass
-            ? entrant.id + " · " + entrant.baseModelClass
-            : entrant.id)
+          div("lb-id", [
+            entrant.baseModelClass
+              ? entrant.id + " · " + entrant.baseModelClass
+              : entrant.id,
+            // An Exhibition Run is ranked in the same table and says so on its
+            // own row. The Gameweek is the API's, derived from when the run
+            // answered, so the page states it and computes none of it.
+            entrant.exhibition
+              ? "ran after Gameweek " + entrant.exhibition.ranAfterGw
+              : null
+          ].filter(Boolean).join(" · "))
         );
         row.append(
           div("lb-rank", String(index + 1), "cell"),
@@ -232,6 +245,7 @@ import Page from "../layouts/Page.astro";
         "n = " + body.settledFixtures + " fixtures · ranks, does not prove");
       text($("qual-match"), body.matchPointsQualification ?? "");
       text($("qual-bet"), body.betPointsQualification ?? "");
+      text($("qual-exhibition"), body.exhibitionCaveat ?? "");
     }
 
     function renderPreSeason() {

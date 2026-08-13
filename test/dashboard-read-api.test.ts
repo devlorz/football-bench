@@ -7,6 +7,8 @@ import {
   handleDashboardRequest, type LeaderboardBody, type Query
 } from "../src/dashboard/read-api.js";
 import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
+import { MATCH_PROMPT_VERSION } from "../src/predictions/openrouter-entrant.js";
+import { EXHIBITION_CAVEAT } from "../src/exhibition/recall-caveat.js";
 import {
   BET_POINTS_QUALIFICATION, MATCH_POINTS_QUALIFICATION, scoreMatchSeason
 } from "../src/predictions/score-match-gameweek.js";
@@ -366,6 +368,48 @@ describe("the dashboard read API on a Locked Gameweek nothing has settled", () =
       expect(body.entrants.every(({ n }) => n === null)).toBe(true);
     });
 
+  test("keeps a replayed Exhibition Run off a Season with no ranking",
+    async () => {
+      // A label this endpoint could derive: the run answered two days after
+      // Gameweek 1's deadline, so it did run after Gameweek 1.
+      await writer.query(
+        `insert into models (
+           id, name, base_model, provider, prompt_version, role
+         ) values ('late-arrival/v1', 'Late Arrival', 'late/base-model',
+                   'late', $1, 'exhibition')`,
+        [MATCH_PROMPT_VERSION]
+      );
+      await writer.query(
+        `insert into predictions (
+           model_id, season, fpl_id, probs, pred_home, pred_away, context_id,
+           attempts_used, predicted_at
+         )
+         select 'late-arrival/v1', $1, 1, '{"H":0.5,"D":0.3,"A":0.2}', 2, 1,
+                c.id, 0, $2
+           from contexts c
+          where c.season = $1 and c.track = 'match' and c.fpl_id = 1`,
+        [SEASON, "2026-08-16T09:00:00Z"]
+      );
+
+      const response = await handleDashboardRequest(
+        new Request("https://benchmark.example/api/leaderboard"),
+        query, SEASON, NOW
+      );
+      const body = await response.json() as LeaderboardBody;
+
+      // An Exhibition Run is ranked among the Entrants, and this Season has no
+      // ranking to be among: the page draws its "Entered for 2026-27" list off
+      // this same array, and that list is who was entered for the Season —
+      // which an Exhibition Run, joining after the fact, was not. Admitting it
+      // here would put it on a seat roll under a heading that is false of it,
+      // and with no ranked column to carry its label.
+      expect(body.throughGw).toBeNull();
+      expect(body.entrants.map(({ id }) => id)).toEqual(ROSTER);
+
+      // And no caveat, because nothing on the page is describing it.
+      expect(body.exhibitionCaveat).toBeNull();
+    });
+
   test("holds it through the window between results and the scoring run",
     async () => {
       // Results are ingested by a job of their own and scored by a later one,
@@ -585,4 +629,262 @@ describe("the dashboard read API with an Entrant that settled nothing", () => {
       });
       expect(byId.get("gpt/v1")?.n).toBe(SETTLED_FIXTURES);
     });
+});
+
+describe("the dashboard read API with an Exhibition Run on the Season", () => {
+  const writer = new Client({ connectionString: process.env.DATABASE_URL });
+  const reader = new Client({ connectionString: process.env.DATABASE_URL });
+
+  const query: Query = async (sql, parameters = []) =>
+    (await reader.query(sql, [...parameters])).rows;
+
+  const leaderboard = async (): Promise<LeaderboardBody> => {
+    const response = await handleDashboardRequest(
+      new Request("https://benchmark.example/api/leaderboard"),
+      query, SEASON, NOW
+    );
+    expect(response.status).toBe(200);
+    return await response.json() as LeaderboardBody;
+  };
+
+  /** The Exhibition Run's own row, and the one the label is derived against. */
+  const EXHIBITION = "late-arrival/v1";
+
+  /**
+   * A second Exhibition Run, interrupted and resumed across a deadline: two
+   * answers a week apart with Gameweek 15's Lock between them. It is what makes
+   * the label's aggregate load-bearing — one taken over the run's first answer
+   * would call this Gameweek 14 while half its figures were answered after
+   * Gameweek 15 had been played.
+   */
+  const RESUMED = "resumed-arrival/v1";
+
+  const EXHIBITIONS = [EXHIBITION, RESUMED];
+
+  /**
+   * After Gameweek 14's deadline and before Gameweek 15's, which are a week
+   * apart. The Season is scored through 14, so this is the instant a replay of
+   * every Settled Gameweek would have been answered at.
+   */
+  const REPLAYED_AT = "2026-11-15T09:00:00Z";
+
+  /** A week later, with Gameweek 15's deadline passed in between. */
+  const RESUMED_AT = "2026-11-22T09:00:00Z";
+
+  /** The one settled Fixture the Exhibition Run left unanswered. */
+  const EXHIBITION_GAP = 1;
+
+  /** Every roster figure as it stood before the Exhibition Run existed. */
+  let withoutExhibition: LeaderboardBody;
+
+  /**
+   * Every Match row the scorer wrote for the roster, without its `scored_at`:
+   * the stamp is the run's and moves whenever a row is rewritten, and what is
+   * claimed here is that the figures did not.
+   */
+  const rosterScores = async (): Promise<Map<string, string>> => {
+    const stored = await writer.query<{
+      model_id: string; gw: number; metric: string;
+    }>(
+      `select model_id, gw, metric, value, n, detail from scores
+        where season = $1 and track = 'match'
+          and model_id <> all ($2::text[])
+        order by model_id, gw, metric`,
+      [SEASON, EXHIBITIONS]
+    );
+    return new Map(stored.rows.map((row) => [
+      `${row.model_id} gw${row.gw} ${row.metric}`, JSON.stringify(row)
+    ]));
+  };
+
+  let scoresWithout: Map<string, string>;
+
+  beforeAll(async () => {
+    await writer.connect();
+    await reader.connect();
+    await writer.query(
+      `truncate scores, contexts, predictions, fixtures, models, gameweeks,
+       historical_matches restart identity cascade`
+    );
+    await seedSeason({
+      database: writer, season: SEASON, stopAt: "the design's"
+    });
+    await reader.query("set role dashboard_read");
+
+    // The baseline is taken after a scoring run of its own, so that the run
+    // which admits the Exhibition Run is the second and not the first. The seed
+    // leaves Gameweek 15 Locked, answered and unscored, and comparing a Season
+    // scored once against a Season scored twice would report every Gameweek 15
+    // row as a figure the Exhibition Run moved.
+    await scoreMatchSeason({
+      database: writer,
+      season: SEASON,
+      now: () => new Date("2026-11-15T12:00:00Z")
+    });
+    withoutExhibition = await leaderboard();
+    scoresWithout = await rosterScores();
+
+    await writer.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values ($1, 'Late Arrival', 'late/base-model', 'late', $2,
+                 'exhibition')`,
+      [EXHIBITION, MATCH_PROMPT_VERSION]
+    );
+
+    // A near-perfect replay: the exact scoreline of every settled Fixture bar
+    // one, answered months after the Lock it is attributed to. Perfect rather
+    // than plausible because the claim under test is that a run which tops the
+    // readable table and beats every Entrant on RPS still reaches a reader
+    // labelled, and still moves nothing the roster is measured by.
+    //
+    // Bar one, because an Exhibition Run's own Gap is the other way the
+    // statistical layer could feel it: a complete case is the Fixtures every
+    // retained Entrant answered, so an Exhibition Gap counted among them would
+    // silently take Fixture 1 out of all nine Entrants' shared sample. It is a
+    // Fixture the seed's Gapped Entrant answered, so the Gap here is the
+    // Exhibition Run's alone.
+    await writer.query(
+      `insert into predictions (
+         model_id, season, fpl_id, probs, pred_home, pred_away, context_id,
+         attempts_used, predicted_at
+       )
+       select $2, $1, f.fpl_id,
+              case f.result ->> 'outcome'
+                when 'H' then '{"H":0.9,"D":0.05,"A":0.05}'::jsonb
+                when 'D' then '{"H":0.05,"D":0.9,"A":0.05}'::jsonb
+                else '{"H":0.05,"D":0.05,"A":0.9}'::jsonb
+              end,
+              (f.result ->> 'home_goals')::int,
+              (f.result ->> 'away_goals')::int,
+              c.id, 0, $3
+         from fixtures f
+         join contexts c
+           on c.season = f.season and c.track = 'match' and c.fpl_id = f.fpl_id
+        where f.season = $1 and f.locked_in_gw is not null
+          and f.result is not null and f.fpl_id <> $4`,
+      [SEASON, EXHIBITION, REPLAYED_AT, EXHIBITION_GAP]
+    );
+
+    // The resumed run: two Fixtures of Gameweek 1, answered a week apart.
+    await writer.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values ($1, 'Resumed Arrival', 'resumed/base-model', 'resumed', $2,
+                 'exhibition')`,
+      [RESUMED, MATCH_PROMPT_VERSION]
+    );
+    for (const [fplId, at] of [[2, REPLAYED_AT], [3, RESUMED_AT]] as const) {
+      await writer.query(
+        `insert into predictions (
+           model_id, season, fpl_id, probs, pred_home, pred_away, context_id,
+           attempts_used, predicted_at
+         )
+         select $2, $1, $3, '{"H":0.5,"D":0.3,"A":0.2}', 1, 0, c.id, 0, $4
+           from contexts c
+          where c.season = $1 and c.track = 'match' and c.fpl_id = $3`,
+        [SEASON, RESUMED, fplId, at]
+      );
+    }
+    await scoreMatchSeason({
+      database: writer,
+      season: SEASON,
+      now: () => new Date("2026-11-16T10:00:00Z")
+    });
+
+    return async () => {
+      await writer.end();
+      await reader.end();
+    };
+    // Seeds a Season and scores it twice over; the default ten seconds is not
+    // enough for the second pass.
+  }, 60_000);
+
+  test("ranks the Exhibition Run among the Entrants, labelled by when it ran",
+    async () => {
+      const body = await leaderboard();
+
+      const exhibition =
+        body.entrants.find(({ id }) => id === EXHIBITION);
+
+      // Fourteen, and derived: every `predicted_at` on this run falls between
+      // Gameweek 14's deadline and Gameweek 15's, and nothing was told this
+      // endpoint which Gameweek that is.
+      expect(exhibition?.exhibition).toEqual({ ranAfterGw: 14 });
+
+      // Its Gap is its own: one Fixture short of the Season, and the Gapped
+      // Entrant is still exactly one short of it too.
+      expect(exhibition?.n).toBe(SETTLED_FIXTURES - 1);
+
+      // Ranked among them and not beside them, in both readable tables: one
+      // shape of row, and a leaderboard sorted by either column puts this run
+      // at the top of it. Both are asserted because both are rankings a reader
+      // switches between, and a Bet Points join quietly lost would leave the
+      // Exhibition Run's second column reading nought against a field that
+      // scored.
+      const leads = (field: "matchPoints" | "betPoints"): void => {
+        expect(exhibition?.[field]).toBeGreaterThan(Math.max(
+          ...withoutExhibition.entrants.map((each) => each[field] ?? 0)
+        ));
+      };
+      leads("matchPoints");
+      leads("betPoints");
+
+      // And the resumed run is labelled by its last answer rather than its
+      // first: Gameweek 15's Lock passed between the two, so by the time it
+      // gave the second, Gameweek 15 had been played.
+      expect(body.entrants.find(({ id }) => id === RESUMED)?.exhibition)
+        .toEqual({ ranAfterGw: 15 });
+
+      // And every Entrant is still an Entrant, carrying no label of its own.
+      const roster =
+        body.entrants.filter(({ id }) => !EXHIBITIONS.includes(id));
+      expect(roster.map(({ id }) => id)).toEqual(ROSTER);
+      expect(roster.every(({ exhibition: label }) => label === null)).toBe(true);
+    });
+
+  test("carries the recall-versus-skill caveat the table now needs", async () => {
+    const body = await leaderboard();
+
+    expect(body.exhibitionCaveat).toBe(EXHIBITION_CAVEAT);
+
+    // And a table of the roster alone does not carry a caveat about somebody
+    // who is not in it. The same body, one Exhibition Run earlier.
+    expect(withoutExhibition.exhibitionCaveat).toBeNull();
+  });
+
+  test("moves no figure the roster is read on", async () => {
+    const body = await leaderboard();
+
+    // Byte for byte, and over the whole body rather than a field at a time: a
+    // run that may remember the results must be visible and must change
+    // nothing, and the strongest form of that claim is the Season answering
+    // identically with it present and absent. Compared as text, so a `numeric`
+    // arriving as a string on one pass and a number on the other is a failure
+    // rather than a deep-equality that looks past it.
+    const roster = (published: LeaderboardBody): string =>
+      JSON.stringify({
+        ...published,
+        exhibitionCaveat: null,
+        entrants:
+          published.entrants.filter(({ id }) => !EXHIBITIONS.includes(id))
+      });
+
+    expect(roster(body)).toBe(roster(withoutExhibition));
+
+    expect(body.entrants).toHaveLength(ROSTER.length + EXHIBITIONS.length);
+
+    // And underneath the body, the same claim about every row the scorer
+    // wrote — the Gap rates, the intervals and the Paired Differences the
+    // leaderboard never reads included. This is where an Exhibition Run
+    // standing as a Comparison Anchor, or emptying a complete case with a Gap
+    // of its own, would show up.
+    const after = await rosterScores();
+    const moved = [...after]
+      .filter(([key, row]) => scoresWithout.get(key) !== row)
+      .map(([key]) => key);
+
+    expect(moved).toEqual([]);
+    expect([...after.keys()]).toEqual([...scoresWithout.keys()]);
+  });
 });

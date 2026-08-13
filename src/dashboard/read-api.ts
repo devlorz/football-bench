@@ -1,3 +1,4 @@
+import { EXHIBITION_CAVEAT } from "../exhibition/recall-caveat.js";
 import { argmaxOutcome, outcomeOf, type Probs } from "../fixture-result.js";
 import { MATCH_PROMPT_VERSION } from "../predictions/openrouter-entrant.js";
 import {
@@ -67,6 +68,13 @@ const SCORED_CACHE = "max-age=300, stale-while-revalidate=3600, stale-if-error=0
  */
 const FIXTURES_CACHE = "max-age=60, stale-if-error=0";
 
+/**
+ * One ranked row, which is not the same thing as one Entrant. The Season Roster
+ * is nine of them and an Exhibition Run that has replayed is another, ranked in
+ * the same table by ADR-0032 and told apart by `exhibition` alone. The type is
+ * one shape because the row is one shape; what a row *is* is a field on it and
+ * not a second body for a reader to join.
+ */
 export interface LeaderboardEntrant {
   id: string;
   name: string;
@@ -79,6 +87,13 @@ export interface LeaderboardEntrant {
    * the Season's: the two differ by exactly what the Entrant Gapped.
    */
   n: number | null;
+  /**
+   * Null for the Season Roster, and the Gameweek the run answered after for an
+   * Exhibition Run. A per-row fact, because two Exhibition Runs joining the
+   * record in different weeks ran after different Gameweeks — unlike the caveat
+   * beside them, which is one sentence about the kind of thing they are.
+   */
+  exhibition: { ranAfterGw: number } | null;
 }
 
 /**
@@ -93,6 +108,14 @@ export interface LeaderboardBody {
   settledFixtures: number;
   matchPointsQualification: string | null;
   betPointsQualification: string | null;
+  /**
+   * Null on a table holding no Exhibition Run, which must not carry a caveat
+   * about somebody absent from it. Beside the two qualifications because it is
+   * the same kind of thing — one sentence a figure may not be published
+   * without — and unlike them it qualifies a row rather than a ranking, so the
+   * row carries the `exhibition` label that says which row it is about.
+   */
+  exhibitionCaveat: string | null;
   entrants: LeaderboardEntrant[];
 }
 
@@ -169,7 +192,8 @@ async function scoredThrough(
 }
 
 /**
- * The nine Entrants ranked Season-to-date, both qualifications, and the
+ * Every ranked row Season-to-date — the nine Entrants and any Exhibition Run
+ * that has replayed — both qualifications, the Exhibition caveat, and the
  * evidence the ranking rests on.
  *
  * The qualifications are read out of the stored rows, because the claim being
@@ -211,17 +235,55 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
   // `role = 'entrant'` selects both tracks' seats, so the roster is the Season
   // Roster as CONTEXT.md defines it: the role and the track's Prompt Version.
   //
+  // The readable table is the one place an Exhibition Run joins that roster,
+  // which is what ADR-0032 asks for and the only relaxation of the filter
+  // anywhere: every statistical figure the dashboard publishes is read
+  // elsewhere and still selects `role = 'entrant'` alone.
+  //
+  // An Exhibition Run appears where there is a ranking for it to be ranked in,
+  // which is why `$4` — the scored Gameweek — is a condition of admitting one.
+  // The same array is what the page draws its pre-season "Entered for" list
+  // from, and that list is the seats entered for the Season; an Exhibition Run
+  // joined after the fact and is not one of them (CONTEXT.md), so on a Season
+  // with nothing scored it belongs to no list this body carries.
+  //
+  // An Exhibition Run appears once its label can be derived and not before. The
+  // Gameweek it ran after is the last one whose deadline its *latest*
+  // Prediction post-dates, which is the honesty ADR-0032 rests on read
+  // forwards: a row an operator has entered but not yet replayed has no
+  // derivable label, and would otherwise rank as a Base Model that scored
+  // nought. The two laterals are the derivation and that condition at once —
+  // the second is empty exactly when the first is null.
+  //
+  // The latest and not the earliest, because a replay is resumable and its
+  // figures are one Season-to-date total over every answer in it. A run
+  // interrupted and resumed a week later holds answers from either side of a
+  // deadline, and labelling that total by its first answer would understate
+  // what its Base Model had had the chance to read by the time it gave its
+  // last. The label is a ceiling on what the run could know, so it is taken
+  // from the answer that could know the most.
+  //
   // Left joins rather than an inner one, so the pre-season Season returns its
   // nine entered Entrants with nothing beside them instead of returning
   // nothing. `gw = $4` is null before the first Gameweek is scored and matches
   // no row, which is the same branch.
   const rows = await query(
-    `select m.id, m.name, m.config ->> 'baseModelClass' as base_model_class,
+    `select m.id, m.name, m.role,
+            m.config ->> 'baseModelClass' as base_model_class,
+            ran_after.gw as ran_after_gw,
             points.value as match_points, points.n as n,
             points.detail ->> 'qualification' as match_qualification,
             bets.value as bet_points,
             bets.detail ->> 'qualification' as bet_qualification
        from models m
+       left join lateral (
+         select max(predicted_at) as at from predictions
+          where model_id = m.id and season = $1
+       ) last_prediction on true
+       left join lateral (
+         select max(gw) as gw from gameweeks
+          where season = $1 and deadline_at < last_prediction.at
+       ) ran_after on true
        left join scores points
          on points.model_id = m.id and points.season = $1
         and points.track = 'match' and points.gw = $4
@@ -230,7 +292,10 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
          on bets.model_id = m.id and bets.season = $1
         and bets.track = 'match' and bets.gw = $4
         and bets.metric = $3
-      where m.role = 'entrant' and m.prompt_version = $5
+      where m.prompt_version = $5
+        and (m.role = 'entrant'
+             or (m.role = 'exhibition'
+                 and ran_after.gw is not null and $4 is not null))
       order by m.id`,
     [
       season,
@@ -247,8 +312,21 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
     baseModelClass: textOrNull(row.base_model_class),
     matchPoints: scoredOrNull(throughGw, row.match_points),
     betPoints: scoredOrNull(throughGw, row.bet_points),
-    n: scoredOrNull(throughGw, row.n)
+    n: scoredOrNull(throughGw, row.n),
+    exhibition: row.role === "exhibition"
+      ? { ranAfterGw: Number(row.ran_after_gw) }
+      : null
   }));
+
+  // The roster's own rows, because both qualifications qualify the Entrants'
+  // ranking. An Exhibition Run holds a stored copy of each — the scorer writes
+  // the same sentence for any model holding Predictions — and letting that copy
+  // answer would put the roster's caveat on the page on the strength of a row
+  // that is not the roster's, in exactly the state the fallback below exists
+  // for. The two strings are identical today, so nothing a reader sees turns on
+  // this; what turns on it is that the reasoning below says `Entrant` and is
+  // then true.
+  const rosterRows = rows.filter((row) => row.role !== "exhibition");
 
   // One string per ranking rather than one per row: the scorer writes the same
   // sentence into every row a ranking can be read off, and the page shows it
@@ -281,7 +359,7 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
   // the stored string is the only answer, and its absence is a fault: it fails
   // closed, and the page's error line is the state a reader is left in, rather
   // than a ranking that lost its caveat on the way out of the database.
-  const hasRankingRows = rows.some(
+  const hasRankingRows = rosterRows.some(
     (row) => row.match_points != null || row.bet_points != null
   );
 
@@ -292,8 +370,9 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
     if (!hasRankingRows) {
       return canonical;
     }
-    const stored =
-      textOrNull(rows.map((row) => row[column]).find((each) => each != null));
+    const stored = textOrNull(
+      rosterRows.map((row) => row[column]).find((each) => each != null)
+    );
     if (stored === null) {
       throw new Error(
         `The Season's ranking rows carry no ${column}, and a ranking cannot be `
@@ -319,6 +398,12 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
       qualification("match_qualification", MATCH_POINTS_QUALIFICATION),
     betPointsQualification:
       qualification("bet_qualification", BET_POINTS_QUALIFICATION),
+    // Read off the rows that were returned rather than asked of the database
+    // again: the caveat is owed exactly when a reader can see an Exhibition Run,
+    // and the rows in hand are what a reader can see.
+    exhibitionCaveat: entrants.some(({ exhibition }) => exhibition !== null)
+      ? EXHIBITION_CAVEAT
+      : null,
     entrants
   };
 

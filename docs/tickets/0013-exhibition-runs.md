@@ -99,10 +99,16 @@ readable Match Points and Bet Points tables show the Exhibition Run ranked among
 Entrants under a "ran after Gameweek N" label, and every statistical figure the dashboard
 publishes is provably identical with the Exhibition present and absent.
 
+Ranked *among* the Entrants means the Exhibition Run takes a position in the readable table,
+so an Exhibition Run leading a column moves the rank number shown beside every Entrant and
+the bar each one is drawn against. That is the comparison story 26 asks for, and it is what
+the last box below does *not* cover: what must not move is what the API publishes — the
+figures, the Entrants' order among themselves, the intervals and the Gap rates.
+
 **Blocked by:** Match Exhibition replay, end to end.
 
-- [ ] The scorer writes the readable metrics — Match Points, Bet Points and their season-to-date twins — for Exhibition Predictions under the same conventions as the roster's, idempotently
-- [ ] Comparison Anchor selection, the complete-case intersection and the published intervals read from the roster alone: with an Exhibition Run leading Match Points, the Anchor is unchanged, and an Exhibition Gap removes no Fixture from anybody's intersection
-- [ ] The readable rankings show the Exhibition Run ranked among Entrants, carrying a label whose Gameweek is derived from its stored `predicted_at` timestamps against the Gameweek deadlines, never asserted from configuration
-- [ ] The recall-versus-skill caveat appears wherever the Exhibition Run is described
-- [ ] Every roster figure — scores, rankings among Entrants, intervals, Gap rates — is byte-identical with and without the Exhibition rows present, proven behaviourally
+- [x] The scorer writes the readable metrics — Match Points, Bet Points and their season-to-date twins — for Exhibition Predictions under the same conventions as the roster's, idempotently
+- [x] Comparison Anchor selection, the complete-case intersection and the published intervals read from the roster alone: with an Exhibition Run leading Match Points, the Anchor is unchanged, and an Exhibition Gap removes no Fixture from anybody's intersection
+- [x] The readable rankings show the Exhibition Run ranked among Entrants, carrying a label whose Gameweek is derived from its stored `predicted_at` timestamps against the Gameweek deadlines, never asserted from configuration
+- [x] The recall-versus-skill caveat appears wherever the Exhibition Run is described
+- [x] Every roster figure — scores, rankings among Entrants, intervals, Gap rates — is byte-identical with and without the Exhibition rows present, proven behaviourally
