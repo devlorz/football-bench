@@ -114,6 +114,14 @@ export interface ExhibitionJobConfig {
   exhibitionModelId: string;
 }
 
+export interface FplExhibitionJobConfig {
+  databaseUrl: string;
+  season: string;
+  openRouterApiKey: string;
+  entrantCallTimeoutMs: number;
+  exhibitionModelId: string;
+}
+
 export type PreflightJobConfig = {
   databaseUrl: string;
   season: string;
@@ -346,6 +354,44 @@ export function readExhibitionJobConfig(
   return {
     ...readScheduledPredictJobConfig(environment),
     exhibitionModelId: required(environment, "EXHIBITION_MODEL_ID")
+  };
+}
+
+/**
+ * Which track one Exhibition replay walks, defaulting to the Match track it
+ * was first written for. One entry point takes both (spec 0013), because the
+ * two share the operator, the model row and the reason for running — what
+ * differs is only which record is replayed.
+ */
+export function readExhibitionTrack(
+  environment: NodeJS.ProcessEnv
+): "match" | "fpl" {
+  const track = environment.TRACK?.trim() || "match";
+  if (track !== "match" && track !== "fpl") {
+    throw new Error("TRACK must be match or fpl");
+  }
+  return track;
+}
+
+/**
+ * The same four variables the Match track reads, with the call timeout that
+ * track's prompt needs (spec 0010) in place of the concurrency bound: a season
+ * path is replayed in order, each Gameweek's context carrying the Squad the one
+ * before it left, so there is never a second call to bound. Read through the
+ * Match reader rather than beside it, so the four they share cannot drift.
+ */
+export function readFplExhibitionJobConfig(
+  environment: NodeJS.ProcessEnv
+): FplExhibitionJobConfig {
+  const { concurrency: _unbounded, ...shared } =
+    readExhibitionJobConfig(environment);
+  return {
+    ...shared,
+    entrantCallTimeoutMs: readPositiveInteger(
+      environment,
+      "ENTRANT_CALL_TIMEOUT_MS",
+      DEFAULT_HTTP_TIMEOUT_MS
+    )
   };
 }
 

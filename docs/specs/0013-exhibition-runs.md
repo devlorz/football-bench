@@ -114,6 +114,11 @@ of the landed scorer, proven and kept true by the work this spec tickets).
     rolled over when still illegal, with the resulting Manager State stored before the next
     Gameweek is attempted, so that the replay is one sequential season path under full
     rules.
+18a. As an operator, I want an opening Gameweek whose Repairs are all spent to store nothing
+    and stop the run, so that a Roll Over never commits an empty Squad — there is no Team
+    Sheet standing to roll onto at an opening, and `manager_states` is insert-only, so the
+    Exhibition model would carry no players for the rest of the Season on account
+    of one Gameweek's four bad answers.
 19. As an operator, I want the spliced body stored as the Exhibition model's own per-Entrant
     context row, so that what it was shown is on record with a hash like everything else.
 20. As an operator, I want the replay to stop at the last Settled Gameweek and to resume
@@ -187,6 +192,12 @@ One new operator-triggered entry point per the established job-config convention
 model's id. It resolves the covered Gameweeks itself — Settled ones only — rather than
 taking a range. Phase 1 implements the Match track; phase 2 adds the FPL track behind a
 track argument, replaying from the recorded starting Gameweek of the real track.
+
+The FPL track reads that same entry point's variables but swaps the concurrency bound for
+the call timeout the FPL prompt needs (spec 0010): a season path is replayed in order, each
+Gameweek's context carrying the Squad the one before it left, so there is never a second
+call to bound. The two tracks hold separate replay locks, because what two runs would
+collide over is one track's record and neither track's is the other's.
 
 Settled is read off the record, never off the clock (CONTEXT.md), and on the Match track the
 record is `fixtures.result` — the same thing scoring reads. A Gameweek is covered when it

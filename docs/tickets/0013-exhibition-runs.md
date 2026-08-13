@@ -81,13 +81,13 @@ Gameweek and the whole chain resumable.
 **Blocked by:** The Exhibition seat: the role, the blindness proof, and the door in · The
 splice: one Entrant's body, another's Manager State.
 
-- [ ] The replay starts at the Gameweek the real track opened at, from the same opening Manager State, and refuses to run where the track never started
-- [ ] Each Gameweek's donor is the stored context of the real Entrant with the lowest id for that Gameweek, and the spliced body is stored as the Exhibition model's own per-Entrant context row, hashed like every other
-- [ ] Purchase prices are read from the stored text as the pipeline reads them for real Entrants, and Selling Prices derive from the purchase prices in the Exhibition model's own carried state
-- [ ] Each action is validated with up to three Repairs and rolls over when still illegal, and the resulting Manager State is stored before the next Gameweek is attempted
-- [ ] Gameweeks are replayed strictly in order — the chain never skips, and a missing link stops the run rather than inventing a state to bridge it
-- [ ] The replay stops at the last Settled Gameweek, and re-running resumes from the stored chain rather than restarting
-- [ ] An end-to-end pass over several Gameweeks with a scripted model proves the slice: the Manager State chain carries bank and purchase prices correctly through a Transfer, a scripted illegal action consumes Repairs and rolls over, and a second run resumes instead of repeating
+- [x] The replay starts at the Gameweek the real track opened at, from the same opening Manager State, and refuses to run where the track never started
+- [x] Each Gameweek's donor is the stored context of the real Entrant with the lowest id for that Gameweek, and the spliced body is stored as the Exhibition model's own per-Entrant context row, hashed like every other
+- [x] Purchase prices are read from the stored text as the pipeline reads them for real Entrants, and Selling Prices derive from the purchase prices in the Exhibition model's own carried state
+- [x] Each action is validated with up to three Repairs and rolls over when still illegal, and the resulting Manager State is stored before the next Gameweek is attempted
+- [x] Gameweeks are replayed strictly in order — the chain never skips, and a missing link stops the run rather than inventing a state to bridge it
+- [x] The replay stops at the last Settled Gameweek, and re-running resumes from the stored chain rather than restarting
+- [x] An end-to-end pass over several Gameweeks with a scripted model proves the slice: the Manager State chain carries bank and purchase prices correctly through a Transfer, a scripted illegal action consumes Repairs and rolls over, and a second run resumes instead of repeating
 
 ## Exhibition on the scoreboard: scored, labelled, never statistical
 
