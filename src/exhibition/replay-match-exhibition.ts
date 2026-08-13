@@ -86,12 +86,20 @@ async function settledGameweeks(
  * Two things end this run's business with a Fixture, and both are read off the
  * ledger rather than remembered: a Prediction, which is the answer, and an
  * attempt that stopped the asking — one whose cause no Repair addresses, or
- * one that had already used the last Repair. What that leaves is the crash
- * window: a Fixture whose stored failure is repairable and whose Repairs are
- * not spent is still owed the asks it never got, so a re-run finishes it
- * rather than counting an interrupted conversation as a Gap. A recorded Gap is
- * never retried; within a Gameweek the run's own Repairs are the only retries,
- * as on the official track.
+ * one that had already used the last Repair. A Gap so reached is never retried;
+ * within a Gameweek the run's own Repairs are the only retries, as on the
+ * official track.
+ *
+ * What that leaves is the crash window: a Fixture whose stored failure is
+ * repairable and whose Repairs are not spent was never asked to the end, so it
+ * is asked again — from the top, as a new ask with its own three Repairs, as
+ * the official Fill asks a Fixture it finds unanswered. Not a
+ * continuation: the interrupted conversation's assistant turn and failure
+ * reason are in the ledger, but rebuilding a Repair chain out of them is a
+ * second way to ask, and one way to ask is worth more here than a refunded
+ * budget is. So three Repairs bound one ask and not a Season, a crash hands
+ * back three, and the ledger shows it as a second attempt sequence beside the
+ * first rather than as a longer one.
  */
 async function remainingFixtures(
   database: Database,

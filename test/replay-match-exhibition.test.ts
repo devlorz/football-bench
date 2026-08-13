@@ -19,6 +19,19 @@ function sha256(body: string): string {
   return createHash("sha256").update(body, "utf8").digest("hex");
 }
 
+/** The roster's stored context for one Fixture, hashed as the pipeline hashes. */
+async function storeContext(
+  database: pg.Client,
+  gameweek: number,
+  fixtureId: number
+): Promise<void> {
+  await database.query(
+    `insert into contexts (season, gw, track, fpl_id, hash, body)
+     values ('2026-27', $1, 'match', $2, $3, $4)`,
+    [gameweek, fixtureId, sha256(storedBody(fixtureId)), storedBody(fixtureId)]
+  );
+}
+
 function answeredPrediction(fixtureId: number): string {
   return JSON.stringify({
     choices: [{
@@ -96,12 +109,11 @@ describe("replaying the Match track as an Exhibition Run", () => {
          (
            '2026-27', 3, 2, 2, 'Chelsea', 'Brentford',
            '2026-08-29T14:00:00Z', null
-         );
-       insert into contexts (season, gw, track, fpl_id, hash, body) values
-         ('2026-27', 1, 'match', 1, ${quoted(sha256(storedBody(1)))}, ${quoted(storedBody(1))}),
-         ('2026-27', 1, 'match', 2, ${quoted(sha256(storedBody(2)))}, ${quoted(storedBody(2))}),
-         ('2026-27', 2, 'match', 3, ${quoted(sha256(storedBody(3)))}, ${quoted(storedBody(3))})`
+         )`
     );
+    await storeContext(client, 1, 1);
+    await storeContext(client, 1, 2);
+    await storeContext(client, 2, 3);
     await insertExhibition(client, {
       provider: "late-provider",
       quantization: "fp8"
@@ -133,7 +145,16 @@ describe("replaying the Match track as an Exhibition Run", () => {
     // says it saw — which is the whole of a sceptic's verification.
     expect(sent.get(1)).toBe(storedBody(1));
     expect(sent.get(2)).toBe(storedBody(2));
+    // Gameweek 2 has not settled, so its Fixture is unasked and unrecorded —
+    // the second half read from the tables rather than from the calls made.
     expect(sent.has(3)).toBe(false);
+    expect(
+      (await client.query(
+        `select
+           (select count(*) from predictions where fpl_id = 3) as predictions,
+           (select count(*) from attempts where fpl_id = 3) as attempts`
+      )).rows
+    ).toEqual([{ predictions: "0", attempts: "0" }]);
     const hashes = await client.query(
       `select c.fpl_id, c.hash
          from contexts c
@@ -416,11 +437,9 @@ describe("replaying the Match track as an Exhibition Run", () => {
          season, fpl_id, gw, home_team, away_team, kickoff_at, deferred
        ) values (
          '2026-27', 4, 1, 'Leeds', 'Burnley', '2026-08-22T16:30:00Z', true
-       );
-       insert into contexts (season, gw, track, fpl_id, hash, body) values
-         ('2026-27', 1, 'match', 4, ${quoted(sha256(storedBody(4)))},
-          ${quoted(storedBody(4))})`
+       )`
     );
+    await storeContext(client, 1, 4);
     const called: number[] = [];
 
     const gameweeks = await replayMatchExhibition({
@@ -448,7 +467,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
     expect(unplayed.rows).toEqual([{ locked_in_gw: null, attempts: "0" }]);
   });
 
-  test("resumes a Fixture whose Repairs a crash left unspent", async () => {
+  test("asks again where a crash left an ask unfinished", async () => {
     await client.query(
       `insert into attempts (
          model_id, season, gw, track, fpl_id, attempt_no, ok, error_kind,
@@ -480,14 +499,30 @@ describe("replaying the Match track as an Exhibition Run", () => {
     });
 
     // Fixture 1's stored failure is one a Repair addresses and it had Repairs
-    // left, so the run still owes it an ask. Fixture 2's provider failure is
-    // where the run stopped asking: a recorded Gap, never retried.
+    // left, so the ask never finished and the run asks again. Fixture 2's
+    // provider failure is where the asking stopped: a recorded Gap, never
+    // retried.
     expect(called).toEqual([1]);
     expect(
       (await client.query(
         `select fpl_id from predictions where model_id = 'exhibition/late'`
       )).rows
     ).toEqual([{ fpl_id: 1 }]);
+    // A new ask from the top, with its own Repairs — not a fourth turn of the
+    // conversation the crash interrupted, whose assistant turn and failure
+    // reason no longer exist anywhere the run can reach. The ledger says so
+    // rather than hiding it: a second attempt numbered 0 beside the first.
+    expect(
+      (await client.query(
+        `select attempt_no, ok, error_kind
+           from attempts
+          where model_id = 'exhibition/late' and fpl_id = 1
+          order by id`
+      )).rows
+    ).toEqual([
+      { attempt_no: 0, ok: false, error_kind: "schema" },
+      { attempt_no: 0, ok: true, error_kind: null }
+    ]);
   });
 
   test("leaves a Fixture alone once its Repairs are spent", async () => {
@@ -580,8 +615,3 @@ describe("replaying the Match track as an Exhibition Run", () => {
     );
   });
 });
-
-/** A Postgres string literal, for bodies whose bytes the test asserts on. */
-function quoted(body: string): string {
-  return `'${body.replace(/'/g, "''")}'`;
-}

@@ -206,8 +206,11 @@ Prediction; the FPL side continues from the last stored Manager State. Neither r
 recorded Gap — within a Gameweek the run's own Repairs are the only retries, as on the
 official tracks. What a recorded Gap is, the Match side reads off the ledger rather than
 assuming: an attempt whose cause no Repair addresses, or one that spent the last Repair. A
-Fixture a crash left mid-Repair is owed the asks it never got, so the next run finishes it
-instead of counting it as a Gap it never earned.
+Fixture a crash left mid-Repair is neither, so the next run asks it again from the top —
+a new ask with its own three Repairs, as the Fill re-asks any Fixture it finds unanswered,
+rather than a continuation rebuilt out of the interrupted conversation. Three Repairs
+therefore bound one ask and not a Season, and the ledger shows a crash as a second attempt
+sequence beside the first.
 
 ### The splice (phase 2)
 
