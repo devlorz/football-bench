@@ -3,7 +3,6 @@ import { beforeAll, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
 import { workerDriver } from "./worker-driver.js";
 import { seedSeason, type SeedStop } from "../src/seed-season.js";
-import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
 import {
   handleDashboardRequest, type FixturesBody, type FixtureView, type Query
 } from "../src/dashboard/read-api.js";
@@ -71,26 +70,11 @@ async function seed(
   await reader.query("set role dashboard_read");
 }
 
-/**
- * An FPL seat, carrying the same `entrant` role as the nine and told apart only
- * by its Prompt Version. Without one in the database the roster assertions
- * below pass on a query that never filtered anything.
- */
-async function enterFplSeat(writer: pg.Client): Promise<void> {
-  await writer.query(
-    `insert into models (id, name, base_model, provider, prompt_version, role)
-     values ('fpl-claude/v1', 'Claude', 'anthropic/claude-opus-4.5',
-             'anthropic', $1, 'entrant')`,
-    [FPL_PROMPT_VERSION]
-  );
-}
-
 describe("the Fixtures endpoint on the design's Season", () => {
   const { writer, reader, query, fixtures } = connections();
 
   beforeAll(async () => {
     await seed(writer, reader, "the design's");
-    await enterFplSeat(writer);
     return async () => {
       await writer.end();
       await reader.end();
@@ -132,13 +116,13 @@ describe("the Fixtures endpoint on the design's Season", () => {
 
   test("carries the same nine Entrants in the same order on every Fixture",
     async () => {
-      // The precondition the assertion below would otherwise assume: an FPL
-      // seat is in `models` carrying the same `entrant` role, so nine is the
-      // roster filter's answer and not the whole table's.
+      // The precondition the assertion below would otherwise assume: the seed
+      // enters an FPL seat beside every Match one, carrying the same `entrant`
+      // role, so nine is the roster filter's answer and not the whole table's.
       const seats = await writer.query(
         "select 1 from models where role = 'entrant'"
       );
-      expect(seats.rowCount).toBe(ROSTER.length + 1);
+      expect(seats.rowCount).toBe(ROSTER.length * 2);
 
       const body = await fixtures();
 

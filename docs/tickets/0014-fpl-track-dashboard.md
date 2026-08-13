@@ -27,14 +27,14 @@ runs against a deployed database.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] One command against an empty database produces nine Entrants with Manager States and
+- [x] One command against an empty database produces nine Entrants with Manager States and
       Team Sheets across at least three Settled Gameweeks
-- [ ] Every FPL `scores` row comes from running the real scorer; the seed writes none itself
-- [ ] The seed contains at least one Transfer taken as a Hit, one banked Free Transfer, one
+- [x] Every FPL `scores` row comes from running the real scorer; the seed writes none itself
+- [x] The seed contains at least one Transfer taken as a Hit, one banked Free Transfer, one
       played Chip, one Roll Over, one Repair spent, and one Gap
-- [ ] At least one player's price has risen and one has fallen since purchase, so Selling
+- [x] At least one player's price has risen and one has fallen since purchase, so Selling
       Price is exercised in both directions
-- [ ] A pre-Season stopping point exists, so the empty state the pages must render is
+- [x] A pre-Season stopping point exists, so the empty state the pages must render is
       producible from the same command
 
 ## The FPL leaderboard endpoint

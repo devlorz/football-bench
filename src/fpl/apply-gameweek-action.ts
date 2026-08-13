@@ -164,8 +164,12 @@ export interface Violation {
  * what an Entrant is shown, so their wording cannot drift while the task is
  * being measured. Several messages may share a kind — the kind drives the
  * violation profile, the message tells the Entrant what to correct.
+ *
+ * Exported so that anything writing a refusal quotes one of these rather than
+ * wording its own. `ENFORCED_VIOLATIONS` below is the same values without
+ * their names, which is what a caller wanting a particular refusal needs.
  */
-const VIOLATIONS = {
+export const VIOLATIONS = {
   budget: {
     kind: "budget",
     message: "A Squad must cost no more than £100.0m."
