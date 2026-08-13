@@ -42,11 +42,18 @@ interface ReplayedFixture {
  *
  * Settled is read off the record rather than off the clock (CONTEXT.md), and on
  * the Match track the record is `fixtures.result` — the same thing scoring
- * reads. A deferred Fixture is excluded because it will never gain a result, so
- * a Gameweek left holding one would otherwise stay unreplayable for the rest of
- * the Season. The run resolves this itself rather than taking a range: an
- * operator naming Gameweeks would be a second opinion about which of them are
- * Settled.
+ * reads.
+ *
+ * A Fixture that has left the Gameweek it was locked into does not hold that
+ * Gameweek open: `deferred` marks exactly that, monotonically, and it is set on
+ * every Locked Fixture the feed withdraws (ADR-0024). Waiting for one to come
+ * back would leave its Gameweek unreplayable for the rest of the Season, and
+ * nothing is lost by not waiting — coverage is decided per Fixture and
+ * resolved again on every run, so a withdrawal that is rescheduled and played
+ * is picked up by the next one.
+ *
+ * The run resolves this itself rather than taking a range: an operator naming
+ * Gameweeks would be a second opinion about which of them are Settled.
  */
 async function settledGameweeks(
   database: Database,
@@ -79,9 +86,15 @@ async function settledGameweeks(
  * Only a Fixture that was played, and whose Lock belongs to this Gameweek. The
  * Lock is read rather than assigned: `attemptMatchCalls` would fill an absent
  * one in, and a replay months later must not be the run that decides which
- * Gameweek a Fixture was locked into (ADR-0013). A Fixture with no result was
- * withdrawn from the calendar and will never gain one, so there is nothing to
- * replay it against.
+ * Gameweek a Fixture was locked into (ADR-0013).
+ *
+ * A result is what makes a Fixture replayable, and `deferred` is not consulted
+ * here on purpose. It records that the Fixture left the Gameweek it was locked
+ * into, never that it went unplayed (ADR-0024): a withdrawal FPL rescheduled
+ * is played, scored, and answered by the roster under the same Lock, so
+ * skipping it would leave the Exhibition short of a Fixture everyone else has.
+ * What a missing result means is only "not played yet", and the next run
+ * covers it.
  *
  * Two things end this run's business with a Fixture, and both are read off the
  * ledger rather than remembered: a Prediction, which is the answer, and an
@@ -93,9 +106,9 @@ async function settledGameweeks(
  * What that leaves is the crash window: a Fixture whose stored failure is
  * repairable and whose Repairs are not spent was never asked to the end, so it
  * is asked again — from the top, as a new ask with its own three Repairs, as
- * the official Fill asks a Fixture it finds unanswered. Not a
- * continuation: the interrupted conversation's assistant turn and failure
- * reason are in the ledger, but rebuilding a Repair chain out of them is a
+ * the official Fill asks a Fixture it finds unanswered. Not a continuation:
+ * the interrupted conversation's assistant turn and failure reason are in the
+ * ledger, but rebuilding a Repair chain out of them is a
  * second way to ask, and one way to ask is worth more here than a refunded
  * budget is. So three Repairs bound one ask and not a Season, a crash hands
  * back three, and the ledger shows it as a second attempt sequence beside the

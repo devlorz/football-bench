@@ -427,19 +427,34 @@ describe("replaying the Match track as an Exhibition Run", () => {
     ).toEqual(ledger.rows);
   });
 
-  test("passes over a Fixture that was never played", async () => {
-    // Withdrawn from the calendar after the roster was shown it, so it holds a
-    // stored context and will never gain a result. Unlocked, too: a replay that
-    // called it would also be the run that assigned its canonical Lock, months
-    // after the Gameweek it names.
+  test("passes over a Fixture never played, not one that merely moved", async () => {
+    // Fixture 4 is off the calendar and holds no result: withdrawn after the
+    // roster was shown it, so it has a stored context and nothing to be replayed
+    // against. Unlocked, too — a replay that called it would also be the run
+    // that assigned its canonical Lock, months after the Gameweek it names.
+    //
+    // Fixture 5 is the same withdrawal after FPL named a new date: `deferred`
+    // stays set because it records history (ADR-0024), but it was played, it is
+    // scored, and the roster answered it under this Gameweek's Lock. Skipping it
+    // would leave the Exhibition short of a Fixture everyone else has.
     await client.query(
       `insert into fixtures (
-         season, fpl_id, gw, home_team, away_team, kickoff_at, deferred
-       ) values (
-         '2026-27', 4, 1, 'Leeds', 'Burnley', '2026-08-22T16:30:00Z', true
-       )`
+         season, fpl_id, gw, locked_in_gw, home_team, away_team, kickoff_at,
+         deferred, unscheduled, result
+       ) values
+         (
+           '2026-27', 4, 1, null, 'Leeds', 'Burnley',
+           '2026-08-22T16:30:00Z', true, true, null
+         ),
+         (
+           '2026-27', 5, 2, 1, 'Wolves', 'Sunderland',
+           '2026-08-29T18:45:00Z', true, false,
+           jsonb_build_object('home_goals', 1, 'away_goals', 3,
+                              'outcome', 'A')
+         )`
     );
     await storeContext(client, 1, 4);
+    await storeContext(client, 1, 5);
     const called: number[] = [];
 
     const gameweeks = await replayMatchExhibition({
@@ -457,7 +472,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
     });
 
     expect(gameweeks).toEqual([1]);
-    expect(called.sort()).toEqual([1, 2]);
+    expect(called.sort()).toEqual([1, 2, 5]);
     const unplayed = await client.query(
       `select f.locked_in_gw,
               (select count(*) from attempts a where a.fpl_id = 4) as attempts

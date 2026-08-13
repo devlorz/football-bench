@@ -188,13 +188,19 @@ track argument, replaying from the recorded starting Gameweek of the real track.
 
 Settled is read off the record, never off the clock (CONTEXT.md), and on the Match track the
 record is `fixtures.result` — the same thing scoring reads. A Gameweek is covered when it
-holds stored Match contexts and every non-deferred Fixture locked into it has a result; a
-deferred Fixture is passed over because it will never gain one, and a Gameweek left holding
-it would otherwise stay unreplayable for the rest of the Season. The FPL track reads its own
+holds stored Match contexts and every Fixture locked into it either has a result or has left
+that Gameweek. `deferred` marks having left it, monotonically, and is set on every Locked
+Fixture the feed withdraws (ADR-0024); waiting for one to come back would leave its Gameweek
+unreplayable for the rest of the Season, and nothing is lost by not waiting, because coverage
+is decided per Fixture and resolved again on every run. The FPL track reads its own
 Settled-ness from stored per-player points, as its context builder already does.
 
 Within a covered Gameweek the replay calls only Fixtures that were played and whose Lock
-already belongs to that Gameweek. The Lock is read, never assigned: the shared call path fills
+already belongs to that Gameweek. A result is the whole of "was played": `deferred` says the
+Fixture left the Gameweek it was locked into, never that it went unplayed, so a withdrawal
+FPL rescheduled — played, scored, answered by the roster under the same Lock — is replayed
+like any other, and skipping it would leave the Exhibition short of a Fixture everyone else
+has. The Lock is read, never assigned: the shared call path fills
 an absent one in, and a run months after the fact must not be what decides which Gameweek a
 Fixture was locked into (ADR-0013).
 
