@@ -15,9 +15,7 @@ import {
 } from "../src/fpl/validate-gameweek-action.js";
 import { DEFAULT_HTTP_TIMEOUT_MS, type HttpFetcher } from "../src/http.js";
 import {
-  FPL_POOL,
-  FPL_POOL_ALTERNATES,
-  type FixturePlayer
+  FPL_POOL, FPL_POOL_ALTERNATES, lockPool
 } from "./fpl-pool-fixture.js";
 import {
   OPENING_ACTION,
@@ -224,8 +222,8 @@ describe("opening the FPL track for a Gameweek", () => {
          'fpl/2026-27-v1', 'entrant'
        )`
     );
-    await lockPool(1, FPL_POOL);
-    await lockPool(2, FPL_POOL);
+    await lockPool(client, 1, FPL_POOL);
+    await lockPool(client, 2, FPL_POOL);
   });
 
   /**
@@ -258,30 +256,6 @@ describe("opening the FPL track for a Gameweek", () => {
   }
 
   /** The Gameweek's pool as its Lock found it, at unmoved opening prices. */
-  async function lockPool(
-    gameweek: number,
-    players: readonly FixturePlayer[]
-  ): Promise<void> {
-    for (const player of players) {
-      await client.query(
-        `insert into fpl_players (
-           season, gw, fpl_id, team_name, web_name, position, price_tenths,
-           status, chance_of_playing_next_round, news, news_added, observed_at
-         ) values (
-           '2026-27', $1, $2, $3, $4, $5, $6, 'a', null, '', null,
-           '2026-08-21T17:00:00Z'
-         )`,
-        [
-          gameweek,
-          player.fplId,
-          player.club,
-          player.webName,
-          player.position,
-          player.priceTenths
-        ]
-      );
-    }
-  }
 
   /**
    * One Entrant's Gameweek, answered by the scripted responses in order, and
@@ -489,7 +463,7 @@ describe("opening the FPL track for a Gameweek", () => {
     // Freezing the sentences is only half of that — this is the other half,
     // that the loop quotes them rather than composing its own.
     await seedStandingManagerState();
-    await lockPool(2, FPL_POOL_ALTERNATES);
+    await lockPool(client, 2, FPL_POOL_ALTERNATES);
     const conversations = await play({
       responses: [
         "not JSON at all",
@@ -658,7 +632,7 @@ describe("opening the FPL track for a Gameweek", () => {
   test("Rolls the Gameweek over when the third Repair is still illegal", async () => {
     // Fernandez is in the second Gameweek's pool, which is what lets the
     // rejected action be a real Squad change rather than a malformed one.
-    await lockPool(2, FPL_POOL_ALTERNATES);
+    await lockPool(client, 2, FPL_POOL_ALTERNATES);
     await seedStandingManagerState();
     // Four responses, all the same illegal action: the initial one and three
     // Repairs. Nothing after the fourth is scripted, so a fifth call fails the
@@ -813,7 +787,7 @@ describe("opening the FPL track for a Gameweek", () => {
             )
           ]
         );
-        await lockPool(gameweek, FPL_POOL);
+        await lockPool(client, gameweek, FPL_POOL);
       }
       // The default clock is comfortably before every deadline above.
       await seedStandingManagerState();
@@ -860,7 +834,7 @@ describe("opening the FPL track for a Gameweek", () => {
       );
     }
     for (const gameweek of [18, 19, 21]) {
-      await lockPool(gameweek, FPL_POOL);
+      await lockPool(client, gameweek, FPL_POOL);
     }
     // The track joins at Gameweek 18 and the first half's Free Hit is played
     // in Gameweek 19, the last Gameweek that half's set is reachable in.
@@ -930,8 +904,8 @@ describe("opening the FPL track for a Gameweek", () => {
       `insert into gameweeks (season, gw, deadline_at)
        values ('2026-27', 3, '2026-09-04T17:30:00Z')`
     );
-    await lockPool(2, FPL_POOL_ALTERNATES);
-    await lockPool(3, [...FPL_POOL, ...FPL_POOL_ALTERNATES]);
+    await lockPool(client, 2, FPL_POOL_ALTERNATES);
+    await lockPool(client, 3, [...FPL_POOL, ...FPL_POOL_ALTERNATES]);
 
     await seedStandingManagerState();
     await play({ responses: [FREE_HIT_REBUILD] });
@@ -979,8 +953,7 @@ describe("opening the FPL track for a Gameweek", () => {
        )`
     );
     await lockPool(
-      2,
-      FPL_POOL_ALTERNATES.filter(({ fplId }) => fplId === 19)
+      client, 2, FPL_POOL_ALTERNATES.filter(({ fplId }) => fplId === 19)
     );
     await seedStandingManagerState();
     await storeManagerState(client, {
@@ -1060,8 +1033,7 @@ describe("opening the FPL track for a Gameweek", () => {
     // a player in a Squad is a player the Gameweek prices, and a pool without
     // him would refuse that Squad rather than the action being tested.
     await lockPool(
-      2,
-      FPL_POOL_ALTERNATES.filter(({ fplId }) => fplId === 19)
+      client, 2, FPL_POOL_ALTERNATES.filter(({ fplId }) => fplId === 19)
     );
     await seedStandingManagerState();
     // The second Entrant stands one Transfer from the first: Wilson sold and
@@ -1386,7 +1358,7 @@ describe("opening the FPL track for a Gameweek", () => {
     // window that announced its own truncation would be inventing a fact about
     // the season that the schedule already states by stopping.
     await seedSchedule();
-    await lockPool(7, FPL_POOL);
+    await lockPool(client, 7, FPL_POOL);
     await seedStandingManagerState(6);
     await play({
       gameweek: 7,
@@ -1455,7 +1427,7 @@ describe("opening the FPL track for a Gameweek", () => {
               timestamptz '2026-08-28T17:30:00Z' + (gw * interval '7 days')
          from generate_series(3, 8) as gw`
     );
-    await lockPool(8, FPL_POOL);
+    await lockPool(client, 8, FPL_POOL);
     for (const gameweek of PALMER_GAMEWEEKS) {
       await storePlayerPoints(client, { fplId: 8, ...gameweek });
     }
@@ -1582,7 +1554,7 @@ describe("opening the FPL track for a Gameweek", () => {
     await seedSettledSeason();
     // Evanilson joins Gameweek 8's pool because the Transfer buys him, and a
     // player the pool does not carry cannot be bought at any price.
-    await lockPool(8, FPL_POOL_ALTERNATES.filter(({ fplId }) => fplId === 19));
+    await lockPool(client, 8, FPL_POOL_ALTERNATES.filter(({ fplId }) => fplId === 19));
     await seedStandingManagerState(7);
 
     await play({
@@ -1605,7 +1577,7 @@ describe("opening the FPL track for a Gameweek", () => {
 
   test("prices a Transfer from a body carrying the pool's flags", async () => {
     // Evanilson joins the Gameweek's pool because the Transfer buys him.
-    await lockPool(2, FPL_POOL_ALTERNATES.filter(({ fplId }) => fplId === 19));
+    await lockPool(client, 2, FPL_POOL_ALTERNATES.filter(({ fplId }) => fplId === 19));
     // The two shapes FPL's feed sends: a percentage against Palmer, and a flag
     // on Wilson with none. Everyone else is left as the fetch locked them —
     // status 'a', no percentage, empty news.

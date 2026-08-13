@@ -1,9 +1,49 @@
+import type { Client } from "pg";
 import type { FplTrackPlayer } from "../src/context/build-fpl-track-context.js";
 import type { PoolPlayer } from "../src/fpl/apply-gameweek-action.js";
 import type { PlayerPosition } from "../src/fpl/score-team-sheet.js";
 
+type Database = Pick<Client, "query">;
+
 export interface FixturePlayer extends PoolPlayer {
   webName: string;
+}
+
+/**
+ * The pool as a Gameweek's Lock left it in the database: one `fpl_players` row
+ * per player, available and unflagged, which is what the fetch writes for most
+ * of a pool most weeks.
+ *
+ * Here rather than in each suite because four of them wrote it out identically
+ * — the run, the opening, the track start and the Exhibition replay — and a
+ * pool that meant one thing in one file and something else in another would
+ * let a real change pass in whichever file was not updated. It is the stored
+ * counterpart of `trackPool` above.
+ */
+export async function lockPool(
+  database: Database,
+  gameweek: number,
+  players: readonly FixturePlayer[]
+): Promise<void> {
+  for (const player of players) {
+    await database.query(
+      `insert into fpl_players (
+         season, gw, fpl_id, team_name, web_name, position, price_tenths,
+         status, chance_of_playing_next_round, news, news_added, observed_at
+       ) values (
+         '2026-27', $1, $2, $3, $4, $5, $6, 'a', null, '', null,
+         '2026-08-21T17:00:00Z'
+       )`,
+      [
+        gameweek,
+        player.fplId,
+        player.club,
+        player.webName,
+        player.position,
+        player.priceTenths
+      ]
+    );
+  }
 }
 
 /**

@@ -13,10 +13,9 @@ import { DEFAULT_HTTP_TIMEOUT_MS, type HttpFetcher } from "../src/http.js";
 import { MATCH_PROMPT_VERSION } from "../src/predictions/openrouter-entrant.js";
 import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
 import {
-  FPL_POOL,
-  FPL_POOL_ALTERNATES,
-  type FixturePlayer
+  FPL_POOL, FPL_POOL_ALTERNATES, lockPool
 } from "./fpl-pool-fixture.js";
+import { seatId } from "./fpl-seat-fixture.js";
 import { EVERYONE_PLAYED, storeSettledPoints } from "./fpl-points-fixture.js";
 import { insertExhibition, resetSchema } from "./schema-fixture.js";
 import { firstMessageText, type CapturedTurn as Turn } from "./sent-context.js";
@@ -35,9 +34,6 @@ const BASE_MODELS = Array.from(
   (_unused, index) => `vendor/base-${index + 1}`
 );
 
-function seatId(baseModel: string): string {
-  return `fpl/${baseModel.split("/")[1]}`;
-}
 
 const OPENING_SHEET = {
   starters: [1, 3, 4, 5, 6, 8, 9, 10, 11, 13, 14],
@@ -199,7 +195,7 @@ describe("replaying the FPL track as an Exhibition Run", () => {
       promptVersion: FPL_PROMPT_VERSION
     });
     for (const gameweek of [1, 2, 3]) {
-      await lockPool(gameweek, [...FPL_POOL, ...FPL_POOL_ALTERNATES]);
+      await lockPool(client, gameweek, [...FPL_POOL, ...FPL_POOL_ALTERNATES]);
     }
     // Evanilson is £6.0m when he is bought at Gameweek 2 and £8.0m when he is
     // sold at Gameweek 3, so a sale has a rise to halve.
@@ -208,30 +204,6 @@ describe("replaying the FPL track as an Exhibition Run", () => {
     );
   });
 
-  async function lockPool(
-    gameweek: number,
-    players: readonly FixturePlayer[]
-  ): Promise<void> {
-    for (const player of players) {
-      await client.query(
-        `insert into fpl_players (
-           season, gw, fpl_id, team_name, web_name, position, price_tenths,
-           status, chance_of_playing_next_round, news, news_added, observed_at
-         ) values (
-           '2026-27', $1, $2, $3, $4, $5, $6, 'a', null, '', null,
-           '2026-08-21T17:00:00Z'
-         )`,
-        [
-          gameweek,
-          player.fplId,
-          player.club,
-          player.webName,
-          player.position,
-          player.priceTenths
-        ]
-      );
-    }
-  }
 
   /**
    * The real track: nine seats opened at Gameweek 1 and carried through 2 and

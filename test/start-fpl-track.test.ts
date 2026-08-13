@@ -10,7 +10,8 @@ import {
 import { GAMEWEEK_RULES } from "../src/fpl/apply-gameweek-action.js";
 import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
 import { DEFAULT_HTTP_TIMEOUT_MS, type HttpFetcher } from "../src/http.js";
-import { FPL_POOL, type FixturePlayer } from "./fpl-pool-fixture.js";
+import { FPL_POOL, lockPool } from "./fpl-pool-fixture.js";
+import { seatId } from "./fpl-seat-fixture.js";
 import { storePlayerPoints } from "./fpl-points-fixture.js";
 import { STORED_OPENING_STATE } from "./fpl-state-fixture.js";
 import {
@@ -26,9 +27,6 @@ const BASE_MODELS = Array.from(
   (_unused, index) => `vendor/base-${index + 1}`
 );
 
-function seatId(baseModel: string): string {
-  return `fpl/${baseModel.split("/")[1]}`;
-}
 
 const LEGAL_ACTION = JSON.stringify({
   transfers_in: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
@@ -174,35 +172,11 @@ describe("starting the FPL track for all nine Entrants", () => {
         [seatId(baseModel), baseModel, baseModel, FPL_PROMPT_VERSION]
       );
     }
-    await lockPool(1, FPL_POOL);
-    await lockPool(2, FPL_POOL);
+    await lockPool(client, 1, FPL_POOL);
+    await lockPool(client, 2, FPL_POOL);
   });
 
   /** The Gameweek's pool as its Lock found it, at unmoved opening prices. */
-  async function lockPool(
-    gameweek: number,
-    players: readonly FixturePlayer[]
-  ): Promise<void> {
-    for (const player of players) {
-      await client.query(
-        `insert into fpl_players (
-           season, gw, fpl_id, team_name, web_name, position, price_tenths,
-           status, chance_of_playing_next_round, news, news_added, observed_at
-         ) values (
-           '2026-27', $1, $2, $3, $4, $5, $6, 'a', null, '', null,
-           '2026-08-21T17:00:00Z'
-         )`,
-        [
-          gameweek,
-          player.fplId,
-          player.club,
-          player.webName,
-          player.position,
-          player.priceTenths
-        ]
-      );
-    }
-  }
 
   /**
    * One attempt at opening the track, answered by the scripted responses in

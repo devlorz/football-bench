@@ -6,7 +6,8 @@ import { startFplTrack } from "../src/fpl/start-fpl-track.js";
 import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
 import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
 import { DEFAULT_HTTP_TIMEOUT_MS, type HttpFetcher } from "../src/http.js";
-import { FPL_POOL, type FixturePlayer } from "./fpl-pool-fixture.js";
+import { FPL_POOL, lockPool } from "./fpl-pool-fixture.js";
+import { seatId } from "./fpl-seat-fixture.js";
 import {
   EVERYONE_PLAYED,
   storeSettledPoints
@@ -25,9 +26,6 @@ const BASE_MODELS = Array.from(
   (_unused, index) => `vendor/base-${index + 1}`
 );
 
-function seatId(baseModel: string): string {
-  return `fpl/${baseModel.split("/")[1]}`;
-}
 
 /** The legal opening Squad: £95.5m spent, £4.5m left in the bank. */
 const OPENING = JSON.stringify({
@@ -149,35 +147,11 @@ describe("running a Gameweek for the whole FPL roster", () => {
       );
     }
     for (const gameweek of [1, 2, 3]) {
-      await lockPool(gameweek, FPL_POOL);
+      await lockPool(client, gameweek, FPL_POOL);
     }
   });
 
   /** The Gameweek's pool as its Lock found it, at unmoved opening prices. */
-  async function lockPool(
-    gameweek: number,
-    players: readonly FixturePlayer[]
-  ): Promise<void> {
-    for (const player of players) {
-      await client.query(
-        `insert into fpl_players (
-           season, gw, fpl_id, team_name, web_name, position, price_tenths,
-           status, chance_of_playing_next_round, news, news_added, observed_at
-         ) values (
-           '2026-27', $1, $2, $3, $4, $5, $6, 'a', null, '', null,
-           '2026-08-21T17:00:00Z'
-         )`,
-        [
-          gameweek,
-          player.fplId,
-          player.club,
-          player.webName,
-          player.position,
-          player.priceTenths
-        ]
-      );
-    }
-  }
 
   /**
    * Opens the track for all nine at Gameweek 1, which is the only way a
