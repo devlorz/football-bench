@@ -16,6 +16,7 @@ import {
   type MatchPromptFixture
 } from "./openrouter-entrant.js";
 import type { AttemptTrigger } from "./prediction-trigger.js";
+import type { ModelRole } from "../season-roster.js";
 import {
   readGapAlert,
   type GapAlert
@@ -49,7 +50,7 @@ interface WorkItemRow extends FixtureRow {
   base_model: string;
   provider: string;
   quantization: string | null;
-  role: string;
+  role: ModelRole;
 }
 
 function sha256(value: string): string {

@@ -13,6 +13,7 @@ import {
   type PredictionValidation
 } from "./validate-prediction.js";
 import type { AttemptTrigger } from "./prediction-trigger.js";
+import type { ModelRole } from "../season-roster.js";
 
 type Database = Pick<Client, "query">;
 
@@ -32,7 +33,7 @@ export interface MatchCall {
   base_model: string;
   provider: string;
   quantization: string | null;
-  role: string;
+  role: ModelRole;
   fpl_id: number;
   context: StoredContext;
 }

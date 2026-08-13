@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
-import { resetSchema } from "./schema-fixture.js";
+import { insertExhibition, resetSchema } from "./schema-fixture.js";
 import type { HttpRequest } from "../src/http.js";
 import { preflightBaseModels } from "../src/preflight/preflight-base-models.js";
 import {
@@ -642,14 +642,10 @@ describe("pre-flight for the Base Model roster", () => {
   test("checks one Exhibition on its own, at the frozen Prompt Version", async () => {
     // A late-arriving Base Model joins as data — one row — and the check that
     // it will answer at all is the same check the roster passed, aimed at it.
-    await client.query(
-      `insert into models (
-         id, name, base_model, provider, quantization, prompt_version, role
-       ) values (
-         'exhibition/late', 'Late Arrival', 'vendor/late', 'late-provider',
-         'fp8', 'match/2026-27-v2', 'exhibition'
-       )`
-    );
+    await insertExhibition(client, {
+      provider: "late-provider",
+      quantization: "fp8"
+    });
     const requests: HttpRequest[] = [];
 
     const report = await preflightBaseModels({
@@ -748,14 +744,10 @@ describe("pre-flight for the Base Model roster", () => {
     // else can be configured (ADR-0001). A row saying it is at some other
     // Prompt Version would be pre-flighted at the frozen one anyway, leaving
     // the row's stated identity and the thing actually tested disagreeing.
-    await client.query(
-      `insert into models (
-         id, name, base_model, provider, prompt_version, role
-       ) values (
-         'exhibition/fpl', 'Late Arrival', 'vendor/late', 'vendor',
-         'fpl/2026-27-v2', 'exhibition'
-       )`
-    );
+    await insertExhibition(client, {
+      id: "exhibition/fpl",
+      promptVersion: "fpl/2026-27-v2"
+    });
     let calls = 0;
 
     await expect(preflightBaseModels({
@@ -811,14 +803,7 @@ describe("pre-flight for the Base Model roster", () => {
     // An Exhibition carries this track's frozen Prompt Version, so the count
     // check would read ten seats and refuse a correctly configured pre-flight
     // if the role were not what selects the roster.
-    await client.query(
-      `insert into models (
-         id, name, base_model, provider, prompt_version, role
-       ) values (
-         'exhibition/late', 'Late Arrival', 'vendor/late', 'vendor',
-         'match/2026-27-v2', 'exhibition'
-       )`
-    );
+    await insertExhibition(client);
     const called: string[] = [];
 
     const report = await preflightBaseModels({

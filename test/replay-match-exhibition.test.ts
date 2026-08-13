@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
-import { resetSchema } from "./schema-fixture.js";
+import { insertExhibition, resetSchema } from "./schema-fixture.js";
 import { replayMatchExhibition } from "../src/exhibition/replay-match-exhibition.js";
 import { firstMessageText, type CapturedTurn } from "./sent-context.js";
 
@@ -14,13 +14,9 @@ function storedBody(fixtureId: number): string {
   return `Fixture ID: ${fixtureId}\nWhat the roster was shown, verbatim.\n`;
 }
 
+/** The hash the roster's stored row carries, and a sceptic recomputes. */
 function sha256(body: string): string {
   return createHash("sha256").update(body, "utf8").digest("hex");
-}
-
-/** The hash the roster's stored row carries, and a sceptic recomputes. */
-function bodyHash(fixtureId: number): string {
-  return sha256(storedBody(fixtureId));
 }
 
 function answeredPrediction(fixtureId: number): string {
@@ -102,16 +98,14 @@ describe("replaying the Match track as an Exhibition Run", () => {
            '2026-08-29T14:00:00Z', null
          );
        insert into contexts (season, gw, track, fpl_id, hash, body) values
-         ('2026-27', 1, 'match', 1, ${quoted(bodyHash(1))}, ${quoted(storedBody(1))}),
-         ('2026-27', 1, 'match', 2, ${quoted(bodyHash(2))}, ${quoted(storedBody(2))}),
-         ('2026-27', 2, 'match', 3, ${quoted(bodyHash(3))}, ${quoted(storedBody(3))});
-       insert into models (
-         id, name, base_model, provider, quantization, prompt_version, role
-       ) values (
-         'exhibition/late', 'Late Arrival', 'vendor/late', 'late-provider',
-         'fp8', 'match/2026-27-v2', 'exhibition'
-       )`
+         ('2026-27', 1, 'match', 1, ${quoted(sha256(storedBody(1)))}, ${quoted(storedBody(1))}),
+         ('2026-27', 1, 'match', 2, ${quoted(sha256(storedBody(2)))}, ${quoted(storedBody(2))}),
+         ('2026-27', 2, 'match', 3, ${quoted(sha256(storedBody(3)))}, ${quoted(storedBody(3))})`
     );
+    await insertExhibition(client, {
+      provider: "late-provider",
+      quantization: "fp8"
+    });
   });
 
   test("covers every contexted Fixture of a Settled Gameweek and no other", async () => {
@@ -211,14 +205,10 @@ describe("replaying the Match track as an Exhibition Run", () => {
   });
 
   test("refuses a row that is not at the Season's frozen Prompt Version", async () => {
-    await client.query(
-      `insert into models (
-         id, name, base_model, provider, prompt_version, role
-       ) values (
-         'exhibition/fpl', 'Late Arrival', 'vendor/late', 'late-provider',
-         'fpl/2026-27-v2', 'exhibition'
-       )`
-    );
+    await insertExhibition(client, {
+      id: "exhibition/fpl",
+      promptVersion: "fpl/2026-27-v2"
+    });
 
     await expect(replayMatchExhibition({
       database: client,
@@ -393,7 +383,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
          '2026-27', 4, 1, 'Leeds', 'Burnley', '2026-08-22T16:30:00Z', true
        );
        insert into contexts (season, gw, track, fpl_id, hash, body) values
-         ('2026-27', 1, 'match', 4, ${quoted(bodyHash(4))},
+         ('2026-27', 1, 'match', 4, ${quoted(sha256(storedBody(4)))},
           ${quoted(storedBody(4))})`
     );
     const called: number[] = [];

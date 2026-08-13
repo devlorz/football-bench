@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
-import { resetSchema } from "./schema-fixture.js";
+import { insertExhibition, resetSchema } from "./schema-fixture.js";
 import { startFplTrack } from "../src/fpl/start-fpl-track.js";
 import {
   FPL_PROMPT_VERSION,
@@ -454,11 +454,14 @@ describe("starting the FPL track for all nine Entrants", () => {
        ) values
          ('reference/home', 'Home prior', 'none', 'none', $1, 'reference'),
          ('match/base-1', 'Match seat', 'vendor/base-1', 'vendor',
-          'match/2026-27-v2', 'entrant'),
-         ('exhibition/base-1', 'Late Arrival', 'vendor/base-1', 'vendor',
-          $1, 'exhibition')`,
+          'match/2026-27-v2', 'entrant')`,
       [FPL_PROMPT_VERSION]
     );
+    await insertExhibition(client, {
+      id: "exhibition/base-1",
+      baseModel: "vendor/base-1",
+      promptVersion: FPL_PROMPT_VERSION
+    });
 
     const { opening, calls } = await open();
 

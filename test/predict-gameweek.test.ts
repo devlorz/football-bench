@@ -1,6 +1,6 @@
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
-import { resetSchema } from "./schema-fixture.js";
+import { insertExhibition, resetSchema } from "./schema-fixture.js";
 import type { HttpRequest } from "../src/http.js";
 import { predictGameweek } from "../src/predictions/predict-gameweek.js";
 import {
@@ -1359,14 +1359,7 @@ describe("predicting a Gameweek", () => {
     // scheduled query already asks for `role = 'entrant'`. Proven here rather
     // than asserted: the row is present and the official run is unchanged by
     // it, both in what it calls and in what it pages about.
-    await client.query(
-      `insert into models (
-         id, name, base_model, provider, prompt_version, role
-       ) values (
-         'exhibition/late', 'Late Arrival', 'vendor/late', 'vendor',
-         'match/2026-27-v2', 'exhibition'
-       )`
-    );
+    await insertExhibition(client);
     const called: string[] = [];
 
     const alert = await predictGameweek({

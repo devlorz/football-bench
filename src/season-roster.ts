@@ -16,6 +16,18 @@ type Database = Pick<PgClient, "query">;
  */
 export const SEASON_ROSTER_SIZE = 9;
 
+/**
+ * What a `models` row is for, as its check constraint admits (migrations 0001
+ * and 0019): a competitor on a leaderboard, a Reference Line, or a
+ * retrospective Exhibition Run.
+ *
+ * All three and not just the two that predict, because this is what the column
+ * holds rather than what any one reader wants of it — a query that filters the
+ * role down still reads rows of this type, and what a Reference Line may do is
+ * decided by asking, not by being unsayable.
+ */
+export type ModelRole = "entrant" | "reference" | "exhibition";
+
 /** Where a Base Model comes from (CONTEXT.md, ADR-0009, ADR-0014). */
 type BaseModelClass = "Frontier" | "First-party" | "Open-weight";
 

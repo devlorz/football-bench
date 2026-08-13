@@ -1,5 +1,6 @@
 import type { Client } from "pg";
 import { MATCH_PROMPT_VERSION } from "../predictions/openrouter-entrant.js";
+import type { ModelRole } from "../season-roster.js";
 
 type Database = Pick<Client, "query">;
 
@@ -20,7 +21,7 @@ export interface CalledRow {
    * caller restating it as a literal would be a second place for it to be
    * wrong.
    */
-  role: string;
+  role: ModelRole;
 }
 
 /**

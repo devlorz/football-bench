@@ -1,6 +1,6 @@
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
-import { resetSchema } from "./schema-fixture.js";
+import { insertExhibition, resetSchema } from "./schema-fixture.js";
 import { runFplGameweek } from "../src/fpl/run-fpl-gameweek.js";
 import { startFplTrack } from "../src/fpl/start-fpl-track.js";
 import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
@@ -504,15 +504,7 @@ describe("running a Gameweek for the whole FPL roster", () => {
     // at, so it leaves a Manager State standing at that Gameweek too — and the
     // roster is read from `manager_states`, where nothing said which of those
     // rows was a seat. Its own carried state is not this run's business.
-    await client.query(
-      `insert into models (
-         id, name, base_model, provider, prompt_version, role
-       ) values (
-         'exhibition/late', 'Late Arrival', 'vendor/late', 'vendor',
-         $1, 'exhibition'
-       )`,
-      [FPL_PROMPT_VERSION]
-    );
+    await insertExhibition(client, { promptVersion: FPL_PROMPT_VERSION });
     await client.query(
       `insert into manager_states (
          model_id, season, gw, squad, team_sheet, bank, free_transfers, hits,
