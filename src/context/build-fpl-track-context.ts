@@ -430,24 +430,24 @@ function squadSection(state: ManagerState): string[] {
 }
 
 /** The heading the Manager State block opens on, and the splice finds it by. */
-const STATE_HEADING = "Your Manager State";
+const MANAGER_STATE_HEADING = "Your Manager State";
 
 /**
- * The one block that belongs to the seat rather than to the Gameweek: the
- * Squad, the bank, the Free Transfers and the Chips. Everything else the
- * context shows is the same for every seat, which is what lets an Exhibition
- * borrow a stored body and replace only this (spec 0013).
+ * The one block that belongs to the Manager State rather than to the Gameweek:
+ * the Squad, the bank, the Free Transfers and the Chips. Everything else the
+ * context shows is the same whoever is reading it, which is what lets an
+ * Exhibition Run borrow a stored body and replace only this (spec 0013).
  *
  * The reversion happens here, on the same stored row the reducer reverts, so
- * what a seat is shown is what its action will be judged against. Taking the
- * row as it stands would show a Free Hit's borrowed Squad and borrowed bank to
- * a seat that owns neither. Doing it in the block means neither the builder nor
- * the splice can forget, and doing it twice is doing it once.
+ * what the reader is shown is what its action will be judged against. Taking
+ * the row as it stands would show a Free Hit's borrowed Squad and borrowed bank
+ * to a reader that owns neither. Doing it in the block means neither the
+ * builder nor the splice can forget, and doing it twice is doing it once.
  */
 function managerStateSection(stored: ManagerState, gameweek: number): string[] {
   const state = carriedIntoNextGameweek(stored);
   return [
-    STATE_HEADING,
+    MANAGER_STATE_HEADING,
     ...squadSection(state),
     `Bank: ${money(state.bankTenths)}`,
     `Free Transfers: ${state.freeTransfers}`,
@@ -505,10 +505,10 @@ export function buildFplTrackContext({
 }
 
 /** The line the body opens on, which is also where its Gameweek is written. */
-const TRACK_HEADING = /^Fantasy Premier League — .+ Gameweek (\d+)$/;
+const TRACK_HEADING_PATTERN = /^Fantasy Premier League — .+ Gameweek (\d+)$/;
 
 /**
- * A stored body as it would have read for a seat holding `state` — the donor's
+ * A stored body as it would have read for a holder of `state` — the donor's
  * Manager State block replaced, every shared section carried over untouched
  * (ADR-0032). The Gameweek comes off the donor's own heading, so the Chip line
  * is recomputed against the Gameweek the body was frozen for.
@@ -523,13 +523,20 @@ export function spliceManagerState(
   state: ManagerState
 ): string {
   const lines = donor.split("\n");
-  const heading = TRACK_HEADING.exec(lines[0] ?? "");
-  const opens = lines.indexOf(STATE_HEADING);
+  const heading = TRACK_HEADING_PATTERN.exec(lines[0] ?? "");
+  const opens = lines.indexOf(MANAGER_STATE_HEADING);
   const closes = lines.indexOf("", opens);
-  if (heading?.[1] === undefined || opens === -1 || closes === -1) {
+  if (heading?.[1] === undefined) {
     throw new Error(
-      `the donor is not a ${FPL_PROMPT_VERSION} body: no heading and `
-      + `${STATE_HEADING} block to replace`
+      `the donor is not a ${FPL_PROMPT_VERSION} body: `
+      + `its first line names no Gameweek`
+    );
+  }
+  if (opens === -1 || closes === -1) {
+    throw new Error(
+      `the donor is not a ${FPL_PROMPT_VERSION} body: its `
+      + `${MANAGER_STATE_HEADING} block never `
+      + `${opens === -1 ? "opens" : "closes"}`
     );
   }
   return [

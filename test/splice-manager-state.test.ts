@@ -5,6 +5,7 @@ import {
   type BuildFplTrackContextOptions
 } from "../src/context/build-fpl-track-context.js";
 import {
+  CHIPS,
   openingManagerState,
   type ManagerState
 } from "../src/fpl/apply-gameweek-action.js";
@@ -91,14 +92,21 @@ function body(state: ManagerState): string {
   return buildFplTrackContext({ ...SHARED, state });
 }
 
-/** A seat that bought its Squad in Gameweek 1 and has held it since. */
+/** A Manager State that bought its Squad in Gameweek 1 and has held it since. */
 const OPENED = legalStateFrom(OPENING_ACTION, openingManagerState(), 1);
 
 /**
- * A seat whose last Gameweek was a Free Hit: a borrowed Squad and a borrowed
- * bank stashed over its own, and one Chip fewer than the donor holds.
+ * A Manager State whose last Gameweek was a Free Hit: a borrowed Squad and a
+ * borrowed bank stashed over its own, and one Chip fewer than the donor holds.
  */
 const ON_FREE_HIT = legalStateFrom(FREE_HIT_REBUILD, OPENED, 2);
+
+/** The Manager State block as the splice finds it: heading to blank line. */
+function stateBlock(body: string): string[] {
+  const lines = body.split("\n");
+  const opens = lines.indexOf("Your Manager State");
+  return lines.slice(opens, lines.indexOf("", opens));
+}
 
 describe("spliceManagerState", () => {
   test("renders what the builder renders for the spliced state", () => {
@@ -117,6 +125,34 @@ describe("spliceManagerState", () => {
       "Chips unspent, first half (through Gameweek 19): "
       + "wildcard, free_hit, triple_captain, bench_boost"
     );
+    // The line the rules are actually read off (spec 0013, story 15): the
+    // donor offers the Free Hit, and the state spliced in has spent it.
+    expect(spliced).toContain(
+      "Chips you can play this Gameweek: "
+      + "wildcard, triple_captain, bench_boost"
+    );
+    expect(body(OPENED)).toContain(
+      "Chips you can play this Gameweek: "
+      + "wildcard, free_hit, triple_captain, bench_boost"
+    );
+  });
+
+  test("closes the block on the Chip line in every Manager State", () => {
+    // The splice takes the first blank line after the heading as the end of
+    // the block, which is only the end of it while the block holds no blank
+    // line of its own. Stated here so a section that grows one fails loudly
+    // rather than leaving the donor's Chip lines under a spliced block.
+    const spent = [...CHIPS];
+    for (const state of [
+      openingManagerState(),
+      OPENED,
+      ON_FREE_HIT,
+      { ...OPENED, chipsUsed: { firstHalf: spent, secondHalf: spent } }
+    ]) {
+      expect(stateBlock(body(state)).at(-1)).toMatch(
+        /^Chips you can play this Gameweek: /
+      );
+    }
   });
 
   test("reverts the spliced state's Free Hit before showing it", () => {
