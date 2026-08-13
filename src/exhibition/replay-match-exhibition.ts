@@ -8,7 +8,7 @@ import {
 } from "../predictions/attempt-match-calls.js";
 import { REPAIRABLE_KINDS } from "../predictions/validate-prediction.js";
 import { MAX_REPAIRS } from "../repairs.js";
-import { loadExhibition } from "./exhibition-model.js";
+import { loadExhibition } from "./load-exhibition.js";
 
 type Database = Pick<Client, "query">;
 

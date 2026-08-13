@@ -27,11 +27,11 @@ export interface CalledRow {
 /**
  * The one Exhibition row the operator named, or a refusal saying which of the
  * three things is wrong with the id: no such row, a row that is not an
- * Exhibition, or one that is not at the Prompt Version the caller sends. A
+ * Exhibition, or one that is not at the Season's frozen Match Prompt Version. A
  * typo must not put an Entrant through this door, and a row cannot claim one
- * Prompt Version while being called at another — the frozen Match prompt is
- * the only thing the Match track builds and there is no way to configure it
- * (ADR-0001).
+ * Prompt Version while being called at another — the frozen Match prompt is the
+ * only thing either door behind this builds, the pre-flight and the replay
+ * alike, and there is no way to configure another (ADR-0001).
  */
 export async function loadExhibition(
   database: Database,

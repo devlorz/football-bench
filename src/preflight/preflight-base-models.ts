@@ -17,7 +17,7 @@ import { validatePrediction } from "../predictions/validate-prediction.js";
 import {
   loadExhibition,
   type CalledRow
-} from "../exhibition/exhibition-model.js";
+} from "../exhibition/load-exhibition.js";
 
 type Database = Pick<Client, "query">;
 

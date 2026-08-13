@@ -226,6 +226,41 @@ describe("replaying the Match track as an Exhibition Run", () => {
     );
   });
 
+  test("fans Fixtures out to the bound it was given", async () => {
+    let activeCalls = 0;
+    let maximumActiveCalls = 0;
+    let releaseBatch: () => void = () => undefined;
+    const batchStarted = new Promise<void>((resolve) => {
+      releaseBatch = resolve;
+    });
+
+    await replayMatchExhibition({
+      database: client,
+      season: "2026-27",
+      exhibitionModelId: "exhibition/late",
+      concurrency: 2,
+      apiKey: "test-key",
+      now: () => RAN_AT,
+      http: async (_url, options) => {
+        activeCalls += 1;
+        maximumActiveCalls = Math.max(maximumActiveCalls, activeCalls);
+        if (activeCalls === 2) {
+          releaseBatch();
+        }
+        // Held until both Fixtures are in flight, so a run that answered them
+        // one after the other would wait here rather than pass.
+        await batchStarted;
+        activeCalls -= 1;
+        return {
+          status: 200,
+          body: answeredPrediction(requestedFixtureId(options!.body!))
+        };
+      }
+    });
+
+    expect(maximumActiveCalls).toBe(2);
+  });
+
   test("logs every call in attempts under trigger 'manual'", async () => {
     await replayMatchExhibition({
       database: client,

@@ -99,8 +99,18 @@ export interface DryRunJobConfig extends DailyFetchJobConfig {
  * What an Exhibition replay reads: the one row it replays, and nothing about
  * which Gameweeks to cover. The run resolves the Settled ones itself (ADR-0032),
  * so there is no Gameweek here to disagree with the record.
+ *
+ * The four fields it shares with `ScheduledEntrantJobConfig` are written out
+ * rather than inherited from it. They are read by the same function, because
+ * they are the same variables — but an Exhibition Run is not an Entrant's job
+ * and nothing scheduled runs it, so the name would have said two false things
+ * to save four lines.
  */
-export interface ExhibitionJobConfig extends ScheduledEntrantJobConfig {
+export interface ExhibitionJobConfig {
+  databaseUrl: string;
+  season: string;
+  concurrency: number;
+  openRouterApiKey: string;
   exhibitionModelId: string;
 }
 
