@@ -523,25 +523,25 @@ export function spliceManagerState(
   state: ManagerState
 ): string {
   const lines = donor.split("\n");
-  const heading = TRACK_HEADING_PATTERN.exec(lines[0] ?? "");
-  const opens = lines.indexOf(MANAGER_STATE_HEADING);
-  const closes = lines.indexOf("", opens);
-  if (heading?.[1] === undefined) {
+  const title = TRACK_HEADING_PATTERN.exec(lines[0] ?? "");
+  const blockOpens = lines.indexOf(MANAGER_STATE_HEADING);
+  const blockCloses = lines.indexOf("", blockOpens);
+  if (title?.[1] === undefined) {
     throw new Error(
       `the donor is not a ${FPL_PROMPT_VERSION} body: `
       + `its first line names no Gameweek`
     );
   }
-  if (opens === -1 || closes === -1) {
+  if (blockOpens === -1 || blockCloses === -1) {
     throw new Error(
       `the donor is not a ${FPL_PROMPT_VERSION} body: its `
       + `${MANAGER_STATE_HEADING} block never `
-      + `${opens === -1 ? "opens" : "closes"}`
+      + `${blockOpens === -1 ? "opens" : "closes"}`
     );
   }
   return [
-    ...lines.slice(0, opens),
-    ...managerStateSection(state, Number(heading[1])),
-    ...lines.slice(closes)
+    ...lines.slice(0, blockOpens),
+    ...managerStateSection(state, Number(title[1])),
+    ...lines.slice(blockCloses)
   ].join("\n");
 }

@@ -108,7 +108,7 @@ function stateBlock(body: string): string[] {
   return lines.slice(opens, lines.indexOf("", opens));
 }
 
-describe("spliceManagerState", () => {
+describe("A stored FPL context with another Manager State spliced in", () => {
   test("renders what the builder renders for the spliced state", () => {
     expect(spliceManagerState(body(OPENED), ON_FREE_HIT))
       .toBe(body(ON_FREE_HIT));
