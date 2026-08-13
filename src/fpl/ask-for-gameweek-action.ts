@@ -6,7 +6,9 @@ import {
   parseOpenRouterResponse,
   type OpenRouterMessage
 } from "../predictions/openrouter-entrant.js";
+import type { AttemptTrigger } from "../predictions/prediction-trigger.js";
 import { MAX_REPAIRS } from "../repairs.js";
+import type { ModelRole } from "../season-roster.js";
 import {
   applyGameweekAction,
   type ManagerState,
@@ -21,22 +23,32 @@ import {
 
 type Database = Pick<Client, "query">;
 
-/** The Base Model one seat calls, and how it is pinned. */
-export interface GameweekEntrant {
+/**
+ * The Base Model one Gameweek call is put to, and how it is pinned.
+ *
+ * Deliberately not named for a role, as `CalledRow` is not on the Match track:
+ * the same shape carries a seat of the roster and an Exhibition Run, and an
+ * Exhibition is not a competitor on the leaderboard. `role` travels with it
+ * because what a call is entitled to — the Lock above all — is decided by that
+ * column, and a caller restating it as a literal would be a second place for it
+ * to be wrong.
+ */
+export interface GameweekCaller {
   id: string;
   base_model: string;
   provider: string;
   quantization: string | null;
+  role: ModelRole;
 }
 
 export interface AskForGameweekActionOptions {
   database: Database;
   season: string;
   gameweek: number;
-  entrant: GameweekEntrant;
-  /** The exact text the Entrant is handed, as it is on record. */
+  caller: GameweekCaller;
+  /** The exact text the caller is handed, as it is on record. */
   body: string;
-  /** What the Entrant carries into this Gameweek. */
+  /** What the caller carries into this Gameweek. */
   previous: ManagerState;
   /** The Gameweek's pool, priced as the stored context prices it. */
   pool: PoolPlayer[];
@@ -187,8 +199,22 @@ function elapsed(startedAt: Date, completedAt: Date): number {
   return Math.max(0, completedAt.getTime() - startedAt.getTime());
 }
 
+/**
+ * What run a call belongs to, asked of the role like the Lock below.
+ *
+ * The roster's Gameweek is the scheduled run, whether the schedule or an
+ * operator carrying one seat forward set it going. An Exhibition Run is
+ * operator-triggered and nothing about it recurs, so its calls land in the
+ * ledger as the manual run they are (spec 0013). Its Exhibition identity is
+ * still the join to `models.role`; this says only which run asked.
+ */
+function attemptTrigger(role: ModelRole): AttemptTrigger {
+  return role === "exhibition" ? "manual" : "main";
+}
+
 async function recordAttempt(
   database: Database,
+  trigger: AttemptTrigger,
   attempt: RecordedAttempt
 ): Promise<void> {
   await database.query(
@@ -198,7 +224,7 @@ async function recordAttempt(
        raw_response, trigger, attempted_at
      ) values (
        $1, $2, $3, 'fpl', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-       'main', $14
+       $14, $15
      )`,
     [
       attempt.entrantId,
@@ -214,6 +240,7 @@ async function recordAttempt(
       attempt.tokensIn,
       attempt.tokensOut,
       attempt.rawResponse,
+      trigger,
       attempt.attemptedAt
     ]
   );
@@ -233,7 +260,7 @@ export async function askForGameweekAction({
   database,
   season,
   gameweek,
-  entrant,
+  caller,
   body,
   previous,
   pool,
@@ -248,14 +275,15 @@ export async function askForGameweekAction({
   // so the Entrant is measured on correcting its own answer rather than on
   // answering afresh three more times.
   const messages: OpenRouterMessage[] = [{ role: "user", content: body }];
+  const trigger = attemptTrigger(caller.role);
 
   for (let attemptNo = 0; attemptNo <= MAX_REPAIRS; attemptNo += 1) {
     const { url, ...request } = openRouterRequest(
       apiKey,
       {
-        baseModel: entrant.base_model,
-        provider: entrant.provider,
-        quantization: entrant.quantization
+        baseModel: caller.base_model,
+        provider: caller.provider,
+        quantization: caller.quantization
       },
       messages
     );
@@ -270,8 +298,8 @@ export async function askForGameweekAction({
       receivedAt = now();
     } catch (error) {
       receivedAt = now();
-      await recordAttempt(database, {
-        ...blankAttempt(entrant.id, season, gameweek, attemptNo),
+      await recordAttempt(database, trigger, {
+        ...blankAttempt(caller.id, season, gameweek, attemptNo),
         failure: {
           kind: isTimeoutError(error) ? "timeout" : "provider",
           reason: `OpenRouter call failed: ${errorText(error)}.`
@@ -289,8 +317,8 @@ export async function askForGameweekAction({
     // rather than Rolling Over on a failure the Entrant did not make.
     const providerFailure = failedUpstream(response);
     if (providerFailure !== null) {
-      await recordAttempt(database, {
-        ...blankAttempt(entrant.id, season, gameweek, attemptNo),
+      await recordAttempt(database, trigger, {
+        ...blankAttempt(caller.id, season, gameweek, attemptNo),
         failure: providerFailure,
         rawResponse: response.body,
         latencyMs: elapsed(startedAt, receivedAt),
@@ -301,8 +329,8 @@ export async function askForGameweekAction({
 
     const parsed = parseOpenRouterResponse(response.body);
     if (parsed === null || parsed.content === null) {
-      await recordAttempt(database, {
-        ...blankAttempt(entrant.id, season, gameweek, attemptNo),
+      await recordAttempt(database, trigger, {
+        ...blankAttempt(caller.id, season, gameweek, attemptNo),
         failure: {
           kind: parsed?.refusal === null || parsed?.refusal === undefined
             ? "provider"
@@ -333,13 +361,20 @@ export async function askForGameweekAction({
     // a late legal action as legal would claim a Manager State that was never
     // stored, and recording it as a violation would put a failure of
     // punctuality into the profile of how an Entrant manages a Squad.
-    const beforeLock = receivedAt < deadline;
-    await recordAttempt(database, {
-      entrantId: entrant.id,
+    //
+    // The Lock is asked of the role, not of a parameter. An Entrant answering
+    // after its deadline has missed it; an Exhibition Run answers after every
+    // deadline by construction, which is the feature and not a miss
+    // (ADR-0032) — so a Lock refusal would refuse the whole feature, and a
+    // boolean asking to skip it would be a second place for the role to be
+    // stated.
+    const lockAllows = receivedAt < deadline || caller.role === "exhibition";
+    await recordAttempt(database, trigger, {
+      entrantId: caller.id,
       season,
       gameweek,
       attemptNo,
-      failure: !beforeLock
+      failure: !lockAllows
         ? {
           kind: "deadline",
           reason: `The Lock passed at ${deadline.toISOString()}.`
@@ -355,7 +390,7 @@ export async function askForGameweekAction({
       latencyMs: elapsed(startedAt, receivedAt),
       attemptedAt: receivedAt
     });
-    if (!beforeLock) {
+    if (!lockAllows) {
       return { kind: "silent" };
     }
     if ("state" in judged) {

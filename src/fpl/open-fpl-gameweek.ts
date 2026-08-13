@@ -10,7 +10,7 @@ import {
 } from "./apply-gameweek-action.js";
 import {
   askForGameweekAction,
-  type GameweekEntrant
+  type GameweekCaller
 } from "./ask-for-gameweek-action.js";
 import {
   loadLockedGameweek,
@@ -96,11 +96,115 @@ async function carriedThroughSilence(
  */
 export type FplGameweekResult = "played" | "standing" | "missing";
 
+export interface PlayGameweekFromContextOptions {
+  database: Database;
+  season: string;
+  gameweek: number;
+  caller: GameweekCaller;
+  /** The exact text on record, as the caller stored it. */
+  body: string;
+  /** What the caller carries into this Gameweek. */
+  previous: ManagerState;
+  deadline: Date;
+  apiKey: string;
+  /** How long one call may take (spec 0010). */
+  entrantCallTimeoutMs: number;
+  http: HttpFetcher;
+  now: () => Date;
+}
+
+/**
+ * One Gameweek played from the stored context onwards — the conversation, the
+ * Repairs and the Roll Over — returning the Manager State it stores, or null
+ * where the Gameweek produced none.
+ *
+ * The state is returned as well as stored because a caller may be carrying the
+ * chain itself. An Exhibition Run replays a season path Gameweek by Gameweek
+ * and needs what this one came to before it can splice the next one's context
+ * (ADR-0032); the roster's own run reads what it needs from the record.
+ *
+ * It takes the body rather than building it, because that is the whole of what
+ * the two callers differ over: the roster builds each seat its own context, and
+ * an Exhibition splices its Manager State into an Entrant's frozen body.
+ * Everything from the call onwards is the same, and a second copy of it would
+ * be a second answer to what the fourth invalid response means.
+ */
+export async function playGameweekFromContext({
+  database,
+  season,
+  gameweek,
+  caller,
+  body,
+  previous,
+  deadline,
+  apiKey,
+  entrantCallTimeoutMs,
+  http,
+  now
+}: PlayGameweekFromContextOptions): Promise<ManagerState | null> {
+  const outcome = await askForGameweekAction({
+    database,
+    season,
+    gameweek,
+    caller,
+    body,
+    previous,
+    // Priced from the context on record, never from a snapshot that may have
+    // moved since it was stored.
+    pool: parseFplTrackContextPool(body),
+    deadline,
+    apiKey,
+    timeoutMs: entrantCallTimeoutMs,
+    http,
+    now
+  });
+
+  if (outcome.kind === "action") {
+    await storeManagerState(database, {
+      entrantId: caller.id,
+      season,
+      gameweek,
+      state: outcome.state,
+      attemptsUsed: outcome.repairsUsed,
+      predictedAt: outcome.receivedAt
+    });
+    return outcome.state;
+  }
+  // The fourth invalid response. The action is discarded whole and the
+  // Gameweek Rolls Over onto the Team Sheet already standing (ADR-0004) —
+  // never a score of zero, because zero is a punishment large enough to drown
+  // out every other signal this track produces.
+  //
+  // Unless nothing is standing, which is what an opening is. Rolling over
+  // there would store an empty Squad, and `manager_states` is insert-only, so
+  // the Exhibition Run would carry no players for the rest of the Season on
+  // account of one Gameweek's four bad answers. An opening that produced no
+  // legal action produced nothing, and the run that asked says so (ADR-0004).
+  //
+  // The roster never arrives here: `playFplGameweek` refuses a Gameweek with
+  // nothing standing behind it, and openings are `startFplTrack`'s, which
+  // commits all nine or none. What opens alone is an Exhibition Run.
+  if (outcome.kind === "exhausted" && previous.teamSheet !== null) {
+    const rolled = rolledOverState(previous);
+    await storeManagerState(database, {
+      entrantId: caller.id,
+      season,
+      gameweek,
+      state: rolled,
+      attemptsUsed: MAX_REPAIRS,
+      rolledOver: true,
+      predictedAt: outcome.receivedAt
+    });
+    return rolled;
+  }
+  return null;
+}
+
 export interface PlayFplGameweekOptions {
   database: Database;
   season: string;
   gameweek: number;
-  entrant: GameweekEntrant;
+  entrant: GameweekCaller;
   /** The Gameweek's Lock and pool, read once for however many Entrants play. */
   locked: LockedGameweek;
   apiKey: string;
@@ -184,52 +288,20 @@ export async function playFplGameweek({
     })
   );
 
-  const outcome = await askForGameweekAction({
+  const played = await playGameweekFromContext({
     database,
     season,
     gameweek,
-    entrant,
+    caller: entrant,
     body,
     previous,
-    // Priced from the context on record, never from a snapshot that may have
-    // moved since it was stored.
-    pool: parseFplTrackContextPool(body),
     deadline,
     apiKey,
-    timeoutMs: entrantCallTimeoutMs,
+    entrantCallTimeoutMs,
     http,
     now
   });
-
-  if (outcome.kind === "action") {
-    await storeManagerState(database, {
-      entrantId: entrant.id,
-      season,
-      gameweek,
-      state: outcome.state,
-      attemptsUsed: outcome.repairsUsed,
-      predictedAt: outcome.receivedAt
-    });
-    return "played";
-  }
-  // The fourth invalid response. The action is discarded whole and the
-  // Gameweek Rolls Over onto the Team Sheet already standing (ADR-0004) —
-  // never a score of zero, because zero is a punishment large enough to drown
-  // out every other signal this track produces. There is always something
-  // standing here: an Entrant without one never got past the check above.
-  if (outcome.kind === "exhausted") {
-    await storeManagerState(database, {
-      entrantId: entrant.id,
-      season,
-      gameweek,
-      state: rolledOverState(previous),
-      attemptsUsed: MAX_REPAIRS,
-      rolledOver: true,
-      predictedAt: outcome.receivedAt
-    });
-    return "played";
-  }
-  return "missing";
+  return played === null ? "missing" : "played";
 }
 
 /**
@@ -261,8 +333,8 @@ export async function openFplGameweek({
 }: OpenFplGameweekOptions): Promise<FplGameweekResult> {
   const locked = await loadLockedGameweek(database, season, gameweek);
 
-  const entrantResult = await database.query<GameweekEntrant>(
-    `select id, base_model, provider, quantization
+  const entrantResult = await database.query<GameweekCaller>(
+    `select id, base_model, provider, quantization, role
        from models
       where id = $1 and role = 'entrant'`,
     [entrantId]

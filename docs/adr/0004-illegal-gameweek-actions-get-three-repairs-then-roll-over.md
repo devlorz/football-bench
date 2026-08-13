@@ -17,6 +17,14 @@ Rolling Over is preferred to scoring zero because zero is a punishment large eno
 out every other signal, while a stale Squad degrades gradually — injured players stay,
 fixtures worsen — which is the hole the track exists to watch Entrants climb out of.
 
+A Roll Over needs a previous Team Sheet, and an opening Gameweek has none. Where the third
+Repair fails at an opening, nothing is stored and the run stops: the empty Squad is not a
+Team Sheet to stand on, and `manager_states` is insert-only, so committing it would leave
+the Exhibition Run with no players for the rest of the Season on account of one Gameweek's
+four answers. The official track never reaches this — an opening is `startFplTrack`'s, which
+commits all nine or none and lets the operator try again — so the case belongs to the
+Exhibition Run, which opens alone (ADR-0032).
+
 ## Consequences
 
 - Validator messages are part of the experiment. Their wording and level of detail must be

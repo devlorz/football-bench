@@ -2,7 +2,7 @@ import type { Client } from "pg";
 import { eachBounded } from "../bounded-concurrency.js";
 import { FPL_PROMPT_VERSION } from "../context/build-fpl-track-context.js";
 import type { HttpFetcher } from "../http.js";
-import type { GameweekEntrant } from "./ask-for-gameweek-action.js";
+import type { GameweekCaller } from "./ask-for-gameweek-action.js";
 import { loadLockedGameweek } from "./fpl-gameweek-context.js";
 import {
   loadStartedRoster,
@@ -98,8 +98,8 @@ export async function runFplGameweek({
   // of which nine. A seat added to `models` afterwards never opened, has
   // nothing standing, and is not one of them.
   const roster = await loadStartedRoster(database, season, startedAt);
-  const entrantResult = await database.query<GameweekEntrant>(
-    `select id, base_model, provider, quantization
+  const entrantResult = await database.query<GameweekCaller>(
+    `select id, base_model, provider, quantization, role
        from models
       where id = any($1) and role = 'entrant' and prompt_version = $2
       order by id`,

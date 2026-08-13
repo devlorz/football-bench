@@ -13,7 +13,7 @@ import {
 import {
   askForGameweekAction,
   judgeGameweekResponse,
-  type GameweekEntrant
+  type GameweekCaller
 } from "./ask-for-gameweek-action.js";
 import { parseOpenRouterResponse } from "../predictions/openrouter-entrant.js";
 import {
@@ -163,8 +163,8 @@ export async function startFplTrack({
   const { deadline, pool: contextPool, ...windows } =
     await loadLockedGameweek(database, season, gameweek);
 
-  const entrantResult = await database.query<GameweekEntrant>(
-    `select id, base_model, provider, quantization
+  const entrantResult = await database.query<GameweekCaller>(
+    `select id, base_model, provider, quantization, role
        from models
       where role = 'entrant' and prompt_version = $1
       order by id`,
@@ -255,7 +255,7 @@ export async function startFplTrack({
       database,
       season,
       gameweek,
-      entrant,
+      caller: entrant,
       body,
       previous,
       pool,
