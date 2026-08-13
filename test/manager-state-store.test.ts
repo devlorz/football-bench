@@ -1,9 +1,11 @@
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
-import { resetSchema } from "./schema-fixture.js";
+import { insertExhibition, resetSchema } from "./schema-fixture.js";
 import {
   loadManagerState,
   loadStandingManagerState,
+  loadStartedRoster,
+  loadStartingGameweek,
   storeManagerState
 } from "../src/fpl/manager-state-store.js";
 import { applyGameweekAction } from "../src/fpl/apply-gameweek-action.js";
@@ -253,5 +255,36 @@ describe("storing and reloading Manager State", () => {
       season: "2026-27",
       before: 1
     })).toBeNull();
+  });
+
+  test("reads the Gameweek the track started at off the seats alone", async () => {
+    await insertExhibition(client, { promptVersion: "fpl/2026-27-v1" });
+    const opened = legalStateFrom(OPENING);
+    await storeManagerState(client, {
+      entrantId: "entrant/v1",
+      season: "2026-27",
+      gameweek: 2,
+      state: opened,
+      attemptsUsed: 0,
+      predictedAt: new Date("2026-08-28T17:00:00Z")
+    });
+    // An Exhibition Run holds Manager States in this table too (ADR-0032), and
+    // here it holds an earlier one than any seat. The Gameweek the *track*
+    // started at is a fact about the seats: an Exhibition cannot move it, or a
+    // Gameweek before the start would become playable retrospectively for the
+    // whole roster.
+    await storeManagerState(client, {
+      entrantId: "exhibition/late",
+      season: "2026-27",
+      gameweek: 1,
+      state: opened,
+      attemptsUsed: 0,
+      predictedAt: new Date("2026-09-30T11:30:00Z")
+    });
+
+    expect(await loadStartingGameweek(client, "2026-27")).toBe(2);
+    expect(await loadStartedRoster(client, "2026-27", 2)).toEqual([
+      "entrant/v1"
+    ]);
   });
 });

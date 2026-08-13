@@ -129,13 +129,22 @@ export async function loadManagerState(
  * for opposite reasons: an opening refuses to run when it is not null, and the
  * demonstration record counts from it. Two copies of one `min(gw)` would be
  * two places for "the Gameweek the track started at" to drift apart.
+ *
+ * The role is asked for exactly as `loadStartedRoster` asks it. An Exhibition
+ * Run leaves Manager States in this table too (ADR-0032), and while it can only
+ * ever open at the Gameweek this answers — so it cannot pull the minimum down
+ * today — the Gameweek the *track* started at is a fact about the seats, and a
+ * reader that happens to be right is one change away from being wrong.
  */
 export async function loadStartingGameweek(
   database: Database,
   season: string
 ): Promise<number | null> {
   const result = await database.query<{ gw: number | null }>(
-    `select min(gw)::int as gw from manager_states where season = $1`,
+    `select min(s.gw)::int as gw
+       from manager_states s
+       join models m on m.id = s.model_id
+      where s.season = $1 and m.role = 'entrant'`,
     [season]
   );
   return result.rows[0]?.gw ?? null;
