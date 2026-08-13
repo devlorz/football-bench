@@ -1,5 +1,12 @@
+import { FPL_PROMPT_VERSION } from "../context/build-fpl-track-context.js";
 import { EXHIBITION_CAVEAT } from "../exhibition/recall-caveat.js";
 import { argmaxOutcome, outcomeOf, type Probs } from "../fixture-result.js";
+import {
+  chipsRemaining, sellingPrice, type ChipsUsed, type SquadEnvelope
+} from "../fpl/apply-gameweek-action.js";
+import {
+  FPL_POINTS_METRIC, FPL_POINTS_SEASON_TO_DATE_METRIC
+} from "../fpl/demonstration-record.js";
 import { MATCH_PROMPT_VERSION } from "../predictions/openrouter-entrant.js";
 import {
   BET_POINTS_QUALIFICATION, BET_POINTS_SEASON_TO_DATE_METRIC,
@@ -55,9 +62,9 @@ const BROWSER_CACHE = "no-cache";
 
 /**
  * How long each answer may be served for at the edge, chosen per endpoint
- * because the three do not change on the same clock (ADR-0028). The leaderboard
- * and the Entrant records both move when the daily scoring run writes, and
- * share this one.
+ * because the endpoints do not all change on the same clock (ADR-0028). Both
+ * leaderboards, the Entrant records and every FPL answer move when a scoring
+ * run writes, and share this one; the Fixtures page is the one that does not.
  */
 const SCORED_CACHE = "max-age=300, stale-while-revalidate=3600, stale-if-error=0";
 
@@ -808,6 +815,290 @@ async function entrants(query: Query, season: string): Promise<Response> {
   return json(body, SCORED_CACHE);
 }
 
+/** One row of the FPL points ranking, and one line of the Race chart. */
+export interface FplLeaderboardEntrant {
+  id: string;
+  name: string;
+  /** The OpenRouter Base Model id the design prints beneath the name. */
+  baseModel: string;
+  /**
+   * Null before the first Settled Gameweek, as every figure beside it is: nine
+   * Entrants with nothing scored are a field entered, not a ranking, and a page
+   * handed ranks 1 to 9 there would publish an order nothing produced.
+   *
+   * Ties share a rank rather than being separated by id. Nine Entrants opening
+   * on the same fifteen players can arrive at the same total, and an order
+   * invented for two equal rows would show one of them climbing when neither
+   * moved.
+   */
+  rank: number | null;
+  /**
+   * Places climbed since the previous scored Gameweek's cumulative snapshot,
+   * negative for places lost. Null at the first Settled Gameweek of the record:
+   * there is no snapshot behind it, and nought would read as "held its place".
+   */
+  movement: number | null;
+  /**
+   * The scored Gameweek's own points. Null rather than the Match track's
+   * nought-for-a-missing-row: there, an Entrant that Gapped every Fixture
+   * legitimately has no row and scored nothing, while here a scored Gameweek
+   * has a row for all nine or for none (ADR-0011) — so an absent one is a
+   * broken record, and publishing it as a nought would hide that.
+   */
+  gwPoints: number | null;
+  /** Net of Hits, which is what the scorer stored and what the ranking orders by. */
+  totalPoints: number | null;
+  /**
+   * What the Squad is worth to the Entrant: every owned player at his Selling
+   * Price, which is the price paid plus half of any rise and the whole of any
+   * fall (CONTEXT.md). In tenths, as every price in the track is.
+   */
+  squadValueTenths: number | null;
+  /** Chips the Entrant can still play; see `chipsRemaining`. */
+  chipsRemaining: number | null;
+  /**
+   * Cumulative points through every scored Gameweek, which is the Race
+   * variant's whole line. Read from the stored cumulative rows rather than
+   * summed here: the running total is a figure the scorer wrote, and adding the
+   * Gameweeks up again would be a second answer to it.
+   */
+  cumulative: Array<{ gw: number; points: number }>;
+}
+
+/**
+ * What `/api/fpl/leaderboard` answers with. Exported for the same reason the
+ * Match track's bodies are: a body the tests describe for themselves is one
+ * they can go on describing after this has changed.
+ */
+export interface FplLeaderboardBody {
+  season: string;
+  /** The Gameweek the record starts at, and the one it runs through. */
+  fromGw: number | null;
+  throughGw: number | null;
+  /**
+   * The Gameweeks inside that span the record holds nothing for, in order. A
+   * hole is announced and never smoothed over (spec 0014): every Entrant's
+   * series skips the same Gameweek, and a page that was not told would draw the
+   * skip as a Gameweek in which nobody scored.
+   */
+  missingGws: number[];
+  qualification: string | null;
+  entrants: FplLeaderboardEntrant[];
+}
+
+/**
+ * The Gameweek the FPL track has been scored through, which is the same
+ * question `scoredThrough` answers for the Match track and a simpler one.
+ *
+ * A Gameweek settles for the whole roster or for none of it: a Gameweek any
+ * Entrant stored no Manager State in is removed from every Season path
+ * (ADR-0011), so the scorer writes its eight rows for nine Entrants or writes
+ * nothing at all. The Gameweek's own points row is therefore the fact, and
+ * there is no behavioural row that runs ahead of it the way the Match track's
+ * do.
+ *
+ * Every read below filters `track = 'fpl'` for the reason the Match track's
+ * reads filter `'match'`: one seat can hold both tracks, and ADR-0003 is
+ * careful never to let the two rankings meet.
+ */
+async function fplScoredThrough(
+  query: Query,
+  season: string
+): Promise<number | null> {
+  const [scored] = await query(
+    `select max(gw) as through_gw from scores
+      where season = $1 and track = 'fpl' and metric = $2`,
+    [season, FPL_POINTS_METRIC]
+  );
+  return numberOrNull(scored?.through_gw);
+}
+
+/**
+ * The nine Entrants ranked by cumulative FPL points through the latest Settled
+ * Gameweek, with the Race variant's whole series beside them — the three
+ * variants are one page, and switching them must not fetch.
+ *
+ * The qualification is read out of the stored rows the ranking was read off,
+ * because the claim being made is that what the scorer stored reaches a reader
+ * intact; restating the constant would answer that with itself. Unlike the
+ * Match track's there is no fallback to the constant, and none is possible: a
+ * scored Gameweek has a cumulative row for every Entrant, so a ranking with no
+ * stored sentence anywhere is a fault and fails closed.
+ */
+async function fplLeaderboard(query: Query, season: string): Promise<Response> {
+  const throughGw = await fplScoredThrough(query, season);
+
+  // Every scored Gameweek's cumulative row in one read. It is the series the
+  // Race chart draws, the total the ranking is ordered by, and the snapshot the
+  // movement is measured against, all three being the same stored figure at
+  // different Gameweeks.
+  const totals = throughGw === null ? [] : await query(
+    `select model_id, gw, value, detail ->> 'qualification' as qualification
+       from scores
+      where season = $1 and track = 'fpl' and metric = $2 and gw <= $3
+      order by gw`,
+    [season, FPL_POINTS_SEASON_TO_DATE_METRIC, throughGw]
+  );
+
+  // The standing Manager State rather than the Gameweek's own. A Gameweek can
+  // store none — a Roll Over stores what stood, a Gap stores nothing at all —
+  // and the Squad a reader is being shown is the one the Entrant holds, which
+  // is the last one it wrote.
+  //
+  // Left joins for the reason the Match track's leaderboard uses them:
+  // pre-Season returns the nine entered seats with nothing beside them, and
+  // `$2` is null there and matches no row.
+  const rows = await query(
+    `select m.id, m.name, m.base_model,
+            points.value as gw_points,
+            state.squad, state.chips_used
+       from models m
+       left join scores points
+         on points.model_id = m.id and points.season = $1
+        and points.track = 'fpl' and points.gw = $2 and points.metric = $3
+       left join lateral (
+         select squad, chips_used from manager_states
+          where model_id = m.id and season = $1 and gw <= $2
+          order by gw desc limit 1
+       ) state on true
+      where m.role = 'entrant' and m.prompt_version = $4
+      order by m.id`,
+    [season, throughGw, FPL_POINTS_METRIC, FPL_PROMPT_VERSION]
+  );
+
+  // The price each player was last listed at through the scored Gameweek,
+  // which is the other half of Selling Price. At or before rather than at: a
+  // Gameweek whose pre-Lock snapshot was missed must not blank every Squad
+  // value on the page, and a price holds until the next snapshot moves it.
+  const listed = new Map(
+    (throughGw === null ? [] : await query(
+      `select distinct on (fpl_id) fpl_id, price_tenths from fpl_players
+        where season = $1 and gw <= $2
+        order by fpl_id, gw desc`,
+      [season, throughGw]
+    )).map((row) => [Number(row.fpl_id), Number(row.price_tenths)])
+  );
+
+  // The Squad the Entrant is fielding, which during a Free Hit is the week's
+  // borrowed fifteen and not the permanent Squad waiting in `free_hit_stash`.
+  // That is the value the Gameweek was played at and the one the Team Sheet
+  // beside it belongs to; the permanent Squad returns as `active` next
+  // Gameweek, and reading the stash instead would price a Squad nobody played.
+  const squadValueOf = (squad: SquadEnvelope): number =>
+    squad.active.reduce((total, { fplId, purchasePriceTenths }) => {
+      const price = listed.get(fplId);
+      if (price === undefined) {
+        throw new Error(
+          `The Season lists no price for player ${fplId}, so the Squad value `
+          + "of an Entrant that owns him cannot be read"
+        );
+      }
+      return total + sellingPrice(purchasePriceTenths, price);
+    }, 0);
+
+  // One rank per Entrant at one Gameweek, ties sharing a place. Used twice —
+  // once for the ranking and once for the snapshot the movement is measured
+  // against — so the two cannot disagree about what a tie means.
+  const ranksAt = (gameweek: number): Map<string, number> => {
+    const scored = totals
+      .filter((row) => Number(row.gw) === gameweek)
+      .map((row) => ({ id: String(row.model_id), points: Number(row.value) }));
+    return new Map(scored.map(({ id, points }) => [
+      id,
+      1 + scored.filter((other) => other.points > points).length
+    ]));
+  };
+
+  const gameweeks = [...new Set(totals.map((row) => Number(row.gw)))];
+  const previousGw = gameweeks.filter((gw) => gw < (throughGw ?? 0)).at(-1);
+  const unranked = new Map<string, number>();
+  const ranks = throughGw === null ? unranked : ranksAt(throughGw);
+  const before = previousGw === undefined ? unranked : ranksAt(previousGw);
+
+  const entrants: FplLeaderboardEntrant[] = rows.map((row) => {
+    const id = String(row.id);
+    const rank = ranks.get(id) ?? null;
+    const previousRank = before.get(id);
+    const squad = row.squad as SquadEnvelope | null;
+    // Ordered by Gameweek, so the last point is the row at the scored Gameweek
+    // and the total the ranking is ordered by — the same stored figure, read
+    // once rather than looked up a second time.
+    const cumulative = totals
+      .filter((each) => each.model_id === id)
+      .map((each) => ({ gw: Number(each.gw), points: Number(each.value) }));
+    return {
+      id,
+      name: String(row.name),
+      baseModel: String(row.base_model),
+      rank,
+      movement: rank === null || previousRank === undefined
+        ? null
+        : previousRank - rank,
+      gwPoints: numberOrNull(row.gw_points),
+      totalPoints: cumulative.at(-1)?.points ?? null,
+      squadValueTenths: squad === null ? null : squadValueOf(squad),
+      // Counted for the Gameweek after the one being read, which is the next
+      // one the Entrant can play a Chip in. The Gameweek on the page has
+      // settled, so its deadline is behind the Entrant — and reading a Settled
+      // Gameweek 19 as though the first-half set were still reachable would
+      // leave four expired Chips on the page for the rest of the Season.
+      chipsRemaining: row.chips_used === null || throughGw === null
+        ? null
+        : chipsRemaining(row.chips_used as ChipsUsed, throughGw + 1),
+      cumulative
+    };
+  });
+
+  // The sentence stored in the rows the ranking was read off, which is the
+  // rows at the scored Gameweek and no earlier one. A ranking a reader can see
+  // without the qualification is the failure ADR-0003 asks for it against, and
+  // on this track there is no row it could be missing from that is not a fault:
+  // the scorer writes it into every cumulative row it writes, so a Gameweek's
+  // rows carry it nine times or the record is broken.
+  //
+  // One distinct value across those rows rather than the first one found.
+  // Reading the first would answer a Gameweek whose own rows lost the sentence
+  // with a copy from an earlier Gameweek — publishing a ranking on the strength
+  // of a row it was not read from, which is the one thing failing closed here
+  // exists to prevent — and would let two rows disagreeing about a sentence
+  // frozen for the Season pass unnoticed.
+  const stored = new Set(
+    totals
+      .filter((row) => Number(row.gw) === throughGw)
+      .map((row) => textOrNull(row.qualification))
+  );
+  const [qualification = null] = stored;
+  if (throughGw !== null && (stored.size !== 1 || qualification === null)) {
+    throw new Error(
+      `The Season's FPL ranking rows at Gameweek ${throughGw} carry no one `
+      + "qualification, and a ranking cannot be published without it"
+    );
+  }
+
+  // The holes in the record inside the span, announced rather than skipped: a
+  // Gameweek any Entrant stored no Manager State in is removed from every
+  // Season path (ADR-0011), so it is absent from the series above and from
+  // every total. A reader given a series that jumps from 3 to 5 with nothing
+  // said would read the jump as a Gameweek nobody scored in.
+  const missingGws = gameweeks.length === 0 ? [] : Array.from(
+    { length: (throughGw ?? 0) - gameweeks[0]! + 1 },
+    (_, offset) => gameweeks[0]! + offset
+  ).filter((gw) => !gameweeks.includes(gw));
+
+  const body: FplLeaderboardBody = {
+    season,
+    fromGw: gameweeks[0] ?? null,
+    throughGw,
+    missingGws,
+    qualification,
+    // Ranked order, and the entered order before there is a ranking to take.
+    entrants: throughGw === null
+      ? entrants
+      : [...entrants].sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity))
+  };
+  return json(body, SCORED_CACHE);
+}
+
 function json(body: unknown, edgeCache: string): Response {
   return new Response(JSON.stringify(body), {
     headers: {
@@ -847,6 +1138,9 @@ export async function handleDashboardRequest(
   }
   if (pathname === "/api/entrants") {
     return await entrants(query, season);
+  }
+  if (pathname === "/api/fpl/leaderboard") {
+    return await fplLeaderboard(query, season);
   }
   return new Response("Not found", {
     status: 404,

@@ -47,17 +47,17 @@ seam under the select-only role.
 
 **Blocked by:** "A seeded FPL Season".
 
-- [ ] The response carries the documented body: nine ranked rows, the Gameweek span, the
+- [x] The response carries the documented body: nine ranked rows, the Gameweek span, the
       per-Entrant cumulative series, and the qualification
-- [ ] Rank movement is computed against the cumulative snapshot at the previous Settled
+- [x] Rank movement is computed against the cumulative snapshot at the previous Settled
       Gameweek, and the first Settled Gameweek shows no movement rather than inventing one
-- [ ] The qualification equals the sentence stored in the seeded rows' detail, and a record
+- [x] The qualification equals the sentence stored in the seeded rows' detail, and a record
       stripped of it is an error, not a blank
-- [ ] FPL reads exclude match rows and match reads exclude FPL rows, proven in both
+- [x] FPL reads exclude match rows and match reads exclude FPL rows, proven in both
       directions over one seed
-- [ ] Responses carry the scored-data cache lifetime with `stale-if-error=0` and browser
+- [x] Responses carry the scored-data cache lifetime with `stale-if-error=0` and browser
       `no-cache`
-- [ ] Before the first Settled Gameweek the endpoint returns the honest empty shape
+- [x] Before the first Settled Gameweek the endpoint returns the honest empty shape
 
 ## The FPL section and the ranking page
 

@@ -99,9 +99,10 @@ describe("the dashboard read API", () => {
     const [current] = await query("select current_role as role");
     expect(current?.role).toBe("dashboard_read");
 
-    // Granted six tables and no seventh: a table the dashboard was never meant
-    // to read is refused rather than returned empty, and the refusal is what
-    // says the role is doing anything at all.
+    // Granted the tables the endpoints read and no other: one the dashboard
+    // was never meant to read is refused rather than returned empty, and the
+    // refusal is what says the role is doing anything at all. Which tables
+    // those are is `schema.test.ts`'s to state, and it grows as endpoints do.
     await expect(query("select 1 from attempts limit 1"))
       .rejects.toThrow(/permission denied/);
   });

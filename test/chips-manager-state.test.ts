@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
   applyGameweekAction,
+  chipsRemaining,
+  type ChipsUsed,
   type GameweekAction
 } from "../src/fpl/apply-gameweek-action.js";
 import { LOCKED_POOL as POOL } from "./fpl-pool-fixture.js";
@@ -495,6 +497,19 @@ describe("One set of Chips for each half of the Season", () => {
     expect(replay(TWICE, { openingGameweek: 18 })).toMatchObject({
       state: { chipsUsed: { firstHalf: ["wildcard"], secondHalf: ["wildcard"] } }
     });
+  });
+
+  test("counts what is left to play, and stops counting an expired set", () => {
+    const used: ChipsUsed = { firstHalf: ["wildcard"], secondHalf: [] };
+
+    // Seven of the eight while the first set is still playable: four in the
+    // second half's set and the three unspent in this one.
+    expect(chipsRemaining(used, 19)).toBe(7);
+
+    // And four the Gameweek after, because what the first half did not spend
+    // it cannot carry over. Counting eight less what was spent would go on
+    // offering three Chips nobody can play for the rest of the Season.
+    expect(chipsRemaining(used, 20)).toBe(4);
   });
 
   test("carries nothing unspent out of the first half and into the second", () => {

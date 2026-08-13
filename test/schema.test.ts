@@ -695,7 +695,8 @@ describe("the benchmark database", () => {
     // makes that failure loud, and a later migration adding a table the
     // dashboard reads has to carry both halves to keep it that way.
     expect(granted).toEqual([
-      "contexts", "fixtures", "gameweeks", "models", "predictions", "scores"
+      "contexts", "fixtures", "fpl_players", "gameweeks", "manager_states",
+      "models", "predictions", "scores"
     ]);
     expect(policied).toEqual(granted);
   });
