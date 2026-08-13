@@ -429,6 +429,32 @@ function squadSection(state: ManagerState): string[] {
   ];
 }
 
+/** The heading the Manager State block opens on, and the splice finds it by. */
+const STATE_HEADING = "Your Manager State";
+
+/**
+ * The one block that belongs to the seat rather than to the Gameweek: the
+ * Squad, the bank, the Free Transfers and the Chips. Everything else the
+ * context shows is the same for every seat, which is what lets an Exhibition
+ * borrow a stored body and replace only this (spec 0013).
+ *
+ * The reversion happens here, on the same stored row the reducer reverts, so
+ * what a seat is shown is what its action will be judged against. Taking the
+ * row as it stands would show a Free Hit's borrowed Squad and borrowed bank to
+ * a seat that owns neither. Doing it in the block means neither the builder nor
+ * the splice can forget, and doing it twice is doing it once.
+ */
+function managerStateSection(stored: ManagerState, gameweek: number): string[] {
+  const state = carriedIntoNextGameweek(stored);
+  return [
+    STATE_HEADING,
+    ...squadSection(state),
+    `Bank: ${money(state.bankTenths)}`,
+    `Free Transfers: ${state.freeTransfers}`,
+    ...chipsSection(state, gameweek)
+  ];
+}
+
 export function buildFplTrackContext({
   season,
   gameweek,
@@ -442,12 +468,6 @@ export function buildFplTrackContext({
   const windows = new Map(
     performance.map((player) => [player.fplId, player])
   );
-  // The same reversion the reducer performs on the same stored row, so what
-  // the Entrant is shown is what its action will be judged against. Taking the
-  // row as it stands would show a Free Hit's borrowed Squad and borrowed bank
-  // to an Entrant that owns neither. Doing it here rather than leaving it to
-  // callers means no caller can forget, and doing it twice is doing it once.
-  const state = carriedIntoNextGameweek(stored);
 
   return [
     `Fantasy Premier League — ${season} Gameweek ${gameweek}`,
@@ -455,11 +475,7 @@ export function buildFplTrackContext({
     "You manage one Squad for the whole Season. Your decisions persist: the "
     + "Squad you pick now is the Squad you carry into the next Gameweek.",
     "",
-    "Your Manager State",
-    ...squadSection(state),
-    `Bank: ${money(state.bankTenths)}`,
-    `Free Transfers: ${state.freeTransfers}`,
-    ...chipsSection(state, gameweek),
+    ...managerStateSection(stored, gameweek),
     "",
     ...fixturesSection(schedule),
     "",
@@ -485,5 +501,40 @@ export function buildFplTrackContext({
         vice_captain: 0
       }
     })
+  ].join("\n");
+}
+
+/** The line the body opens on, which is also where its Gameweek is written. */
+const TRACK_HEADING = /^Fantasy Premier League — .+ Gameweek (\d+)$/;
+
+/**
+ * A stored body as it would have read for a seat holding `state` — the donor's
+ * Manager State block replaced, every shared section carried over untouched
+ * (ADR-0032). The Gameweek comes off the donor's own heading, so the Chip line
+ * is recomputed against the Gameweek the body was frozen for.
+ *
+ * This couples to the rendered structure of a frozen Prompt Version, which is
+ * what makes the coupling safe: a version that redraws the block's delimiting
+ * must revisit this function, and a body it cannot find the block in is refused
+ * rather than patched approximately.
+ */
+export function spliceManagerState(
+  donor: string,
+  state: ManagerState
+): string {
+  const lines = donor.split("\n");
+  const heading = TRACK_HEADING.exec(lines[0] ?? "");
+  const opens = lines.indexOf(STATE_HEADING);
+  const closes = lines.indexOf("", opens);
+  if (heading?.[1] === undefined || opens === -1 || closes === -1) {
+    throw new Error(
+      `the donor is not a ${FPL_PROMPT_VERSION} body: no heading and `
+      + `${STATE_HEADING} block to replace`
+    );
+  }
+  return [
+    ...lines.slice(0, opens),
+    ...managerStateSection(state, Number(heading[1])),
+    ...lines.slice(closes)
   ].join("\n");
 }

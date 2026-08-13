@@ -64,11 +64,11 @@ shared inputs.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] Splicing a donor body with a Manager State yields exactly the body `buildFplTrackContext` renders for that state and the donor's shared inputs, byte for byte
-- [ ] The Chip-availability line reflects the spliced-in state, never the donor's
-- [ ] The carried-state transformation the builder applies — including the Free Hit reversion — is applied identically before rendering
-- [ ] The pool block, schedule, league table and performance sections are byte-identical to the donor's
-- [ ] A donor body whose structure the splice does not recognise is refused loudly rather than patched approximately
+- [x] Splicing a donor body with a Manager State yields exactly the body `buildFplTrackContext` renders for that state and the donor's shared inputs, byte for byte
+- [x] The Chip-availability line reflects the spliced-in state, never the donor's
+- [x] The carried-state transformation the builder applies — including the Free Hit reversion — is applied identically before rendering
+- [x] The pool block, schedule, league table and performance sections are byte-identical to the donor's
+- [x] A donor body whose structure the splice does not recognise is refused loudly rather than patched approximately
 
 ## FPL Exhibition replay, sequential from the opening
 
