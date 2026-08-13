@@ -6,6 +6,7 @@ import {
   requireCallConcurrency,
   type MatchCall
 } from "../predictions/attempt-match-calls.js";
+import { MATCH_PROMPT_VERSION } from "../predictions/openrouter-entrant.js";
 import { REPAIRABLE_KINDS } from "../predictions/validate-prediction.js";
 import { MAX_REPAIRS } from "../repairs.js";
 import { loadExhibition } from "./load-exhibition.js";
@@ -181,7 +182,11 @@ async function replayCoveredGameweeks({
   http,
   now
 }: ReplayMatchExhibitionOptions): Promise<number[]> {
-  const exhibition = await loadExhibition(database, exhibitionModelId);
+  const exhibition = await loadExhibition(
+    database,
+    exhibitionModelId,
+    MATCH_PROMPT_VERSION
+  );
 
   const covered: number[] = [];
   for (const gameweek of await settledGameweeks(database, season)) {

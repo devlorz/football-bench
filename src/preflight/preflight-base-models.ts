@@ -275,7 +275,9 @@ export async function preflightBaseModels({
   // Exhibition changes is only which rows are called, never how.
   let checked: CalledRow[];
   if (exhibitionModelId !== undefined) {
-    checked = [await loadExhibition(database, exhibitionModelId)];
+    checked = [
+      await loadExhibition(database, exhibitionModelId, MATCH_PROMPT_VERSION)
+    ];
   } else {
     // The Match track's seats, told from the FPL track's by Prompt Version:
     // both mark a competitor with `role = 'entrant'` in the same table. The

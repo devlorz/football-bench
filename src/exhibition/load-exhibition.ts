@@ -1,5 +1,6 @@
 import type { Client } from "pg";
-import { MATCH_PROMPT_VERSION } from "../predictions/openrouter-entrant.js";
+import type { FPL_PROMPT_VERSION } from "../context/build-fpl-track-context.js";
+import type { MATCH_PROMPT_VERSION } from "../predictions/openrouter-entrant.js";
 import type { ModelRole } from "../season-roster.js";
 
 type Database = Pick<Client, "query">;
@@ -25,17 +26,30 @@ export interface CalledRow {
 }
 
 /**
+ * The frozen Prompt Versions a run can be at — which is the same thing as
+ * which track it is. Named as the two constants rather than as `string`, so a
+ * caller cannot ask this door to admit a version nothing builds.
+ */
+type FrozenPromptVersion =
+  | typeof MATCH_PROMPT_VERSION
+  | typeof FPL_PROMPT_VERSION;
+
+/**
  * The one Exhibition row the operator named, or a refusal saying which of the
  * three things is wrong with the id: no such row, a row that is not an
- * Exhibition, or one that is not at the Season's frozen Match Prompt Version. A
- * typo must not put an Entrant through this door, and a row cannot claim one
- * Prompt Version while being called at another — the frozen Match prompt is the
- * only thing either door behind this builds, the pre-flight and the replay
- * alike, and there is no way to configure another (ADR-0001).
+ * Exhibition, or one that is not at the frozen Prompt Version the caller
+ * builds. A typo must not put an Entrant through this door, and a row cannot
+ * claim one Prompt Version while being called at another.
+ *
+ * The version is the caller's because it says which track it is: a Match replay
+ * and an FPL replay build different frozen prompts, and each has exactly one it
+ * can build with no way to configure another (ADR-0001). Reading it off the row
+ * instead would make this check agree with whatever it found.
  */
 export async function loadExhibition(
   database: Database,
-  modelId: string
+  modelId: string,
+  promptVersion: FrozenPromptVersion
 ): Promise<CalledRow> {
   const result = await database.query<CalledRow>(
     `select id, base_model, provider, quantization, prompt_version, role
@@ -52,10 +66,10 @@ export async function loadExhibition(
       `${modelId} has role '${model.role}', not 'exhibition'`
     );
   }
-  if (model.prompt_version !== MATCH_PROMPT_VERSION) {
+  if (model.prompt_version !== promptVersion) {
     throw new Error(
       `${modelId} is at Prompt Version ${model.prompt_version}, `
-      + `not ${MATCH_PROMPT_VERSION}`
+      + `not ${promptVersion}`
     );
   }
   return model;
