@@ -191,3 +191,10 @@ Gameweek N, meaning scoreable Fixtures whose Lock belongs to Gameweek N or earli
 Points, then lower RPS, then Entrant id. Every other Entrant retained in the Season roster has
 one comparison against it. This selects a comparison reference; it does not break a tie in
 the Match Points ranking.
+
+**Demonstration**:
+What the FPL points ranking is and the Match track ranking is not: evidence that the track
+ran, never a comparison of Base Models. One seat per Base Model means one Season path each —
+a sample of one apiece — so the ranking cannot separate skill from luck, and anywhere it can
+be read it carries the qualification saying so. The Match track carries the evidential claims.
+_Avoid_: leaderboard result (as evidence), benchmark score
