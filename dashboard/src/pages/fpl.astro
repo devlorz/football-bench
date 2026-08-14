@@ -59,10 +59,10 @@ import FplPage from "../layouts/FplPage.astro";
     </div>
   </section>
 
-  {/* Nine, because nine is what the roster is and a loading state that guesses
-      a different height moves the page when the data lands.
+  {/* Ten, because ten is what the roster is (ADR-0034) and a loading state that
+      guesses a different height moves the page when the data lands.
 
-      Outside the table rather than nine `colspan` rows inside it, which is what
+      Outside the table rather than ten `colspan` rows inside it, which is what
       this was while the table was the only variant: one response fills three
       views, so there is one wait for it, and a reader who opened a link to the
       Race variant would otherwise be shown a table while it loaded. It is also
@@ -70,7 +70,7 @@ import FplPage from "../layouts/FplPage.astro";
       width of the content, and not a guess at each column's width, which a
       `<table>` would then move. */}
   <div class="fplskeleton" id="loading" aria-hidden="true">
-    {Array.from({ length: 9 }).map(() => <div class="skeleton"></div>)}
+    {Array.from({ length: 10 }).map(() => <div class="skeleton"></div>)}
   </div>
 
   <section id="ranking" hidden>

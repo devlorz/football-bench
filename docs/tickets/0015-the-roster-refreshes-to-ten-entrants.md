@@ -62,8 +62,8 @@ because every other surface reads the roster from the data.
 
 **Blocked by:** "Ten seats of record".
 
-- [ ] The loading skeleton renders exactly as many rows as the Season Roster holds
-- [ ] The comment beside it still explains why the count is fixed rather than guessed
+- [x] The loading skeleton renders exactly as many rows as the Season Roster holds
+- [x] The comment beside it still explains why the count is fixed rather than guessed
 
 ## The road in is loud
 

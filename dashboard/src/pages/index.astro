@@ -88,10 +88,10 @@ import Page from "../layouts/Page.astro";
         <div class="cell" role="columnheader">Bet points</div>
       </div>
       <div id="rows" role="rowgroup">
-        {/* Still blocks over the same grid the real rows use. Nine, because
-            nine is what the roster is and a loading state that guesses a
+        {/* Still blocks over the same grid the real rows use. Ten, because ten
+            is what the roster is (ADR-0034) and a loading state that guesses a
             different height moves the page when the data lands. */}
-        {Array.from({ length: 9 }).map(() => (
+        {Array.from({ length: 10 }).map(() => (
           <div class="lbrow lbrow-skeleton" aria-hidden="true">
             <div class="skeleton"></div>
             <div class="skeleton"></div>
