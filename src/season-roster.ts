@@ -71,14 +71,13 @@ export interface Entrant {
  * The ten seats of ADR-0034: ADR-0014's nine with the Qwen and Grok seats
  * passed to their successors and Muse Spark 1.2 added.
  *
- * The seven carried seats were read off the live table on 2026-08-12 and
- * agree, field for field, with the roster-resolution tables of the three
- * pre-flight reports in `docs/reports` — every `canonicalSlug` is that
- * report's resolved model and every `provider` is the slug behind its resolved
- * provider's display name, and each carries the date of that read. The three
- * new seats have no report behind them yet: their `canonicalSlug` is
- * ADR-0034's expectation from the 2026-08-14 catalog check, to be replaced by
- * what the road in's pre-flight actually resolves.
+ * All ten agree, field for field, with the roster-resolution table of
+ * `docs/reports/2026-08-15-ten-entrant-roster-preflight.md`: every
+ * `canonicalSlug` is that report's resolved model and every `provider` is the
+ * slug behind its resolved provider's display name. The three arriving seats
+ * were entered on ADR-0034's catalog expectation and the pre-flight resolved
+ * each to exactly that, so the values did not move — what moved is what stands
+ * behind them, from an expectation to an observation.
  * `src/seed-season.ts` holds a different nine on purpose — the design mock's
  * placeholders — and is not a source for these.
  */
@@ -88,7 +87,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "anthropic/claude-opus-5", provider: "anthropic",
     quantization: null,
     canonicalSlug: "anthropic/claude-opus-5-20260723",
-    catalogCheckedAt: "2026-08-12",
+    catalogCheckedAt: "2026-08-15",
     baseModelClass: "Frontier"
   },
   {
@@ -96,7 +95,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "openai/gpt-5.6-sol-pro", provider: "openai",
     quantization: null,
     canonicalSlug: "openai/gpt-5.6-sol-pro-20260709",
-    catalogCheckedAt: "2026-08-12",
+    catalogCheckedAt: "2026-08-15",
     baseModelClass: "Frontier"
   },
   {
@@ -104,7 +103,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "google/gemini-3.1-pro-preview", provider: "google-ai-studio",
     quantization: null,
     canonicalSlug: "google/gemini-3.1-pro-preview-20260219",
-    catalogCheckedAt: "2026-08-12",
+    catalogCheckedAt: "2026-08-15",
     baseModelClass: "Frontier"
   },
   {
@@ -112,7 +111,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "x-ai/grok-4.6", provider: "xai",
     quantization: null,
     canonicalSlug: "x-ai/grok-4.6-20260810",
-    catalogCheckedAt: "2026-08-14",
+    catalogCheckedAt: "2026-08-15",
     baseModelClass: "First-party"
   },
   {
@@ -123,7 +122,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     // is no precision to fix.
     quantization: null,
     canonicalSlug: "meta/muse-spark-1.2-20260805",
-    catalogCheckedAt: "2026-08-14",
+    catalogCheckedAt: "2026-08-15",
     baseModelClass: "First-party"
   },
   {
@@ -131,7 +130,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "moonshotai/kimi-k3", provider: "moonshotai",
     quantization: "mxfp4",
     canonicalSlug: "moonshotai/kimi-k3-20260715",
-    catalogCheckedAt: "2026-08-12",
+    catalogCheckedAt: "2026-08-15",
     baseModelClass: "Open-weight"
   },
   {
@@ -139,7 +138,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "z-ai/glm-5.2", provider: "z-ai",
     quantization: "fp8",
     canonicalSlug: "z-ai/glm-5.2-20260616",
-    catalogCheckedAt: "2026-08-12",
+    catalogCheckedAt: "2026-08-15",
     baseModelClass: "Open-weight"
   },
   {
@@ -147,7 +146,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "deepseek/deepseek-v4-pro", provider: "novita",
     quantization: "fp8",
     canonicalSlug: "deepseek/deepseek-v4-pro-20260423",
-    catalogCheckedAt: "2026-08-12",
+    catalogCheckedAt: "2026-08-15",
     baseModelClass: "Open-weight"
   },
   {
@@ -163,7 +162,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     // day a second endpoint appears.
     quantization: null,
     canonicalSlug: "qwen/qwen3.8-max-20260803",
-    catalogCheckedAt: "2026-08-14",
+    catalogCheckedAt: "2026-08-15",
     baseModelClass: "Open-weight"
   },
   {
@@ -171,7 +170,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "minimax/minimax-m3", provider: "minimax",
     quantization: "fp8",
     canonicalSlug: "minimax/minimax-m3-20260531",
-    catalogCheckedAt: "2026-08-12",
+    catalogCheckedAt: "2026-08-15",
     baseModelClass: "Open-weight"
   }
 ];
