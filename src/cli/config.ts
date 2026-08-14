@@ -253,7 +253,11 @@ function readScheduledJobConfig(
 export function readScheduledPredictJobConfig(
   environment: NodeJS.ProcessEnv
 ): ScheduledPredictJobConfig {
-  return readScheduledJobConfig(environment, "PREDICT_CONCURRENCY", 9);
+  return readScheduledJobConfig(
+    environment,
+    "PREDICT_CONCURRENCY",
+    SEASON_ROSTER_SIZE
+  );
 }
 
 /**
@@ -325,7 +329,9 @@ export function readDryRunJobConfig(
     readDailyFetchJobConfig(environment);
   const { gameweek } = readFetchJobConfig(environment);
   const at = environment.DRY_RUN_AT?.trim() || "deadline-6h";
-  const concurrency = Number(environment.PREDICT_CONCURRENCY?.trim() || "9");
+  const concurrency = Number(
+    environment.PREDICT_CONCURRENCY?.trim() || String(SEASON_ROSTER_SIZE)
+  );
   if (!Number.isInteger(concurrency) || concurrency < 1) {
     throw new Error("PREDICT_CONCURRENCY must be a positive integer");
   }
@@ -455,7 +461,9 @@ export function readPreviewJobConfig(
   const { databaseUrl, season, footballDataSeason } =
     readDailyFetchJobConfig(environment);
   const { gameweek } = readFetchJobConfig(environment);
-  const concurrency = Number(environment.PREDICT_CONCURRENCY?.trim() || "9");
+  const concurrency = Number(
+    environment.PREDICT_CONCURRENCY?.trim() || String(SEASON_ROSTER_SIZE)
+  );
   if (!Number.isInteger(concurrency) || concurrency < 1) {
     throw new Error("PREDICT_CONCURRENCY must be a positive integer");
   }

@@ -83,6 +83,10 @@ describe("entering the Season Roster", () => {
       for (const row of await entrants()) {
         const entrant = SEASON_ROSTER.find(({ id }) => id === row.id);
         expect(entrant?.canonicalSlug).toBe(row.config.canonical_slug);
+        // Beside it, when that resolution was last looked at. Per seat, so a
+        // refresh that opened three Base Models' pages cannot date the seven
+        // it never opened.
+        expect(entrant?.catalogCheckedAt).toBe(row.config.catalog_checked_at);
         // The pin is recorded beside a stable request name rather than sent
         // as one, which is what keeps a snapshot swap detectable.
         expect(row.base_model).not.toBe(row.config.canonical_slug);
@@ -156,7 +160,10 @@ describe("entering the Season Roster", () => {
         );
       await expect(enterSeasonRoster(
         client, SEASON, [...SEASON_ROSTER, SEASON_ROSTER[0]!]
-      )).rejects.toThrow(/holds 11 Entrants/);
+      )).rejects.toThrow(
+        `The roster holds ${SEASON_ROSTER_SIZE + 1} Entrants, not `
+        + `${SEASON_ROSTER_SIZE} (ADR-0034)`
+      );
 
       // And it refuses before writing anything, not part way through.
       expect(await entrants()).toHaveLength(0);

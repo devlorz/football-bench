@@ -46,12 +46,14 @@ export interface Entrant {
   provider: string;
   /**
    * Pinned on the open-weight seats and null on the rest (ADR-0009,
-   * ADR-0034): a served open-weight Base Model is a different model at a
+   * ADR-0034): a served open-weight Base Model is a different Base Model at a
    * different precision, so an unpinned one is not one Entrant across a
    * Season. A first-party seat has nothing to pin.
    */
   quantization: string | null;
-  /** The dated model every pre-flight has observed this seat resolving to. */
+  /**
+   * The dated Base Model every pre-flight has observed this seat resolving to.
+   */
   canonicalSlug: string;
   baseModelClass: BaseModelClass;
   /**

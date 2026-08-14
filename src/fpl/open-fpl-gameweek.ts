@@ -28,9 +28,9 @@ import {
 type Database = Pick<Client, "query">;
 
 /**
- * One Entrant per call. Gathering all ten and committing them atomically is
- * the "Start all nine Entrants together" ticket's job; opening them one at a
- * time from here would leave a partial start behind.
+ * One Entrant per call. Gathering the whole roster and committing it
+ * atomically is `startFplTrack`'s job; opening them one at a time from here
+ * would leave a partial start behind.
  */
 export interface OpenFplGameweekOptions {
   database: Database;
