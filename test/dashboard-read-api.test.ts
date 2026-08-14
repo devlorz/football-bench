@@ -103,7 +103,7 @@ describe("the dashboard read API", () => {
     // was never meant to read is refused rather than returned empty, and the
     // refusal is what says the role is doing anything at all. Which tables
     // those are is `schema.test.ts`'s to state, and it grows as endpoints do.
-    await expect(query("select 1 from attempts limit 1"))
+    await expect(query("select 1 from raw_snapshots limit 1"))
       .rejects.toThrow(/permission denied/);
   });
 

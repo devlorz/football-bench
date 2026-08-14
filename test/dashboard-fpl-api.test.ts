@@ -82,8 +82,10 @@ describe("the FPL leaderboard endpoint", () => {
     expect((await query("select 1 from manager_states limit 1")).length).toBe(1);
     expect((await query("select 1 from fpl_players limit 1")).length).toBe(1);
 
-    // And no table beyond what the endpoints read.
-    await expect(query("select 1 from fpl_player_points limit 1"))
+    // And nothing beyond what the endpoints read: `attempts` arrived with the
+    // squads endpoint (migration 0021) as a column-level grant, so a provider's
+    // answer verbatim is still out of an internet-facing role's reach.
+    await expect(query("select raw_response from attempts limit 1"))
       .rejects.toThrow(/permission denied/);
   });
 

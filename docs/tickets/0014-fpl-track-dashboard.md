@@ -107,15 +107,15 @@ costs, and the validation record — so the page's picker can switch without fet
 
 **Blocked by:** "A seeded FPL Season".
 
-- [ ] The response carries all nine Entrants for the latest Settled Gameweek in one body
-- [ ] Selling Price is purchase price plus half of any rise rounded down, and a fall passes
+- [x] The response carries all nine Entrants for the latest Settled Gameweek in one body
+- [x] Selling Price is purchase price plus half of any rise rounded down, and a fall passes
       through in full — both proven against the seed
-- [ ] Transfers report out, in, and cost, including a −4 Hit where the seed took one
-- [ ] The validation record reports Repairs used, whether the Gameweek Rolled Over, and the
+- [x] Transfers report out, in, and cost, including a −4 Hit where the seed took one
+- [x] The validation record reports Repairs used, whether the Gameweek Rolled Over, and the
       last violation; a Rolled Over Gameweek presents the standing Team Sheet
-- [ ] Responses carry the scored-data cache lifetime — deliberately not the sixty-second
+- [x] Responses carry the scored-data cache lifetime — deliberately not the sixty-second
       fixtures lifetime
-- [ ] Before the first Settled Gameweek the endpoint returns the honest empty shape
+- [x] Before the first Settled Gameweek the endpoint returns the honest empty shape
 
 ## The latest-squads page
 
