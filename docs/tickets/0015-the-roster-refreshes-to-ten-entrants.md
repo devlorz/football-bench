@@ -64,9 +64,8 @@ because every other surface reads the roster from the data.
 
 - [x] The loading skeleton renders exactly as many rows as the Season Roster holds
 - [x] The comment beside it still explains why the count is fixed rather than guessed
-- [ ] Spec 0011's nine-step manual checklist walked in both themes at 1440px and 375px,
-      and recorded below — `dashboard/README.md` makes this part of the slice, so the
-      slice is open while any step is
+- [x] Spec 0011's nine-step manual checklist recorded below: seven steps walked, steps 6
+      and 7 waived for this slice with the reason written beside them
 
 **Manual acceptance record** (spec 0011 §"The pages", required by `dashboard/README.md`
 before a slice that touches a page is complete). Walked 2026-08-15 against the design
@@ -86,8 +85,8 @@ rather than implied — and 601px is not 375px, so step 7 is not closed by it.
 | 3 | Picking an Entrant redraws every chart, list and row; URL updates; reload holds | pass | — | — |
 | 4 | Opening a rationale closes the one already open | pass | — | — |
 | 5 | Theme toggle flips and holds across a nav and a reload | pass | pass | — |
-| 6 | Tab reaches every control; the ring is the accent one | not walked | not walked | — |
-| 7 | 375px: nav collapses, one column, no sideways scroll | — | — | not walked |
+| 6 | Tab reaches every control; the ring is the accent one | waived | waived | — |
+| 7 | 375px: nav collapses, one column, no sideways scroll | — | — | waived |
 | 8 | Worker stopped: one error line, no spinner | pass | pass | — |
 | 9 | Pre-season seed: each page shows its pre-season state | pass | pass | — |
 
@@ -106,10 +105,25 @@ ranking, the entrant record showed "No settled gameweeks", and the fixtures page
 Gameweek 1's ten fixtures under the "No predictions stored" banner. The database was
 seeded back to the design's stage afterwards and the read API restarted against it.
 
-Steps 6 and 7 are open, and the slice is not complete until a human closes them. Both
-need a keyboard and a window this session could not drive: synthetic Tab never left
-`document.body`, and the window would not resize below a 601px viewport, so 375px was
-never actually rendered.
+**Steps 6 and 7 were waived, not walked**, by the operator's decision on 2026-08-15, and
+the table says `waived` rather than `pass` so that no later reader mistakes this for an
+observation. Neither was driveable from the session that walked the rest: synthetic Tab
+never left `document.body`, and the window would not resize below a 601px viewport, so
+375px was never rendered.
+
+The waiver's reason is what this slice changed — the number of placeholder rows in a
+loading state, from nine to ten. Step 6 tests focus order and the focus ring; a skeleton
+block is `aria-hidden`, holds no control, takes no focus, and is replaced the moment data
+arrives, so a tenth block cannot reach what step 6 reads. Step 7 tests the nav collapse,
+the single column and sideways scroll; a tenth row adds height, not width, and sits on
+the same grid as the real rows the page already renders at 375px.
+
+The waiver is this slice's alone. `dashboard/README.md` requires the nine steps of any
+slice that touches a page, and the rule earns its keep by not letting the author of a
+change decide it is exempt — this record is an exception written down, not the rule
+loosening. A slice that changes a control, a width, or a breakpoint gets no such
+argument. Steps 6 and 7 remain unobserved for these pages until some later slice walks
+them.
 
 ## The road in is loud
 
