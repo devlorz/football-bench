@@ -552,6 +552,48 @@ describe("pre-flight for the Base Model roster", () => {
     expect(calls).toBe(0);
   });
 
+  test("refuses a roster grown past the size it expects, naming both numbers", async () => {
+    // The outgoing seats are still in the table while the incoming one is
+    // inserted, so the road from nine to ten passes through eleven and twelve.
+    // Neither is silently swept up: the refusal names what was expected and
+    // what was found, so the operator reads which way the table is wrong.
+    const addEntrant = async (index: number) => {
+      await client.query(
+        `insert into models (
+           id, name, base_model, provider, quantization, prompt_version, role
+         ) values ($1, $2, $3, $4, null, 'match/2026-27-v2', 'entrant')`,
+        [`entrant/${index}`, `Entrant ${index}`, `vendor/base-model-${index}`,
+          `provider-${index}`]
+      );
+    };
+    let calls = 0;
+    const expectTen = () => preflightBaseModels({
+      database: client,
+      season: "2026-27",
+      fixtureId: 1,
+      expectedEntrantCount: 10,
+      apiKey: "test-key",
+      http: async () => {
+        calls += 1;
+        throw new Error("HTTP must not run");
+      }
+    });
+
+    await addEntrant(10);
+    await addEntrant(11);
+    await expect(expectTen()).rejects.toThrow(
+      "Pre-flight requires exactly 10 Entrants at Prompt Version "
+      + "match/2026-27-v2; found 11"
+    );
+
+    await addEntrant(12);
+    await expect(expectTen()).rejects.toThrow(
+      "Pre-flight requires exactly 10 Entrants at Prompt Version "
+      + "match/2026-27-v2; found 12"
+    );
+    expect(calls).toBe(0);
+  });
+
   test("refuses to run when an Entrant names a different Prompt Version", async () => {
     await client.query(
       `update models

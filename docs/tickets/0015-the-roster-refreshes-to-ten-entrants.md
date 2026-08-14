@@ -122,10 +122,21 @@ made the states possible, this one pins them down.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] A roster pre-flight expecting ten refuses a table holding eleven or twelve Entrant
+- [x] A roster pre-flight expecting ten refuses a table holding eleven or twelve Entrant
       rows at the frozen Prompt Version, naming both numbers
-- [ ] A roster pre-flight expecting ten refuses a table holding nine
-- [ ] A single temporary `role = 'exhibition'` row is pre-flighted alone, touching no
+- [x] A roster pre-flight expecting ten refuses a table holding nine
+- [x] A single temporary `role = 'exhibition'` row is pre-flighted alone, touching no
       Entrant row
-- [ ] An Entrant row aimed at the Exhibition door is refused by role, so a typo cannot
+- [x] An Entrant row aimed at the Exhibition door is refused by role, so a typo cannot
       check the wrong thing
+
+Three of the four were already pinned before this slice, in
+`test/preflight-base-models.test.ts`: "refuses to run when the roster does not match its
+configured size" expects ten against nine, "checks one Exhibition on its own, at the frozen
+Prompt Version" asserts a single call, and "refuses a targeted model that is missing or is
+not an Exhibition" names the role. Only the grown roster was missing, and it is the one
+test this slice adds. The fixtures keep writing the count as a literal on purpose:
+`expectedEntrantCount` reaches the pre-flight from the operator's `EXPECTED_ENTRANT_COUNT`
+(`src/cli/config.ts`), not from `SEASON_ROSTER_SIZE`, and a test that imported the constant
+would stop failing on the day the roster grows without the operator's environment moving
+with it.
