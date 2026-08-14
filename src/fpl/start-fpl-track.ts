@@ -61,8 +61,8 @@ export interface FplTrackOpening {
  * through the rules reducer as if it had just been answered (ADR-0025) — or
  * null for a seat that never got a legal answer on record and must be called.
  *
- * A retry of a refused opening re-billed every seat, including the eight whose
- * legal actions the run had already thrown away. The accepted action is parsed
+ * A retry of a refused opening re-billed every seat, including every one whose
+ * legal action the run had already thrown away. The accepted action is parsed
  * back out of `attempts.raw_response` at the point of use — no new column, no
  * second copy of a fact the audit trail already states — and driven through
  * the same judgement a live response gets, against the same stored context the
@@ -128,7 +128,7 @@ async function replayRecordedOpening(
  * Opens the FPL track at a Gameweek the operator names, for every Entrant at
  * once.
  *
- * The Season path begins only when all nine Base Models hold a legal opening
+ * The Season path begins only when all ten Base Models hold a legal opening
  * Squad, so the actions are gathered first and committed second: an Entrant
  * that never gets there does not receive a shorter path than its peers, it
  * stops the start. What survives a refused start is the attempt record, which
@@ -189,7 +189,7 @@ export async function startFplTrack({
   // And there are as many of them as the Season has Entrants. `missing` is
   // measured against the roster that was queried, so a roster of the wrong
   // size reports nobody missing and starts a Season that is not the one
-  // ADR-0014 describes — with no way back, because `manager_states` is
+  // ADR-0034 describes — with no way back, because `manager_states` is
   // insert-only. Both questions are asked before the first call, so a roster
   // problem is never discovered next to a Lock.
   if (entrants.length !== SEASON_ROSTER_SIZE) {
@@ -200,9 +200,9 @@ export async function startFplTrack({
   }
 
   // Every Entrant starts from the same seed state and the same locked pool, so
-  // the nine bodies are identical. They are still stored one apiece, because a
+  // the ten bodies are identical. They are still stored one apiece, because a
   // context is one Entrant's from the next Gameweek onwards and one shape for
-  // the whole Season is worth nine copies of one body.
+  // the whole Season is worth ten copies of one body.
   const previous = openingManagerState();
   const opening = buildFplTrackContext({
     season,
@@ -220,7 +220,7 @@ export async function startFplTrack({
     repairsUsed: number;
     receivedAt: Date;
   }>();
-  // Nine conversations at once, up to the operator's limit. Each Entrant's
+  // Ten conversations at once, up to the operator's limit. Each Entrant's
   // own Repairs stay in its own conversation, so the only thing concurrency
   // shares is the wait — which is the point, with one Lock to finish inside.
   await eachBounded(entrants, concurrency, async (entrant) => {
@@ -238,7 +238,7 @@ export async function startFplTrack({
     const pool = parseFplTrackContextPool(body);
     // A seat that already answered legally is not asked again. What it said is
     // replayed from the record instead, so one seat's provider outage stops
-    // costing eight other Entrants' answers (ADR-0025).
+    // costing every other Entrant its answer (ADR-0025).
     const replayed = await replayRecordedOpening(
       database,
       season,

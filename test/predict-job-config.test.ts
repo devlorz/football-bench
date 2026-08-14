@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
 import {
   readPredictJobConfig,
   readScheduledPredictJobConfig
@@ -28,7 +29,7 @@ describe("the predict job configuration", () => {
       GAMEWEEK: "1",
       OPENROUTER_API_KEY: "secret-from-environment"
     })).toMatchObject({
-      concurrency: 9,
+      concurrency: SEASON_ROSTER_SIZE,
       trigger: "main"
     });
 
@@ -62,7 +63,7 @@ describe("the predict job configuration", () => {
     })).toEqual({
       databaseUrl: "postgresql://localhost/benchmark",
       season: "2026-27",
-      concurrency: 9,
+      concurrency: SEASON_ROSTER_SIZE,
       openRouterApiKey: "secret-from-environment"
     });
   });

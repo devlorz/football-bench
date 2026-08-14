@@ -695,8 +695,23 @@ describe("the benchmark database", () => {
     // makes that failure loud, and a later migration adding a table the
     // dashboard reads has to carry both halves to keep it that way.
     expect(granted).toEqual([
-      "contexts", "fixtures", "gameweeks", "models", "predictions", "scores"
+      "contexts", "fixtures", "fpl_player_points", "fpl_players", "gameweeks",
+      "manager_states", "models", "predictions", "scores"
     ]);
-    expect(policied).toEqual(granted);
+
+    // `attempts` is the one table granted column by column rather than whole
+    // (migration 0021): the squads endpoint reads the last violation off it,
+    // and the same row carries a provider's answer verbatim. A column grant is
+    // no table privilege at all, so it holds a policy without appearing above —
+    // and the columns are what has to be checked instead.
+    expect(policied).toEqual(["attempts", ...granted]);
+    const readable = async (column: string): Promise<boolean> =>
+      (await client.query<{ allowed: boolean }>(
+        `select has_column_privilege(
+           'dashboard_read', 'attempts', $1, 'select') as allowed`,
+        [column]
+      )).rows[0]!.allowed;
+    expect(await readable("error_kind")).toBe(true);
+    expect(await readable("raw_response")).toBe(false);
   });
 });

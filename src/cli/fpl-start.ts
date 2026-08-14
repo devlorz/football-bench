@@ -21,7 +21,7 @@ try {
   });
 
   if (opening.missing.length > 0) {
-    // Nothing was stored: the track starts for all nine or for none. Every
+    // Nothing was stored: the track starts for all ten or for none. Every
     // attempt is on record, and the operator decides from those whether to
     // try this Gameweek again or the next one.
     console.error(

@@ -29,6 +29,7 @@ import {
 import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
 import { archivedBody } from "./archived-fixture.js";
 import { resetSchema } from "./schema-fixture.js";
+import { BASE_MODELS } from "./fpl-seat-fixture.js";
 
 const { Client } = pg;
 
@@ -42,12 +43,6 @@ const SEASON = "2026-27";
  * are the archived ones either way; only the Season they are filed under moves.
  */
 const FOOTBALL_DATA_SEASON = SEASON;
-
-/** The nine seats ADR-0014 puts on the track, one per Base Model. */
-const BASE_MODELS = Array.from(
-  { length: SEASON_ROSTER_SIZE },
-  (_unused, index) => `vendor/base-${index + 1}`
-);
 
 function seatId(baseModel: string): string {
   return `fpl/${baseModel.split("/")[1]}`;
@@ -141,7 +136,7 @@ describe("rehearsing the FPL track over archived Gameweeks", () => {
     });
   }
 
-  /** Opens the track for all nine at Gameweek 1, which every later Gameweek
+  /** Opens the track for all ten at Gameweek 1, which every later Gameweek
    * needs a Squad standing behind it for. */
   async function openTheTrack(
     answer: (baseModel: string, attempt: number) => string = () => OPENING
@@ -190,7 +185,7 @@ describe("rehearsing the FPL track over archived Gameweeks", () => {
     });
   }
 
-  test("opens all nine Entrants at the Gameweek the operator chose", async () => {
+  test("opens all ten Entrants at the Gameweek the operator chose", async () => {
     await fetchDay({ gameweek: 1, at: "2026-08-20T06:00:00Z" });
 
     const opening = await startFplTrack({
@@ -220,7 +215,7 @@ describe("rehearsing the FPL track over archived Gameweeks", () => {
     const stubborn = BASE_MODELS[4]!;
 
     // The armband on a substitute, four times over: the opening answer and
-    // three Repairs. Eight Entrants open legally and the ninth never does.
+    // three Repairs. Every Entrant but one opens legally; that one never does.
     const opening = await startFplTrack({
       database: client,
       season: SEASON,
@@ -238,8 +233,8 @@ describe("rehearsing the FPL track over archived Gameweeks", () => {
       now: () => new Date("2026-08-21T11:30:00Z")
     });
 
-    // The Season path begins for all nine or for none: eight Manager States
-    // committed while the ninth never arrives would be eight demonstrations a
+    // The Season path begins for the whole roster or for none of it: the
+    // states committed while one never arrives would be demonstrations a
     // Gameweek longer than the one they are ranked against, and
     // `manager_states` is insert-only, so there would be no way back.
     expect(opening).toEqual({ gameweek: 1, missing: [seatId(stubborn)] });
@@ -587,8 +582,8 @@ describe("rehearsing the FPL track over archived Gameweeks", () => {
     expect(report.entrants).toHaveLength(SEASON_ROSTER_SIZE);
     expect(report.incomplete).toEqual([]);
 
-    // Nine paths of equal length: the Entrant that Rolled Over holds Gameweek 2
-    // as surely as the eight that answered it, which is the whole difference
+    // Ten paths of equal length: the Entrant that Rolled Over holds Gameweek 2
+    // as surely as the seats that answered it, which is the whole difference
     // between a Roll Over and a Gap.
     expect(new Set(report.entrants.map(({ path }) => path.length)))
       .toEqual(new Set([2]));

@@ -16,7 +16,7 @@ import {
 /**
  * The FPL points ranking is a demonstration, and the label is not decoration.
  * One seat per Base Model means one Season path each (ADR-0003), so a ranking
- * of nine paths is a sample of one apiece — it shows the track ran, not that
+ * of ten paths is a sample of one apiece — it shows the track ran, not that
  * the Base Model on top manages a Squad better than the one beneath it.
  *
  * The sentence is stored in the detail of every row a ranking could be read

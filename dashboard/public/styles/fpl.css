@@ -1,0 +1,394 @@
+/*
+ * The FPL track's own sheet, loaded only by the pages under `/fpl`.
+ *
+ * `modernist.css` is vendored whole and never edited, and `overrides.css` is
+ * the Match track's -- so everything the FPL design asks for that the other two
+ * do not already say lives here, and loading this third sheet is the whole of
+ * what makes a page an FPL page.
+ *
+ * Two kinds of thing: the token overrides the design of record names -- the
+ * Premier League purple in place of the Match track's, the neutral ramp that
+ * inverts on the dark theme, and the pitch -- and the classes for the chrome
+ * and for the ranking in each of the three forms the design gives it: the
+ * table, the Race chart and its standings, and the Cards grid.
+ */
+
+/* ── tokens ──────────────────────────────────────────────────────────────── */
+
+:root {
+  /* The design's purple, which is not the Match track's: the two sections are
+     separated by path and by accent, and a reader who has crossed over can see
+     which track they are on without reading the brand. */
+  --color-accent: #7f2ea8;
+  --color-accent-100: #f6effa;
+  --color-accent-200: #ead9f3;
+  --color-accent-300: #d8bbe9;
+  --color-accent-400: #b98ad6;
+  --color-accent-500: #9b4dc4;
+  --color-accent-600: #6c2291;
+  --color-accent-700: #57157a;
+  --color-accent-800: #420f5c;
+  --color-accent-900: #37003c;
+
+  /* The field the Team Sheet is drawn on, two slices from now. It is a token of
+     the section and not of that one page: it is also the border colour of every
+     name plate that sits on the field, and the design fixes it in both themes.
+   */
+  --pitch: var(--color-neutral-900);
+
+  /* The width the FPL screens were drawn at, narrower than the Match track's
+     because this section's widest row is seven columns and not four. */
+  --page-max: 1240px;
+}
+
+[data-theme="dark"] {
+  /* Lightened so it still holds contrast against the dark ground, and the ramp
+     mirrored end for end, so every `accent-N` the design names keeps the visual
+     weight it was picked for rather than inverting it. */
+  --color-accent: #a95ccd;
+  --color-accent-100: #420f5c;
+  --color-accent-200: #57157a;
+  --color-accent-300: #6c2291;
+  /* The same value `:root` above gives it, and not a redundant one: the Match
+     track's sheet loads first and moves this step to its own purple on the dark
+     theme, so leaving the hole here hands one rung of the FPL ramp to the other
+     track. */
+  --color-accent-500: #9b4dc4;
+  --color-accent-600: #c084dd;
+  --color-accent-700: #d8bbe9;
+  --color-accent-800: #ead9f3;
+  --color-accent-900: #f6effa;
+
+  /* The neutral ramp inverts with it, for the same reason: `.tag-neutral` is
+     ink on a pale fill by construction, and left alone it is a white pill on a
+     dark table. */
+  --color-neutral-100: #2d2b2b;
+  --color-neutral-200: #444141;
+  --color-neutral-300: #605d5d;
+  --color-neutral-400: #7d7979;
+  --color-neutral-500: #9b9797;
+  --color-neutral-600: #bab6b6;
+  --color-neutral-700: #d7d3d3;
+  --color-neutral-800: #eae7e7;
+  --color-neutral-900: #f8f4f4;
+
+  /* Pinned rather than left to follow the ramp: the pitch is dark in both
+     themes by design, and the inversion above would otherwise make it white. */
+  --pitch: #141312;
+}
+
+/* ── chrome ──────────────────────────────────────────────────────────────── */
+
+/* The header is the Match track's markup wearing this section's design: brand
+   left, tabs centred, status line and theme toggle right. Everything below
+   restates a value the design fixes and `overrides.css` sets differently. */
+
+.nav { align-items: center; padding-block: 0; }
+.brand-track { font-size: 13px; letter-spacing: 0.18em; }
+
+.navlinks { gap: 32px; margin: 0 auto; }
+.navlinks a {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: normal;
+  text-transform: none;
+  text-decoration: none;
+  padding: 20px 0;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+.navlinks a:hover { color: var(--color-accent); }
+/* The underline is an inset shadow and not a border, so the tab does not move
+   by three pixels when it becomes the current one. */
+.navlinks a[aria-current="page"] {
+  color: var(--color-accent);
+  box-shadow: inset 0 -3px 0 var(--color-accent);
+}
+
+/* Written by whichever page is on screen, out of what that page's own endpoint
+   answered: the Gameweek in it is a fact about the record and not about the
+   chrome, and the chrome has no fetch of its own to learn it from. */
+.fplstatus {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  /* Two lines at the design's own width. It is the longest run of text in a
+     header that must never wrap the brand or the tabs, so it is the thing that
+     gives way. */
+  max-width: 26ch;
+  text-align: right;
+}
+
+/* The design's `34px 28px 80px`, of which the sides and the foot are already
+   the Match track's. Set as `padding-top` and not as the shorthand, so the
+   phone's values below are the only other place this has to be said -- see the
+   note there, because a shorthand in a media query does not outrank a longhand
+   in a later sheet. */
+.page { padding-top: 34px; }
+
+/* ── ranking ─────────────────────────────────────────────────────────────── */
+
+.fplhero {
+  display: flex;
+  align-items: baseline;
+  gap: 24px;
+  border-bottom: 2px solid var(--color-divider);
+  padding-bottom: 18px;
+}
+.fplhero h1 { font-size: 46px; letter-spacing: -0.03em; margin: 0; }
+/* Beside the title rather than under it, and in the body's ink rather than the
+   accent `.kicker` carries elsewhere: here it qualifies the heading it sits
+   next to, and an accent phrase that size reads as a second heading. */
+.fplhero .kicker {
+  margin: 0;
+  letter-spacing: 0.08em;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+/* Right of the title and its kicker, which is where the design puts it and
+   what the hero's own flex row already allows for. */
+.fplhero .seg { margin-left: auto; }
+
+/* One wait for one response, whichever of the three variants it fills. The
+   design has no loading state of its own; this is the Match track's `.skeleton`
+   over the gap the Entrant record's own loading block uses. */
+.fplskeleton { display: grid; gap: 14px; margin-top: 20px; }
+
+/* The table's own scroll container, the convention `.sttable` already sets on
+   the Match track: seven columns are wider than a phone, and the page itself
+   must never scroll sideways. It is not the mobile collapse -- that slice drops
+   Squad value and Chips left, and this only keeps the seven from pushing the
+   document past the viewport until it does. */
+.fplscroll { overflow-x: auto; }
+
+.fpltable { margin-top: 8px; }
+.fpltable th, .fpltable td { padding: 12px 8px; }
+.fpltable th:nth-child(1) { width: 56px; }
+.fpltable th:nth-child(2) { width: 34px; }
+.fpltable th:nth-child(4) { width: 96px; }
+.fpltable th:nth-child(5) { width: 120px; }
+.fpltable th:nth-child(6) { width: 120px; }
+.fpltable th:nth-child(7) { width: 110px; }
+.fpltable .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.fplrank {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 20px;
+}
+.fplmove { font-size: 12px; font-weight: 600; }
+/* A rise is the accent and a fall is neutral: the design emphasises the climb,
+   and colouring the fall would make a mid-table Season read as an alarm. */
+.fplmove-up { color: var(--color-accent); }
+.fplmove-down { color: var(--color-neutral-600); }
+.fplmove-flat { opacity: 0.35; }
+.fplname {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 16px;
+}
+/* The Base Model id, named as the Match track names the same cell. Never
+   "model": CONTEXT.md marks the word Avoid under both Entrant and Base Model,
+   because it means either one depending on who is speaking. */
+.fpl-id {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.fpltotal {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 18px;
+}
+.fplvalue { opacity: 0.75; }
+
+/* The design's 70ch, and nothing here clamps or truncates: the qualification is
+   the benchmark's own sentence and is shown whole. */
+.fplnote {
+  margin: 0;
+  max-width: 70ch;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.fplnotes { margin-top: 20px; display: grid; gap: 8px; }
+
+/* Clipped rather than `display: none`: these are the words that say what a
+   column of triangles means, and a reader who cannot see the triangles is
+   exactly the one who needs them. */
+.vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ── race ────────────────────────────────────────────────────────────────── */
+
+.fplrace {
+  margin-top: 24px;
+  display: grid;
+  grid-template-columns: 1fr 260px;
+  gap: 32px;
+}
+/* Inside a panel the kicker names a chart rather than a section, and the design
+   greys it there for the reason it greys the one beside the title. */
+.fplrace .kicker {
+  letter-spacing: 0.08em;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+/* The handoff's `20px 22px`, with a foot of 10 rather than another 20: the
+   Entrant labels are centred on their line's end and the lowest of them can be
+   clamped to the foot of the plot, where half of an 11px label hangs below the
+   viewBox. The 10px is the room it hangs in. Closing it back up to 20 does not
+   make the panel tidier -- it clips a name. */
+.fplpanel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  padding: 20px 22px 10px;
+}
+/* The ground the HTML labels are positioned against: they are absolute in this
+   box and the chart fills it, so a percentage of its height is a position in
+   the viewBox. */
+.fplplot { position: relative; }
+.fplchart { display: block; width: 100%; height: auto; }
+.fplgrid line { stroke: var(--color-divider); }
+
+/* The design weights a line by where its Entrant stands: the leader in the
+   accent, the two behind it in ink, and the rest of the field lighter and
+   thinner so the top of the table reads through them. Set here and not as
+   presentation attributes on the polyline, because a `stroke` attribute holding
+   `var(--color-accent)` is a string the SVG never resolves.
+
+   The colour is a variable of the band and not a `stroke` of it, because a
+   Season one Gameweek old draws a dot rather than a line and the dot is the
+   same weight of the same colour -- said once, so the two marks cannot end up
+   two colours. */
+.fplline-1 { --fplline: var(--color-accent); stroke-width: 3; }
+.fplline-top { --fplline: var(--color-neutral-800); stroke-width: 2; }
+.fplline-rest { --fplline: var(--color-neutral-500); stroke-width: 1.25; }
+.fplline-dash { stroke-dasharray: 6 4; }
+polyline.fplline { fill: none; stroke: var(--fplline); }
+circle.fplline { fill: var(--fplline); stroke: none; }
+
+/* In the quarter of the viewBox the plot leaves for them. The vertical
+   position is written by the page, out of the tested de-overlap. */
+.fpllabel {
+  position: absolute;
+  left: 76%;
+  transform: translateY(-50%);
+  font-family: var(--font-heading);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.fpllabel-1 { font-weight: 800; color: var(--color-accent); }
+.fpllabel-top { font-weight: 800; }
+.fpllabel-rest { font-weight: 400; opacity: 0.6; }
+
+/* Positioned by Gameweek and not spaced evenly: a Gameweek the record holds
+   nothing for is a longer segment in every line, and an evenly spaced axis
+   would label the Gameweek after the hole with the number of the hole. */
+.fplgw { position: absolute; bottom: -2px; font-size: 10px; opacity: 0.5; }
+
+.fplstanding {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--color-divider);
+}
+.fplstanding-rank {
+  width: 18px;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  opacity: 0.5;
+}
+.fplstanding-name {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 14px;
+}
+.fplstanding-total {
+  margin-left: auto;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── cards ───────────────────────────────────────────────────────────────── */
+
+/* The 2px gaps read as the rules between the tiles: the grid's own background
+   shows through them, so the design's rules are the gaps and there is no border
+   to double up on at the edges. */
+.fplcards {
+  margin-top: 24px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  background: var(--color-divider);
+}
+.fplcard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 186px;
+  padding: 20px 20px 18px;
+  background: var(--color-bg);
+}
+.fplcard-head { display: flex; align-items: baseline; gap: 10px; }
+.fplcard-rank {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 40px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+.fplcard-rank-1 { color: var(--color-accent); }
+.fplcard-total {
+  margin-left: auto;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 28px;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.fplcard-name {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+}
+.fplcard-tags { margin-top: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── 760px ───────────────────────────────────────────────────────────────── */
+
+@media (max-width: 760px) {
+  /* `overrides.css` collapses the header at this width already -- the tabs into
+     the burger's panel, the padding to 16px -- and this puts back the vertical
+     padding the zeroed `padding-block` above took off it. The status line still
+     sits in the collapsed header; taking it out is the mobile slice's own
+     acceptance box and not this one's. */
+  .nav { padding-block: 12px; }
+
+  /* The design's `22px 16px 60px`, said in full. A media query adds no weight
+     to a selector, so `overrides.css`'s phone padding and the `padding-top`
+     above are two rules of equal specificity and the later sheet wins -- which
+     left the phone wearing the desktop's 34px until this was written. */
+  .page { padding: 22px 16px 60px; }
+  .fplhero { display: block; }
+  .fplhero h1 { font-size: 28px; }
+  .fplhero .kicker { margin-top: 8px; }
+  /* Scrolls inside `.fplscroll` rather than squashing seven columns of figures
+     into a phone's width. The floor is what the six fixed columns and their
+     padding come to; below it the Entrant names wrap to one word a line. */
+  .fplscroll .fpltable { min-width: 720px; }
+  /* Stacked, because a 260px standings column and three tiles across do not
+     fit a phone and the page itself must never scroll sideways. The mobile
+     slice owns what else collapses at this width and is what checks it; this
+     is only the two grids this slice added not pushing the document past the
+     viewport in the meantime. */
+  .fplrace, .fplcards { grid-template-columns: 1fr; }
+  /* The hero's flex row is `display: block` above, so the control is no longer
+     pushed right by `margin-left: auto` and sits under the kicker. */
+  .fplhero .seg { margin-top: 12px; }
+}

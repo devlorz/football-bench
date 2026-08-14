@@ -3,6 +3,7 @@ import {
   readFplStartJobConfig,
   readScheduledFplJobConfig
 } from "../src/cli/config.js";
+import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
 
 describe("the FPL job configuration", () => {
   test("the scheduled run resolves its Gameweek from stored deadlines", () => {
@@ -19,7 +20,7 @@ describe("the FPL job configuration", () => {
       openRouterApiKey: "secret-from-environment"
     });
 
-    // Nine by default, one worker per seat, and its own knob rather than the
+    // Ten by default, one worker per seat, and its own knob rather than the
     // Match track's: the two runs share a deadline and nothing else, and the
     // FPL prompt is several times the size, so one number for both would tie
     // two costs that have no reason to move together.
@@ -28,7 +29,7 @@ describe("the FPL job configuration", () => {
       SEASON: "2026-27",
       PREDICT_CONCURRENCY: "2",
       OPENROUTER_API_KEY: "secret-from-environment"
-    })).toMatchObject({ concurrency: 9 });
+    })).toMatchObject({ concurrency: SEASON_ROSTER_SIZE });
 
     expect(() => readScheduledFplJobConfig({
       DATABASE_URL: "postgresql://localhost/benchmark",
@@ -98,7 +99,7 @@ describe("the FPL job configuration", () => {
       databaseUrl: "postgresql://localhost/benchmark",
       season: "2026-27",
       gameweek: 28,
-      concurrency: 9,
+      concurrency: SEASON_ROSTER_SIZE,
       entrantCallTimeoutMs: 120_000,
       openRouterApiKey: "secret-from-environment"
     });

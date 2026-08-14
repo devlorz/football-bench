@@ -56,8 +56,8 @@ export type FplGameweekRun =
  * locks at (ADR-0006).
  *
  * The Lock and the pool are read once and handed to every Entrant, because
- * both belong to the Gameweek rather than to whoever is reading them: nine
- * Entrants priced from nine reads of a moving snapshot would be nine Entrants
+ * both belong to the Gameweek rather than to whoever is reading them: ten
+ * Entrants priced from ten reads of a moving snapshot would be ten Entrants
  * playing slightly different games. Everything after that is per-Entrant — its
  * own standing Manager State, its own context, its own conversation and its
  * own three Repairs — and the only thing the roster shares is the wait.
@@ -94,8 +94,8 @@ export async function runFplGameweek({
 
   // Who is on the Season's path: whoever holds a Manager State at the Gameweek
   // the track started at. Read from the opening rather than from `models`,
-  // because the opening committed all nine or none and is therefore the record
-  // of which nine. A seat added to `models` afterwards never opened, has
+  // because the opening committed all ten or none and is therefore the record
+  // of which ten. A seat added to `models` afterwards never opened, has
   // nothing standing, and is not one of them.
   const roster = await loadStartedRoster(database, season, startedAt);
   const entrantResult = await database.query<GameweekCaller>(
@@ -117,7 +117,7 @@ export async function runFplGameweek({
 
   const locked = await loadLockedGameweek(database, season, gameweek);
 
-  // Nine conversations at once, up to the operator's limit. Each Entrant's own
+  // Ten conversations at once, up to the operator's limit. Each Entrant's own
   // Repairs stay in its own conversation, so the only thing concurrency shares
   // is the wait — which is the point, with one Lock to finish inside.
   const results = new Map<string, FplGameweekResult>();

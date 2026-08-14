@@ -15,7 +15,7 @@ import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
 import {
   FPL_POOL, FPL_POOL_ALTERNATES, lockPool
 } from "./fpl-pool-fixture.js";
-import { seatId } from "./fpl-seat-fixture.js";
+import { BASE_MODELS, seatId } from "./fpl-seat-fixture.js";
 import { EVERYONE_PLAYED, storeSettledPoints } from "./fpl-points-fixture.js";
 import { insertExhibition, resetSchema } from "./schema-fixture.js";
 import { firstMessageText, type CapturedTurn as Turn } from "./sent-context.js";
@@ -28,12 +28,6 @@ const EXHIBITION_BASE_MODEL = "vendor/late";
 
 /** Long after every deadline the Season has — where an Exhibition Run lives. */
 const AFTER_THE_SEASON = "2026-10-01T12:00:00Z";
-
-const BASE_MODELS = Array.from(
-  { length: SEASON_ROSTER_SIZE },
-  (_unused, index) => `vendor/base-${index + 1}`
-);
-
 
 const OPENING_SHEET = {
   starters: [1, 3, 4, 5, 6, 8, 9, 10, 11, 13, 14],
@@ -204,9 +198,8 @@ describe("replaying the FPL track as an Exhibition Run", () => {
     );
   });
 
-
   /**
-   * The real track: nine seats opened at Gameweek 1 and carried through 2 and
+   * The real track: ten seats opened at Gameweek 1 and carried through 2 and
    * 3, each Gameweek settling behind them. This is what an Exhibition arrives
    * to — the donor bodies and the Gameweeks that have settled are the record it
    * replays against, and seeding them by hand would be a second opinion about

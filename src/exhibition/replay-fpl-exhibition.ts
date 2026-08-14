@@ -84,7 +84,7 @@ async function gameweeksFrom(
  * Entrant by id, which is an ordering of text and so alphabetical rather than
  * numeric — determinism is the whole of what is wanted from it.
  *
- * Any seat's would do — from the second Gameweek onwards the nine differ only
+ * Any seat's would do — from the second Gameweek onwards the seats differ only
  * in the Manager State block, which is the one thing the splice replaces — so
  * the choice is made by a rule rather than by chance, and the same run twice
  * splices the same text.
@@ -131,7 +131,7 @@ async function donorBody(
  * deadline is the feature (ADR-0032).
  *
  * A Gameweek that produces no Manager State ends the run rather than being
- * carried past. The roster tolerates a silent Gameweek because eight other
+ * carried past. The roster tolerates a silent Gameweek because the other
  * Entrants are waiting on the Lock and the Squad is still on record; here there
  * is nothing to wait for and no reason to invent a state to bridge it, and the
  * next run picks the chain up where this one left it.

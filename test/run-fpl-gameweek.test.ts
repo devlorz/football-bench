@@ -7,7 +7,7 @@ import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
 import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
 import { DEFAULT_HTTP_TIMEOUT_MS, type HttpFetcher } from "../src/http.js";
 import { FPL_POOL, lockPool } from "./fpl-pool-fixture.js";
-import { seatId } from "./fpl-seat-fixture.js";
+import { BASE_MODELS, seatId } from "./fpl-seat-fixture.js";
 import {
   EVERYONE_PLAYED,
   storeSettledPoints
@@ -19,13 +19,6 @@ import {
 } from "./sent-context.js";
 
 const { Client } = pg;
-
-/** The nine seats ADR-0014 puts on the track, one per Base Model. */
-const BASE_MODELS = Array.from(
-  { length: SEASON_ROSTER_SIZE },
-  (_unused, index) => `vendor/base-${index + 1}`
-);
-
 
 /** The legal opening Squad: £95.5m spent, £4.5m left in the bank. */
 const OPENING = JSON.stringify({
@@ -151,10 +144,8 @@ describe("running a Gameweek for the whole FPL roster", () => {
     }
   });
 
-  /** The Gameweek's pool as its Lock found it, at unmoved opening prices. */
-
   /**
-   * Opens the track for all nine at Gameweek 1, which is the only way a
+   * Opens the track for all ten at Gameweek 1, which is the only way a
    * Gameweek this function runs can have a Squad standing behind it. It goes
    * through `startFplTrack` rather than seeding rows, because the Manager
    * States a run carries forward should be the ones the opening actually
@@ -259,8 +250,8 @@ describe("running a Gameweek for the whole FPL roster", () => {
 
     // The same Gameweek again, while its Lock still stands. Every Entrant's
     // decision is already taken, and `manager_states` refuses an update in any
-    // case — so the second run makes no call at all rather than making nine
-    // and throwing away nine answers.
+    // case — so the second run makes no call at all rather than making ten
+    // and throwing away ten answers.
     const { outcome, calls } = await run({ responses: [] });
 
     expect(outcome).toEqual({
@@ -276,7 +267,9 @@ describe("running a Gameweek for the whole FPL roster", () => {
          (select count(*)::int from manager_states where gw = 2) as states,
          (select count(*)::int from attempts where gw = 2) as attempts`
     );
-    expect(rows.rows).toEqual([{ states: 9, attempts: 9 }]);
+    expect(rows.rows).toEqual([
+      { states: SEASON_ROSTER_SIZE, attempts: SEASON_ROSTER_SIZE }
+    ]);
   });
 
   test("stays inactive before the Gameweek the track started at", async () => {
@@ -333,14 +326,15 @@ describe("running a Gameweek for the whole FPL roster", () => {
         where gw = 2
         group by error_kind`
     );
-    expect(late.rows).toEqual([{ error_kind: "deadline", count: 9 }]);
+    expect(late.rows)
+      .toEqual([{ error_kind: "deadline", count: SEASON_ROSTER_SIZE }]);
   });
 
   test("carries a silent Entrant forward without back-filling its Gameweek", async () => {
     await openTheTrack();
     const silent = BASE_MODELS[0]!;
 
-    // One provider fails at Gameweek 2 and the other eight play it.
+    // One provider fails at Gameweek 2 and the rest of the roster plays it.
     const stumbled = await run({
       perEntrant: { [silent]: [] },
       http: async (_url, options) => {
@@ -364,7 +358,7 @@ describe("running a Gameweek for the whole FPL roster", () => {
       missing: [seatId(silent)]
     });
 
-    // Gameweek 3 plays for all nine, including the one that was silent. Its
+    // Gameweek 3 plays for all ten, including the one that was silent. Its
     // Squad did not vanish because a Gameweek passed without it, and no row
     // appears at Gameweek 2 to pretend it did not: the Gameweek stays missing
     // and the Free Transfer it granted is carried through the silence.
@@ -390,7 +384,7 @@ describe("running a Gameweek for the whole FPL roster", () => {
     );
     // And the silent Gameweek still granted its Free Transfer. One accrued at
     // the opening, one across the silence and one at Gameweek 3 — the same
-    // three the eight that answered every Gameweek hold. A state carried from
+    // three the seats that answered every Gameweek hold. A state carried from
     // Gameweek 1 to Gameweek 3 as though no time had passed would leave this
     // Entrant on two, permanently one behind its peers for a Gameweek its
     // provider missed rather than for a decision it made.
@@ -447,9 +441,9 @@ describe("running a Gameweek for the whole FPL roster", () => {
     await openTheTrack();
     let called = 0;
 
-    // Palmer rises to £13.0m in the middle of the run. Nine reads of a moving
-    // snapshot would be nine Entrants priced differently for the same
-    // Gameweek, which is nine Entrants playing slightly different games — so
+    // Palmer rises to £13.0m in the middle of the run. Ten reads of a moving
+    // snapshot would be ten Entrants priced differently for the same
+    // Gameweek, which is ten Entrants playing slightly different games — so
     // the pool belongs to the Gameweek and is read before the first call.
     const { outcome } = await run({
       http: async () => {
@@ -517,7 +511,7 @@ describe("running a Gameweek for the whole FPL roster", () => {
     // One seat leaves the FPL track's Prompt Version after opening on it. It
     // is on the Season's path and `manager_states` is insert-only, so it
     // cannot be taken off — and a run that simply skipped it would play the
-    // Gameweek for eight, quietly costing the demonstration a Base Model.
+    // Gameweek one seat short, quietly costing the demonstration a Base Model.
     await client.query(
       `update models
           set prompt_version = 'fpl/draft'
@@ -553,7 +547,7 @@ describe("running a Gameweek for the whole FPL roster", () => {
        language plpgsql
        as $$
        begin
-         if new.model_id = 'fpl/base-4' and new.gw = 2 then
+         if new.model_id = 'fpl/base-04' and new.gw = 2 then
            raise exception 'simulated Manager State persistence failure';
          end if;
          return new;
@@ -654,8 +648,8 @@ describe("running a Gameweek for the whole FPL roster", () => {
     let active = 0;
     let peak = 0;
 
-    // Nine seats through a pool of three. The bound is what an operator sets
-    // `FPL_CONCURRENCY` for — nine simultaneous calls carrying a
+    // Ten seats through a pool of three. The bound is what an operator sets
+    // `FPL_CONCURRENCY` for — ten simultaneous calls carrying a
     // six-hundred-player pool each is a different load on the provider from
     // three — so a pool that ignored it would spend the whole roster at once.
     await run({

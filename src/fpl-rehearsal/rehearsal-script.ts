@@ -170,3 +170,49 @@ export function absent(
 
 /** Watkins rises three tenths, so selling him pays purchase plus one. */
 export const WATKINS_RISE: Readonly<Record<number, number>> = { 55: 83 };
+
+/** Soler, bought at the opening for £4.0m and traded by one seat. */
+export const SOLER = 66;
+
+/**
+ * Soler falls three tenths, so selling him pays his lower current price rather
+ * than the £4.0m he was bought for — the mirror of Watkins' rise, and the fall
+ * the faller seat sells into.
+ */
+export const SOLER_FALL: Readonly<Record<number, number>> = { [SOLER]: 37 };
+
+/** García, who replaces Soler at the same £4.0m the fall was measured from. */
+export const GARCIA = 38;
+
+/**
+ * Soler out, García in, Defender for Defender at £4.0m apiece.
+ *
+ * One Transfer against one banked Free Transfer, so no Hit — which leaves the
+ * bank saying one thing only: what a fallen player sold for. Like for like at
+ * the listing, so what comes back cannot be a bargain the replacement found.
+ * García is Villa's second seat and Bournemouth loses one, so the club limit
+ * the opening Squad sits on is untouched.
+ */
+export const SELL_THE_FALLER = JSON.stringify({
+  transfers_in: [GARCIA],
+  transfers_out: [SOLER],
+  chip: null,
+  team_sheet: {
+    starters: [1, 6, 356, 229, 173, 154, 427, 13, 132, 411, 55],
+    bench: [58, GARCIA, 163, 107],
+    captain: 411,
+    vice_captain: 154
+  }
+});
+
+/**
+ * The Squad after that sale standing pat, which is what leaves Gameweek 3
+ * asking whether a replacement who never plays can be substituted on.
+ */
+export const FALLER_STAND_PAT = JSON.stringify({
+  transfers_in: [],
+  transfers_out: [],
+  chip: null,
+  team_sheet: (JSON.parse(SELL_THE_FALLER) as { team_sheet: unknown })
+    .team_sheet
+});

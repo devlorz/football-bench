@@ -412,8 +412,8 @@ async function writeRecordThrough(
     const played = await scoreOneGameweek(database, season, gw);
     // Two ways a Gameweek is not the Season's, and they come to the same
     // thing: it has not settled, or it is not every Entrant's. A Gameweek
-    // published for eight Entrants of nine would give those eight a season
-    // path a Gameweek longer than the ninth's, which is the comparison the
+    // published for nine Entrants of ten would give those nine a season
+    // path a Gameweek longer than the tenth's, which is the comparison the
     // whole track exists to make — so ADR-0011's answer holds here as it does
     // for the Match track, and one Entrant's Gap removes the Gameweek from
     // every path, including from the Entrants that were working fine. The

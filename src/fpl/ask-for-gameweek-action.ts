@@ -253,8 +253,9 @@ async function recordAttempt(
  *
  * Every attempt is written before the outcome is returned, so a caller that
  * discards the outcome still leaves the record of how the Entrant behaved.
- * That is what lets an opening throw away eight legal actions because a ninth
- * was never legal, without throwing away the evidence of any of them.
+ * That is what lets an opening throw away a roster of legal actions because
+ * one seat's was never legal, without throwing away the evidence of any of
+ * them.
  */
 export async function askForGameweekAction({
   database,

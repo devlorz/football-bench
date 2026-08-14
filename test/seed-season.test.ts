@@ -76,10 +76,13 @@ describe("the seeded Season and its three stopping points", () => {
   test("the roster carries the Base Model Classes of ADR-0014", async () => {
     await seedSeason({ database: client, season: SEASON, stopAt: "pre-season" });
 
+    // The Match roster's nine. Its FPL counterpart carries the same classes,
+    // and is asserted where it is seeded — `seed-fpl-season.test.ts`.
     const classes = await client.query<{ class: string; count: string }>(
       `select config ->> 'baseModelClass' as class, count(*) as count
-         from models where role = 'entrant'
-        group by 1 order by 1`
+         from models where role = 'entrant' and prompt_version = $1
+        group by 1 order by 1`,
+      [MATCH_PROMPT_VERSION]
     );
     expect(classes.rows).toEqual([
       { class: "First-party", count: "1" },
@@ -170,11 +173,13 @@ describe("the seeded Season and its three stopping points", () => {
 
   test("every scores row is the real scorer's and none is the seed's",
     async () => {
+      // The Match track's rows. The FPL track's are the FPL scorer's and are
+      // asserted the same way where that scorer runs — `seed-fpl-season.test.ts`.
       const storedScores = async (): Promise<unknown[]> => {
         const rows = await client.query(
           `select model_id, gw, track, metric, value, n, detail, scored_at
-             from scores where season = $1
-            order by model_id, gw, track, metric`,
+             from scores where season = $1 and track = 'match'
+            order by model_id, gw, metric`,
           [SEASON]
         );
         return rows.rows;
@@ -190,7 +195,7 @@ describe("the seeded Season and its three stopping points", () => {
       // Nothing the seed wrote is left, and running the scorer again over the
       // same Predictions and results puts every row back exactly as it was. A
       // row the seed had written itself would be missing here.
-      await client.query("truncate scores");
+      await client.query("delete from scores where track = 'match'");
       expect(await storedScores()).toEqual([]);
       await scoreMatchSeason({
         database: client, season: SEASON, now: () => SEED_SCORED_AT
@@ -306,6 +311,14 @@ describe("the seeded Season and its three stopping points", () => {
       stopAt: "pending",
       score: async () => {
         scoresWhenScorerRan = await countOf("select count(*) from scores");
+      },
+      // Both tracks' scorers, because both are asked to run over the same
+      // written Season and neither may find a row of its own already there.
+      scoreFpl: async () => {
+        scoresWhenScorerRan = Math.max(
+          scoresWhenScorerRan ?? 0,
+          await countOf("select count(*) from scores")
+        );
       }
     });
 
@@ -406,7 +419,8 @@ describe("the seeded Season and its three stopping points", () => {
         database: client, season: SEASON, stopAt: "pre-season"
       });
 
-      expect(await countOf("select count(*) from public.models")).toBe(9);
+      // Nine Base Models, each with a seat on either track.
+      expect(await countOf("select count(*) from public.models")).toBe(18);
       expect(await countOf("select count(*) from decoy.models")).toBe(1);
     } finally {
       await client.query("drop schema decoy cascade");

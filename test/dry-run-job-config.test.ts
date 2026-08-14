@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
 import { readDryRunJobConfig } from "../src/cli/config.js";
 
 const environment = {
@@ -16,7 +17,7 @@ describe("the dry run job configuration", () => {
       footballDataSeason: "2025-26",
       gameweek: 1,
       at: "deadline-6h",
-      concurrency: 9
+      concurrency: SEASON_ROSTER_SIZE
     });
   });
 

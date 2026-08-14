@@ -2,6 +2,8 @@ import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { runFplRehearsal } from "../src/fpl-rehearsal/run-fpl-rehearsal.js";
 import type { FplRehearsalArchive } from "../src/fpl-rehearsal/run-fpl-rehearsal.js";
+import type { FplRehearsalReport } from "../src/fpl-rehearsal/rehearsal-report.js";
+import { SOLER } from "../src/fpl-rehearsal/rehearsal-script.js";
 import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
 import { archivedBody } from "./archived-fixture.js";
 import { resetSchema } from "./schema-fixture.js";
@@ -9,6 +11,11 @@ import { resetSchema } from "./schema-fixture.js";
 const { Client } = pg;
 
 const SEASON = "2026-27";
+
+/** One seat's path and metrics, by the suffix the rehearsal seeded it under. */
+function seat(report: FplRehearsalReport, suffix: string) {
+  return report.entrants.find(({ entrantId }) => entrantId === `fpl/${suffix}`);
+}
 
 describe("a whole rehearsal of the FPL track", () => {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
@@ -73,6 +80,7 @@ describe("a whole rehearsal of the FPL track", () => {
     expect(report.entrants.map(({ entrantId }) => entrantId).sort())
       .toEqual([
         "fpl/bench-boost",
+        "fpl/faller",
         "fpl/free-hit",
         "fpl/idle",
         "fpl/repaired",
@@ -86,9 +94,7 @@ describe("a whole rehearsal of the FPL track", () => {
     // The seat that never produced a legal action still holds every Gameweek:
     // a Roll Over is a Manager State stored on the Team Sheet already
     // standing, which is the whole difference between it and a Gap.
-    const rolled = report.entrants.find(
-      ({ entrantId }) => entrantId === "fpl/rolled-over"
-    );
+    const rolled = seat(report, "rolled-over");
     expect(rolled?.path.map(({ gameweek, rolledOver, attemptsUsed }) =>
       ({ gameweek, rolledOver, attemptsUsed }))).toEqual([
       { gameweek: 1, rolledOver: false, attemptsUsed: 0 },
@@ -104,9 +110,7 @@ describe("a whole rehearsal of the FPL track", () => {
 
     // And the seat that broke one rule and was told which came back inside its
     // allowance rather than spending it.
-    const repaired = report.entrants.find(
-      ({ entrantId }) => entrantId === "fpl/repaired"
-    );
+    const repaired = seat(report, "repaired");
     expect(repaired?.path[1]).toMatchObject({
       gameweek: 2,
       rolledOver: false,
@@ -116,9 +120,7 @@ describe("a whole rehearsal of the FPL track", () => {
 
   test("scores the idle seat's Gameweeks against hand-computed totals", async () => {
     const { report } = await rehearse();
-    const idle = report.entrants.find(
-      ({ entrantId }) => entrantId === "fpl/idle"
-    );
+    const idle = seat(report, "idle");
     const points = idle?.metrics
       .filter(({ metric }) => metric === "fpl_points")
       .map(({ gameweek, value }) => ({ gameweek, value }));
@@ -141,6 +143,48 @@ describe("a whole rehearsal of the FPL track", () => {
       metric === "fpl_points_season_to_date" && gameweek === 3);
     expect(cumulative?.value).toBe(69 + 69 + 72);
   });
+
+  test("holds a player whose price has fallen below what a seat paid", async () => {
+    const { report } = await rehearse();
+
+    // Soler is bought at the opening and never traded, so his purchase price
+    // stands while the pool moves under him — which is the fall a later seat
+    // will sell into, and which is asserted here so that flattening it is
+    // caught as a missing fall rather than as arithmetic going quietly right.
+    const gameweek2 = seat(report, "idle")?.path[1];
+    expect(gameweek2?.gameweek).toBe(2);
+
+    const held = gameweek2?.state.squad.active
+      .find(({ fplId }) => fplId === SOLER);
+    expect(held).toMatchObject({ purchasePriceTenths: 40 });
+
+    // Read from the pool rather than from the report, because what a player is
+    // listed at is not part of any Manager State — the state carries only what
+    // a seat paid.
+    const listed = await client.query<{ price_tenths: number }>(
+      "select price_tenths from fpl_players where season = $1 and gw = 2 and fpl_id = $2",
+      [SEASON, SOLER]
+    );
+    expect(listed.rows).toHaveLength(1);
+    // Stated rather than read back from SOLER_FALL: a test that took the fall
+    // from the constant it is meant to hold would pass a flattened one.
+    expect(listed.rows[0]?.price_tenths).toBe(37);
+  });
+
+  test("pays the faller's seller the fallen price and not a penny of the fall",
+    async () => {
+      const { report } = await rehearse();
+      const gameweek2 = seat(report, "faller")?.path[1];
+
+      expect(gameweek2?.gameweek).toBe(2);
+      expect(gameweek2?.state.squad.active.map(({ fplId }) => fplId))
+        .not.toContain(SOLER);
+      // Stated rather than computed from the seat's own expectation, which the
+      // verifier already checks it against: the two numbers a wrong rule would
+      // produce are named beside the seat in `rehearsal-seats.ts`.
+      expect(gameweek2?.state.bankTenths).toBe(12);
+      expect(gameweek2?.state.hits).toBe(0);
+    });
 
   test("produces identical states, values and details when repeated", async () => {
     const first = await rehearse();

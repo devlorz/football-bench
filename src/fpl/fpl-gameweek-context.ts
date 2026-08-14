@@ -239,7 +239,7 @@ async function currentSeasonTable(
  * the Match track (ADR-0006), one snapshot of the pool, one schedule of the
  * Gameweeks ahead and one set of performance windows. All are read before any
  * Entrant is called, because all belong to the Gameweek rather than to whoever
- * is reading it — which is also what leaves the nine Entrants nothing to
+ * is reading it — which is also what leaves the ten Entrants nothing to
  * differ over.
  */
 export async function loadLockedGameweek(
@@ -296,7 +296,7 @@ export async function loadLockedGameweek(
  * a text the Entrant was never shown and the stored hash does not cover.
  *
  * One row per Entrant per Gameweek, because from the second Gameweek onwards
- * the text carries that Entrant's own Squad. The opening's nine bodies are
+ * the text carries that Entrant's own Squad. The opening's ten bodies are
  * identical — every Entrant is seeded from the same empty Squad — and are
  * still stored one apiece, so that no reader of `contexts` has to know which
  * Gameweek was the exception.

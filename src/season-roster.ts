@@ -4,17 +4,17 @@ import { MATCH_PROMPT_VERSION } from "./predictions/openrouter-entrant.js";
 type Database = Pick<PgClient, "query">;
 
 /**
- * How many Entrants a Season is run with (ADR-0014): three frontier Base
- * Models, one more first-party and five open-weight.
+ * How many Entrants a Season is run with (ADR-0034): three frontier Base
+ * Models, two first-party and five open-weight.
  *
  * It is a fixed number rather than whatever the `models` table happens to
  * hold, because the roster size is a recorded decision and half the results
  * are read against it — ADR-0011's complete-case intersection, ADR-0016's
- * eight comparisons against the leader, and the FPL track's demonstration of
- * one season path per Base Model. A track that quietly started eight would
+ * nine comparisons against the leader, and the FPL track's demonstration of
+ * one season path per Base Model. A track that quietly started nine would
  * produce all of those numbers and none of them would mean what they say.
  */
-export const SEASON_ROSTER_SIZE = 9;
+export const SEASON_ROSTER_SIZE = 10;
 
 /**
  * What a `models` row is for, as its check constraint admits (migrations 0001
@@ -28,7 +28,7 @@ export const SEASON_ROSTER_SIZE = 9;
  */
 export type ModelRole = "entrant" | "reference" | "exhibition";
 
-/** Where a Base Model comes from (CONTEXT.md, ADR-0009, ADR-0014). */
+/** Where a Base Model comes from (CONTEXT.md, ADR-0009, ADR-0034). */
 type BaseModelClass = "Frontier" | "First-party" | "Open-weight";
 
 export interface Entrant {
@@ -46,26 +46,41 @@ export interface Entrant {
   provider: string;
   /**
    * Pinned on the open-weight seats and null on the rest (ADR-0009,
-   * ADR-0014): a served open-weight Base Model is a different model at a
+   * ADR-0034): a served open-weight Base Model is a different Base Model at a
    * different precision, so an unpinned one is not one Entrant across a
    * Season. A first-party seat has nothing to pin.
    */
   quantization: string | null;
-  /** The dated model every pre-flight has observed this seat resolving to. */
+  /**
+   * The dated Base Model every pre-flight has observed this seat resolving to.
+   */
   canonicalSlug: string;
   baseModelClass: BaseModelClass;
+  /**
+   * When the operator last checked *this* seat against OpenRouter's catalog.
+   *
+   * Per seat rather than one date over the roster, because the roster is no
+   * longer entered all at once: a check that looked at three arriving Base
+   * Models did not look at Kimi, and stamping its date on Kimi's row would
+   * record an observation nobody made.
+   */
+  catalogCheckedAt: string;
 }
 
 /**
- * The nine seats of ADR-0014, as they stand in the production `models` table.
+ * The ten seats of ADR-0034: ADR-0014's nine with the Qwen and Grok seats
+ * passed to their successors and Muse Spark 1.2 added.
  *
- * Read off the live table on 2026-08-12 and agreeing, field for field, with
- * the roster-resolution tables of the three pre-flight reports in
- * `docs/reports` — every `canonicalSlug` is that report's resolved model and
- * every `provider` is the slug behind its resolved provider's display name.
- * Until now the roster existed only as rows somebody typed at deploy time;
- * this is the written record. `src/seed-season.ts` holds a different nine on
- * purpose — the design mock's placeholders — and is not a source for these.
+ * The seven carried seats were read off the live table on 2026-08-12 and
+ * agree, field for field, with the roster-resolution tables of the three
+ * pre-flight reports in `docs/reports` — every `canonicalSlug` is that
+ * report's resolved model and every `provider` is the slug behind its resolved
+ * provider's display name, and each carries the date of that read. The three
+ * new seats have no report behind them yet: their `canonicalSlug` is
+ * ADR-0034's expectation from the 2026-08-14 catalog check, to be replaced by
+ * what the road in's pre-flight actually resolves.
+ * `src/seed-season.ts` holds a different nine on purpose — the design mock's
+ * placeholders — and is not a source for these.
  */
 export const SEASON_ROSTER: readonly Entrant[] = [
   {
@@ -73,6 +88,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "anthropic/claude-opus-5", provider: "anthropic",
     quantization: null,
     canonicalSlug: "anthropic/claude-opus-5-20260723",
+    catalogCheckedAt: "2026-08-12",
     baseModelClass: "Frontier"
   },
   {
@@ -80,6 +96,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "openai/gpt-5.6-sol-pro", provider: "openai",
     quantization: null,
     canonicalSlug: "openai/gpt-5.6-sol-pro-20260709",
+    catalogCheckedAt: "2026-08-12",
     baseModelClass: "Frontier"
   },
   {
@@ -87,13 +104,26 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "google/gemini-3.1-pro-preview", provider: "google-ai-studio",
     quantization: null,
     canonicalSlug: "google/gemini-3.1-pro-preview-20260219",
+    catalogCheckedAt: "2026-08-12",
     baseModelClass: "Frontier"
   },
   {
-    id: "match/grok-4.5", name: "Grok 4.5",
-    baseModel: "x-ai/grok-4.5", provider: "xai",
+    id: "match/grok-4.6", name: "Grok 4.6",
+    baseModel: "x-ai/grok-4.6", provider: "xai",
     quantization: null,
-    canonicalSlug: "x-ai/grok-4.5-20260708",
+    canonicalSlug: "x-ai/grok-4.6-20260810",
+    catalogCheckedAt: "2026-08-14",
+    baseModelClass: "First-party"
+  },
+  {
+    id: "match/muse-spark-1.2", name: "Muse Spark 1.2",
+    baseModel: "meta/muse-spark-1.2", provider: "meta",
+    // First-party by CONTEXT.md's criterion — Meta serves its own Base Model
+    // as the sole endpoint — so the provider pin is the whole of it and there
+    // is no precision to fix.
+    quantization: null,
+    canonicalSlug: "meta/muse-spark-1.2-20260805",
+    catalogCheckedAt: "2026-08-14",
     baseModelClass: "First-party"
   },
   {
@@ -101,6 +131,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "moonshotai/kimi-k3", provider: "moonshotai",
     quantization: "mxfp4",
     canonicalSlug: "moonshotai/kimi-k3-20260715",
+    catalogCheckedAt: "2026-08-12",
     baseModelClass: "Open-weight"
   },
   {
@@ -108,6 +139,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "z-ai/glm-5.2", provider: "z-ai",
     quantization: "fp8",
     canonicalSlug: "z-ai/glm-5.2-20260616",
+    catalogCheckedAt: "2026-08-12",
     baseModelClass: "Open-weight"
   },
   {
@@ -115,21 +147,23 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "deepseek/deepseek-v4-pro", provider: "novita",
     quantization: "fp8",
     canonicalSlug: "deepseek/deepseek-v4-pro-20260423",
+    catalogCheckedAt: "2026-08-12",
     baseModelClass: "Open-weight"
   },
   {
-    id: "match/qwen3.7-max", name: "Qwen3.7 Max",
-    baseModel: "qwen/qwen3.7-max", provider: "alibaba",
+    id: "match/qwen3.8-max", name: "Qwen3.8 Max",
+    baseModel: "qwen/qwen3.8-max", provider: "alibaba",
     // The one open-weight seat with no quantization pin, and it is not a
-    // weakening of ADR-0009. OpenRouter lists exactly one endpoint for this
-    // Base Model -- Alibaba's -- and its published quantization moved from
-    // `fp8` to `unknown` between 2026-07-29 and 2026-08-12, so an `fp8`
-    // filter now matches nothing and the seat answers HTTP 404 rather than
+    // weakening of ADR-0009. The justification carries over from Qwen3.7 Max
+    // with the succession (ADR-0034): OpenRouter lists exactly one endpoint
+    // for this Base Model -- Alibaba's -- at quantization `unknown`, so an
+    // `fp8` filter matches nothing and the seat answers HTTP 404 rather than
     // serving. Where a Base Model has a single endpoint the provider pin
     // already fixes the precision the pin was there to fix; pin it again the
     // day a second endpoint appears.
     quantization: null,
-    canonicalSlug: "qwen/qwen3.7-max-20260520",
+    canonicalSlug: "qwen/qwen3.8-max-20260803",
+    catalogCheckedAt: "2026-08-14",
     baseModelClass: "Open-weight"
   },
   {
@@ -137,24 +171,28 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "minimax/minimax-m3", provider: "minimax",
     quantization: "fp8",
     canonicalSlug: "minimax/minimax-m3-20260531",
+    catalogCheckedAt: "2026-08-12",
     baseModelClass: "Open-weight"
   }
 ];
 
-/** When the operator last checked these seats against OpenRouter's catalog. */
-const CATALOG_CHECKED_AT = "2026-08-12";
-
 /**
- * Upserts the nine Entrant rows for `season`'s Prompt Version, and nothing
+ * Upserts the ten Entrant rows for `season`'s Prompt Version, and nothing
  * else — no Fixtures, no Predictions.
  *
  * `config` is merged rather than replaced: these rows were hand-entered, so
  * the table may carry a key this module has never heard of, and a re-entry
  * that dropped it would destroy the only copy.
+ *
+ * `roster` defaults to the roster of record and exists so that the size guard
+ * below can be walked into. A guard that only the constant beside it can reach
+ * is a guard nothing has ever seen bite, and this one stands between a
+ * careless edit and a Season entered at the wrong size.
  */
 export async function enterSeasonRoster(
   database: Database,
-  season: string
+  season: string,
+  roster: readonly Entrant[] = SEASON_ROSTER
 ): Promise<readonly string[]> {
   // The models table has no Season column — a seat belongs to a Season only
   // through its Prompt Version. So the operator's SEASON and the frozen
@@ -165,16 +203,16 @@ export async function enterSeasonRoster(
       `SEASON ${season} does not own Prompt Version ${MATCH_PROMPT_VERSION}`
     );
   }
-  if (SEASON_ROSTER.length !== SEASON_ROSTER_SIZE) {
+  if (roster.length !== SEASON_ROSTER_SIZE) {
     throw new Error(
-      `The roster holds ${SEASON_ROSTER.length} Entrants, not `
-      + `${SEASON_ROSTER_SIZE} (ADR-0014)`
+      `The roster holds ${roster.length} Entrants, not `
+      + `${SEASON_ROSTER_SIZE} (ADR-0034)`
     );
   }
 
   await database.query("begin");
   try {
-    for (const entrant of SEASON_ROSTER) {
+    for (const entrant of roster) {
       await database.query(
         `insert into models (
            id, name, base_model, provider, quantization, prompt_version, role,
@@ -198,7 +236,7 @@ export async function enterSeasonRoster(
           JSON.stringify({
             baseModelClass: entrant.baseModelClass,
             canonical_slug: entrant.canonicalSlug,
-            catalog_checked_at: CATALOG_CHECKED_AT
+            catalog_checked_at: entrant.catalogCheckedAt
           })
         ]
       );
@@ -209,5 +247,5 @@ export async function enterSeasonRoster(
     throw error;
   }
 
-  return SEASON_ROSTER.map(({ id }) => id);
+  return roster.map(({ id }) => id);
 }

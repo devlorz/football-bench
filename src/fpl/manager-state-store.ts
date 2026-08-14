@@ -120,7 +120,7 @@ export async function loadManagerState(
  * started.
  *
  * There is no column for it and there must not be one. A Gameweek either holds
- * every Entrant's opening or holds nothing — `startFplTrack` commits all nine
+ * every Entrant's opening or holds nothing — `startFplTrack` commits all ten
  * or none — so the earliest Gameweek any Manager State belongs to *is* the
  * starting Gameweek. A stored column would be a second answer to a question
  * that already has one, and nothing would keep the two in agreement.
@@ -154,8 +154,8 @@ export async function loadStartingGameweek(
  * The Entrants whose Season path the Season is a record of: whoever holds a
  * Manager State at the Gameweek the track started at.
  *
- * Read from the opening rather than counted against ADR-0014's nine, because
- * the opening has already checked it against nine — `startFplTrack` refuses a
+ * Read from the opening rather than counted against ADR-0034's ten, because
+ * the opening has already checked it against ten — `startFplTrack` refuses a
  * roster of any other size and commits all of them or none. What is wanted
  * downstream is *which* Entrants, and only the opening knows that.
  *

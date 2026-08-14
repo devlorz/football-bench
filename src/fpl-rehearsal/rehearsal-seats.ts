@@ -4,8 +4,10 @@ import type {
 } from "../fpl/apply-gameweek-action.js";
 import {
   BENCHED_CAPTAIN,
+  FALLER_STAND_PAT,
   REBUILT_STAND_PAT,
   SELL_INTO_A_RISE,
+  SELL_THE_FALLER,
   STAND_PAT,
   THREE_AT_THE_BACK,
   withChip
@@ -40,7 +42,7 @@ export const REHEARSED_GAMEWEEKS = [OPENING_GAMEWEEK, ...PLAYED_GAMEWEEKS];
  * One object per Gameweek rather than eight lists read at the same index.
  * Nothing can check that eight separate lists stay the same length or stay in
  * the same order, and a rehearsal whose expectations had quietly slid by one
- * Gameweek would still be nine seats of plausible numbers. The Gameweek is
+ * Gameweek would still be ten seats of plausible numbers. The Gameweek is
  * named in the row rather than implied by its position, so the verifier can
  * say so rather than assume it.
  */
@@ -107,11 +109,11 @@ function spent(chip: Chip): SeatGameweekExpectation["chipsUsed"] {
 }
 
 /**
- * The nine seats, and what each one does. One Base Model per seat is what makes
+ * The ten seats, and what each one does. One Base Model per seat is what makes
  * the ranking a demonstration of one Season path each (ADR-0003), and the
  * script gives each of them a different thing to prove: inaction, a paid
  * Transfer, each of the four Chips, a Repair that succeeds, one that does not,
- * and a Team Sheet whose substitutions are hard.
+ * a Team Sheet whose substitutions are hard, and a sale into a price fall.
  *
  * Every seat scores 69 in Gameweek 1, because every seat opens with the same
  * Squad; and every seat still playing the permanent Squad scores 72 in Gameweek
@@ -269,6 +271,27 @@ export const SEATS = [
       played(1, 69, 15, 1),
       played(2, 78, 15, 2),
       played(3, 75, 15, 3)
+    ]
+  },
+  {
+    suffix: "faller",
+    gw2: () => SELL_THE_FALLER,
+    gw3: FALLER_STAND_PAT,
+    // The losing side of Selling Price, which no other seat walks: Soler cost
+    // £4.0m and is listed at £3.7m, so the sale pays £3.7m in full — no half of
+    // anything — and buying García back at £4.0m leaves £1.2m of the £1.5m the
+    // opening banked. A fall halved the way a rise is would leave £1.3m and a
+    // fall ignored altogether would leave the £1.5m untouched.
+    //
+    // One Transfer against the banked Free Transfer, so no Hit. García is left
+    // out of every fabricated matchday squad, so Gameweek 3's two absentees are
+    // covered by Essugo and Furo from behind him: 43 from the nine starters who
+    // played, 23 from those two, and Palmer's 9 again in the absent captain's
+    // place — 75.
+    expect: [
+      played(1, 69, 15, 1),
+      played(2, 69, 12, 1),
+      played(3, 75, 12, 2)
     ]
   }
 ] as const satisfies readonly RehearsalSeat[];
