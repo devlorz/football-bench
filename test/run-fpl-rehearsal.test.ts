@@ -2,6 +2,7 @@ import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { runFplRehearsal } from "../src/fpl-rehearsal/run-fpl-rehearsal.js";
 import type { FplRehearsalArchive } from "../src/fpl-rehearsal/run-fpl-rehearsal.js";
+import { SOLER } from "../src/fpl-rehearsal/rehearsal-script.js";
 import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
 import { archivedBody } from "./archived-fixture.js";
 import { resetSchema } from "./schema-fixture.js";
@@ -140,6 +141,27 @@ describe("a whole rehearsal of the FPL track", () => {
     const cumulative = idle?.metrics.find(({ metric, gameweek }) =>
       metric === "fpl_points_season_to_date" && gameweek === 3);
     expect(cumulative?.value).toBe(69 + 69 + 72);
+  });
+
+  test("holds a player whose price has fallen below what a seat paid", async () => {
+    const { report } = await rehearse();
+
+    // Soler is bought at the opening and never traded, so his purchase price
+    // stands while the pool moves under him — which is the fall a later seat
+    // will sell into, and which is asserted here so that flattening it is
+    // caught as a missing fall rather than as arithmetic going quietly right.
+    const idle = report.entrants.find(
+      ({ entrantId }) => entrantId === "fpl/idle"
+    );
+    const paid = idle?.path[1]?.state.squad.active
+      .find(({ fplId }) => fplId === SOLER)?.purchasePriceTenths;
+    const listed = await client.query<{ price_tenths: number }>(
+      "select price_tenths from fpl_players where season = $1 and gw = 2 and fpl_id = $2",
+      [SEASON, SOLER]
+    );
+
+    expect(paid).toBe(40);
+    expect(listed.rows[0]?.price_tenths).toBe(37);
   });
 
   test("produces identical states, values and details when repeated", async () => {

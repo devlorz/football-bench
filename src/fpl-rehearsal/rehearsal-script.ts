@@ -170,3 +170,13 @@ export function absent(
 
 /** Watkins rises three tenths, so selling him pays purchase plus one. */
 export const WATKINS_RISE: Readonly<Record<number, number>> = { 55: 83 };
+
+/** Soler, bought at the opening for £4.0m and traded by nobody. */
+export const SOLER = 66;
+
+/**
+ * Soler falls three tenths, so selling him pays his lower current price rather
+ * than the £4.0m he was bought for — the mirror of Watkins' rise, and the fall
+ * a seat can be scripted to sell into without first going looking for one.
+ */
+export const SOLER_FALL: Readonly<Record<number, number>> = { [SOLER]: 37 };

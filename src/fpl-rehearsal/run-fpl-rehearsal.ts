@@ -30,6 +30,7 @@ import {
   OPENING,
   REBUILT_STAND_PAT,
   SELL_INTO_A_RISE,
+  SOLER_FALL,
   STAND_PAT,
   THREE_AT_THE_BACK,
   WATKINS_RISE,
@@ -170,7 +171,7 @@ export async function runFplRehearsal({
     await fetchDay(
       gameweek,
       {},
-      gameweek === 2 ? WATKINS_RISE : undefined,
+      gameweek === 2 ? { ...WATKINS_RISE, ...SOLER_FALL } : undefined,
       new Date(lock.getTime() - 24 * 3_600_000)
     );
     await runFplGameweek({

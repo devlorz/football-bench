@@ -25,11 +25,11 @@ to the point.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] A named player's price is lower in a later rehearsed Gameweek than the price a seat
+- [x] A named player's price is lower in a later rehearsed Gameweek than the price a seat
       paid for him
-- [ ] No existing seat buys or sells that player, and every existing seat's expectations
+- [x] No existing seat buys or sells that player, and every existing seat's expectations
       pass unchanged
-- [ ] The fall is asserted by the rehearsal suite, so a future edit that flattens the
+- [x] The fall is asserted by the rehearsal suite, so a future edit that flattens the
       price is caught here and not by the faller's arithmetic going quietly right
 
 ## Ten seats of record
