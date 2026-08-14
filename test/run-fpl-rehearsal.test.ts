@@ -80,6 +80,7 @@ describe("a whole rehearsal of the FPL track", () => {
     expect(report.entrants.map(({ entrantId }) => entrantId).sort())
       .toEqual([
         "fpl/bench-boost",
+        "fpl/faller",
         "fpl/free-hit",
         "fpl/idle",
         "fpl/repaired",
@@ -169,6 +170,22 @@ describe("a whole rehearsal of the FPL track", () => {
     // from the constant it is meant to hold would pass a flattened one.
     expect(listed.rows[0]?.price_tenths).toBe(37);
   });
+
+  test("pays the faller's seller the fallen price and not a penny of the fall",
+    async () => {
+      const { report } = await rehearse();
+      const gameweek2 = seat(report, "faller")?.path[1];
+
+      expect(gameweek2?.gameweek).toBe(2);
+      expect(gameweek2?.state.squad.active.map(({ fplId }) => fplId))
+        .not.toContain(SOLER);
+      // Stated rather than computed from the script: £4.0m paid, £3.7m
+      // received, £4.0m spent on the replacement, against the £1.5m the
+      // opening banked. A fall halved the way a rise is would leave 13 and a
+      // fall ignored altogether would leave 15.
+      expect(gameweek2?.state.bankTenths).toBe(12);
+      expect(gameweek2?.state.hits).toBe(0);
+    });
 
   test("produces identical states, values and details when repeated", async () => {
     const first = await rehearse();

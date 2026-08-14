@@ -79,7 +79,7 @@ const FIXTURES_CACHE = "max-age=60, stale-if-error=0";
 
 /**
  * One ranked row, which is not the same thing as one Entrant. The Season Roster
- * is nine of them and an Exhibition Run that has replayed is another, ranked in
+ * is ten of them and an Exhibition Run that has replayed is another, ranked in
  * the same table by ADR-0032 and told apart by `exhibition` alone. The type is
  * one shape because the row is one shape; what a row *is* is a field on it and
  * not a second body for a reader to join.
@@ -201,7 +201,7 @@ async function scoredThrough(
 }
 
 /**
- * Every ranked row Season-to-date — the nine Entrants and any Exhibition Run
+ * Every ranked row Season-to-date — the ten Entrants and any Exhibition Run
  * that has replayed — both qualifications, the Exhibition caveat, and the
  * evidence the ranking rests on.
  *
@@ -273,7 +273,7 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
   // from the answer that could know the most.
   //
   // Left joins rather than an inner one, so the pre-season Season returns its
-  // nine entered Entrants with nothing beside them instead of returning
+  // ten entered Entrants with nothing beside them instead of returning
   // nothing. `gw = $4` is null before the first Gameweek is scored and matches
   // no row, which is the same branch.
   const rows = await query(
@@ -351,7 +351,7 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
   // rather than the design. It is reached only when a scored Season holds no
   // ranking row at all — which needs no Entrant to have settled a single
   // Prediction all Season, so an outage over the first settled Gameweek and
-  // nothing later. That state still ranks nine Entrants at nought on the page,
+  // nothing later. That state still ranks ten Entrants at nought on the page,
   // and a ranking a reader can see is a ranking that carries its caveat; with
   // no row written there is no third source to read one from.
   //
@@ -459,7 +459,7 @@ export interface FixturesBody {
 }
 
 /**
- * The Gameweek in front of the reader, its Fixtures, and what all nine Entrants
+ * The Gameweek in front of the reader, its Fixtures, and what all ten Entrants
  * committed before the Lock.
  *
  * The page never reads `throughGw` and this body does not carry it.
@@ -517,7 +517,7 @@ async function fixtures(
   // A deferred Fixture that was Locked stays on the page: its Predictions were
   // committed under this Gameweek's Lock and are what a reader came for. One
   // that left the schedule before any run reached it is not in the Gameweek at
-  // all, and would read as nine Gaps.
+  // all, and would read as ten Gaps.
   const rows = await query(
     `select fpl_id, home_team, away_team, kickoff_at from fixtures
       where season = $1 and coalesce(locked_in_gw, gw) = $2
@@ -526,7 +526,7 @@ async function fixtures(
     [season, gw]
   );
 
-  // The same nine in the same order on every Fixture, which is what makes a
+  // The same ten in the same order on every Fixture, which is what makes a
   // Gap a slot rather than a shorter list.
   const roster = await query(
     `select id, name from models
@@ -687,8 +687,8 @@ interface GapGameweek {
 }
 
 /**
- * All nine Entrants with their complete per-Gameweek series, so selecting one
- * is a re-render and not a fetch — the cumulative chart draws nine lines at
+ * All ten Entrants with their complete per-Gameweek series, so selecting one
+ * is a re-render and not a fetch — the cumulative chart draws ten lines at
  * once, and a page that fetched per Entrant could not draw the field.
  *
  * Every count here is counted over the flattened detail. `score_pct` and
@@ -703,7 +703,7 @@ async function entrants(query: Query, season: string): Promise<Response> {
   // the series is four rows per Entrant rather than four per Gameweek.
   //
   // Left joins for the same reason the leaderboard uses them: pre-season
-  // returns the nine entered Entrants with nothing beside them, and `gw = $6`
+  // returns the ten entered Entrants with nothing beside them, and `gw = $6`
   // is null there and matches no row.
   const rows = await query(
     `select m.id, m.name,
@@ -750,7 +750,7 @@ async function entrants(query: Query, season: string): Promise<Response> {
     // The Gap rate is the one row written for every Entrant of the roster
     // whether it answered or not, so it is the spine the series is hung on: a
     // Gameweek an Entrant Gapped entirely stays a row rather than closing over,
-    // and all nine lines share one x-domain.
+    // and all ten lines share one x-domain.
     gaps: perGameweek<GapGameweek>(row.gaps_detail)
   }));
 
@@ -824,11 +824,11 @@ export interface FplLeaderboardEntrant {
   /** The OpenRouter Base Model id the design prints beneath the name. */
   baseModel: string;
   /**
-   * Null before the first Settled Gameweek, as every figure beside it is: nine
+   * Null before the first Settled Gameweek, as every figure beside it is: ten
    * Entrants with nothing scored are a field entered, not a ranking, and a page
-   * handed ranks 1 to 9 there would publish an order nothing produced.
+   * handed ranks 1 to 10 there would publish an order nothing produced.
    *
-   * Ties share a rank rather than being separated by id. Nine Entrants opening
+   * Ties share a rank rather than being separated by id. Ten Entrants opening
    * on the same fifteen players can arrive at the same total, and an order
    * invented for two equal rows would show one of them climbing when neither
    * moved.
@@ -844,7 +844,7 @@ export interface FplLeaderboardEntrant {
    * The scored Gameweek's own points. Null rather than the Match track's
    * nought-for-a-missing-row: there, an Entrant that Gapped every Fixture
    * legitimately has no row and scored nothing, while here a scored Gameweek
-   * has a row for all nine or for none (ADR-0011) — so an absent one is a
+   * has a row for all ten or for none (ADR-0011) — so an absent one is a
    * broken record, and publishing it as a nought would hide that.
    */
   gwPoints: number | null;
@@ -894,7 +894,7 @@ export interface FplLeaderboardBody {
  *
  * A Gameweek settles for the whole roster or for none of it: a Gameweek any
  * Entrant stored no Manager State in is removed from every Season path
- * (ADR-0011), so the scorer writes its eight rows for nine Entrants or writes
+ * (ADR-0011), so the scorer writes its eight rows for ten Entrants or writes
  * nothing at all. The Gameweek's own points row is therefore the fact, and
  * there is no behavioural row that runs ahead of it the way the Match track's
  * do.
@@ -969,7 +969,7 @@ async function listedPool(
 }
 
 /**
- * The nine Entrants ranked by cumulative FPL points through the latest Settled
+ * The ten Entrants ranked by cumulative FPL points through the latest Settled
  * Gameweek, with the Race variant's whole series beside them — the three
  * variants are one page, and switching them must not fetch.
  *
@@ -1001,7 +1001,7 @@ async function fplLeaderboard(query: Query, season: string): Promise<Response> {
   // is the last one it wrote.
   //
   // Left joins for the reason the Match track's leaderboard uses them:
-  // pre-Season returns the nine entered seats with nothing beside them, and
+  // pre-Season returns the ten entered seats with nothing beside them, and
   // `$2` is null there and matches no row.
   const rows = await query(
     `select m.id, m.name, m.base_model,
@@ -1095,7 +1095,7 @@ async function fplLeaderboard(query: Query, season: string): Promise<Response> {
   // without the qualification is the failure ADR-0003 asks for it against, and
   // on this track there is no row it could be missing from that is not a fault:
   // the scorer writes it into every cumulative row it writes, so a Gameweek's
-  // rows carry it nine times or the record is broken.
+  // rows carry it ten times or the record is broken.
   //
   // One distinct value across those rows rather than the first one found.
   // Reading the first would answer a Gameweek whose own rows lost the sentence
@@ -1229,7 +1229,7 @@ export interface FplSquadsEntrant {
 }
 
 /**
- * What `/api/fpl/squads` answers with: all nine Entrants at one Gameweek, so
+ * What `/api/fpl/squads` answers with: all ten Entrants at one Gameweek, so
  * the page's picker switches without fetching.
  */
 export interface FplSquadsBody {
@@ -1244,7 +1244,7 @@ export interface FplSquadsBody {
  * strip's figures, the Gameweek's Transfers and how cleanly the action landed.
  *
  * The Manager State is read at that Gameweek exactly, where the leaderboard
- * takes the latest at or before it. A Settled Gameweek has a row for all nine —
+ * takes the latest at or before it. A Settled Gameweek has a row for all ten —
  * a Gameweek any Entrant stored none in is removed from every Season path
  * (ADR-0011) — and the Repairs, the Roll Over and the Transfers are facts about
  * *this* Gameweek, so an earlier Gameweek's row standing in for a missing one
@@ -1409,7 +1409,7 @@ async function fplSquads(query: Query, season: string): Promise<Response> {
     season,
     gw,
     // The order the picker lists them in, which is the ranking's. Ties keep the
-    // entered order rather than sharing a place: a picker is a list of nine
+    // entered order rather than sharing a place: a picker is a list of ten
     // buttons, and the shared rank a tie deserves is the leaderboard's answer
     // to a question this page does not ask.
     entrants: entrants.sort(

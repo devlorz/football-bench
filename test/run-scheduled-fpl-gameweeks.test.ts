@@ -15,7 +15,7 @@ const { Client } = pg;
 const BASE_MODELS = Array.from(
   { length: SEASON_ROSTER_SIZE },
   (_unused, index) => `vendor/base-${index + 1}`
-);
+).sort();
 
 function seatId(baseModel: string): string {
   return `fpl/${baseModel.split("/")[1]}`;
@@ -372,8 +372,8 @@ describe("scheduled FPL Gameweek runs", () => {
     const script = answering(STAND_PAT);
 
     // Polled after Gameweek 2's deadline, having never run it. Asking now
-    // would spend nine calls on a Gameweek every one of whose answers is
-    // already too late, and would record nine `deadline` attempts that say
+    // would spend ten calls on a Gameweek every one of whose answers is
+    // already too late, and would record ten `deadline` attempts that say
     // only that the run was started too late to matter. Gameweek 3 is not due
     // for another fortnight, so the poll finds nothing at all.
     const runs = await schedule({

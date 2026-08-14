@@ -128,7 +128,7 @@ async function replayRecordedOpening(
  * Opens the FPL track at a Gameweek the operator names, for every Entrant at
  * once.
  *
- * The Season path begins only when all nine Base Models hold a legal opening
+ * The Season path begins only when all ten Base Models hold a legal opening
  * Squad, so the actions are gathered first and committed second: an Entrant
  * that never gets there does not receive a shorter path than its peers, it
  * stops the start. What survives a refused start is the attempt record, which
@@ -200,9 +200,9 @@ export async function startFplTrack({
   }
 
   // Every Entrant starts from the same seed state and the same locked pool, so
-  // the nine bodies are identical. They are still stored one apiece, because a
+  // the ten bodies are identical. They are still stored one apiece, because a
   // context is one Entrant's from the next Gameweek onwards and one shape for
-  // the whole Season is worth nine copies of one body.
+  // the whole Season is worth ten copies of one body.
   const previous = openingManagerState();
   const opening = buildFplTrackContext({
     season,
@@ -220,7 +220,7 @@ export async function startFplTrack({
     repairsUsed: number;
     receivedAt: Date;
   }>();
-  // Nine conversations at once, up to the operator's limit. Each Entrant's
+  // Ten conversations at once, up to the operator's limit. Each Entrant's
   // own Repairs stay in its own conversation, so the only thing concurrency
   // shares is the wait — which is the point, with one Lock to finish inside.
   await eachBounded(entrants, concurrency, async (entrant) => {

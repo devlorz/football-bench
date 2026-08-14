@@ -43,16 +43,16 @@ a local database enters ten seats; the rehearsal runs and verifies ten.
 
 **Blocked by:** "A price falls in the rehearsal's world".
 
-- [ ] Entering the roster writes ten Entrant rows at the frozen Prompt Version, and
+- [x] Entering the roster writes ten Entrant rows at the frozen Prompt Version, and
       re-entering is idempotent
-- [ ] A roster constant whose length disagrees with the declared size is refused at the
+- [x] A roster constant whose length disagrees with the declared size is refused at the
       entry door
-- [ ] The DeepSeek and Gemini seats are byte-for-byte the seats of ADR-0014's roster
-- [ ] Muse Spark 1.2 and Grok 4.6 carry a provider pin and no quantization; Qwen3.8 Max
+- [x] The DeepSeek and Gemini seats are byte-for-byte the seats of ADR-0014's roster
+- [x] Muse Spark 1.2 and Grok 4.6 carry a provider pin and no quantization; Qwen3.8 Max
       carries its predecessor's single-endpoint justification in place
-- [ ] The faller seat's bank after selling proves the Selling Price of a fallen player is
+- [x] The faller seat's bank after selling proves the Selling Price of a fallen player is
       his lower current price, and the rehearsal verifier counts ten seats
-- [ ] No comment or docstring in the changed modules states nine as the size in force
+- [x] No comment or docstring in the changed modules states nine as the size in force
 
 ## The skeleton holds ten rows
 

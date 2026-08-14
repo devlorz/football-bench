@@ -28,7 +28,7 @@ import {
 type Database = Pick<Client, "query">;
 
 /**
- * One Entrant per call. Gathering all nine and committing them atomically is
+ * One Entrant per call. Gathering all ten and committing them atomically is
  * the "Start all nine Entrants together" ticket's job; opening them one at a
  * time from here would leave a partial start behind.
  */
@@ -183,7 +183,7 @@ export async function playGameweekFromContext({
   //
   // The roster never arrives here: `playFplGameweek` refuses a Gameweek with
   // nothing standing behind it, and openings are `startFplTrack`'s, which
-  // commits all nine or none. What opens alone is an Exhibition Run.
+  // commits all ten or none. What opens alone is an Exhibition Run.
   if (outcome.kind === "exhausted" && previous.teamSheet !== null) {
     const rolled = rolledOverState(previous);
     await storeManagerState(database, {
@@ -254,10 +254,10 @@ export async function playFplGameweek({
 
   // What the Entrant carries in — and it must carry something in. An opening
   // seeds from the empty Squad, and seeding one Entrant here would start the
-  // Season for one of nine: `manager_states` is insert-only, so that row is
+  // Season for one of ten: `manager_states` is insert-only, so that row is
   // permanent, it is the earliest the Season has, and it would therefore be
   // the Gameweek the track started at. Openings are `startFplTrack`'s, which
-  // commits all nine or none.
+  // commits all ten or none.
   const standing = await loadStandingManagerState(database, {
     entrantId,
     season,

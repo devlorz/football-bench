@@ -9,7 +9,7 @@ export interface DryRunVerdict {
 
 /**
  * Turns a dry run from a report someone interprets into a check that fails on
- * its own. Eight Predictions instead of nine looks almost identical to a human
+ * its own. Nine Predictions instead of ten looks almost identical to a human
  * skimming eighty lines of Gap summary.
  */
 export function dryRunVerdict(result: {

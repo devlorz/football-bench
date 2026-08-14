@@ -21,11 +21,15 @@ import {
 
 const { Client } = pg;
 
-/** The nine seats ADR-0014 puts on the track, one per Base Model. */
+/**
+ * The ten seats ADR-0034 puts on the track, one per Base Model, held in seat-id
+ * order: rows come back ordered by `model_id`, and ten seats sort `base-1`,
+ * `base-10`, `base-2` rather than by their number.
+ */
 const BASE_MODELS = Array.from(
   { length: SEASON_ROSTER_SIZE },
   (_unused, index) => `vendor/base-${index + 1}`
-);
+).sort();
 
 
 const LEGAL_ACTION = JSON.stringify({
@@ -106,8 +110,8 @@ interface Call {
 }
 
 /**
- * Answers each Base Model from its own script, so the nine conversations stay
- * nine conversations however they interleave. A Base Model with no script of
+ * Answers each Base Model from its own script, so the ten conversations stay
+ * ten conversations however they interleave. A Base Model with no script of
  * its own gets `otherwise`, which is what lets a test name only the Entrant it
  * is about.
  */
@@ -140,7 +144,7 @@ function scripted(
   };
 }
 
-describe("starting the FPL track for all nine Entrants", () => {
+describe("starting the FPL track for all ten Entrants", () => {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
 
   beforeAll(async () => {
@@ -268,7 +272,7 @@ describe("starting the FPL track for all nine Entrants", () => {
     const { calls } = await open();
 
     // One row per seat. At an opening the text says nothing about who is
-    // reading it — the same seed Squad, the same locked pool — so the nine
+    // reading it — the same seed Squad, the same locked pool — so the ten
     // bodies are identical and the hashes with them, which is what proves
     // afterwards that nobody saw a different pool from anybody else. They are
     // stored one apiece regardless, because from the next Gameweek onwards a
@@ -354,7 +358,7 @@ describe("starting the FPL track for all nine Entrants", () => {
     // A track opened at Gameweek 2 has a Settled Gameweek behind it, and the
     // opening context is the one place a Season that joins late can say so.
     // Every seat is seeded from the same empty Squad, so the windows are the
-    // only thing in the nine bodies that could have differed.
+    // only thing in the ten bodies that could have differed.
     await storePlayerPoints(client, {
       gameweek: 1,
       fplId: 8,
@@ -393,7 +397,7 @@ describe("starting the FPL track for all nine Entrants", () => {
   });
 
   test("does not start when the Lock passes before every opening is legal", async () => {
-    // Nine legal actions, all of them late. The Lock is the deadline instant
+    // Ten legal actions, all of them late. The Lock is the deadline instant
     // itself, and an action refused by it is not an opening however legal it
     // would have been in time.
     const { opening } = await open({ at: "2026-08-21T17:30:00Z" });
@@ -483,7 +487,7 @@ describe("starting the FPL track for all nine Entrants", () => {
       }
     });
 
-    // Three at once, which is both more than one — nine Entrants answered one
+    // Three at once, which is both more than one — ten Entrants answered one
     // after another would not finish inside a Lock — and no more than the
     // operator asked for.
     expect(mostInFlight).toBe(3);
@@ -580,7 +584,7 @@ describe("starting the FPL track for all nine Entrants", () => {
   });
 
   test("gives every Entrant call the operator's timeout", async () => {
-    // Three of nine seats died at the fetcher's two minutes on every run of
+    // Three of ten seats died at the fetcher's two minutes on every run of
     // the dry opening (spec 0010). The knob has to reach the wire to be a
     // knob at all, so it is read from the options the fetcher receives.
     const timeouts: (number | undefined)[] = [];
@@ -633,9 +637,9 @@ describe("starting the FPL track for all nine Entrants", () => {
     );
 
     try {
-      // Nine legal actions and a database that refuses the ninth row. Eight
-      // committed states would be eight Entrants a Gameweek ahead of the
-      // ninth, so the transaction takes all nine or none.
+      // Ten legal actions and a database that refuses one of the rows. Nine
+      // committed states would be nine Entrants a Gameweek ahead of the
+      // tenth, so the transaction takes all ten or none.
       await expect(open()).rejects.toThrow(
         "simulated Manager State persistence failure"
       );
@@ -738,8 +742,8 @@ describe("starting the FPL track for all nine Entrants", () => {
 
   test.for([
     { what: "no seats at all", seats: 0 },
-    { what: "one seat short", seats: 8 },
-    { what: "one seat too many", seats: 10 }
+    { what: "one seat short", seats: 9 },
+    { what: "one seat too many", seats: 11 }
   ])("refuses to start a roster of $what", async ({ seats }) => {
     // `missing` is measured against the roster that was queried, so a roster
     // of the wrong size reports nobody missing and starts a Season that is not

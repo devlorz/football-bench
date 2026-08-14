@@ -20,11 +20,15 @@ import {
 
 const { Client } = pg;
 
-/** The nine seats ADR-0014 puts on the track, one per Base Model. */
+/**
+ * The ten seats ADR-0034 puts on the track, one per Base Model, held in seat-id
+ * order: rows come back ordered by `model_id`, and ten seats sort `base-1`,
+ * `base-10`, `base-2` rather than by their number.
+ */
 const BASE_MODELS = Array.from(
   { length: SEASON_ROSTER_SIZE },
   (_unused, index) => `vendor/base-${index + 1}`
-);
+).sort();
 
 
 /** The legal opening Squad: £95.5m spent, £4.5m left in the bank. */
@@ -152,7 +156,7 @@ describe("running a Gameweek for the whole FPL roster", () => {
   });
 
   /**
-   * Opens the track for all nine at Gameweek 1, which is the only way a
+   * Opens the track for all ten at Gameweek 1, which is the only way a
    * Gameweek this function runs can have a Squad standing behind it. It goes
    * through `startFplTrack` rather than seeding rows, because the Manager
    * States a run carries forward should be the ones the opening actually
@@ -257,8 +261,8 @@ describe("running a Gameweek for the whole FPL roster", () => {
 
     // The same Gameweek again, while its Lock still stands. Every Entrant's
     // decision is already taken, and `manager_states` refuses an update in any
-    // case — so the second run makes no call at all rather than making nine
-    // and throwing away nine answers.
+    // case — so the second run makes no call at all rather than making ten
+    // and throwing away ten answers.
     const { outcome, calls } = await run({ responses: [] });
 
     expect(outcome).toEqual({
@@ -274,7 +278,9 @@ describe("running a Gameweek for the whole FPL roster", () => {
          (select count(*)::int from manager_states where gw = 2) as states,
          (select count(*)::int from attempts where gw = 2) as attempts`
     );
-    expect(rows.rows).toEqual([{ states: 9, attempts: 9 }]);
+    expect(rows.rows).toEqual([
+      { states: SEASON_ROSTER_SIZE, attempts: SEASON_ROSTER_SIZE }
+    ]);
   });
 
   test("stays inactive before the Gameweek the track started at", async () => {
@@ -331,7 +337,8 @@ describe("running a Gameweek for the whole FPL roster", () => {
         where gw = 2
         group by error_kind`
     );
-    expect(late.rows).toEqual([{ error_kind: "deadline", count: 9 }]);
+    expect(late.rows)
+      .toEqual([{ error_kind: "deadline", count: SEASON_ROSTER_SIZE }]);
   });
 
   test("carries a silent Entrant forward without back-filling its Gameweek", async () => {
@@ -362,7 +369,7 @@ describe("running a Gameweek for the whole FPL roster", () => {
       missing: [seatId(silent)]
     });
 
-    // Gameweek 3 plays for all nine, including the one that was silent. Its
+    // Gameweek 3 plays for all ten, including the one that was silent. Its
     // Squad did not vanish because a Gameweek passed without it, and no row
     // appears at Gameweek 2 to pretend it did not: the Gameweek stays missing
     // and the Free Transfer it granted is carried through the silence.
@@ -445,9 +452,9 @@ describe("running a Gameweek for the whole FPL roster", () => {
     await openTheTrack();
     let called = 0;
 
-    // Palmer rises to £13.0m in the middle of the run. Nine reads of a moving
-    // snapshot would be nine Entrants priced differently for the same
-    // Gameweek, which is nine Entrants playing slightly different games — so
+    // Palmer rises to £13.0m in the middle of the run. Ten reads of a moving
+    // snapshot would be ten Entrants priced differently for the same
+    // Gameweek, which is ten Entrants playing slightly different games — so
     // the pool belongs to the Gameweek and is read before the first call.
     const { outcome } = await run({
       http: async () => {
@@ -652,8 +659,8 @@ describe("running a Gameweek for the whole FPL roster", () => {
     let active = 0;
     let peak = 0;
 
-    // Nine seats through a pool of three. The bound is what an operator sets
-    // `FPL_CONCURRENCY` for — nine simultaneous calls carrying a
+    // Ten seats through a pool of three. The bound is what an operator sets
+    // `FPL_CONCURRENCY` for — ten simultaneous calls carrying a
     // six-hundred-player pool each is a different load on the provider from
     // three — so a pool that ignored it would spend the whole roster at once.
     await run({

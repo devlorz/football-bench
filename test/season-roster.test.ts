@@ -44,7 +44,7 @@ describe("entering the Season Roster", () => {
     )
   ).rows;
 
-  test("writes the nine seats of ADR-0014 under the Season's Prompt Version",
+  test("writes the ten seats of ADR-0034 under the Season's Prompt Version",
     async () => {
       await enterSeasonRoster(client, SEASON);
 
@@ -58,16 +58,17 @@ describe("entering the Season Roster", () => {
         return { ...counts, [name]: (counts[name] ?? 0) + 1 };
       }, {});
       expect(classes).toEqual({
-        Frontier: 3, "First-party": 1, "Open-weight": 5
+        Frontier: 3, "First-party": 2, "Open-weight": 5
       });
 
       // ADR-0009: an open-weight seat served at another precision is another
-      // model, so every one of them is pinned — and nothing else is. Qwen3.7
+      // model, so every one of them is pinned — and nothing else is. Qwen3.8
       // Max is the single exception, for the reason recorded beside it in
-      // `src/season-roster.ts`: one endpoint exists for that Base Model, so
-      // the provider pin fixes the precision on its own, and the stale `fp8`
-      // filter matched nothing and 404'd the seat.
-      const unpinnedOpenWeight = new Set(["match/qwen3.7-max"]);
+      // `src/season-roster.ts` and inherited from its predecessor: one
+      // endpoint exists for that Base Model, so the provider pin fixes the
+      // precision on its own, and an `fp8` filter matches nothing and 404s
+      // the seat.
+      const unpinnedOpenWeight = new Set(["match/qwen3.8-max"]);
       for (const row of rows) {
         const pinned = row.config.baseModelClass === "Open-weight"
           && !unpinnedOpenWeight.has(row.id);
@@ -112,6 +113,44 @@ describe("entering the Season Roster", () => {
           : row
       )));
     });
+
+  test("leaves the two seats ADR-0034 declined to move exactly as they were",
+    async () => {
+      await enterSeasonRoster(client, SEASON);
+
+      // The DeepSeek and Gemini rejections are recorded in ADR-0034 as an
+      // absence of change, which is invisible in a roster of ten unless
+      // something says what the absence was.
+      const rows = await entrants();
+      expect(rows.find(({ id }) => id === "match/deepseek-v4-pro"))
+        .toMatchObject({
+          name: "DeepSeek V4 Pro",
+          base_model: "deepseek/deepseek-v4-pro",
+          provider: "novita",
+          quantization: "fp8",
+          config: expect.objectContaining({
+            canonical_slug: "deepseek/deepseek-v4-pro-20260423"
+          })
+        });
+      expect(rows.find(({ id }) => id === "match/gemini-3.1-pro-preview"))
+        .toMatchObject({
+          name: "Gemini 3.1 Pro Preview",
+          base_model: "google/gemini-3.1-pro-preview",
+          provider: "google-ai-studio",
+          quantization: null,
+          config: expect.objectContaining({
+            canonical_slug: "google/gemini-3.1-pro-preview-20260219"
+          })
+        });
+    });
+
+  test("holds as many seats as the recorded decision declares", () => {
+    // The entry door refuses a roster of the wrong length, and this is what
+    // makes that refusal reachable: the door can only be walked into by a
+    // roster that got there, so the constant is checked here rather than by
+    // an operator finding out at the door.
+    expect(SEASON_ROSTER).toHaveLength(SEASON_ROSTER_SIZE);
+  });
 
   test("refuses a Season the frozen Prompt Version does not name", async () => {
     await expect(enterSeasonRoster(client, "2027-28")).rejects

@@ -32,7 +32,7 @@ const AFTER_THE_SEASON = "2026-10-01T12:00:00Z";
 const BASE_MODELS = Array.from(
   { length: SEASON_ROSTER_SIZE },
   (_unused, index) => `vendor/base-${index + 1}`
-);
+).sort();
 
 
 const OPENING_SHEET = {
@@ -206,7 +206,7 @@ describe("replaying the FPL track as an Exhibition Run", () => {
 
 
   /**
-   * The real track: nine seats opened at Gameweek 1 and carried through 2 and
+   * The real track: ten seats opened at Gameweek 1 and carried through 2 and
    * 3, each Gameweek settling behind them. This is what an Exhibition arrives
    * to — the donor bodies and the Gameweeks that have settled are the record it
    * replays against, and seeding them by hand would be a second opinion about
