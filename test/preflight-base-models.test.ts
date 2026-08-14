@@ -17,6 +17,16 @@ const openRouterResponseUrl = new URL(
   import.meta.url
 );
 
+/**
+ * The seat number as it appears in an Entrant's id. Zero-padded because the
+ * roster query orders by id, which sorts as text: an unpadded tenth seat would
+ * land between the first and the second, and every assertion listing the
+ * roster in order would have to say so.
+ */
+function seat(index: number): string {
+  return String(index).padStart(2, "0");
+}
+
 describe("pre-flight for the Base Model roster", () => {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
 
@@ -98,7 +108,7 @@ describe("pre-flight for the Base Model roster", () => {
            id, name, base_model, provider, quantization, prompt_version, role
          ) values ($1, $2, $3, $4, $5, 'match/2026-27-v2', 'entrant')`,
         [
-          `entrant/${index}`,
+          `entrant/${seat(index)}`,
           `Entrant ${index}`,
           `vendor/base-model-${index}`,
           `provider-${index}`,
@@ -255,7 +265,7 @@ describe("pre-flight for the Base Model roster", () => {
       results: Array.from({ length: 9 }, (_, offset) => {
         const index = offset + 1;
         return {
-          modelId: `entrant/${index}`,
+          modelId: `entrant/${seat(index)}`,
           baseModel: `vendor/base-model-${index}`,
           status: "parseable",
           detail: null,
@@ -330,7 +340,7 @@ describe("pre-flight for the Base Model roster", () => {
       calls: 9,
       ok: false,
       first: {
-        modelId: "entrant/1",
+        modelId: "entrant/01",
         baseModel: "vendor/base-model-1",
         status: "refusal",
         detail: "I cannot provide betting predictions.",
@@ -405,7 +415,7 @@ describe("pre-flight for the Base Model roster", () => {
 
     expect(report.ok).toBe(false);
     expect(report.results[0]).toEqual({
-      modelId: "entrant/1",
+      modelId: "entrant/01",
       baseModel: "vendor/base-model-1",
       status: "parseable",
       detail: "OpenRouter did not identify a selected model.",
@@ -493,7 +503,7 @@ describe("pre-flight for the Base Model roster", () => {
       ok: false,
       results: [
         {
-          modelId: "entrant/1",
+          modelId: "entrant/01",
           baseModel: "vendor/base-model-1",
           status: "parseable",
           detail: "OpenRouter did not identify a selected provider. OpenRouter did not identify a selected model.",
@@ -502,7 +512,7 @@ describe("pre-flight for the Base Model roster", () => {
           rawBody: missingProviderBody
         },
         {
-          modelId: "entrant/2",
+          modelId: "entrant/02",
           baseModel: "vendor/base-model-2",
           status: "unparseable",
           detail: "Response must be valid JSON. OpenRouter did not identify a selected model.",
@@ -511,7 +521,7 @@ describe("pre-flight for the Base Model roster", () => {
           rawBody: unparseableBody
         },
         {
-          modelId: "entrant/3",
+          modelId: "entrant/03",
           baseModel: "vendor/base-model-3",
           status: "transport_error",
           detail: "OpenRouter returned HTTP 503.",
@@ -520,7 +530,7 @@ describe("pre-flight for the Base Model roster", () => {
           rawBody: httpErrorBody
         },
         {
-          modelId: "entrant/4",
+          modelId: "entrant/04",
           baseModel: "vendor/base-model-4",
           status: "transport_error",
           detail: "OpenRouter call failed: connection reset.",
@@ -552,7 +562,7 @@ describe("pre-flight for the Base Model roster", () => {
     expect(calls).toBe(0);
   });
 
-  test("refuses a roster grown past the size it expects, naming both numbers", async () => {
+  test("passes at ten, and refuses eleven and twelve naming both numbers", async () => {
     // The outgoing seats are still in the table while the incoming one is
     // inserted, so the road from nine to ten passes through eleven and twelve.
     // Neither is silently swept up: the refusal names what was expected and
@@ -562,12 +572,12 @@ describe("pre-flight for the Base Model roster", () => {
         `insert into models (
            id, name, base_model, provider, quantization, prompt_version, role
          ) values ($1, $2, $3, $4, null, 'match/2026-27-v2', 'entrant')`,
-        [`entrant/${index}`, `Entrant ${index}`, `vendor/base-model-${index}`,
+        [`entrant/${seat(index)}`, `Entrant ${index}`, `vendor/base-model-${index}`,
           `provider-${index}`]
       );
     };
     let calls = 0;
-    const expectTen = () => preflightBaseModels({
+    const runExpectingTen = () => preflightBaseModels({
       database: client,
       season: "2026-27",
       fixtureId: 1,
@@ -579,8 +589,8 @@ describe("pre-flight for the Base Model roster", () => {
       }
     });
 
-    // The finished ten passes. Without this the pair below would still be
-    // green against a pre-flight that refused every roster it was handed.
+    // Only the finished ten passes (spec 0015, Further Notes). Every other
+    // run in this file is a roster of nine, so ten is stated here or nowhere.
     await addEntrant(10);
     const finished = await preflightBaseModels({
       database: client,
@@ -617,17 +627,18 @@ describe("pre-flight for the Base Model roster", () => {
         };
       }
     });
-    expect({ ok: finished.ok, called: finished.results.length })
-      .toEqual({ ok: true, called: 10 });
+    expect(finished.ok).toBe(true);
+    expect(finished.results.map(({ modelId }) => modelId))
+      .toEqual(Array.from({ length: 10 }, (_u, n) => `entrant/${seat(n + 1)}`));
 
     await addEntrant(11);
-    await expect(expectTen()).rejects.toThrow(
+    await expect(runExpectingTen()).rejects.toThrow(
       "Pre-flight requires exactly 10 Entrants at Prompt Version "
       + "match/2026-27-v2; found 11"
     );
 
     await addEntrant(12);
-    await expect(expectTen()).rejects.toThrow(
+    await expect(runExpectingTen()).rejects.toThrow(
       "Pre-flight requires exactly 10 Entrants at Prompt Version "
       + "match/2026-27-v2; found 12"
     );
@@ -638,7 +649,7 @@ describe("pre-flight for the Base Model roster", () => {
     await client.query(
       `update models
           set prompt_version = 'match/draft'
-        where id = 'entrant/9'`
+        where id = 'entrant/09'`
     );
     let calls = 0;
 
@@ -718,7 +729,7 @@ describe("pre-flight for the Base Model roster", () => {
     expect(report.ok).toBe(true);
     expect(called).toHaveLength(9);
     expect(report.results.map(({ modelId }) => modelId))
-      .toEqual(Array.from({ length: 9 }, (_u, n) => `entrant/${n + 1}`));
+      .toEqual(Array.from({ length: 9 }, (_u, n) => `entrant/${seat(n + 1)}`));
   });
 
   test("checks one Exhibition on its own, at the frozen Prompt Version", async () => {
@@ -815,8 +826,8 @@ describe("pre-flight for the Base Model roster", () => {
     await expect(target("exhibition/typo")).rejects.toThrow(
       "exhibition/typo has no row in models"
     );
-    await expect(target("entrant/1")).rejects.toThrow(
-      "entrant/1 has role 'entrant', not 'exhibition'"
+    await expect(target("entrant/01")).rejects.toThrow(
+      "entrant/01 has role 'entrant', not 'exhibition'"
     );
     expect(calls).toBe(0);
   });
@@ -927,7 +938,7 @@ describe("pre-flight for the Base Model roster", () => {
 
     expect(report.ok).toBe(true);
     expect(report.results.map(({ modelId }) => modelId))
-      .toEqual(Array.from({ length: 9 }, (_u, n) => `entrant/${n + 1}`));
+      .toEqual(Array.from({ length: 9 }, (_u, n) => `entrant/${seat(n + 1)}`));
     expect(called).not.toContain("vendor/late");
   });
 
@@ -949,7 +960,7 @@ describe("pre-flight for the Base Model roster", () => {
     });
 
     expect(report.results[0]).toEqual({
-      modelId: "entrant/1",
+      modelId: "entrant/01",
       baseModel: "vendor/base-model-1",
       status: "parseable",
       detail: null,
