@@ -1,5 +1,6 @@
 ---
 import FplPage from "../layouts/FplPage.astro";
+import { SEASON_ROSTER_SIZE } from "../../../src/season-roster.js";
 ---
 <FplPage title="FPL points ranking — Football Bench, FPL track" current="leaderboard">
   {/*
@@ -59,10 +60,12 @@ import FplPage from "../layouts/FplPage.astro";
     </div>
   </section>
 
-  {/* Ten, because ten is what the roster is (ADR-0034) and a loading state that
-      guesses a different height moves the page when the data lands.
+  {/* As many blocks as the roster holds, read at build time from the one
+      number that declares it: a loading state that guesses a different height
+      moves the page when the data lands, and a height copied by hand goes
+      stale the next time the roster moves.
 
-      Outside the table rather than ten `colspan` rows inside it, which is what
+      Outside the table rather than one `colspan` row each inside it, which is what
       this was while the table was the only variant: one response fills three
       views, so there is one wait for it, and a reader who opened a link to the
       Race variant would otherwise be shown a table while it loaded. It is also
@@ -70,7 +73,7 @@ import FplPage from "../layouts/FplPage.astro";
       width of the content, and not a guess at each column's width, which a
       `<table>` would then move. */}
   <div class="fplskeleton" id="loading" aria-hidden="true">
-    {Array.from({ length: 10 }).map(() => <div class="skeleton"></div>)}
+    {Array.from({ length: SEASON_ROSTER_SIZE }).map(() => <div class="skeleton"></div>)}
   </div>
 
   <section id="ranking" hidden>

@@ -65,6 +65,34 @@ because every other surface reads the roster from the data.
 - [x] The loading skeleton renders exactly as many rows as the Season Roster holds
 - [x] The comment beside it still explains why the count is fixed rather than guessed
 
+**Manual acceptance record** (spec 0011 §"The pages", required by `dashboard/README.md`
+before a slice that touches a page is complete). Walked 2026-08-15 against the design
+seed on the local Postgres, `astro dev` on :4322 proxying the running read API on :8787.
+Both leaderboards read `SEASON_ROSTER_SIZE` at build time; `astro check` reports no
+diagnostics and the built pages carry ten placeholder rows each.
+
+| # | Step | 1440 light | 1440 dark | 375 |
+|---|------|-----------|-----------|-----|
+| 1 | Nav links reach their page and mark themselves current | pass | pass | — |
+| 2 | Sort reorders and recomputes ranks; URL updates; reload holds; Back leaves the page | pass | — | — |
+| 3 | Picking an Entrant redraws every chart, list and row; URL updates; reload holds | pass | — | — |
+| 4 | Opening a rationale closes the one already open | pass | — | — |
+| 5 | Theme toggle flips and holds across a nav and a reload | pass | pass | — |
+| 6 | Tab reaches every control; the ring is the accent one | not walked | not walked | — |
+| 7 | 375px: nav collapses, one column, no sideways scroll | — | — | not walked |
+| 8 | Worker stopped: one error line, no spinner | not walked | not walked | — |
+| 9 | Pre-season seed: each page shows its pre-season state | not walked | not walked | — |
+
+Steps 2 and 5's Back and reload assertions were read off `history.length` staying put
+across sort toggles, which is what `replaceState` buys and what Back leaving the page
+rests on.
+
+Steps 6–9 are open, and the slice is not complete until a human closes them. Step 6 and
+step 7 need a keyboard and a window this session could not drive: synthetic Tab never
+left `document.body`, and the 375px resize did not take. Step 8 stops the read API and
+step 9 re-seeds the local database at its pre-season stage — both would have disturbed a
+stack this session did not start.
+
 ## The road in is loud
 
 **What to build:** Proof that the operator's path from nine to ten cannot be walked half

@@ -1,5 +1,6 @@
 ---
 import Page from "../layouts/Page.astro";
+import { SEASON_ROSTER_SIZE } from "../../../src/season-roster.js";
 ---
 <Page title="Leaderboard — Football Bench, match track" current="leaderboard">
   {/*
@@ -88,10 +89,13 @@ import Page from "../layouts/Page.astro";
         <div class="cell" role="columnheader">Bet points</div>
       </div>
       <div id="rows" role="rowgroup">
-        {/* Still blocks over the same grid the real rows use. Ten, because ten
-            is what the roster is (ADR-0034) and a loading state that guesses a
-            different height moves the page when the data lands. */}
-        {Array.from({ length: 10 }).map(() => (
+        {/* Still blocks over the same grid the real rows use. As many as the
+            roster holds, read at build time from the one number that declares
+            it: a loading state that guesses a different height moves the page
+            when the data lands, and a height copied by hand goes stale the
+            next time the roster moves. Fixed, not guessed -- the count is in
+            the built HTML, not waiting on the fetch it is covering for. */}
+        {Array.from({ length: SEASON_ROSTER_SIZE }).map(() => (
           <div class="lbrow lbrow-skeleton" aria-hidden="true">
             <div class="skeleton"></div>
             <div class="skeleton"></div>
