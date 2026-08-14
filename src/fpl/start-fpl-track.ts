@@ -61,8 +61,8 @@ export interface FplTrackOpening {
  * through the rules reducer as if it had just been answered (ADR-0025) — or
  * null for a seat that never got a legal answer on record and must be called.
  *
- * A retry of a refused opening re-billed every seat, including the eight whose
- * legal actions the run had already thrown away. The accepted action is parsed
+ * A retry of a refused opening re-billed every seat, including every one whose
+ * legal action the run had already thrown away. The accepted action is parsed
  * back out of `attempts.raw_response` at the point of use — no new column, no
  * second copy of a fact the audit trail already states — and driven through
  * the same judgement a live response gets, against the same stored context the
@@ -238,7 +238,7 @@ export async function startFplTrack({
     const pool = parseFplTrackContextPool(body);
     // A seat that already answered legally is not asked again. What it said is
     // replayed from the record instead, so one seat's provider outage stops
-    // costing eight other Entrants' answers (ADR-0025).
+    // costing every other Entrant its answer (ADR-0025).
     const replayed = await replayRecordedOpening(
       database,
       season,

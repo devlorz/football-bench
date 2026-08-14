@@ -11,7 +11,7 @@ import { GAMEWEEK_RULES } from "../src/fpl/apply-gameweek-action.js";
 import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
 import { DEFAULT_HTTP_TIMEOUT_MS, type HttpFetcher } from "../src/http.js";
 import { FPL_POOL, lockPool } from "./fpl-pool-fixture.js";
-import { seatId } from "./fpl-seat-fixture.js";
+import { BASE_MODELS, seatId } from "./fpl-seat-fixture.js";
 import { storePlayerPoints } from "./fpl-points-fixture.js";
 import { STORED_OPENING_STATE } from "./fpl-state-fixture.js";
 import {
@@ -20,17 +20,6 @@ import {
 } from "./sent-context.js";
 
 const { Client } = pg;
-
-/**
- * The ten seats ADR-0034 puts on the track, one per Base Model, held in seat-id
- * order: rows come back ordered by `model_id`, and ten seats sort `base-1`,
- * `base-10`, `base-2` rather than by their number.
- */
-const BASE_MODELS = Array.from(
-  { length: SEASON_ROSTER_SIZE },
-  (_unused, index) => `vendor/base-${index + 1}`
-).sort();
-
 
 const LEGAL_ACTION = JSON.stringify({
   transfers_in: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
@@ -429,13 +418,13 @@ describe("starting the FPL track for all ten Entrants", () => {
          id, name, base_model, provider, prompt_version, role
        ) values
          ('reference/home', 'Home prior', 'none', 'none', $1, 'reference'),
-         ('match/base-1', 'Match seat', 'vendor/base-1', 'vendor',
+         ('match/base-01', 'Match seat', 'vendor/base-01', 'vendor',
           'match/2026-27-v2', 'entrant')`,
       [FPL_PROMPT_VERSION]
     );
     await insertExhibition(client, {
-      id: "exhibition/base-1",
-      baseModel: "vendor/base-1",
+      id: "exhibition/base-01",
+      baseModel: "vendor/base-01",
       promptVersion: FPL_PROMPT_VERSION
     });
 
@@ -456,7 +445,7 @@ describe("starting the FPL track for all ten Entrants", () => {
       `insert into models (
          id, name, base_model, provider, prompt_version, role
        ) values (
-         'fpl/base-1-again', 'A second seat', 'vendor/base-1', 'vendor',
+         'fpl/base-01-again', 'A second seat', 'vendor/base-01', 'vendor',
          $1, 'entrant'
        )`,
       [FPL_PROMPT_VERSION]
@@ -466,7 +455,7 @@ describe("starting the FPL track for all ten Entrants", () => {
     // a different experiment (ADR-0003). Refusing before the first call keeps
     // the roster question away from the Lock.
     await expect(open()).rejects.toThrow(
-      "vendor/base-1 has more than one FPL seat: fpl/base-1, fpl/base-1-again"
+      "vendor/base-01 has more than one FPL seat: fpl/base-01, fpl/base-01-again"
     );
     const attempts = await client.query("select id from attempts");
     expect(attempts.rows).toEqual([]);
@@ -499,10 +488,10 @@ describe("starting the FPL track for all ten Entrants", () => {
     // together. Attempts are what a violation profile is counted from, so a
     // count landing on the wrong Entrant is a wrong published result.
     const repairsWanted: Readonly<Record<string, number>> = {
-      "vendor/base-2": 1,
-      "vendor/base-4": 2,
-      "vendor/base-6": 3,
-      "vendor/base-8": 1
+      "vendor/base-02": 1,
+      "vendor/base-04": 2,
+      "vendor/base-06": 3,
+      "vendor/base-08": 1
     };
     const arrive = barrier(4);
     const { opening, calls } = await open({
@@ -554,21 +543,21 @@ describe("starting the FPL track for all ten Entrants", () => {
   });
 
   test("stores nothing at all when one Entrant never opens legally", async () => {
-    // Eight legal openings and one that is still illegal after its third
-    // Repair. Committing the eight would hand them a season path a Gameweek
-    // longer than the ninth's, which is the comparison this track exists to
-    // make impossible.
+    // One short of the roster: every seat but one opens legally, and that one
+    // is still illegal after its third Repair. Committing the rest would hand
+    // them a season path a Gameweek longer than that one's, which is the
+    // comparison this track exists to make impossible.
     const { opening } = await open({
       perEntrant: {
-        "vendor/base-5": Array.from({ length: 4 }, () => CAPTAIN_ON_THE_BENCH)
+        "vendor/base-05": Array.from({ length: 4 }, () => CAPTAIN_ON_THE_BENCH)
       }
     });
 
-    expect(opening).toEqual({ gameweek: 1, missing: ["fpl/base-5"] });
+    expect(opening).toEqual({ gameweek: 1, missing: ["fpl/base-05"] });
     const states = await client.query("select model_id from manager_states");
     expect(states.rows).toEqual([]);
 
-    // The eight legal actions are thrown away; the evidence that they were
+    // The legal actions are thrown away; the evidence that they were
     // made is not. Repairs and the violation profile are read from these rows
     // and a refused start must not empty them.
     const attempts = await client.query<{ model_id: string; count: number }>(
@@ -579,12 +568,12 @@ describe("starting the FPL track for all ten Entrants", () => {
     );
     expect(attempts.rows).toEqual(BASE_MODELS.map((baseModel) => ({
       model_id: seatId(baseModel),
-      count: baseModel === "vendor/base-5" ? 4 : 1
+      count: baseModel === "vendor/base-05" ? 4 : 1
     })));
   });
 
   test("gives every Entrant call the operator's timeout", async () => {
-    // Three of ten seats died at the fetcher's two minutes on every run of
+    // Three of nine seats died at the fetcher's two minutes on every run of
     // the dry opening (spec 0010). The knob has to reach the wire to be a
     // knob at all, so it is read from the options the fetcher receives.
     const timeouts: (number | undefined)[] = [];
@@ -603,17 +592,17 @@ describe("starting the FPL track for all ten Entrants", () => {
     const { opening } = await open({
       http: async (url, options) => {
         const { model } = JSON.parse(options?.body ?? "{}") as { model: string };
-        return model === "vendor/base-7"
+        return model === "vendor/base-07"
           ? { status: 500, body: "upstream exploded" }
           : { status: 200, body: openRouterBody(LEGAL_ACTION) };
       }
     });
 
-    expect(opening.missing).toEqual(["fpl/base-7"]);
+    expect(opening.missing).toEqual(["fpl/base-07"]);
     const states = await client.query("select model_id from manager_states");
     expect(states.rows).toEqual([]);
     const failed = await client.query(
-      "select error_kind from attempts where model_id = 'fpl/base-7'"
+      "select error_kind from attempts where model_id = 'fpl/base-07'"
     );
     expect(failed.rows).toEqual([{ error_kind: "provider" }]);
   });
@@ -625,7 +614,7 @@ describe("starting the FPL track for all ten Entrants", () => {
        language plpgsql
        as $$
        begin
-         if new.model_id = 'fpl/base-9' then
+         if new.model_id = 'fpl/base-09' then
            raise exception 'simulated Manager State persistence failure';
          end if;
          return new;
@@ -637,9 +626,9 @@ describe("starting the FPL track for all ten Entrants", () => {
     );
 
     try {
-      // Ten legal actions and a database that refuses one of the rows. Nine
-      // committed states would be nine Entrants a Gameweek ahead of the
-      // tenth, so the transaction takes all ten or none.
+      // A legal action per seat and a database that refuses one of the rows.
+      // Committing the rest would put them a Gameweek ahead of the one that
+      // failed, so the transaction takes the whole roster or none of it.
       await expect(open()).rejects.toThrow(
         "simulated Manager State persistence failure"
       );
@@ -667,7 +656,7 @@ describe("starting the FPL track for all ten Entrants", () => {
        language plpgsql
        as $$
        begin
-         if new.model_id = 'fpl/base-4' then
+         if new.model_id = 'fpl/base-04' then
            raise exception 'simulated attempt persistence failure';
          end if;
          return new;
@@ -786,7 +775,7 @@ describe("starting the FPL track for all ten Entrants", () => {
   test("starts at a later Gameweek after an incomplete opening", async () => {
     await open({
       perEntrant: {
-        "vendor/base-3": Array.from({ length: 4 }, () => CAPTAIN_ON_THE_BENCH)
+        "vendor/base-03": Array.from({ length: 4 }, () => CAPTAIN_ON_THE_BENCH)
       }
     });
     const { opening } = await open({
@@ -824,11 +813,11 @@ describe("starting the FPL track for all ten Entrants", () => {
 
   test("re-calls only the seat that failed and replays the rest from record", async () => {
     // One run that fails on a single seat, with a second seat taking a Repair
-    // to get there. Eight legal openings are on record and one is not.
+    // to get there. Every legal opening but one is on record.
     await open({
       perEntrant: {
-        "vendor/base-2": [CAPTAIN_ON_THE_BENCH, LEGAL_ACTION],
-        "vendor/base-5": Array.from({ length: 4 }, () => CAPTAIN_ON_THE_BENCH)
+        "vendor/base-02": [CAPTAIN_ON_THE_BENCH, LEGAL_ACTION],
+        "vendor/base-05": Array.from({ length: 4 }, () => CAPTAIN_ON_THE_BENCH)
       }
     });
 
@@ -837,12 +826,12 @@ describe("starting the FPL track for all ten Entrants", () => {
     // rather than quietly costing an Entrant call it need not have made.
     const { opening, calls } = await open({
       responses: [],
-      perEntrant: { "vendor/base-5": [LEGAL_ACTION] },
+      perEntrant: { "vendor/base-05": [LEGAL_ACTION] },
       at: "2026-08-21T12:30:00Z"
     });
 
     expect(opening).toEqual({ gameweek: 1, missing: [] });
-    expect(calls.map(({ baseModel }) => baseModel)).toEqual(["vendor/base-5"]);
+    expect(calls.map(({ baseModel }) => baseModel)).toEqual(["vendor/base-05"]);
 
     // And what the replay commits is what a fresh answer commits: the same
     // Squad at the same purchase prices, with the Repair the recorded run
@@ -855,13 +844,13 @@ describe("starting the FPL track for all ten Entrants", () => {
     );
     expect(states.rows).toEqual(BASE_MODELS.map((baseModel) => ({
       ...STORED_OPENING_STATE,
-      attempts_used: baseModel === "vendor/base-2" ? 1 : 0,
+      attempts_used: baseModel === "vendor/base-02" ? 1 : 0,
       model_id: seatId(baseModel),
       // A replayed seat keeps the instant its action was actually received;
       // only the seat that was called again carries the retry's clock. Replay
       // changes what a run costs and nothing else.
       predicted_at: new Date(
-        baseModel === "vendor/base-5"
+        baseModel === "vendor/base-05"
           ? "2026-08-21T12:30:00Z"
           : "2026-08-21T11:30:00Z"
       )
@@ -871,22 +860,22 @@ describe("starting the FPL track for all ten Entrants", () => {
   test("fails the retry when a recorded action no longer passes the reducer", async () => {
     await open({
       perEntrant: {
-        "vendor/base-5": Array.from({ length: 4 }, () => CAPTAIN_ON_THE_BENCH)
+        "vendor/base-05": Array.from({ length: 4 }, () => CAPTAIN_ON_THE_BENCH)
       }
     });
     // A recorded answer that the rules now refuse. Replaying through the
     // reducer is what makes this loud instead of a stale Squad committed on
     // the strength of an `ok` flag written by an earlier run.
     await client.query(
-      "update attempts set raw_response = $1 where model_id = 'fpl/base-2'",
+      "update attempts set raw_response = $1 where model_id = 'fpl/base-02'",
       [openRouterBody(CAPTAIN_ON_THE_BENCH)]
     );
 
     await expect(open({
       responses: [],
-      perEntrant: { "vendor/base-5": [LEGAL_ACTION] }
+      perEntrant: { "vendor/base-05": [LEGAL_ACTION] }
     })).rejects.toThrow(
-      "fpl/base-2 has a recorded opening action for Gameweek 1 of 2026-27 "
+      "fpl/base-02 has a recorded opening action for Gameweek 1 of 2026-27 "
       + "that the rules now refuse"
     );
     const states = await client.query("select model_id from manager_states");

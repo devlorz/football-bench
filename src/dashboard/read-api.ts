@@ -344,8 +344,8 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
   // Taken from whichever Entrant has one rather than from the first row. The
   // first row is the alphabetically first Entrant, which has a qualification
   // only if it scored — so an Entrant that Gapped a whole Season would strip
-  // the caveat off eight Entrants' rankings, which is the one failure spec 0011
-  // exists to prevent.
+  // the caveat off every other Entrant's ranking, which is the one failure
+  // spec 0011 exists to prevent.
   //
   // The scorer's own constant is the fallback, and it is a stated compromise
   // rather than the design. It is reached only when a scored Season holds no

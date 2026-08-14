@@ -267,7 +267,8 @@ export function bootstrapInterval(differences: number[]): BootstrapInterval {
   const random = uniformFrom(seed);
 
   // ponytail: 10,000 resamples per comparison per recomputed snapshot, which a
-  // full Season recomputation multiplies by eight Entrants and every published
+  // full Season recomputation multiplies by every Entrant compared against the
+  // leader (ADR-0016) and by every published
   // Gameweek. It is the pinned figure and it is fast enough at Season scale; if
   // a back-fill ever drags, cache the interval on the unchanged snapshots
   // rather than resampling fewer times.

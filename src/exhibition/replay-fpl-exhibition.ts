@@ -131,7 +131,7 @@ async function donorBody(
  * deadline is the feature (ADR-0032).
  *
  * A Gameweek that produces no Manager State ends the run rather than being
- * carried past. The roster tolerates a silent Gameweek because eight other
+ * carried past. The roster tolerates a silent Gameweek because the other
  * Entrants are waiting on the Lock and the Squad is still on record; here there
  * is nothing to wait for and no reason to invent a state to bridge it, and the
  * next run picks the chain up where this one left it.

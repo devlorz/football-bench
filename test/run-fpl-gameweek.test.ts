@@ -7,7 +7,7 @@ import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
 import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
 import { DEFAULT_HTTP_TIMEOUT_MS, type HttpFetcher } from "../src/http.js";
 import { FPL_POOL, lockPool } from "./fpl-pool-fixture.js";
-import { seatId } from "./fpl-seat-fixture.js";
+import { BASE_MODELS, seatId } from "./fpl-seat-fixture.js";
 import {
   EVERYONE_PLAYED,
   storeSettledPoints
@@ -19,17 +19,6 @@ import {
 } from "./sent-context.js";
 
 const { Client } = pg;
-
-/**
- * The ten seats ADR-0034 puts on the track, one per Base Model, held in seat-id
- * order: rows come back ordered by `model_id`, and ten seats sort `base-1`,
- * `base-10`, `base-2` rather than by their number.
- */
-const BASE_MODELS = Array.from(
-  { length: SEASON_ROSTER_SIZE },
-  (_unused, index) => `vendor/base-${index + 1}`
-).sort();
-
 
 /** The legal opening Squad: £95.5m spent, £4.5m left in the bank. */
 const OPENING = JSON.stringify({
@@ -345,7 +334,7 @@ describe("running a Gameweek for the whole FPL roster", () => {
     await openTheTrack();
     const silent = BASE_MODELS[0]!;
 
-    // One provider fails at Gameweek 2 and the other eight play it.
+    // One provider fails at Gameweek 2 and the rest of the roster plays it.
     const stumbled = await run({
       perEntrant: { [silent]: [] },
       http: async (_url, options) => {
@@ -395,7 +384,7 @@ describe("running a Gameweek for the whole FPL roster", () => {
     );
     // And the silent Gameweek still granted its Free Transfer. One accrued at
     // the opening, one across the silence and one at Gameweek 3 — the same
-    // three the eight that answered every Gameweek hold. A state carried from
+    // three the seats that answered every Gameweek hold. A state carried from
     // Gameweek 1 to Gameweek 3 as though no time had passed would leave this
     // Entrant on two, permanently one behind its peers for a Gameweek its
     // provider missed rather than for a decision it made.
@@ -522,7 +511,7 @@ describe("running a Gameweek for the whole FPL roster", () => {
     // One seat leaves the FPL track's Prompt Version after opening on it. It
     // is on the Season's path and `manager_states` is insert-only, so it
     // cannot be taken off — and a run that simply skipped it would play the
-    // Gameweek for eight, quietly costing the demonstration a Base Model.
+    // Gameweek one seat short, quietly costing the demonstration a Base Model.
     await client.query(
       `update models
           set prompt_version = 'fpl/draft'
@@ -558,7 +547,7 @@ describe("running a Gameweek for the whole FPL roster", () => {
        language plpgsql
        as $$
        begin
-         if new.model_id = 'fpl/base-4' and new.gw = 2 then
+         if new.model_id = 'fpl/base-04' and new.gw = 2 then
            raise exception 'simulated Manager State persistence failure';
          end if;
          return new;

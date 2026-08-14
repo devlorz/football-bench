@@ -179,10 +179,9 @@ describe("a whole rehearsal of the FPL track", () => {
       expect(gameweek2?.gameweek).toBe(2);
       expect(gameweek2?.state.squad.active.map(({ fplId }) => fplId))
         .not.toContain(SOLER);
-      // Stated rather than computed from the script: £4.0m paid, £3.7m
-      // received, £4.0m spent on the replacement, against the £1.5m the
-      // opening banked. A fall halved the way a rise is would leave 13 and a
-      // fall ignored altogether would leave 15.
+      // Stated rather than computed from the seat's own expectation, which the
+      // verifier already checks it against: the two numbers a wrong rule would
+      // produce are named beside the seat in `rehearsal-seats.ts`.
       expect(gameweek2?.state.bankTenths).toBe(12);
       expect(gameweek2?.state.hits).toBe(0);
     });

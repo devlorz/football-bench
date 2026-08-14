@@ -1,6 +1,7 @@
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
+import { BASE_MODELS } from "./fpl-seat-fixture.js";
 import {
   runScheduledFplGameweeks
 } from "../src/fpl/run-scheduled-fpl-gameweeks.js";
@@ -11,11 +12,6 @@ import { DEFAULT_HTTP_TIMEOUT_MS, type HttpFetcher } from "../src/http.js";
 import { FPL_POOL } from "./fpl-pool-fixture.js";
 
 const { Client } = pg;
-
-const BASE_MODELS = Array.from(
-  { length: SEASON_ROSTER_SIZE },
-  (_unused, index) => `vendor/base-${index + 1}`
-).sort();
 
 function seatId(baseModel: string): string {
   return `fpl/${baseModel.split("/")[1]}`;
@@ -254,7 +250,7 @@ describe("scheduled FPL Gameweek runs", () => {
        language plpgsql
        as $$
        begin
-         if new.model_id = 'fpl/base-4' and new.gw = 2 then
+         if new.model_id = 'fpl/base-04' and new.gw = 2 then
            raise exception 'simulated Manager State persistence failure';
          end if;
          return new;
@@ -309,7 +305,7 @@ describe("scheduled FPL Gameweek runs", () => {
       kind: "played",
       standing: BASE_MODELS
         .map(seatId)
-        .filter((id) => id !== "fpl/base-4")
+        .filter((id) => id !== "fpl/base-04")
     });
     expect(retry.calls()).toBe(1);
     const healed = await client.query<{
@@ -393,7 +389,7 @@ describe("scheduled FPL Gameweek runs", () => {
     await openTheTrack();
     const down = BASE_MODELS[0]!;
 
-    // One provider fails and the other eight play. Nothing throws — a provider
+    // One provider fails and the rest of the roster plays. Nothing throws — a
     // that never answered is an Entrant that produced nothing, not a broken
     // run — so a rule that closed the ledger on a clean return would close
     // this Gameweek with a Gap in it, and no poll would ever ask again.
