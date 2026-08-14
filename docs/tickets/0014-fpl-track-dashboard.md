@@ -68,19 +68,19 @@ qualification. The first demoable slice.
 
 **Blocked by:** "The FPL leaderboard endpoint".
 
-- [ ] The section has its own layout and header; the Match track's layout, nav and styles
+- [x] The section has its own layout and header; the Match track's layout, nav and styles
       are untouched
-- [ ] The purple accent and pitch tokens live in a track-scoped stylesheet loaded only by
+- [x] The purple accent and pitch tokens live in a track-scoped stylesheet loaded only by
       FPL pages; the vendored design-system sheet is unedited
-- [ ] The theme toggle uses the repo's existing attribute and storage key, so one choice
+- [x] The theme toggle uses the repo's existing attribute and storage key, so one choice
       follows the reader across both tracks, with no flash of the other theme on load
-- [ ] The Table variant renders per the design: rank, movement marker, Entrant over Base
+- [x] The Table variant renders per the design: rank, movement marker, Entrant over Base
       Model id, Gameweek points, total, Squad value, Chips-left tag
-- [ ] The footnote renders the movement reference, the Reference Lines sentence, and the
+- [x] The footnote renders the movement reference, the Reference Lines sentence, and the
       qualification exactly as served — no copy of the sentence exists in the page
-- [ ] The page shows a still loading block, a single plain error line on a failed fetch, and
+- [x] The page shows a still loading block, a single plain error line on a failed fetch, and
       the honest empty state before the first Settled Gameweek
-- [ ] The third tab reads "Entrant record", never "Model stats"
+- [x] The third tab reads "Entrant record", never "Model stats"
 
 ## Race and Cards variants
 

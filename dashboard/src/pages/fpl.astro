@@ -1,0 +1,218 @@
+---
+import FplPage from "../layouts/FplPage.astro";
+---
+<FplPage title="FPL points ranking — Football Bench, FPL track" current="leaderboard">
+  {/*
+    Everything that is not a figure is in the built HTML: the title, the column
+    headers, and the two sentences of the footnote that are the page's own. Only
+    the numbers, the Gameweeks they belong to, and the qualification wait on the
+    fetch -- so a reader sees the structure of the ranking before its data.
+  */}
+  <section class="fplhero">
+    <h1>FPL points ranking</h1>
+    <div class="kicker" id="span">&nbsp;</div>
+  </section>
+
+  <p class="error" id="error" hidden>
+    The FPL ranking could not be read. Nothing is being retried.
+  </p>
+
+  {/* The Season nothing has been scored in. Hidden until the response says so,
+      which is `throughGw` being null and not an empty list of Entrants. */}
+  <section class="preseason" id="preseason" hidden>
+    <div>
+      <div class="kicker">No Gameweek settled</div>
+      <h2>The ranking fills after the first Gameweek is settled</h2>
+      <p>
+        <span id="entered-count"></span> Entrants have entered the FPL track,
+        each managing its own Squad under the full ruleset. Nothing is ranked
+        until a Gameweek has been scored, and a Gameweek is scored for the whole
+        field or for none of it.
+      </p>
+    </div>
+    <div class="soft entered">
+      <div class="entered-title" id="entered-title">Entered</div>
+      <div id="entered-rows"></div>
+    </div>
+  </section>
+
+  <section id="ranking">
+    <div class="fplscroll">
+    <table class="table fpltable">
+      <thead>
+        <tr>
+          <th scope="col">Rank</th>
+          {/* The design leaves this header blank, and a blank header leaves a
+              column of triangles with nothing to say what they are. The word is
+              here and only the sighted reader is spared it. */}
+          <th scope="col"><span class="vh">Movement</span></th>
+          <th scope="col">Entrant</th>
+          <th scope="col" class="num" id="gw-head">GW</th>
+          <th scope="col" class="num">Total</th>
+          <th scope="col" class="num">Squad value</th>
+          <th scope="col">Chips left</th>
+        </tr>
+      </thead>
+      <tbody id="rows">
+        {/* Still blocks over the row the real rows use. Nine, because nine is
+            what the roster is and a loading state that guesses a different
+            height moves the page when the data lands.
+
+            One block spanning the row and not one per column, which is what the
+            Entrant record's table does and the opposite of what the Match
+            leaderboard's CSS grid does. The grid holds its columns open with no
+            content in them; a `<table>` sizes its columns from the widest cell
+            in each, so seven separately-filled skeleton cells would lay out at
+            seven widths that the real rows then move. */}
+        {Array.from({ length: 9 }).map(() => (
+          <tr aria-hidden="true">
+            <td colspan="7"><div class="skeleton"></div></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+    </div>
+
+    <div class="fplnotes">
+      <p class="fplnote">
+        <span id="delta-note"></span> Points are net of Hits. Reference Lines do
+        not appear here — they produce probabilities, not a Squad.
+      </p>
+      {/* Written from the response and nowhere else: the sentence the scorer
+          froze into the rows the ranking was read off is the claim being made,
+          and a copy in this page would be a second place for it to be wrong. */}
+      <p class="fplnote" id="qual"></p>
+    </div>
+  </section>
+
+  {/* Bundled rather than `is:inline`: the four things this page says in words
+      rather than figures live in `fpl-view.ts` and are tested there, and an
+      inline script can import nothing. */}
+  <script>
+  import {
+    deltaNote, gameweekSpan, movement, seasonLabel, squadValue, statusLine
+  } from "../fpl-view.js";
+  import type { FplLeaderboardBody } from "../../../src/dashboard/read-api.js";
+
+  (() => {
+    // Every id below is in the built HTML above, so the element is there.
+    const $ = (id: string): HTMLElement => document.getElementById(id)!;
+    const text = (node: HTMLElement, value: string): void => {
+      node.textContent = value;
+    };
+
+    const el = <K extends keyof HTMLElementTagNameMap>(
+      tag: K, className: string, value?: string
+    ): HTMLElementTagNameMap[K] => {
+      const node = document.createElement(tag);
+      node.className = className;
+      if (value !== undefined) node.textContent = value;
+      return node;
+    };
+
+    const figure = (value: number | null): string =>
+      value === null ? "—" : String(value);
+
+    function renderRanking(body: FplLeaderboardBody): void {
+      text($("gw-head"), `GW${body.throughGw}`);
+      // The same three fields the kicker is written from, handed over whole:
+      // which Gameweek the movement was measured against is worked out in
+      // `fpl-view.ts`, where it is tested, and not here.
+      text($("delta-note"),
+        deltaNote(body.fromGw, body.throughGw, body.missingGws));
+
+      const rows = document.createDocumentFragment();
+      for (const entrant of body.entrants) {
+        const row = document.createElement("tr");
+
+        const { mark, tone } = movement(entrant.movement);
+        const name = el("td", "");
+        name.append(
+          el("div", "fplname", entrant.name),
+          el("div", "fpl-id", entrant.baseModel)
+        );
+
+        const chips = el("td", "");
+        if (entrant.chipsRemaining === null) {
+          chips.textContent = "—";
+        } else {
+          chips.append(
+            el("span", "tag tag-neutral", String(entrant.chipsRemaining))
+          );
+        }
+
+        row.append(
+          el("td", "fplrank", figure(entrant.rank)),
+          el("td", "fplmove fplmove-" + tone, mark),
+          name,
+          el("td", "num", figure(entrant.gwPoints)),
+          el("td", "num fpltotal", figure(entrant.totalPoints)),
+          el("td", "num fplvalue", squadValue(entrant.squadValueTenths)),
+          chips
+        );
+        rows.append(row);
+      }
+      $("rows").replaceChildren(rows);
+
+      // Fails closed, because the qualification is the one thing ADR-0003 will
+      // not let a ranking be published without. The endpoint already refuses a
+      // record missing it, so nothing should reach here -- and a blank footnote
+      // is exactly the failure the rule exists against, so if one ever does,
+      // the reader gets the error line and no ranking rather than a ranking
+      // with nothing qualifying it.
+      if (body.qualification === null) {
+        throw new Error("The ranking arrived without its qualification");
+      }
+      text($("qual"), body.qualification);
+    }
+
+    function renderPreSeason(body: FplLeaderboardBody): void {
+      // The count comes from the response and is not the word "Nine" in the
+      // built HTML: the status line beside it prints the real number, and a
+      // page that spells one figure and reads the other can contradict itself.
+      text($("entered-count"), String(body.entrants.length));
+      text($("entered-title"), "Entered for " + seasonLabel(body.season));
+      const rows = document.createDocumentFragment();
+      for (const entrant of body.entrants) {
+        const row = el("div", "entered-row");
+        row.append(
+          el("div", "entered-name", entrant.name),
+          el("div", "fpl-id", entrant.baseModel)
+        );
+        rows.append(row);
+      }
+      $("entered-rows").replaceChildren(rows);
+    }
+
+    function render(body: FplLeaderboardBody): void {
+      text($("status"),
+        statusLine(body.season, body.throughGw, body.entrants.length));
+
+      // Null `throughGw` is the whole of the test. An empty list of Entrants
+      // cannot tell a Season that has not been scored from a read that returned
+      // nothing.
+      const pre = body.throughGw === null;
+      $("preseason").hidden = !pre;
+      $("ranking").hidden = pre;
+      text($("span"), gameweekSpan(body.fromGw, body.throughGw, body.missingGws));
+
+      if (pre) renderPreSeason(body); else renderRanking(body);
+    }
+
+    // A relative path: the Worker claims `/api/*` on this hostname, so nothing
+    // is cross-origin and no origin was a build input.
+    fetch("/api/fpl/leaderboard")
+      .then((response) => {
+        if (!response.ok) throw new Error(String(response.status));
+        return response.json() as Promise<FplLeaderboardBody>;
+      })
+      .then(render)
+      .catch(() => {
+        // One line, and nothing retries.
+        $("error").hidden = false;
+        $("ranking").hidden = true;
+        $("preseason").hidden = true;
+      });
+  })();
+  </script>
+</FplPage>
