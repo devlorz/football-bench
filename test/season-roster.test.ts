@@ -76,7 +76,7 @@ describe("entering the Season Roster", () => {
       }
     });
 
-  test("names the dated model each seat resolves to, never as the request id",
+  test("names the dated Base Model each seat resolves to, never as the request id",
     async () => {
       await enterSeasonRoster(client, SEASON);
 

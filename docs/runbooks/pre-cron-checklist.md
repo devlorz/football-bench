@@ -49,7 +49,7 @@ The consequence is a recurring chore — see [§6](#6-recurring-chores).
 |---|---|---|
 | `SEASON` | `2026-27` | `YYYY-YY` |
 | `FOOTBALL_DATA_SEASON` | `2025-26` | `YYYY-YY`. **Advance to `2026-27` after the first matchday.** |
-| `PREDICT_CONCURRENCY` | e.g. `9` | Defaults to 9 |
+| `PREDICT_CONCURRENCY` | e.g. `10` | Defaults to the Season Roster size, one call per seat |
 | `FETCH_ALERT_ASSIGNEE` | | Optional; see below |
 | `PREDICT_ALERT_ASSIGNEE` | | Optional; see below |
 
