@@ -747,7 +747,7 @@ describe("starting the FPL track for all ten Entrants", () => {
   ])("refuses to start a roster of $what", async ({ seats }) => {
     // `missing` is measured against the roster that was queried, so a roster
     // of the wrong size reports nobody missing and starts a Season that is not
-    // the one ADR-0014 describes. `manager_states` is insert-only, so there is
+    // the one ADR-0034 describes. `manager_states` is insert-only, so there is
     // no undoing it afterwards — the count is checked before the first call.
     await client.query("delete from models");
     for (let seat = 1; seat <= seats; seat += 1) {

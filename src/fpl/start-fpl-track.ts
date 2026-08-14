@@ -189,7 +189,7 @@ export async function startFplTrack({
   // And there are as many of them as the Season has Entrants. `missing` is
   // measured against the roster that was queried, so a roster of the wrong
   // size reports nobody missing and starts a Season that is not the one
-  // ADR-0014 describes — with no way back, because `manager_states` is
+  // ADR-0034 describes — with no way back, because `manager_states` is
   // insert-only. Both questions are asked before the first call, so a roster
   // problem is never discovered next to a Lock.
   if (entrants.length !== SEASON_ROSTER_SIZE) {
