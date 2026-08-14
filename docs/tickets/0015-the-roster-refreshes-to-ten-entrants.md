@@ -74,8 +74,13 @@ seed on the local Postgres, `astro dev` on :4322 proxying the running read API o
 Both leaderboards read `SEASON_ROSTER_SIZE` at build time; `astro check` reports no
 diagnostics and the built pages carry ten placeholder rows each.
 
-| # | Step | 1440 light | 1440 dark | 375 |
-|---|------|-----------|-----------|-----|
+Steps 1–5 were walked at a 1440px viewport. Steps 8 and 9 were walked at 601px, which is
+below the 760px collapse, so what they were read against is the narrow layout with the
+nav behind its burger. Neither step is about the breakpoint, but the width is recorded
+rather than implied — and 601px is not 375px, so step 7 is not closed by it.
+
+| # | Step | light | dark | 375 |
+|---|------|-------|------|-----|
 | 1 | Nav links reach their page and mark themselves current | pass | pass | — |
 | 2 | Sort reorders and recomputes ranks; URL updates; reload holds; Back leaves the page | pass | — | — |
 | 3 | Picking an Entrant redraws every chart, list and row; URL updates; reload holds | pass | — | — |
@@ -83,18 +88,28 @@ diagnostics and the built pages carry ten placeholder rows each.
 | 5 | Theme toggle flips and holds across a nav and a reload | pass | pass | — |
 | 6 | Tab reaches every control; the ring is the accent one | not walked | not walked | — |
 | 7 | 375px: nav collapses, one column, no sideways scroll | — | — | not walked |
-| 8 | Worker stopped: one error line, no spinner | not walked | not walked | — |
-| 9 | Pre-season seed: each page shows its pre-season state | not walked | not walked | — |
+| 8 | Worker stopped: one error line, no spinner | pass | pass | — |
+| 9 | Pre-season seed: each page shows its pre-season state | pass | pass | — |
 
 Steps 2 and 5's Back and reload assertions were read off `history.length` staying put
 across sort toggles, which is what `replaceState` buys and what Back leaving the page
 rests on.
 
-Steps 6–9 are open, and the slice is not complete until a human closes them. Step 6 and
-step 7 need a keyboard and a window this session could not drive: synthetic Tab never
-left `document.body`, and the 375px resize did not take. Step 8 stops the read API and
-step 9 re-seeds the local database at its pre-season stage — both would have disturbed a
-stack this session did not start.
+Step 8 was walked with the read API stopped and all four pages loaded — leaderboard,
+fixtures, entrant record, FPL leaderboard. Each showed its own error line and no visible
+placeholder: the skeleton blocks are still in the DOM but inside the section the failure
+hides, which is the shape the page was built with and not a spinner left running.
+
+Step 9 was walked after `npm run seed -- "pre-season" --reset`. The leaderboard and the
+FPL leaderboard showed their pre-season panels with the entered field listed and no
+ranking, the entrant record showed "No settled gameweeks", and the fixtures page showed
+Gameweek 1's ten fixtures under the "No predictions stored" banner. The database was
+seeded back to the design's stage afterwards and the read API restarted against it.
+
+Steps 6 and 7 are open, and the slice is not complete until a human closes them. Both
+need a keyboard and a window this session could not drive: synthetic Tab never left
+`document.body`, and the window would not resize below a 601px viewport, so 375px was
+never actually rendered.
 
 ## The road in is loud
 
