@@ -14,7 +14,7 @@ same `(season, gw)` today, and `prediction_runs`' upsert would replace one leagu
 record with the other's without an error. Existing rows backfill `competition = 'PL'`.
 
 Competition codes are football-data.org's — `PL`, `PD`, `SA`, `BL1`, `FL1` — matching the
-schedule source chosen in ADR-0035 rather than inventing a house vocabulary. `fixtures.fpl_id`
+schedule source chosen in ADR-0036 rather than inventing a house vocabulary. `fixtures.fpl_id`
 is renamed to `fixture_id`, holding each source's native id (FPL's for `PL`,
 football-data.org's elsewhere), unique within `(competition, season)`; the name stops lying
 the day a second source writes it. The `track` check keeps its two values — `track` says
@@ -42,10 +42,14 @@ success.
 
 - The migration touches every primary key in one pass and is rehearsed on a temporary
   Postgres before it goes anywhere near the live record. If the rehearsal is green before
-  the Premier League Gameweek 1 Lock, it applies before it and La Liga targets its own
-  Gameweek 2 (22–23 August); if not, it applies after Gameweek 1 settles and La Liga starts
-  at Gameweek 3. It is never applied inside a Lock window or while Predictions are in
-  flight.
+  the Premier League Gameweek 1 Lock (2026-08-21T17:30Z), it applies before it and La Liga
+  targets its own Gameweek 2 (22–23 August); if not, it applies after Gameweek 1 settles
+  and La Liga starts at Gameweek 3. It is never applied inside a Lock window or while
+  Predictions are in flight.
+- It also waits for ADR-0034's roster refresh to finish rather than straddling it. That
+  refresh runs in the same days under a harder cutoff (2026-08-19), and its pre-flights
+  write `attempts` — one of the tables this migration rekeys. Roster first, migration
+  after, La Liga last.
 - Serie A, the Bundesliga and Ligue 1 open only after (1) La Liga completes one full
   fetch → Lock → predict → score cycle and (2) the real per-Fixture cost, read from Premier
   League Gameweek 1 `attempts`, is acceptable at five leagues' volume. Gameweeks those

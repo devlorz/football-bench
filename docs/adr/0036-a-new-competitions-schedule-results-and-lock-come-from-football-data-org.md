@@ -25,13 +25,13 @@ being redesigned.
 ## Considered Options
 
 - **API-Football** — richer data, including injuries the availability section could use.
-  Rejected: a paid dependency for data the context does not require after ADR-0036, plus a
+  Rejected: a paid dependency for data the context does not require after ADR-0037, plus a
   second identity-mapping layer.
 - **Scraping league sites** — rejected; fragile, and the benchmark's honesty rests on
   sources a skeptic can independently query.
 - **football-data.co.uk as the schedule source** — rejected; it publishes results, not a
   forward schedule, and updates on a baseline cadence. It stays what it already is: the
-  historical-context source (ADR-0036).
+  historical-context source (ADR-0037).
 
 ## Consequences
 

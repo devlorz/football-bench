@@ -3,17 +3,17 @@
 Nine tracer-bullet slices that take the match track from one league to five — the
 Competition dimension, a second schedule source with a derived Lock, a Competition-scoped
 context, per-Competition seats, and La Liga live. Source:
-[spec 0015](../specs/0015-competition-expansion.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0034–0037](../adr/).
+[spec 0016](../specs/0016-competition-expansion.md). Vocabulary:
+[CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0035–0038](../adr/).
 
 Work the **frontier**: after ticket 1, four tickets open at once (2, 3, 4, 5). Ticket 9
 waits on an external event — Premier League Gameweek 1 settling — and on nothing here.
 
 One note on shape: ticket 1 is this set's wide refactor, and it is deliberately **not**
-sequenced as expand–contract. ADR-0034 chose a single rehearsed pass: carrying two schemas
+sequenced as expand–contract. ADR-0035 chose a single rehearsed pass: carrying two schemas
 side by side through the most deadline-critical week of the Season is a larger risk than
 one migration proven green on a temporary Postgres first. The rehearsal is the safety, and
-the rollout windows in ADR-0034 are the rule for when the pass may run.
+the rollout windows in ADR-0035 are the rule for when the pass may run.
 
 ---
 
@@ -39,14 +39,17 @@ Lock.
 - [ ] Both Lock triggers — a Prediction requires a Locked Fixture, a Locked Gameweek is
       immutable — are recreated against the new keys and proven still enforcing.
 - [ ] The full migration rehearses green on a temporary Postgres before it may touch the
-      live database, and the ADR-0034 rollout windows are honoured when it does.
+      live database, and the ADR-0035 rollout windows are honoured when it does — after
+      ADR-0034's roster refresh has finished, never straddling its pre-flights.
+- [ ] The Fixture id rename is carried through the whole suite, dashboard tests and the
+      Season seed included; its blast radius grew with the FPL dashboard work.
 
 ## 2 — Two Competitions through one scheduler and scorer
 
 **What to build:** Two Competitions sharing a Season, Gameweek numbers and Fixture ids
 flow through the real scheduled-prediction and scoring entry points in one run, and every
 row each produces — runs, contexts, Predictions, scores — lands disjoint. This is the
-coexistence proof spec 0015 requires before any La Liga row reaches the live database.
+coexistence proof spec 0016 requires before any La Liga row reaches the live database.
 
 **Blocked by:** 1.
 
@@ -84,9 +87,9 @@ FPL path observes one at FPL's. Demoable on a temporary Postgres end to end.
 - [ ] Every response is stored in raw snapshots under its own source name, and the parser
       is tested against recorded snapshots.
 
-## 4 — Nine seats under a frozen La Liga prompt
+## 4 — Ten seats under a frozen La Liga prompt
 
-**What to build:** The nine Entrants hold seats in a second Competition under
+**What to build:** The ten Entrants hold seats in a second Competition under
 `match-pd/2026-27-v1` — one shared template rendered with the Competition's name, frozen
 with its own hash — while the Premier League's version is untouched in text, hash and
 seats.
@@ -98,8 +101,10 @@ seats.
 - [ ] A render test proves each Competition's text differs from the Premier League's
       rendering by exactly the Competition name.
 - [ ] The `PL` prompt constants are byte-for-byte untouched (ADR-0026).
-- [ ] Nine seats per active Competition are entered through the existing roster machinery,
+- [ ] Ten seats per active Competition are entered through the existing roster machinery,
       and the Season-prefix validation on version strings carries the Competition.
+- [ ] The seats are the Season Roster that stood at the Season's first Lock; a later
+      Competition is not a door for a Base Model that missed ADR-0034's cutoff.
 - [ ] Prediction runs, fill runs and gap alerts operate per Competition through their
       existing Prompt Version filters, unchanged.
 
@@ -116,7 +121,7 @@ the two date-only queries before any second league's rows can land in their tabl
       seeds two leagues' rows and proves each packet contains only its own, both
       directions.
 - [ ] A `PD` packet renders every v2 section whose data is present, and no availability
-      section exists for a non-`PL` Competition (ADR-0036) — its absence is the recorded
+      section exists for a non-`PL` Competition (ADR-0037) — its absence is the recorded
       structural difference, not an error.
 - [ ] Team-identity misses keep failing loudly; a name missing from a map costs an alert,
       never silent history loss.
@@ -154,7 +159,7 @@ path: the spec allows it to trail into the Season.
 ## 8 — La Liga goes live
 
 **What to build:** The first real La Liga Gameweek: the Competition activated, the live
-source verified, the pre-cron checklist run, and nine Entrants' Predictions Locked before
+source verified, the pre-cron checklist run, and ten Entrants. Predictions Locked before
 kickoff and stored with their contexts — the write path doing for `PD` what it has done
 for `PL` since the Season opened.
 
@@ -183,5 +188,5 @@ Competitions can cite it.
 
 - [ ] Per-Fixture prompt and completion cost is read from the recorded attempts, per
       entrant route.
-- [ ] The five-Competition projection is recorded as a report, and the ADR-0034 gate for
+- [ ] The five-Competition projection is recorded as a report, and the ADR-0035 gate for
       Serie A, the Bundesliga and Ligue 1 cites it.

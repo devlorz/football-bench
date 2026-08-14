@@ -10,7 +10,7 @@ Player availability does not ship. The current section is built from the FPL API
 feed, and no free equivalent exists for the other leagues. Waiting for one, or buying one,
 would trade real Gameweeks — which cannot be back-filled — for a section whose absence does
 not touch the benchmark's claim. Fairness lives inside a Competition: every Entrant in a
-league sees the identical packet, and ADR-0034 already made each league its own benchmark.
+league sees the identical packet, and ADR-0035 already made each league its own benchmark.
 The absence is a recorded structural difference between Competitions, stated here, not a
 Gap and not an apology.
 
@@ -23,7 +23,7 @@ the Competition it is building for.
 ## Considered Options
 
 - **Full parity as a launch gate, availability included (paid injury feed)** — rejected per
-  ADR-0035's reasoning: a paid dependency and a mapping layer for a section the claim does
+  ADR-0036's reasoning: a paid dependency and a mapping layer for a section the claim does
   not need.
 - **Removing availability from the Premier League context to equalise** — rejected; it
   would amend a context already frozen in use (ADR-0026) and damage the running benchmark

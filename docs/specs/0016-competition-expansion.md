@@ -1,30 +1,30 @@
-# Spec 0015 — Competition expansion
+# Spec 0016 — Competition expansion
 
 **Status:** ready-for-agent
 **Scope:** everything that must exist before La Liga's first predicted Gameweek
-**Vocabulary:** [CONTEXT.md](../../CONTEXT.md) · **Decisions:** [ADR 0034–0037](../adr/)
+**Vocabulary:** [CONTEXT.md](../../CONTEXT.md) · **Decisions:** [ADR 0035–0038](../adr/)
 
 ---
 
-The match track expands beyond the Premier League, per ADR-0034 through ADR-0037: every
+The match track expands beyond the Premier League, per ADR-0035 through ADR-0038: every
 row gains a Competition dimension, a new Competition's schedule, results and Lock come
 from football-data.org with a derived deadline, its context is v2 minus availability, and
-the nine Entrants are seated per Competition under per-Competition Prompt Versions. La
+the ten Entrants are seated per Competition under per-Competition Prompt Versions. La
 Liga (`PD`) launches first; Serie A (`SA`), the Bundesliga (`BL1`) and Ligue 1 (`FL1`)
-follow behind the gates ADR-0034 records. This spec turns those decisions into buildable,
+follow behind the gates ADR-0035 records. This spec turns those decisions into buildable,
 testable requirements.
 
 Reads ADR-0005 (write path first), ADR-0006 (one Lock per Gameweek), ADR-0013 (postponed
 keeps its Prediction), ADR-0015 (a Fixture owns its Locked Gameweek), ADR-0024
 (unscheduled leaves the schedule), ADR-0026 (a used Prompt Version is unamendable), and
-ADR-0034–0037 (this expansion's shape). Vocabulary follows `CONTEXT.md` as amended by
-ADR-0034: **Competition** enters the Language; Fixture, Season and Gameweek generalise;
+ADR-0035–0038 (this expansion's shape). Vocabulary follows `CONTEXT.md` as amended by
+ADR-0035: **Competition** enters the Language; Fixture, Season and Gameweek generalise;
 "matchday" stays forbidden — the round is a Gameweek in every Competition.
 
 ## Problem Statement
 
 The benchmark can only answer its question about one league. Four more of Europe's top
-leagues kick off within weeks — La Liga tomorrow — and every Gameweek that passes
+leagues kick off within weeks — La Liga today — and every Gameweek that passes
 unrecorded is sample gone permanently, because a Prediction made after the fact proves
 nothing (spec 0001's founding constraint, unchanged).
 
@@ -45,7 +45,7 @@ writes the same tables the FPL path writes — fixtures, Gameweeks, kickoffs, re
 every Competition except `PL`, with the Gameweek deadline derived as earliest kickoff
 minus ninety minutes. The context builders become Competition-scoped and assemble the v2
 packet from the sources that exist for the league. Each Competition freezes its own Prompt
-Version from one shared template, and the nine Entrants are seated per Competition. The
+Version from one shared template, and the ten Entrants are seated per Competition. The
 scheduler stays one loop under one advisory lock, walking every active Competition. The
 scorer, already league-agnostic given the `fixtures` table, follows with a Competition
 filter.
@@ -125,7 +125,7 @@ filter.
     behind a curated club-identity map, so that the squad-changes section ships where a
     source exists.
 20. As an operator, I want no availability section in a new Competition's packet, recorded
-    as the structural difference ADR-0036 states, so that a missing feed is a documented
+    as the structural difference ADR-0037 states, so that a missing feed is a documented
     property of the benchmark, not a silent hole.
 21. As a developer, I want every team-identity map to fail loudly on an unmapped name —
     the existing rule — so that a new league's spelling drift costs an alert, not history.
@@ -141,9 +141,12 @@ filter.
     never differ between Competitions by more than the league's name.
 24. As an operator, I want `match/2026-27-v2` untouched in text, hash and seats, so that
     the running Premier League benchmark's continuity survives the expansion (ADR-0026).
-25. As an operator, I want the nine Entrants seated per Competition through the existing
+25. As an operator, I want the ten Entrants seated per Competition through the existing
     `models` machinery, with the Season-prefix rule on version strings extended to carry
     the Competition, so that seating, filters and rosters work the way they already work.
+25a. As an operator, I want a Competition's seats to be the Season Roster that stood at
+    the Season's first Lock, so that a Competition opening later cannot become a second
+    door for a Base Model that missed ADR-0034's cutoff.
 26. As an operator, I want prediction runs, fill runs and gap alerts to operate per
     Competition through their existing Prompt-Version filters, so that a Gap in La Liga
     is La Liga's Gap and nothing else's.
@@ -155,7 +158,7 @@ filter.
     rankings without touching the one that exists.
 28. As a reader, I want each Competition's leaderboard read only from its own `scores`
     rows, with no combined cross-league ranking anywhere, so that the per-Competition
-    benchmark claim (ADR-0034) is enforced by construction.
+    benchmark claim (ADR-0035) is enforced by construction.
 
 ### Operating it
 
@@ -194,7 +197,10 @@ filter.
     filter is enforced both directions.
 38. As a developer, I want a render test proving each Competition's frozen prompt text
     differs from the template's Premier League rendering by exactly the Competition name,
-    so that ADR-0037's only-variable claim is checked mechanically.
+    so that ADR-0038's only-variable claim is checked mechanically.
+39. As a developer, I want the roster guard to reject a Competition seated with anything
+    other than the Season Roster, so that story 25a's closed door is enforced by the same
+    machinery that already counts the seats.
 
 ## Implementation Decisions
 
@@ -204,17 +210,24 @@ One migration file, one pass: add `competition text not null` to the seven keyed
 rebuild primary and foreign keys as `(competition, season, …)`, backfill `'PL'`, rename
 `fpl_id` to `fixture_id` everywhere it appears (fixtures, predictions, contexts'
 uniqueness expression), and recreate the two Lock triggers against the new keys. The
-`track` checks are untouched (ADR-0034). A `competitions` table lists the active
+`track` checks are untouched (ADR-0035). A `competitions` table lists the active
 Competitions per Season and is what the scheduler and fetch walk; `PL` is its first row.
 Rehearsal runs the full migration against a temporary Postgres seeded with a
 representative Season and replays the migration test (story 33) before the real database
-is touched.
+is touched. It is the next migration in sequence, and the rename's blast radius now
+includes the FPL dashboard's tests and the Season seed, which grew after this expansion
+was first drafted.
+
+Sequencing against the roster refresh: ADR-0034's refresh owns the same days under a
+harder cutoff and its pre-flights write `attempts`, a table this migration rekeys. The
+order is roster refresh complete, then migrate, then La Liga — the migration never
+straddles a pre-flight, a Lock window, or Predictions in flight.
 
 ### Season configuration stays singular
 
 All five Competitions run August-to-May seasons under the same `2026-27` label, and
 football-data.co.uk uses one season path for all of them, so `SEASON` and
-`FOOTBALL_DATA_SEASON` stay single values. The per-country divergence ADR-0034's research
+`FOOTBALL_DATA_SEASON` stay single values. The per-country divergence ADR-0035's research
 flagged is a non-issue for these five leagues; a Competition with a different calendar
 (if one ever joins) forces the config change then, not now.
 
@@ -238,22 +251,24 @@ the FPL path does, and from then the Gameweek's deadline is immutable — enforc
 way `locked_in_gw` is. The earlier-kickoff alert (story 13) fires when a fetch would
 shrink `deadline_at` into the past or observes a kickoff earlier than the frozen deadline;
 it writes the alert and does not silently relock. The ninety-minute buffer against a daily
-fetch cadence is the accepted margin; ADR-0035 records the reasoning.
+fetch cadence is the accepted margin; ADR-0036 records the reasoning.
 
 ### Prompt Versions and seating
 
 The template lives where the frozen text lives today; each Competition's rendered text is
 a constant with its own sha, version string `match-<code, lowercased>/2026-27-v1`. The
-roster-seating machinery seats nine Entrants per active Competition; the
+roster-seating machinery seats ten Entrants per active Competition; the
 version-prefix validation extends from `match/${season}-` to the Competition-scoped form.
-Nothing about the `PL` constants moves.
+Nothing about the `PL` constants moves. The seats are the Season Roster as it stood at the
+Season's first Lock — ten after ADR-0034's refresh — and the roster guard that counts them
+enforces it, so a Competition opening later cannot seat a Base Model the cutoff excluded.
 
 ### Scorer and reads
 
 `scoreMatchSeason` and the Gameweek scorer take a Competition and derive their Gameweek
 list per `(competition, season)`. Every read that filters `track = 'match'` today filters
 Competition beside it. The dashboard's shape for multiple Competitions is explicitly not
-decided here (ADR-0034); until its ADR lands, the read API continues serving `PL` as it
+decided here (ADR-0035); until its ADR lands, the read API continues serving `PL` as it
 does today.
 
 ### La Liga's launch checklist
@@ -261,9 +276,9 @@ does today.
 What must exist before `PD`'s first predicted Gameweek: the migration applied and
 verified; the `competitions` row; the football-data.org fetch producing Gameweeks,
 Fixtures and derived deadlines; two seasons of `SP1`/`SP2` history and Understat xG
-backfilled; the three identity maps reviewed; `match-pd/2026-27-v1` frozen and nine seats
+backfilled; the three identity maps reviewed; `match-pd/2026-27-v1` frozen and ten seats
 entered; the pre-cron checklist run for the new Competition. Squad changes may trail into
-the Season (they change weekly anyway); availability never ships (ADR-0036).
+the Season (they change weekly anyway); availability never ships (ADR-0037).
 
 ## Testing Decisions
 
@@ -278,7 +293,7 @@ exists to prevent.
 ## Out of Scope
 
 - The dashboard's per-Competition shape — its own ADR and spec.
-- Any availability feed for non-`PL` Competitions (ADR-0036 decides its absence).
+- Any availability feed for non-`PL` Competitions (ADR-0037 decides its absence).
 - A combined cross-league ranking, in any surface.
 - Activating `SA`, `BL1`, `FL1` — gated by story 31; when they open it is data and maps,
   not new spec work.
