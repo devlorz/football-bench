@@ -579,7 +579,52 @@ describe("pre-flight for the Base Model roster", () => {
       }
     });
 
+    // The finished ten passes. Without this the pair below would still be
+    // green against a pre-flight that refused every roster it was handed.
     await addEntrant(10);
+    const finished = await preflightBaseModels({
+      database: client,
+      season: "2026-27",
+      fixtureId: 1,
+      expectedEntrantCount: 10,
+      apiKey: "test-key",
+      http: async (_url, options) => {
+        const request = JSON.parse(options?.body ?? "{}") as { model: string };
+        return {
+          status: 200,
+          body: JSON.stringify({
+            model: request.model,
+            openrouter_metadata: {
+              endpoints: {
+                available: [{
+                  provider: `Resolved ${request.model}`,
+                  model: request.model,
+                  selected: true
+                }]
+              }
+            },
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  fixture_id: 1,
+                  probs: { H: 0.6, D: 0.24, A: 0.16 },
+                  score: { home: 2, away: 1 },
+                  rationale: "Pre-flight answer."
+                })
+              }
+            }]
+          })
+        };
+      }
+    });
+    expect(finished.ok).toBe(true);
+    // Sorted, because `order by id` sorts text: the tenth seat lands between
+    // the first and the second. What matters here is that all ten were called.
+    expect(finished.results.map(({ modelId }) => modelId).sort())
+      .toEqual(
+        Array.from({ length: 10 }, (_u, n) => `entrant/${n + 1}`).sort()
+      );
+
     await addEntrant(11);
     await expect(expectTen()).rejects.toThrow(
       "Pre-flight requires exactly 10 Entrants at Prompt Version "
