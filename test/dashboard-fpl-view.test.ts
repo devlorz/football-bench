@@ -1,14 +1,17 @@
 import { describe, expect, test } from "vitest";
 import {
-  deltaNote, gameweekSpan, movement, seasonLabel, squadValue, statusLine
+  chipsTag, deltaNote, gameweekSpan, movement, rankBand, seasonLabel,
+  settledGws, spreadLabels, squadValue, statusLine
 } from "../dashboard/src/fpl-view.js";
 
 /**
  * Every step the FPL ranking takes between a response and what a reader sees:
  * the movement marker, the Squad value, the span the ranking is cumulative
- * over, the Gameweek the movement was measured against, and the header's status
- * line. No database. They are here because each of them renders perfectly while
- * being wrong, and nothing the page does on its own has that property.
+ * over, the Gameweeks inside it the record holds, the Gameweek the movement was
+ * measured against, the header's status line, the Cards variant's Chips tag,
+ * the weight a place in the field is drawn at, and where the Race chart's
+ * labels sit. No database. They are here because each of them renders perfectly
+ * while being wrong, and nothing the page does on its own has that property.
  */
 describe("the ranking's movement marker", () => {
   test("reads a rise and a fall as opposite things", () => {
@@ -100,6 +103,110 @@ describe("the footnote's movement reference", () => {
     expect(deltaNote(null, null, [])).toBe("");
     // A span whose only other Gameweek is a hole is that same case.
     expect(deltaNote(1, 2, [1])).toBe("");
+  });
+});
+
+describe("the Gameweeks the record holds", () => {
+  test("is the span less the holes announced inside it", () => {
+    expect(settledGws(1, 5, [])).toEqual([1, 2, 3, 4, 5]);
+    // The seeded Season's own shape. The Race variant's axis is labelled from
+    // this, so the hole is a longer segment in every line rather than a
+    // Gameweek 4 label sitting where Gameweek 5's points were plotted.
+    expect(settledGws(1, 5, [4])).toEqual([1, 2, 3, 5]);
+  });
+
+  test("holds nothing before the first Settled Gameweek", () => {
+    expect(settledGws(null, null, [])).toEqual([]);
+  });
+});
+
+describe("the Cards variant's Chips tag", () => {
+  test("counts one Chip in the singular", () => {
+    expect(chipsTag(1)).toBe("1 chip");
+    expect(chipsTag(3)).toBe("3 chips");
+    // Nought Chips left is a fact about the Entrant and reads as the plural.
+    expect(chipsTag(0)).toBe("0 chips");
+  });
+
+  test("says nothing rather than nought for a count it has not read", () => {
+    expect(chipsTag(null)).toBe("—");
+  });
+});
+
+describe("the weight a place in the field is drawn at", () => {
+  test("gives the design's three bands to the leader, the chasers and the rest", () => {
+    expect(rankBand(1)).toEqual({ band: "1", dashed: false });
+    expect(rankBand(2)).toEqual({ band: "top", dashed: false });
+    expect(rankBand(4)).toEqual({ band: "rest", dashed: false });
+    expect(rankBand(9)).toEqual({ band: "rest", dashed: false });
+  });
+
+  test("dashes third place alone, so second and third stay apart", () => {
+    // Both are drawn at the same weight in the same ink. The dash is the only
+    // thing between them, and it belongs to the rank rather than to the chart
+    // that draws it -- the Cards tile reads the same answer and ignores it.
+    expect(rankBand(3)).toEqual({ band: "top", dashed: true });
+  });
+
+  test("draws a rank it has not read as the rest of the field", () => {
+    // Ranks are null before the first Settled Gameweek, where there is no Race
+    // to draw. Nothing should reach here -- and if it does, an unranked Entrant
+    // is not the leader.
+    expect(rankBand(null)).toEqual({ band: "rest", dashed: false });
+  });
+});
+
+describe("the Race chart's label positions", () => {
+  test("leaves labels that already clear each other where they are", () => {
+    expect(spreadLabels([40, 100, 200], 17, 300)).toEqual([40, 100, 200]);
+  });
+
+  test("pushes a collision down to exactly the minimum gap", () => {
+    expect(spreadLabels([100, 105, 140], 17, 300)).toEqual([100, 117, 140]);
+    // The push carries: the third clears the second's new position and not the
+    // one it asked for.
+    expect(spreadLabels([100, 105, 110], 17, 300)).toEqual([100, 117, 134]);
+  });
+
+  test("returns positions in the order it was given them", () => {
+    // The caller pairs a label with a row by index. Handed the ends of nine
+    // lines out of rank order, the answer stays out of rank order -- and the
+    // label that was above stays above.
+    expect(spreadLabels([200, 100, 105], 17, 300)).toEqual([200, 100, 117]);
+  });
+
+  test("holds a whole field on one total inside the plot", () => {
+    // Nine Entrants that opened on the same fifteen players end the first
+    // Gameweek on the same total, so every line ends at the same height. The
+    // run is pulled back off the foot of the panel, and every gap survives it.
+    const stacked = spreadLabels(Array.from({ length: 9 }, () => 280), 17, 300);
+    expect(stacked.at(-1)).toBe(300);
+    expect(stacked[0]).toBe(300 - 8 * 17);
+    for (let index = 1; index < stacked.length; index += 1) {
+      expect(stacked[index]! - stacked[index - 1]!).toBe(17);
+    }
+  });
+
+  test("does not carry a runaway leader off the top of the plot", () => {
+    // A leader clear of a field packed on the baseline: the pack overflows the
+    // foot and the leader does not. Pulling the whole column up by what the
+    // pack overflowed by would put the leader's label above the panel -- it is
+    // the labels that have to move that move, from the bottom up.
+    const packed = spreadLabels(
+      [30, ...Array.from({ length: 8 }, () => 280)], 17, 300
+    );
+    expect(packed[0]).toBe(30);
+    expect(Math.min(...packed)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...packed)).toBeLessThanOrEqual(300);
+    for (let index = 2; index < packed.length; index += 1) {
+      expect(packed[index]! - packed[index - 1]!).toBeGreaterThanOrEqual(17);
+    }
+  });
+
+  test("gives labels that asked for one position the order they arrived in", () => {
+    // Two equal ends are two lines crossing at the same point, and the sort
+    // that separates them must not be the one deciding which name goes on top.
+    expect(spreadLabels([50, 50], 17, 300)).toEqual([50, 67]);
   });
 });
 

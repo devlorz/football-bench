@@ -89,14 +89,14 @@ without fetching, and the chosen variant is linkable.
 
 **Blocked by:** "The FPL section and the ranking page".
 
-- [ ] The Race chart draws one cumulative line per Entrant with the design's rank-based
+- [x] The Race chart draws one cumulative line per Entrant with the design's rank-based
       weights, and its labels are positioned HTML de-overlapped to the minimum gap
-- [ ] The de-overlap is a pure function with its own tests: labels forced apart to the
+- [x] The de-overlap is a pure function with its own tests: labels forced apart to the
       minimum gap, order preserved
-- [ ] The Cards variant renders the nine tiles with rank, movement, total and the three tags
-- [ ] The variant lives in the URL via `replaceState` and a shared link opens on the linked
+- [x] The Cards variant renders the nine tiles with rank, movement, total and the three tags
+- [x] The variant lives in the URL via `replaceState` and a shared link opens on the linked
       variant
-- [ ] Switching variants issues no network request
+- [x] Switching variants issues no network request
 
 ## The latest-squads endpoint
 
