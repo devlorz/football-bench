@@ -64,6 +64,9 @@ because every other surface reads the roster from the data.
 
 - [x] The loading skeleton renders exactly as many rows as the Season Roster holds
 - [x] The comment beside it still explains why the count is fixed rather than guessed
+- [ ] Spec 0011's nine-step manual checklist walked in both themes at 1440px and 375px,
+      and recorded below — `dashboard/README.md` makes this part of the slice, so the
+      slice is open while any step is
 
 **Manual acceptance record** (spec 0011 §"The pages", required by `dashboard/README.md`
 before a slice that touches a page is complete). Walked 2026-08-15 against the design
