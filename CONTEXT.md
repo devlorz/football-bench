@@ -18,8 +18,11 @@ _Avoid_: model, LLM
 
 **Base Model Class**:
 Where a Base Model comes from — Frontier, First-party or Open-weight (ADR-0009, ADR-0014).
-A property of the Base Model, not of the Entrant, and it ranks nothing: it is shown beside
-an Entrant so a reader knows what kind of thing is being compared.
+Frontier is the three houses the founding roster counted as frontier (Claude, GPT, Gemini);
+First-party is any other vendor serving its own Base Model as the sole endpoint; Open-weight
+has public weights and third-party hosts, which is why it alone carries a quantization pin
+(ADR-0034). A property of the Base Model, not of the Entrant, and it ranks nothing: it is
+shown beside an Entrant so a reader knows what kind of thing is being compared.
 _Avoid_: tier (Tier is the Match Points tier and nothing else)
 
 **Prompt Version**:
