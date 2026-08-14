@@ -54,6 +54,15 @@ export interface Entrant {
   /** The dated model every pre-flight has observed this seat resolving to. */
   canonicalSlug: string;
   baseModelClass: BaseModelClass;
+  /**
+   * When the operator last checked *this* seat against OpenRouter's catalog.
+   *
+   * Per seat rather than one date over the roster, because the roster is no
+   * longer entered all at once: a check that looked at three arriving Base
+   * Models did not look at Kimi, and stamping its date on Kimi's row would
+   * record an observation nobody made.
+   */
+  catalogCheckedAt: string;
 }
 
 /**
@@ -64,9 +73,10 @@ export interface Entrant {
  * agree, field for field, with the roster-resolution tables of the three
  * pre-flight reports in `docs/reports` — every `canonicalSlug` is that
  * report's resolved model and every `provider` is the slug behind its resolved
- * provider's display name. The three new seats have no report behind them yet:
- * their `canonicalSlug` is ADR-0034's expectation from the 2026-08-14 catalog
- * check, to be replaced by what the road in's pre-flight actually resolves.
+ * provider's display name, and each carries the date of that read. The three
+ * new seats have no report behind them yet: their `canonicalSlug` is
+ * ADR-0034's expectation from the 2026-08-14 catalog check, to be replaced by
+ * what the road in's pre-flight actually resolves.
  * `src/seed-season.ts` holds a different nine on purpose — the design mock's
  * placeholders — and is not a source for these.
  */
@@ -76,6 +86,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "anthropic/claude-opus-5", provider: "anthropic",
     quantization: null,
     canonicalSlug: "anthropic/claude-opus-5-20260723",
+    catalogCheckedAt: "2026-08-12",
     baseModelClass: "Frontier"
   },
   {
@@ -83,6 +94,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "openai/gpt-5.6-sol-pro", provider: "openai",
     quantization: null,
     canonicalSlug: "openai/gpt-5.6-sol-pro-20260709",
+    catalogCheckedAt: "2026-08-12",
     baseModelClass: "Frontier"
   },
   {
@@ -90,6 +102,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "google/gemini-3.1-pro-preview", provider: "google-ai-studio",
     quantization: null,
     canonicalSlug: "google/gemini-3.1-pro-preview-20260219",
+    catalogCheckedAt: "2026-08-12",
     baseModelClass: "Frontier"
   },
   {
@@ -97,6 +110,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "x-ai/grok-4.6", provider: "xai",
     quantization: null,
     canonicalSlug: "x-ai/grok-4.6-20260810",
+    catalogCheckedAt: "2026-08-14",
     baseModelClass: "First-party"
   },
   {
@@ -107,6 +121,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     // is no precision to fix.
     quantization: null,
     canonicalSlug: "meta/muse-spark-1.2-20260805",
+    catalogCheckedAt: "2026-08-14",
     baseModelClass: "First-party"
   },
   {
@@ -114,6 +129,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "moonshotai/kimi-k3", provider: "moonshotai",
     quantization: "mxfp4",
     canonicalSlug: "moonshotai/kimi-k3-20260715",
+    catalogCheckedAt: "2026-08-12",
     baseModelClass: "Open-weight"
   },
   {
@@ -121,6 +137,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "z-ai/glm-5.2", provider: "z-ai",
     quantization: "fp8",
     canonicalSlug: "z-ai/glm-5.2-20260616",
+    catalogCheckedAt: "2026-08-12",
     baseModelClass: "Open-weight"
   },
   {
@@ -128,6 +145,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "deepseek/deepseek-v4-pro", provider: "novita",
     quantization: "fp8",
     canonicalSlug: "deepseek/deepseek-v4-pro-20260423",
+    catalogCheckedAt: "2026-08-12",
     baseModelClass: "Open-weight"
   },
   {
@@ -143,6 +161,7 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     // day a second endpoint appears.
     quantization: null,
     canonicalSlug: "qwen/qwen3.8-max-20260803",
+    catalogCheckedAt: "2026-08-14",
     baseModelClass: "Open-weight"
   },
   {
@@ -150,12 +169,10 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModel: "minimax/minimax-m3", provider: "minimax",
     quantization: "fp8",
     canonicalSlug: "minimax/minimax-m3-20260531",
+    catalogCheckedAt: "2026-08-12",
     baseModelClass: "Open-weight"
   }
 ];
-
-/** When the operator last checked these seats against OpenRouter's catalog. */
-const CATALOG_CHECKED_AT = "2026-08-14";
 
 /**
  * Upserts the ten Entrant rows for `season`'s Prompt Version, and nothing
@@ -164,10 +181,16 @@ const CATALOG_CHECKED_AT = "2026-08-14";
  * `config` is merged rather than replaced: these rows were hand-entered, so
  * the table may carry a key this module has never heard of, and a re-entry
  * that dropped it would destroy the only copy.
+ *
+ * `roster` defaults to the roster of record and exists so that the size guard
+ * below can be walked into. A guard that only the constant beside it can reach
+ * is a guard nothing has ever seen bite, and this one stands between a
+ * careless edit and a Season entered at the wrong size.
  */
 export async function enterSeasonRoster(
   database: Database,
-  season: string
+  season: string,
+  roster: readonly Entrant[] = SEASON_ROSTER
 ): Promise<readonly string[]> {
   // The models table has no Season column — a seat belongs to a Season only
   // through its Prompt Version. So the operator's SEASON and the frozen
@@ -178,16 +201,16 @@ export async function enterSeasonRoster(
       `SEASON ${season} does not own Prompt Version ${MATCH_PROMPT_VERSION}`
     );
   }
-  if (SEASON_ROSTER.length !== SEASON_ROSTER_SIZE) {
+  if (roster.length !== SEASON_ROSTER_SIZE) {
     throw new Error(
-      `The roster holds ${SEASON_ROSTER.length} Entrants, not `
+      `The roster holds ${roster.length} Entrants, not `
       + `${SEASON_ROSTER_SIZE} (ADR-0034)`
     );
   }
 
   await database.query("begin");
   try {
-    for (const entrant of SEASON_ROSTER) {
+    for (const entrant of roster) {
       await database.query(
         `insert into models (
            id, name, base_model, provider, quantization, prompt_version, role,
@@ -211,7 +234,7 @@ export async function enterSeasonRoster(
           JSON.stringify({
             baseModelClass: entrant.baseModelClass,
             canonical_slug: entrant.canonicalSlug,
-            catalog_checked_at: CATALOG_CHECKED_AT
+            catalog_checked_at: entrant.catalogCheckedAt
           })
         ]
       );
@@ -222,5 +245,5 @@ export async function enterSeasonRoster(
     throw error;
   }
 
-  return SEASON_ROSTER.map(({ id }) => id);
+  return roster.map(({ id }) => id);
 }

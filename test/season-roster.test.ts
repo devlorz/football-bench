@@ -144,13 +144,23 @@ describe("entering the Season Roster", () => {
         });
     });
 
-  test("holds as many seats as the recorded decision declares", () => {
-    // The entry door refuses a roster of the wrong length, and this is what
-    // makes that refusal reachable: the door can only be walked into by a
-    // roster that got there, so the constant is checked here rather than by
-    // an operator finding out at the door.
-    expect(SEASON_ROSTER).toHaveLength(SEASON_ROSTER_SIZE);
-  });
+  test("refuses a roster whose length disagrees with the recorded size",
+    async () => {
+      // A seat dropped from the constant, or one added to it, is a Season
+      // entered at a size no decision records — and every number read against
+      // the roster would still be produced, meaning something else.
+      await expect(enterSeasonRoster(client, SEASON, SEASON_ROSTER.slice(1)))
+        .rejects.toThrow(
+          `The roster holds ${SEASON_ROSTER_SIZE - 1} Entrants, not `
+          + `${SEASON_ROSTER_SIZE} (ADR-0034)`
+        );
+      await expect(enterSeasonRoster(
+        client, SEASON, [...SEASON_ROSTER, SEASON_ROSTER[0]!]
+      )).rejects.toThrow(/holds 11 Entrants/);
+
+      // And it refuses before writing anything, not part way through.
+      expect(await entrants()).toHaveLength(0);
+    });
 
   test("refuses a Season the frozen Prompt Version does not name", async () => {
     await expect(enterSeasonRoster(client, "2027-28")).rejects

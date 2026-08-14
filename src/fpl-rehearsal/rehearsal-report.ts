@@ -48,7 +48,7 @@ export interface FplRehearsalReport {
   season: string;
   /** The Gameweek the track opened at, or null if it never did. */
   startedAt: number | null;
-  /** The sentence that says what a ranking of these nine paths is worth. */
+  /** The sentence that says what a ranking of these paths is worth. */
   qualification: string;
   entrants: RehearsedEntrant[];
   /**
@@ -139,7 +139,7 @@ export async function readFplRehearsalReport({
  * What a reader would be wrong to take at face value. A path shorter than the
  * longest is a Gameweek an Entrant produced nothing for, which ADR-0011
  * removes the Gameweek from the record for — so the rehearsal must say so
- * rather than print nine rankings of unequal length.
+ * rather than print a roster of rankings of unequal length.
  */
 function incompletePaths(
   entrants: RehearsedEntrant[],
