@@ -1,0 +1,145 @@
+---
+/**
+ * The chrome every page of the FPL section wears: the three sheets, the theme,
+ * the header with the design's brand, tabs and status line.
+ *
+ * Its own layout and not a variant of the Match track's (ADR-0033): the two
+ * sections are siblings with different headers, and the Match track's
+ * `Page.astro`, its nav and its styles are untouched by this file existing. The
+ * theme script below is the Match track's, duplicated rather than shared,
+ * because sharing it means editing that layout -- and the pre-paint half of it
+ * has to be inline in the head of every document that wants no flash.
+ *
+ * The two later tabs land in later slices and 404 until they do.
+ */
+interface Props {
+  title: string;
+  current: "leaderboard" | "squads" | "entrants";
+}
+
+const { title, current } = Astro.props;
+
+const TABS = [
+  { key: "leaderboard", href: "/fpl", label: "Leaderboard" },
+  { key: "squads", href: "/fpl/squads", label: "Latest squads" },
+  // "Entrant record" and not the handoff's "Model stats": the glossary forbids
+  // the second, and ADR-0033 carries the Match track's rename into this section
+  // and into the path.
+  { key: "entrants", href: "/fpl/entrants", label: "Entrant record" }
+] as const;
+---
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <link rel="stylesheet" href="/styles/modernist.css" />
+    <link rel="stylesheet" href="/styles/overrides.css" />
+    {/* Third and last, so its accent wins the tie with the Match track's. The
+        two sheets before it are what every page of the site shares: the design
+        system, and the chrome and states this dashboard built on top of it.
+
+        Three sheets and not two by design -- ADR-0033 calls this one "a third
+        stylesheet", and the box it is held to is that `overrides.css` is not
+        edited to accommodate the FPL track, which it is not: this whole section
+        added no line to it. Making `fpl.css` self-contained instead would mean
+        a second copy of the nav, the focus ring, the skeleton, the error line
+        and `[hidden]` -- and the alternative of hoisting those into a shared
+        sheet is an edit to the Match track's, which the same box forbids. What
+        it costs is that a Match change to a shared primitive reaches here; that
+        is the trade taken, and the section's own look lives in `fpl.css`. */}
+    <link rel="stylesheet" href="/styles/fpl.css" />
+    {/* Before the first paint: the reader's theme is the same one across both
+        tracks, and one applied after render is a flash of the other on every
+        page load. Same attribute and same storage key as the Match track. */}
+    <script is:inline>
+      document.documentElement.dataset.theme =
+        localStorage.getItem("theme") === "dark" ? "dark" : "light";
+    </script>
+  </head>
+  <body>
+    <header class="nav" id="nav">
+      <div class="nav-brand">
+        <span class="brand-name">FOOTBALL BENCH</span>
+        <span class="brand-track">FPL track</span>
+      </div>
+      <nav class="navlinks" id="navlinks">
+        {TABS.map(({ key, href, label }) => (
+          <a href={href} aria-current={key === current ? "page" : undefined}>
+            {label}
+          </a>
+        ))}
+      </nav>
+      <div class="navtools">
+        {/* Empty in the built HTML and filled by the page: the Gameweek in it
+            is read from the page's own endpoint, and the chrome has no fetch. */}
+        <span class="fplstatus" id="status"></span>
+        <button
+          class="btn btn-ghost btn-icon burger"
+          id="burger"
+          type="button"
+          aria-label="Menu"
+          aria-expanded="false"
+          aria-controls="navlinks"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18"></path><path d="M3 12h18"></path><path d="M3 18h18"></path></svg>
+        </button>
+        <button
+          class="btn btn-ghost btn-icon"
+          id="theme"
+          type="button"
+          aria-label="Switch theme"
+        >
+          <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+          <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+        </button>
+      </div>
+    </header>
+    <main class="page">
+      <slot />
+    </main>
+
+    <script is:inline>
+      // The two controls in the chrome share no state with each other or with
+      // anything on the page: each is local to the element it sits in.
+      (() => {
+        const root = document.documentElement;
+        const nav = document.getElementById("nav");
+        const burger = document.getElementById("burger");
+        const theme = document.getElementById("theme");
+
+        // The icon says which theme the click leads to, and the name has to say
+        // the same thing. Named here rather than in the markup so the stored
+        // theme, which is only known once this runs, is what it reads.
+        const name = () => {
+          const label = root.dataset.theme === "dark"
+            ? "Switch to light theme"
+            : "Switch to dark theme";
+          theme.setAttribute("aria-label", label);
+          theme.title = label;
+        };
+        name();
+
+        theme.addEventListener("click", () => {
+          const dark = root.dataset.theme !== "dark";
+          root.dataset.theme = dark ? "dark" : "light";
+          // The key the Match track writes, so one choice follows the reader
+          // across both sections.
+          localStorage.setItem("theme", dark ? "dark" : "light");
+          name();
+        });
+
+        const setMenu = (open) => {
+          nav.classList.toggle("menu-open", open);
+          burger.setAttribute("aria-expanded", String(open));
+        };
+        burger.addEventListener("click", () => {
+          setMenu(!nav.classList.contains("menu-open"));
+        });
+        for (const link of document.querySelectorAll("#navlinks a")) {
+          link.addEventListener("click", () => setMenu(false));
+        }
+      })();
+    </script>
+  </body>
+</html>

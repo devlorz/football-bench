@@ -176,8 +176,6 @@ describe("starting the FPL track for all nine Entrants", () => {
     await lockPool(client, 2, FPL_POOL);
   });
 
-  /** The Gameweek's pool as its Lock found it, at unmoved opening prices. */
-
   /**
    * One attempt at opening the track, answered by the scripted responses in
    * order, and the calls it made — which is where a conversation either stays

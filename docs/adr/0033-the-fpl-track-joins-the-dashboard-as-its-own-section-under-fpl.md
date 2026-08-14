@@ -69,7 +69,19 @@ of the `scores` rows where the scorer froze it.
 - Only Settled Gameweeks appear, and a missing Gameweek is announced rather than silently
   absent — the same two rules the rest of the record already obeys, restated in the handoff
   and binding on all three endpoints.
-- The implementation deviates from the design files in exactly three places: "Model stats"
-  is rendered "Entrant record", `.dark` is `data-theme`, and the container query is a media
-  query. Everything else is per the handoff, including the deliberately dark pitch in both
-  themes.
+- The implementation deviates from the design files in exactly five places: "Model stats"
+  is rendered "Entrant record", `.dark` is `data-theme`, the container query is a media
+  query, the Race chart's panel has a 10px foot rather than the handoff's 20px, and its
+  Gameweek axis is an absolutely positioned label at every Gameweek up to eight of them,
+  rather than a flex row of all of them. Everything else is per the handoff, including the
+  deliberately dark pitch in both themes.
+
+  The last two are the Race variant's, and both follow from facts the prototype's four
+  Gameweeks did not have. The axis is positioned because a Gameweek the record holds
+  nothing for is a longer segment in every line: a row spaced evenly would hang GW5's label
+  under GW4's points, which is the quietest kind of wrong a chart can be. It thins to eight
+  because the Season is 38 Gameweeks and not four, and 38 labels across 462 units of viewBox
+  is a grey bar — the same eight the Match track's cumulative chart already thins to, with
+  the last Gameweek always among them. The foot is 10px because the labels are centred on
+  their line's end and the lowest can be clamped to the foot of the plot, where half of it
+  hangs below the viewBox — the padding is the room it hangs in.

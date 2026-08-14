@@ -1,0 +1,520 @@
+---
+import FplPage from "../layouts/FplPage.astro";
+---
+<FplPage title="FPL points ranking — Football Bench, FPL track" current="leaderboard">
+  {/*
+    Everything that is not a figure is in the built HTML: the title, the column
+    headers, the segmented control, the chart's gridlines and the two sentences
+    of the footnote that are the page's own. Only the numbers, the Gameweeks
+    they belong to, and the qualification wait on the fetch -- so a reader sees
+    the structure of the ranking before its data.
+  */}
+  <section class="fplhero">
+    <h1>FPL points ranking</h1>
+    <div class="kicker" id="span">&nbsp;</div>
+    {/* Radios and not buttons: three options of which exactly one holds, which
+        is what a radio group is and what the design system's `.seg` is built
+        over. It is in the built HTML because the choice between three views of
+        one response is not a fact the response carries.
+
+        Named as the Match track's sort control is: three unlabelled radios
+        beside a heading are three options of nothing in particular to a reader
+        who cannot see that they sit under a chart. */}
+    <div class="seg" id="variants" role="group" aria-label="Ranking view">
+      <label class="seg-opt">
+        <input type="radio" name="view" value="table" checked />
+        <span>Table</span>
+      </label>
+      <label class="seg-opt">
+        <input type="radio" name="view" value="race" />
+        <span>Race</span>
+      </label>
+      <label class="seg-opt">
+        <input type="radio" name="view" value="cards" />
+        <span>Cards</span>
+      </label>
+    </div>
+  </section>
+
+  <p class="error" id="error" hidden>
+    The FPL ranking could not be read. Nothing is being retried.
+  </p>
+
+  {/* The Season nothing has been scored in. Hidden until the response says so,
+      which is `throughGw` being null and not an empty list of Entrants. */}
+  <section class="preseason" id="preseason" hidden>
+    <div>
+      <div class="kicker">No Gameweek settled</div>
+      <h2>The ranking fills after the first Gameweek is settled</h2>
+      <p>
+        <span id="entered-count"></span> Entrants have entered the FPL track,
+        each managing its own Squad under the full ruleset. Nothing is ranked
+        until a Gameweek has been scored, and a Gameweek is scored for the whole
+        field or for none of it.
+      </p>
+    </div>
+    <div class="soft entered">
+      <div class="entered-title" id="entered-title">Entered</div>
+      <div id="entered-rows"></div>
+    </div>
+  </section>
+
+  {/* Nine, because nine is what the roster is and a loading state that guesses
+      a different height moves the page when the data lands.
+
+      Outside the table rather than nine `colspan` rows inside it, which is what
+      this was while the table was the only variant: one response fills three
+      views, so there is one wait for it, and a reader who opened a link to the
+      Race variant would otherwise be shown a table while it loaded. It is also
+      what the Entrant record's own loading block is -- a stack of blocks the
+      width of the content, and not a guess at each column's width, which a
+      `<table>` would then move. */}
+  <div class="fplskeleton" id="loading" aria-hidden="true">
+    {Array.from({ length: 9 }).map(() => <div class="skeleton"></div>)}
+  </div>
+
+  <section id="ranking" hidden>
+    <div id="view-table">
+      <div class="fplscroll">
+      <table class="table fpltable">
+        <thead>
+          <tr>
+            <th scope="col">Rank</th>
+            {/* The design leaves this header blank, and a blank header leaves a
+                column of triangles with nothing to say what they are. The word
+                is here and only the sighted reader is spared it. */}
+            <th scope="col"><span class="vh">Movement</span></th>
+            <th scope="col">Entrant</th>
+            <th scope="col" class="num" id="gw-head">GW</th>
+            <th scope="col" class="num">Total</th>
+            <th scope="col" class="num">Squad value</th>
+            <th scope="col">Chips left</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+      </div>
+    </div>
+
+    <div id="view-race" class="fplrace" hidden>
+      <div class="fplpanel">
+        <div class="kicker">Cumulative points by Gameweek</div>
+        <div class="fplplot">
+          {/* Named rather than left as an unlabelled graphic, as the Match
+              track's chart is. The figures themselves are in the standings
+              beside it and in the Table variant, which is what a screen reader
+              reads -- the line is the shape of the same numbers. */}
+          <svg
+            viewBox="0 0 640 300"
+            class="fplchart"
+            role="img"
+            aria-label="Cumulative FPL points per Gameweek, one line per Entrant"
+          >
+            {/* Fixed in the design and in the viewBox, so they are drawn here
+                rather than by the script: the baseline at full strength, the
+                three above it at 40%. */}
+            <g class="fplgrid">
+              <line x1="0" y1="280" x2="470" y2="280"></line>
+              <line x1="0" y1="210" x2="470" y2="210" opacity="0.4"></line>
+              <line x1="0" y1="140" x2="470" y2="140" opacity="0.4"></line>
+              <line x1="0" y1="70" x2="470" y2="70" opacity="0.4"></line>
+            </g>
+            <g id="race-lines"></g>
+          </svg>
+          {/* HTML and not SVG `<text>`: the design of record records that
+              generated `<text>` nodes measured to zero width in the prototype's
+              renderer, and positioned HTML is the route it settled on. */}
+          <div id="race-labels"></div>
+          <div id="race-gws"></div>
+        </div>
+      </div>
+      <div>
+        <div class="kicker">Standings</div>
+        <div id="standings"></div>
+      </div>
+    </div>
+
+    <div id="view-cards" class="fplcards" hidden></div>
+
+    {/* Under all three variants and not under the table alone: the
+        qualification qualifies the ranking, and a reader who arrived on a link
+        to the Cards variant is being shown the same claim. */}
+    <div class="fplnotes">
+      <p class="fplnote">
+        <span id="delta-note"></span> Points are net of Hits. Reference Lines do
+        not appear here — they produce probabilities, not a Squad.
+      </p>
+      {/* Written from the response and nowhere else: the sentence the scorer
+          froze into the rows the ranking was read off is the claim being made,
+          and a copy in this page would be a second place for it to be wrong. */}
+      <p class="fplnote" id="qual"></p>
+    </div>
+  </section>
+
+  {/* Bundled rather than `is:inline`: the things this page says in words rather
+      than figures, and the one position on it that can be wrong without looking
+      wrong, live in `fpl-view.ts` and are tested there, and an inline script can
+      import nothing. */}
+  <script>
+  import {
+    chipsTag, deltaNote, gameweekSpan, movement, rankBand, seasonLabel,
+    settledGws, spreadLabels, squadValue, statusLine
+  } from "../fpl-view.js";
+  import { across } from "../chart-domain.js";
+  import { svg } from "../dom.js";
+  import type { FplLeaderboardBody } from "../../../src/dashboard/read-api.js";
+
+  (() => {
+    // Every id below is in the built HTML above, so the element is there.
+    const $ = (id: string): HTMLElement => document.getElementById(id)!;
+    const text = (node: HTMLElement, value: string): void => {
+      node.textContent = value;
+    };
+
+    const el = <K extends keyof HTMLElementTagNameMap>(
+      tag: K, className: string, value?: string
+    ): HTMLElementTagNameMap[K] => {
+      const node = document.createElement(tag);
+      node.className = className;
+      if (value !== undefined) node.textContent = value;
+      return node;
+    };
+
+    const figure = (value: number | null): string =>
+      value === null ? "—" : String(value);
+
+    /* ── the variant ────────────────────────────────────────────────────── */
+
+    const VIEWS = ["table", "race", "cards"] as const;
+    type View = (typeof VIEWS)[number];
+
+    // A link is a stranger's, so an unknown or absent `?view=` opens the
+    // default rather than a blank page.
+    const asked = new URL(location.href).searchParams.get("view");
+    const known = (VIEWS as readonly string[]).includes(asked ?? "");
+    let view: View = known ? asked as View : "table";
+
+    // The URL is the state on screen (ADR-0028), so it is written when the two
+    // could disagree and not otherwise: a `?view=` naming a variant that does
+    // not exist is a URL claiming something the page is not showing, and is
+    // corrected to what a reader is actually looking at. An absent one claims
+    // nothing and is left alone, so a bare `/fpl` stays a bare `/fpl`.
+    const remember = (): void => {
+      const url = new URL(location.href);
+      if (url.searchParams.get("view") === view) return;
+      url.searchParams.set("view", view);
+      history.replaceState(null, "", url);
+    };
+
+    const show = (next: View): void => {
+      view = next;
+      for (const each of VIEWS) $("view-" + each).hidden = each !== next;
+      document.querySelector<HTMLInputElement>(
+        `#variants input[value="${next}"]`
+      )!.checked = true;
+    };
+
+    for (const input of
+      document.querySelectorAll<HTMLInputElement>("#variants input")) {
+      input.addEventListener("change", () => {
+        show(input.value as View);
+        // Written with `replaceState` for the reason the Entrant picker's
+        // selection is: choosing a view of one ranking is not navigation, and
+        // Back is expected to leave rather than walk back through three views.
+        remember();
+      });
+    }
+
+    // Before the response, so a reader who followed a link to the Race variant
+    // is not shown the table for as long as the fetch takes. The section around
+    // these three is hidden until there is something in them.
+    show(view);
+    if (asked !== null && !known) remember();
+
+    /* ── the table ──────────────────────────────────────────────────────── */
+
+    function renderTable(body: FplLeaderboardBody): void {
+      text($("gw-head"), `GW${body.throughGw}`);
+
+      const rows = document.createDocumentFragment();
+      for (const entrant of body.entrants) {
+        const row = document.createElement("tr");
+
+        const { mark, tone } = movement(entrant.movement);
+        const name = el("td", "");
+        name.append(
+          el("div", "fplname", entrant.name),
+          el("div", "fpl-id", entrant.baseModel)
+        );
+
+        const chips = el("td", "");
+        if (entrant.chipsRemaining === null) {
+          chips.textContent = "—";
+        } else {
+          chips.append(
+            el("span", "tag tag-neutral", String(entrant.chipsRemaining))
+          );
+        }
+
+        row.append(
+          el("td", "fplrank", figure(entrant.rank)),
+          el("td", "fplmove fplmove-" + tone, mark),
+          name,
+          el("td", "num", figure(entrant.gwPoints)),
+          el("td", "num fpltotal", figure(entrant.totalPoints)),
+          el("td", "num fplvalue", squadValue(entrant.squadValueTenths)),
+          chips
+        );
+        rows.append(row);
+      }
+      $("rows").replaceChildren(rows);
+    }
+
+    /* ── the race ───────────────────────────────────────────────────────── */
+
+    // The design's plot: an x of 8→470 of a 640-wide viewBox, the right quarter
+    // left to the labels, and a y of 280 up to 30 for the highest total any
+    // Entrant reached.
+    const PLOT = {
+      left: 8, right: 470, foot: 280, span: 250, width: 640, height: 300
+    };
+    // The design's minimum, in the same units the plot is drawn in.
+    const LABEL_GAP = 17;
+
+    function renderRace(body: FplLeaderboardBody): void {
+      // Both are numbers here: the Race is only drawn once a Gameweek has
+      // settled, which is the same test that decided this is not the pre-Season
+      // page.
+      const first = body.fromGw!;
+      const last = body.throughGw!;
+      const most = Math.max(
+        0,
+        ...body.entrants.flatMap((entrant) =>
+          entrant.cumulative.map((point) => point.points))
+      );
+
+      const x = (gw: number): number =>
+        PLOT.left + across(gw, first, last) * (PLOT.right - PLOT.left);
+      // A field on nought points sits on the baseline rather than dividing by
+      // zero, which is a Gameweek every Entrant Gapped and not a broken read.
+      const y = (points: number): number =>
+        most > 0 ? PLOT.foot - (points / most) * PLOT.span : PLOT.foot;
+
+      const lines = document.createDocumentFragment();
+      const ends: number[] = [];
+      for (const entrant of body.entrants) {
+        const series = entrant.cumulative;
+        // Fails closed, as the missing qualification does. A scored Gameweek
+        // has a row for all nine Entrants or for none of them (ADR-0011), so an
+        // Entrant with no series at all is a broken record -- and dropping its
+        // line while its name stays in the standings beside the chart is a
+        // Race that looks complete and is missing a competitor.
+        if (series.length === 0) {
+          throw new Error(`${entrant.name} arrived without a points series`);
+        }
+        const { band, dashed } = rankBand(entrant.rank);
+        const points = series
+          .map((point) => `${x(point.gw)},${y(point.points)}`)
+          .join(" ");
+        // One Settled Gameweek is one point per Entrant, and a polyline of one
+        // point draws nothing at all: the first Settled Gameweek of a Season
+        // would be a panel of labels beside an empty plot. The mark is a dot
+        // there, so every Entrant is on the chart from the first Gameweek --
+        // and it is only there, because a dot per Gameweek on a drawn line is
+        // not the design.
+        lines.append(
+          series.length === 1
+            ? svg("circle", {
+                class: `fplline fplline-${band}`,
+                cx: x(series[0]!.gw),
+                cy: y(series[0]!.points),
+                r: 3
+              })
+            : svg("polyline", {
+                class:
+                  `fplline fplline-${band}` + (dashed ? " fplline-dash" : ""),
+                points
+              })
+        );
+        ends.push(y(series.at(-1)!.points));
+      }
+      $("race-lines").replaceChildren(lines);
+
+      // The ends of nine lines are wherever nine Seasons finished, and two
+      // Entrants on one total end at one point. `spreadLabels` is what keeps
+      // the names off each other, and it hands back one position per line in
+      // the order the lines were given -- so the name still belongs to its
+      // line, which is why nothing above was allowed to skip an Entrant.
+      const labels = document.createDocumentFragment();
+      spreadLabels(ends, LABEL_GAP, PLOT.height).forEach((top, index) => {
+        const entrant = body.entrants[index]!;
+        const label = el(
+          "span",
+          `fpllabel fpllabel-${rankBand(entrant.rank).band}`,
+          entrant.name
+        );
+        label.style.top = `${(top / PLOT.height) * 100}%`;
+        labels.append(label);
+      });
+      $("race-labels").replaceChildren(labels);
+
+      // The Gameweeks the lines are actually hung on, and never one label per
+      // point of one series: the axis is the span, and a Gameweek the record
+      // holds nothing for is a gap in every line at once. At most eight of
+      // them, so a full Season's axis reads as easily as a first month's.
+      const gws = settledGws(body.fromGw, body.throughGw, body.missingGws);
+      const every = Math.ceil(gws.length / 8);
+      const axis = document.createDocumentFragment();
+      gws.forEach((gw, index) => {
+        const isLast = index === gws.length - 1;
+        if (index % every !== 0 && !isLast) return;
+        const label = el("span", "fplgw", `GW${gw}`);
+        label.style.left = `${(x(gw) / PLOT.width) * 100}%`;
+        // The first and last sit on the plot's own edges, where a centred label
+        // would hang off the panel. Only the ends need it.
+        label.style.transform =
+          index === 0 ? "none" : isLast ? "translateX(-100%)" : "translateX(-50%)";
+        axis.append(label);
+      });
+      $("race-gws").replaceChildren(axis);
+
+      const standings = document.createDocumentFragment();
+      for (const entrant of body.entrants) {
+        const row = el("div", "fplstanding");
+        row.append(
+          el("span", "fplstanding-rank", figure(entrant.rank)),
+          el("span", "fplstanding-name", entrant.name),
+          el("span", "fplstanding-total", figure(entrant.totalPoints))
+        );
+        standings.append(row);
+      }
+      $("standings").replaceChildren(standings);
+    }
+
+    /* ── the cards ──────────────────────────────────────────────────────── */
+
+    function renderCards(body: FplLeaderboardBody): void {
+      const cards = document.createDocumentFragment();
+      for (const entrant of body.entrants) {
+        const { mark, tone } = movement(entrant.movement);
+        const head = el("div", "fplcard-head");
+        head.append(
+          el(
+            "span",
+            "fplcard-rank" +
+              (rankBand(entrant.rank).band === "1" ? " fplcard-rank-1" : ""),
+            figure(entrant.rank)
+          ),
+          el("span", "fplmove fplmove-" + tone, mark),
+          el("span", "fplcard-total", figure(entrant.totalPoints))
+        );
+
+        const tags = el("div", "fplcard-tags");
+        tags.append(
+          el(
+            "span", "tag tag-accent",
+            `GW${body.throughGw} ${figure(entrant.gwPoints)}`
+          ),
+          el(
+            "span", "tag tag-neutral",
+            `£${squadValue(entrant.squadValueTenths)}`
+          ),
+          el("span", "tag tag-neutral", chipsTag(entrant.chipsRemaining))
+        );
+
+        const card = el("div", "fplcard");
+        card.append(
+          head,
+          el("div", "fplcard-name", entrant.name),
+          el("div", "fpl-id", entrant.baseModel),
+          tags
+        );
+        cards.append(card);
+      }
+      $("view-cards").replaceChildren(cards);
+    }
+
+    /* ── the page ───────────────────────────────────────────────────────── */
+
+    function renderRanking(body: FplLeaderboardBody): void {
+      // The same three fields the kicker is written from, handed over whole:
+      // which Gameweek the movement was measured against is worked out in
+      // `fpl-view.ts`, where it is tested, and not here.
+      text($("delta-note"),
+        deltaNote(body.fromGw, body.throughGw, body.missingGws));
+
+      // All three, out of one response and once. Switching variants after this
+      // shows what is already in the document, so it issues no request and can
+      // issue none: the response is not held anywhere to fetch again from.
+      renderTable(body);
+      renderRace(body);
+      renderCards(body);
+
+      // Fails closed, because the qualification is the one thing ADR-0003 will
+      // not let a ranking be published without. The endpoint already refuses a
+      // record missing it, so nothing should reach here -- and a blank footnote
+      // is exactly the failure the rule exists against, so if one ever does,
+      // the reader gets the error line and no ranking rather than a ranking
+      // with nothing qualifying it.
+      if (body.qualification === null) {
+        throw new Error("The ranking arrived without its qualification");
+      }
+      text($("qual"), body.qualification);
+    }
+
+    function renderPreSeason(body: FplLeaderboardBody): void {
+      // The count comes from the response and is not the word "Nine" in the
+      // built HTML: the status line beside it prints the real number, and a
+      // page that spells one figure and reads the other can contradict itself.
+      text($("entered-count"), String(body.entrants.length));
+      text($("entered-title"), "Entered for " + seasonLabel(body.season));
+      const rows = document.createDocumentFragment();
+      for (const entrant of body.entrants) {
+        const row = el("div", "entered-row");
+        row.append(
+          el("div", "entered-name", entrant.name),
+          el("div", "fpl-id", entrant.baseModel)
+        );
+        rows.append(row);
+      }
+      $("entered-rows").replaceChildren(rows);
+    }
+
+    function render(body: FplLeaderboardBody): void {
+      text($("status"),
+        statusLine(body.season, body.throughGw, body.entrants.length));
+
+      // Null `throughGw` is the whole of the test. An empty list of Entrants
+      // cannot tell a Season that has not been scored from a read that returned
+      // nothing.
+      const pre = body.throughGw === null;
+      $("loading").hidden = true;
+      $("preseason").hidden = !pre;
+      $("ranking").hidden = pre;
+      // The variants are a view of a ranking, and before the first Settled
+      // Gameweek there is none to view.
+      $("variants").hidden = pre;
+      text($("span"), gameweekSpan(body.fromGw, body.throughGw, body.missingGws));
+
+      if (pre) renderPreSeason(body); else renderRanking(body);
+    }
+
+    // A relative path: the Worker claims `/api/*` on this hostname, so nothing
+    // is cross-origin and no origin was a build input.
+    fetch("/api/fpl/leaderboard")
+      .then((response) => {
+        if (!response.ok) throw new Error(String(response.status));
+        return response.json() as Promise<FplLeaderboardBody>;
+      })
+      .then(render)
+      .catch(() => {
+        // One line, and nothing retries.
+        $("error").hidden = false;
+        $("loading").hidden = true;
+        $("variants").hidden = true;
+        $("ranking").hidden = true;
+        $("preseason").hidden = true;
+      });
+  })();
+  </script>
+</FplPage>

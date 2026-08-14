@@ -27,14 +27,14 @@ runs against a deployed database.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] One command against an empty database produces nine Entrants with Manager States and
+- [x] One command against an empty database produces nine Entrants with Manager States and
       Team Sheets across at least three Settled Gameweeks
-- [ ] Every FPL `scores` row comes from running the real scorer; the seed writes none itself
-- [ ] The seed contains at least one Transfer taken as a Hit, one banked Free Transfer, one
+- [x] Every FPL `scores` row comes from running the real scorer; the seed writes none itself
+- [x] The seed contains at least one Transfer taken as a Hit, one banked Free Transfer, one
       played Chip, one Roll Over, one Repair spent, and one Gap
-- [ ] At least one player's price has risen and one has fallen since purchase, so Selling
+- [x] At least one player's price has risen and one has fallen since purchase, so Selling
       Price is exercised in both directions
-- [ ] A pre-Season stopping point exists, so the empty state the pages must render is
+- [x] A pre-Season stopping point exists, so the empty state the pages must render is
       producible from the same command
 
 ## The FPL leaderboard endpoint
@@ -47,17 +47,17 @@ seam under the select-only role.
 
 **Blocked by:** "A seeded FPL Season".
 
-- [ ] The response carries the documented body: nine ranked rows, the Gameweek span, the
+- [x] The response carries the documented body: nine ranked rows, the Gameweek span, the
       per-Entrant cumulative series, and the qualification
-- [ ] Rank movement is computed against the cumulative snapshot at the previous Settled
+- [x] Rank movement is computed against the cumulative snapshot at the previous Settled
       Gameweek, and the first Settled Gameweek shows no movement rather than inventing one
-- [ ] The qualification equals the sentence stored in the seeded rows' detail, and a record
+- [x] The qualification equals the sentence stored in the seeded rows' detail, and a record
       stripped of it is an error, not a blank
-- [ ] FPL reads exclude match rows and match reads exclude FPL rows, proven in both
+- [x] FPL reads exclude match rows and match reads exclude FPL rows, proven in both
       directions over one seed
-- [ ] Responses carry the scored-data cache lifetime with `stale-if-error=0` and browser
+- [x] Responses carry the scored-data cache lifetime with `stale-if-error=0` and browser
       `no-cache`
-- [ ] Before the first Settled Gameweek the endpoint returns the honest empty shape
+- [x] Before the first Settled Gameweek the endpoint returns the honest empty shape
 
 ## The FPL section and the ranking page
 
@@ -68,19 +68,19 @@ qualification. The first demoable slice.
 
 **Blocked by:** "The FPL leaderboard endpoint".
 
-- [ ] The section has its own layout and header; the Match track's layout, nav and styles
+- [x] The section has its own layout and header; the Match track's layout, nav and styles
       are untouched
-- [ ] The purple accent and pitch tokens live in a track-scoped stylesheet loaded only by
+- [x] The purple accent and pitch tokens live in a track-scoped stylesheet loaded only by
       FPL pages; the vendored design-system sheet is unedited
-- [ ] The theme toggle uses the repo's existing attribute and storage key, so one choice
+- [x] The theme toggle uses the repo's existing attribute and storage key, so one choice
       follows the reader across both tracks, with no flash of the other theme on load
-- [ ] The Table variant renders per the design: rank, movement marker, Entrant over Base
+- [x] The Table variant renders per the design: rank, movement marker, Entrant over Base
       Model id, Gameweek points, total, Squad value, Chips-left tag
-- [ ] The footnote renders the movement reference, the Reference Lines sentence, and the
+- [x] The footnote renders the movement reference, the Reference Lines sentence, and the
       qualification exactly as served — no copy of the sentence exists in the page
-- [ ] The page shows a still loading block, a single plain error line on a failed fetch, and
+- [x] The page shows a still loading block, a single plain error line on a failed fetch, and
       the honest empty state before the first Settled Gameweek
-- [ ] The third tab reads "Entrant record", never "Model stats"
+- [x] The third tab reads "Entrant record", never "Model stats"
 
 ## Race and Cards variants
 
@@ -89,14 +89,14 @@ without fetching, and the chosen variant is linkable.
 
 **Blocked by:** "The FPL section and the ranking page".
 
-- [ ] The Race chart draws one cumulative line per Entrant with the design's rank-based
+- [x] The Race chart draws one cumulative line per Entrant with the design's rank-based
       weights, and its labels are positioned HTML de-overlapped to the minimum gap
-- [ ] The de-overlap is a pure function with its own tests: labels forced apart to the
+- [x] The de-overlap is a pure function with its own tests: labels forced apart to the
       minimum gap, order preserved
-- [ ] The Cards variant renders the nine tiles with rank, movement, total and the three tags
-- [ ] The variant lives in the URL via `replaceState` and a shared link opens on the linked
+- [x] The Cards variant renders the nine tiles with rank, movement, total and the three tags
+- [x] The variant lives in the URL via `replaceState` and a shared link opens on the linked
       variant
-- [ ] Switching variants issues no network request
+- [x] Switching variants issues no network request
 
 ## The latest-squads endpoint
 
@@ -107,15 +107,15 @@ costs, and the validation record — so the page's picker can switch without fet
 
 **Blocked by:** "A seeded FPL Season".
 
-- [ ] The response carries all nine Entrants for the latest Settled Gameweek in one body
-- [ ] Selling Price is purchase price plus half of any rise rounded down, and a fall passes
+- [x] The response carries all nine Entrants for the latest Settled Gameweek in one body
+- [x] Selling Price is purchase price plus half of any rise rounded down, and a fall passes
       through in full — both proven against the seed
-- [ ] Transfers report out, in, and cost, including a −4 Hit where the seed took one
-- [ ] The validation record reports Repairs used, whether the Gameweek Rolled Over, and the
+- [x] Transfers report out, in, and cost, including a −4 Hit where the seed took one
+- [x] The validation record reports Repairs used, whether the Gameweek Rolled Over, and the
       last violation; a Rolled Over Gameweek presents the standing Team Sheet
-- [ ] Responses carry the scored-data cache lifetime — deliberately not the sixty-second
+- [x] Responses carry the scored-data cache lifetime — deliberately not the sixty-second
       fixtures lifetime
-- [ ] Before the first Settled Gameweek the endpoint returns the honest empty shape
+- [x] Before the first Settled Gameweek the endpoint returns the honest empty shape
 
 ## The latest-squads page
 

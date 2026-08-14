@@ -151,8 +151,6 @@ describe("running a Gameweek for the whole FPL roster", () => {
     }
   });
 
-  /** The Gameweek's pool as its Lock found it, at unmoved opening prices. */
-
   /**
    * Opens the track for all nine at Gameweek 1, which is the only way a
    * Gameweek this function runs can have a Squad standing behind it. It goes

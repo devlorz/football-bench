@@ -255,8 +255,6 @@ describe("opening the FPL track for a Gameweek", () => {
     });
   }
 
-  /** The Gameweek's pool as its Lock found it, at unmoved opening prices. */
-
   /**
    * One Entrant's Gameweek, answered by the scripted responses in order, and
    * the conversations it was sent back — which is where a Repair either

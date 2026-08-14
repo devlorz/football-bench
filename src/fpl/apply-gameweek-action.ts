@@ -112,6 +112,30 @@ function halfOf(gameweek: number): keyof ChipsUsed {
   return gameweek <= FIRST_HALF_FINAL_GAMEWEEK ? "firstHalf" : "secondHalf";
 }
 
+/**
+ * How many Chips an Entrant still holds for a Gameweek it has yet to play —
+ * `playedIn` is the Gameweek a Chip counted here would be played in, and never
+ * one already behind the Entrant.
+ *
+ * Both sets while the first is still playable and the second alone after it,
+ * because the first set expires unspent at the Gameweek 19 deadline: a count
+ * of eight less what was spent would go on offering four Chips nobody can play
+ * for the whole second half. The boundary is the deadline and not the Gameweek,
+ * which is why a caller reading a Settled Gameweek 19 asks about Gameweek 20 —
+ * by the time that Gameweek has settled its deadline is long past, and the set
+ * with it.
+ *
+ * It says nothing about what that Gameweek would *accept*, which is a different
+ * question with a different answer: `chipRefusal` is the one that knows a Free
+ * Hit is withheld the Gameweek after a Free Hit.
+ */
+export function chipsRemaining(used: ChipsUsed, playedIn: number): number {
+  const second = CHIPS.length - used.secondHalf.length;
+  return playedIn <= FIRST_HALF_FINAL_GAMEWEEK
+    ? second + CHIPS.length - used.firstHalf.length
+    : second;
+}
+
 export const STARTERS = 11;
 
 /** One goalkeeper exactly; the outfield minimums the real game enforces. */
@@ -164,8 +188,12 @@ export interface Violation {
  * what an Entrant is shown, so their wording cannot drift while the task is
  * being measured. Several messages may share a kind — the kind drives the
  * violation profile, the message tells the Entrant what to correct.
+ *
+ * Exported so that anything writing a refusal quotes one of these rather than
+ * wording its own. `ENFORCED_VIOLATIONS` below is the same values without
+ * their names, which is what a caller wanting a particular refusal needs.
  */
-const VIOLATIONS = {
+export const VIOLATIONS = {
   budget: {
     kind: "budget",
     message: "A Squad must cost no more than £100.0m."

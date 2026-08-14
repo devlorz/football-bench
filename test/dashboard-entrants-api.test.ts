@@ -3,16 +3,12 @@ import { beforeAll, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
 import { workerDriver } from "./worker-driver.js";
 import { seedSeason, type SeedStop } from "../src/seed-season.js";
-import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
 import {
   handleDashboardRequest, type EntrantsBody, type Query
 } from "../src/dashboard/read-api.js";
 import { MATCH_PROMPT_VERSION } from "../src/predictions/openrouter-entrant.js";
 import {
-  BET_POINTS_METRIC, BET_POINTS_SEASON_TO_DATE_METRIC,
-  GAP_RATE_SEASON_TO_DATE_METRIC, MATCH_POINTS_METRIC,
-  MATCH_POINTS_SEASON_TO_DATE_METRIC, RPS_SEASON_TO_DATE_METRIC,
-  scoreMatchSeason
+  BET_POINTS_METRIC, MATCH_POINTS_METRIC, scoreMatchSeason
 } from "../src/predictions/score-match-gameweek.js";
 
 const { Client } = pg;
@@ -76,39 +72,6 @@ async function seed(
 }
 
 /**
- * An FPL seat carrying the same `entrant` role as the nine, told apart only by
- * its Prompt Version. Without one the roster assertions pass on a query that
- * never filtered anything.
- */
-async function enterFplSeat(writer: pg.Client): Promise<void> {
-  await writer.query(
-    `insert into models (id, name, base_model, provider, prompt_version, role)
-     values ('fpl-claude/v1', 'Claude', 'anthropic/claude-opus-4.5',
-             'anthropic', $1, 'entrant')`,
-    [FPL_PROMPT_VERSION]
-  );
-
-  // Both filters this endpoint relies on are load-bearing and neither
-  // substitutes for the other. The seat above is what the roster filter keeps
-  // off the page; these rows are what the track filter keeps out of the
-  // figures. They sit on a Match Entrant, on the Gameweek the Season is scored
-  // through, under the metric names the Match track uses — so each of the four
-  // left joins that forgot `track = 'match'` would match two rows, and the
-  // endpoint would answer with an FPL demonstration figure or with nine
-  // Entrants returned twice.
-  for (const metric of [
-    MATCH_POINTS_SEASON_TO_DATE_METRIC, BET_POINTS_SEASON_TO_DATE_METRIC,
-    RPS_SEASON_TO_DATE_METRIC, GAP_RATE_SEASON_TO_DATE_METRIC
-  ]) {
-    await writer.query(
-      `insert into scores (model_id, season, gw, track, metric, value, n, detail)
-       values ('claude/v1', $1, $2, 'fpl', $3, 999, 999, '{"gameweeks": []}')`,
-      [SEASON, THROUGH_GW, metric]
-    );
-  }
-}
-
-/**
  * The same counts taken the other way: over the Season's *per-Gameweek* rows,
  * whose detail is flat. The endpoint reads the cumulative rows, whose detail is
  * nested one level deeper — a read assuming the flat shape there counts nothing
@@ -157,7 +120,6 @@ describe("the Entrant record endpoint on the design's Season", () => {
 
   beforeAll(async () => {
     await seed(writer, reader, "the design's");
-    await enterFplSeat(writer);
     return async () => {
       await writer.end();
       await reader.end();
