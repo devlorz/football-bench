@@ -6,16 +6,23 @@ import { writeGapAlert } from "./write-gap-alert.js";
 
 const { Client } = pg;
 const config = readPredictJobConfig(process.env);
+// A Gameweek number means nothing until a Competition is named too, and the
+// scheduled run names one per active Competition. This one is the operator's,
+// so it takes the name from them — defaulted to the Premier League, which is
+// what every runbook that types this command already means, and required to be
+// stated whenever it is anything else.
+//
+// Unlike the backfill's, this default is safe to have: a wrong Competition here
+// predicts a Gameweek that is either empty, which prints Fixtures 0 and spends
+// nothing, or already answered, which the insert-only Predictions refuse.
+const competition = process.env.COMPETITION?.trim() || "PL";
 const database = new Client({ connectionString: config.databaseUrl });
 
 await database.connect();
 try {
   const gapAlert = await predictGameweek({
     database,
-    // The hand-run Prediction is the Premier League's. The scheduled run walks
-    // every active Competition; this one names the Gameweek an operator typed,
-    // and a Gameweek number means nothing until a Competition is named too.
-    competition: "PL",
+    competition,
     season: config.season,
     gameweek: config.gameweek,
     concurrency: config.concurrency,
