@@ -1,5 +1,30 @@
 # A new Competition's schedule, results and Lock come from football-data.org
 
+> Amended 2026-08-15 by ticket 8 of spec 0016. **La Liga's Gameweek 1 was Locked at
+> 17:00Z by hand, not at the 16:00Z the rule below derives.** It is the only Gameweek in
+> the benchmark whose Lock was not `earliest kickoff − 90 minutes`, and the rule below
+> stands unchanged for every other.
+>
+> What happened: the Competition was activated on the afternoon of its opening day, after
+> the derived deadline had already passed. Nothing had been committed under it — no
+> Fixture was Locked into that Gameweek, so migration 0025's trigger did not hold it — and
+> the choice was between a Gameweek predicted under a stated Lock of 17:00Z and no Gameweek
+> at all. The predictions were written by 16:26Z, thirty-four minutes before that Lock and
+> sixty-four minutes before the earliest kick-off. The two promises the record actually
+> makes both hold: every Prediction preceded its Lock, and every Prediction preceded its
+> Fixture.
+>
+> What it costs, stated rather than smoothed over: La Liga Gameweek 1's Entrants had a
+> thirty-minute cut-off where every other Gameweek's have ninety. Nothing in the packet
+> differs — the context is built `as of` the Lock and reads only stored data — but the
+> margin does, so this Gameweek is not strictly comparable to the others and any
+> cross-Gameweek claim should say so. It is one Gameweek of thirty-eight in one of five
+> Competitions.
+>
+> This is a record of a decision taken once under a clock, not a precedent. The
+> alternative the rule already provides is the one to reach for next time: let the
+> Gameweek go and open at the next one, which is what ADR-0035 calls the accepted price.
+
 For every Competition except the Premier League, the daily fetch reads football-data.org:
 the Fixture list, each Fixture's matchday (stored as its Gameweek), kickoff times and final
 scores. The free tier covers all four target leagues under one API and one rate limit that

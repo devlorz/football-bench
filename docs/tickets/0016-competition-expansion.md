@@ -811,8 +811,11 @@ for `PL` since the Season opened.
       `Real Sociedad de Fútbol`. Twelve of its twenty clubs were never the right twenty.
       Swapping the recorded response in is this ticket's, not ticket 7's — it moves
       `test/fetch-football-data-org-competition.test.ts`'s expectations._
-- [ ] The `PD` row is inserted and the scheduler picks the Competition up with no
+- [x] The `PD` row is inserted and the scheduler picks the Competition up with no
       workflow edit.
+      _Inserted 2026-08-15. `roster:enter` then seated twenty — ten per listed
+      Competition, the Premier League's re-upserted harmlessly — and the scheduled run
+      needed no edit to find them._
 - [ ] The football-data.org club names are mapped to football-data.co.uk's and reviewed,
       from the captured real response — ticket 6's second identity map, which could not
       honestly be drafted without it.

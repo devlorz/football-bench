@@ -21,6 +21,13 @@ const SUMMER_TRANSFERS_URL =
   "https://en.wikipedia.org/w/index.php"
   + "?title=List_of_English_football_transfers_summer_2026&action=raw";
 
+// Reached because the fetch walks every listed Competition, and this suite
+// lists two. A league whose transfer page nobody fetches renders its Squad
+// Changes section as a stated absence over a page that was there all along.
+const SPANISH_SUMMER_TRANSFERS_URL =
+  "https://en.wikipedia.org/w/index.php"
+  + "?title=List_of_Spanish_football_transfers_summer_2026&action=raw";
+
 const UNDERSTAT_LEAGUE_BODY = JSON.stringify({
   dates: [{
     id: "29001",
@@ -61,6 +68,10 @@ async function sourceResponses(
     [
       SUMMER_TRANSFERS_URL,
       await archivedBody("wikipedia-transfers-summer-2026.txt.gz")
+    ],
+    [
+      SPANISH_SUMMER_TRANSFERS_URL,
+      await archivedBody("wikipedia-transfers-spain-summer-2026.txt.gz")
     ],
     ...overrides
   ]);
