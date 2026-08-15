@@ -57,6 +57,14 @@ The consequence is a recurring chore — see [§6](#6-recurring-chores).
 |---|---|
 | `DATABASE_URL` | Session pooler, port 5432 |
 | `OPENROUTER_API_KEY` | |
+| `FOOTBALL_DATA_ORG_TOKEN` | Only once a Competition other than `PL` is listed |
+
+`FOOTBALL_DATA_ORG_TOKEN` is a free-tier football-data.org token, and the Premier League
+never reads it: `PL` takes the FPL API for everything (ADR-0036). Leave it unset while `PL`
+is the only row in `competitions`. Set it **in the same change that inserts the second
+Competition's row**, because that row is what makes the daily fetch reach the source — a
+listed Competition with no token fails its own fetch by name, without touching any other
+league's.
 
 ## 4. Repository variables
 
@@ -190,7 +198,9 @@ check of this layer, and it costs nothing.
 
 ## 8. Ordering that must be preserved
 
-`deferred` is materialised by the FPL fetch, not derived on read. A schedule move seen before
+`deferred` is materialised by the fetch, not derived on read — by the FPL fetch for `PL` and
+by the football-data.org fetch for every other Competition, which share the ordering because
+they share the three statements that write it. A schedule move seen before
 the Lock stays `false` until the first fetch at or after the deadline. The 06:00 UTC fetch
 provides that ordering for the 10:00 UTC scorer, and
 [ADR-0013](../adr/0013-a-postponed-fixture-keeps-its-original-prediction.md) requires future

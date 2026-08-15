@@ -130,6 +130,7 @@ describe("collecting settled player Gameweek points", () => {
       database: client,
       season: "2026-27",
       footballDataSeason: "2026-27",
+      footballDataOrgToken: null,
       now: () => AFTER_GAMEWEEK_ONE,
       http: async (url) => {
         requested.push(url);

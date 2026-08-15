@@ -58,6 +58,10 @@ export async function prepareArchivedGameweek({
     database: target,
     season,
     footballDataSeason,
+    // A replay answers from the archive and reaches no live source, so there
+    // is no token to hold. A Competition the archive covers replays through
+    // its stored snapshots like every other source.
+    footballDataOrgToken: null,
     http: createArchiveReplayFetcher(archive.snapshots),
     now: () => archive.observedAt
   });

@@ -1,6 +1,9 @@
 import type { Client } from "pg";
 import { fetchFootballDataSeason } from "../football-data/fetch-season.js";
 import {
+  fetchFootballDataOrgCompetition
+} from "../football-data-org/fetch-competition.js";
+import {
   fetchFplDaily,
   type FetchFplDailyResult
 } from "../fpl/fetch-gameweek.js";
@@ -20,6 +23,13 @@ export interface RunDailyFetchOptions {
   database: Database;
   season: string;
   footballDataSeason: string;
+  /**
+   * `null` until a Competition that reads football-data.org is listed. The
+   * Premier League has never needed it, so requiring it would have made every
+   * existing deployment carry a secret it does not spend; the fetch of a
+   * Competition that does need it refuses loudly instead.
+   */
+  footballDataOrgToken: string | null;
   http: HttpFetcher;
   now: () => Date;
 }
@@ -100,10 +110,30 @@ async function requireCurrentSeasonMatchesAfterFirstDeadline(
   }
 }
 
+/**
+ * Every active Competition except the Premier League, which keeps the FPL API
+ * for everything (ADR-0036). The dispatch keys on the Competition code — a
+ * field already read — rather than on a mode flag, so opening a league is the
+ * `competitions` insert and nothing here.
+ */
+async function competitionsReadingFootballDataOrg(
+  database: Database,
+  season: string
+): Promise<string[]> {
+  const active = await database.query<{ competition: string }>(
+    `select competition from competitions
+      where season = $1 and competition <> 'PL'
+      order by competition`,
+    [season]
+  );
+  return active.rows.map(({ competition }) => competition);
+}
+
 export async function runDailyFetch({
   database,
   season,
   footballDataSeason,
+  footballDataOrgToken,
   http,
   now
 }: RunDailyFetchOptions): Promise<DailyFetchResult> {
@@ -148,6 +178,26 @@ export async function runDailyFetch({
       } catch (error) {
         errors.push(error);
       }
+    }
+  }
+  // Each Competition's failure is collected rather than thrown, on the same
+  // terms as every source above it: one league's dead token must not cost
+  // another league its schedule, and the run still fails loudly at the end.
+  for (const competition of await competitionsReadingFootballDataOrg(
+    database,
+    season
+  )) {
+    try {
+      await fetchFootballDataOrgCompetition({
+        database,
+        competition,
+        season,
+        apiToken: footballDataOrgToken,
+        http,
+        now: () => observedAt
+      });
+    } catch (error) {
+      errors.push(error);
     }
   }
   try {

@@ -48,7 +48,8 @@ describe("rehearsing a migration against a copy of the record", () => {
     expect(rehearsal.applied).toEqual([
       "0022_the_competition_dimension.sql",
       "0023_dashboard_reads_the_competition_column.sql",
-      "0024_history_and_xg_know_their_competition.sql"
+      "0024_history_and_xg_know_their_competition.sql",
+      "0025_a_committed_gameweek_deadline_is_immutable.sql"
     ]);
     // The record the copy carried, not a shape asserted about the schema: an
     // operator reading a rehearsal needs to see that it ran over rows.

@@ -13,6 +13,7 @@ try {
     database,
     season: config.season,
     footballDataSeason: config.footballDataSeason,
+    footballDataOrgToken: config.footballDataOrgToken,
     http: nodeHttpFetcher,
     now: () => new Date()
   });

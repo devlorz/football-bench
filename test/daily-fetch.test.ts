@@ -4,12 +4,18 @@ import {
   runDailyFetch,
   StaleFootballDataSeasonError
 } from "../src/fetch/daily-fetch.js";
+import {
+  StaleCompetitionSourceError
+} from "../src/football-data-org/fetch-competition.js";
 import { archivedBody } from "./archived-fixture.js";
 import { resetSchema } from "./schema-fixture.js";
 
 const { Client } = pg;
 
 const UNDERSTAT_LEAGUE_DATA_URL = "https://understat.com/getLeagueData/EPL/2026";
+
+const LA_LIGA_MATCHES_URL =
+  "https://api.football-data.org/v4/competitions/PD/matches?season=2026";
 
 const SUMMER_TRANSFERS_URL =
   "https://en.wikipedia.org/w/index.php"
@@ -76,10 +82,82 @@ describe("the daily fetch", () => {
     await client.query(
       `truncate
          historical_matches, fpl_players, fixtures, gameweeks, raw_snapshots,
-         understat_match_xg, squad_changes
+         understat_match_xg, squad_changes, competitions
        restart identity cascade`
     );
   });
+
+  test("reads football-data.org for every listed Competition but the Premier League",
+    async () => {
+      await client.query(
+        "insert into competitions (competition, season) values ('PL', $1), ('PD', $1)",
+        ["2026-27"]
+      );
+      const responses = await sourceResponses([[
+        LA_LIGA_MATCHES_URL,
+        await archivedBody("football-data-org-2026-27-PD.json.gz")
+      ]]);
+      const requested: string[] = [];
+
+      await runDailyFetch({
+        database: client,
+        season: "2026-27",
+        footballDataSeason: "2025-26",
+        footballDataOrgToken: "a-football-data-org-token",
+        now: () => new Date("2026-08-21T17:00:00.000Z"),
+        http: async (url: string) => {
+          requested.push(url);
+          return { status: 200, body: responses.get(url) ?? "" };
+        }
+      });
+
+      // The Premier League never reaches football-data.org, and La Liga is
+      // read once. The dispatch is the `competitions` row and nothing else:
+      // no branch above names either league.
+      expect(requested.filter((url) => url.includes("api.football-data.org")))
+        .toEqual([LA_LIGA_MATCHES_URL]);
+
+      const { rows } = await client.query(
+        `select competition, count(*)::int as fixtures
+           from fixtures where season = $1
+          group by competition order by competition`,
+        ["2026-27"]
+      );
+      expect(rows).toEqual([
+        { competition: "PD", fixtures: 8 },
+        { competition: "PL", fixtures: 380 }
+      ]);
+    });
+
+  test("a Competition whose source is unusable does not cost another its fetch",
+    async () => {
+      await client.query(
+        "insert into competitions (competition, season) values ('PL', $1), ('PD', $1)",
+        ["2026-27"]
+      );
+      const responses = await sourceResponses([[
+        LA_LIGA_MATCHES_URL,
+        '{"matches": []}'
+      ]]);
+
+      await expect(runDailyFetch({
+        database: client,
+        season: "2026-27",
+        footballDataSeason: "2025-26",
+        footballDataOrgToken: "a-football-data-org-token",
+        now: () => new Date("2026-08-21T17:00:00.000Z"),
+        http: async (url: string) => ({
+          status: 200,
+          body: responses.get(url) ?? ""
+        })
+      })).rejects.toThrow(StaleCompetitionSourceError);
+
+      // Loud, and the Premier League's day still landed.
+      const { rows } = await client.query(
+        "select count(*)::int as fixtures from fixtures where competition = 'PL'"
+      );
+      expect(rows[0]?.fixtures).toBe(380);
+    });
 
   test("re-running unchanged source data duplicates neither rows nor snapshots", async () => {
     const responses = await sourceResponses();
@@ -87,6 +165,7 @@ describe("the daily fetch", () => {
       database: client,
       season: "2026-27",
       footballDataSeason: "2025-26",
+      footballDataOrgToken: null,
       now: () => new Date("2026-08-21T17:00:00.000Z"),
       http: async (url: string) => ({
         status: 200,
@@ -130,6 +209,7 @@ describe("the daily fetch", () => {
       database: client,
       season: "2026-27",
       footballDataSeason: "2025-26",
+      footballDataOrgToken: null,
       now: () => new Date("2026-08-21T17:00:00.000Z"),
       http: async (url: string) => ({
         status: 200,
@@ -173,6 +253,7 @@ describe("the daily fetch", () => {
       database: client,
       season: "2026-27",
       footballDataSeason: "2025-26",
+      footballDataOrgToken: null,
       now: () => new Date("2026-08-21T17:00:00.000Z"),
       http: async (url) => url.startsWith("https://understat.com/")
         ? { status: 503, body: "<html>down for maintenance" }
@@ -211,6 +292,7 @@ describe("the daily fetch", () => {
       database: client,
       season: "2026-27",
       footballDataSeason: "2025-26",
+      footballDataOrgToken: null,
       now: () => new Date("2026-08-21T17:00:00.000Z"),
       http: async (url) => ({
         status: 200,
@@ -236,6 +318,7 @@ describe("the daily fetch", () => {
       database: client,
       season: "2026-27",
       footballDataSeason: "2025-26",
+      footballDataOrgToken: null,
       now: () => new Date("2026-08-21T17:00:00.000Z"),
       http: async (url) => ({
         status: 200,
@@ -268,6 +351,7 @@ describe("the daily fetch", () => {
       database: client,
       season: "2026-27",
       footballDataSeason: "2025-26",
+      footballDataOrgToken: null,
       now: () => new Date("2026-08-21T17:30:00.000Z"),
       http: async (url) => ({
         status: 200,

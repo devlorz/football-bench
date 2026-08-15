@@ -34,6 +34,14 @@ export interface DailyFetchJobConfig {
   databaseUrl: string;
   season: string;
   footballDataSeason: string;
+  /**
+   * Optional, unlike every other credential here: the Premier League reads
+   * the FPL API and needs none, so a deployment that runs one league is not
+   * asked for a secret it cannot spend. A listed Competition that does read
+   * football-data.org refuses its own fetch loudly when this is absent, which
+   * puts the error where the missing token actually matters.
+   */
+  footballDataOrgToken: string | null;
 }
 
 /**
@@ -174,7 +182,12 @@ export function readDailyFetchJobConfig(
   if (!/^\d{4}-\d{2}$/.test(footballDataSeason)) {
     throw new Error("FOOTBALL_DATA_SEASON must use YYYY-YY format");
   }
-  return { databaseUrl, season, footballDataSeason };
+  return {
+    databaseUrl,
+    season,
+    footballDataSeason,
+    footballDataOrgToken: environment.FOOTBALL_DATA_ORG_TOKEN?.trim() || null
+  };
 }
 
 export function readFetchJobConfig(
@@ -325,8 +338,7 @@ export function readFplRehearsalJobConfig(
 export function readDryRunJobConfig(
   environment: NodeJS.ProcessEnv
 ): DryRunJobConfig {
-  const { databaseUrl, season, footballDataSeason } =
-    readDailyFetchJobConfig(environment);
+  const dailyFetch = readDailyFetchJobConfig(environment);
   const { gameweek } = readFetchJobConfig(environment);
   const at = environment.DRY_RUN_AT?.trim() || "deadline-6h";
   const concurrency = Number(
@@ -339,9 +351,7 @@ export function readDryRunJobConfig(
   resolveDryRunInstant(at, new Date(0));
 
   return {
-    databaseUrl,
-    season,
-    footballDataSeason,
+    ...dailyFetch,
     gameweek,
     at,
     concurrency
@@ -458,8 +468,7 @@ export function readPreflightJobConfig(
 export function readPreviewJobConfig(
   environment: NodeJS.ProcessEnv
 ): PreviewJobConfig {
-  const { databaseUrl, season, footballDataSeason } =
-    readDailyFetchJobConfig(environment);
+  const dailyFetch = readDailyFetchJobConfig(environment);
   const { gameweek } = readFetchJobConfig(environment);
   const concurrency = Number(
     environment.PREDICT_CONCURRENCY?.trim() || String(SEASON_ROSTER_SIZE)
@@ -470,9 +479,7 @@ export function readPreviewJobConfig(
   const openRouterApiKey = required(environment, "OPENROUTER_API_KEY");
 
   return {
-    databaseUrl,
-    season,
-    footballDataSeason,
+    ...dailyFetch,
     gameweek,
     concurrency,
     openRouterApiKey

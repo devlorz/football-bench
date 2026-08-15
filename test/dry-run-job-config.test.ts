@@ -15,6 +15,7 @@ describe("the dry run job configuration", () => {
       databaseUrl: "postgresql://archive/real",
       season: "2026-27",
       footballDataSeason: "2025-26",
+      footballDataOrgToken: null,
       gameweek: 1,
       at: "deadline-6h",
       concurrency: SEASON_ROSTER_SIZE

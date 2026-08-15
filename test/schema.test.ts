@@ -594,6 +594,55 @@ describe("the benchmark database", () => {
     expect(fixture.rows).toEqual([{ gw: 2, locked_in_gw: 1 }]);
   });
 
+  test("keeps a Gameweek's deadline once a Fixture has locked into it",
+    async () => {
+      await client.query(
+        `insert into gameweeks (season, gw, deadline_at) values
+           ('2026-27', 1, '2026-08-21T17:30:00Z'),
+           ('2026-27', 2, '2026-08-28T17:30:00Z');
+         insert into fixtures (
+           season, fixture_id, gw, locked_in_gw, home_team, away_team, kickoff_at
+         ) values (
+           '2026-27', 1, 1, 1, 'Arsenal', 'Coventry City',
+           '2026-08-21T19:00:00Z'
+         )`
+      );
+
+      // Nothing has committed under Gameweek 2, so its deadline still follows
+      // the schedule — which is the state a Competition adopted mid-Season
+      // arrives in, and the reason the condition is not the clock.
+      await client.query(
+        `update gameweeks set deadline_at = '2026-08-28T15:00:00Z'
+          where season = '2026-27' and gw = 2`
+      );
+
+      await expect(client.query(
+        `update gameweeks set deadline_at = '2026-08-21T15:00:00Z'
+          where season = '2026-27' and gw = 1`
+      )).rejects.toMatchObject({
+        code: "55000",
+        message: "a Gameweek deadline is immutable once a Fixture has locked into it"
+      });
+
+      // Rewriting the value it already holds is the ordinary case: every fetch
+      // upserts the deadlines it derived.
+      await client.query(
+        `update gameweeks set deadline_at = '2026-08-21T17:30:00Z'
+          where season = '2026-27' and gw = 1`
+      );
+
+      const deadlines = await client.query(
+        "select gw, deadline_at from gameweeks order by gw"
+      );
+      expect(deadlines.rows.map(({ gw, deadline_at: at }) => [
+        gw,
+        (at as Date).toISOString()
+      ])).toEqual([
+        [1, "2026-08-21T17:30:00.000Z"],
+        [2, "2026-08-28T15:00:00.000Z"]
+      ]);
+    });
+
   test("refuses a Prediction for a Fixture that has no Lock", async () => {
     await client.query(
       `insert into gameweeks (season, gw, deadline_at)

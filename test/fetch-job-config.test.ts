@@ -14,8 +14,19 @@ describe("the fetch job configuration", () => {
     })).toEqual({
       databaseUrl: "postgresql://localhost/benchmark",
       season: "2026-27",
-      footballDataSeason: "2025-26"
+      footballDataSeason: "2025-26",
+      footballDataOrgToken: null
     });
+
+    // A Competition other than the Premier League reads football-data.org and
+    // needs the token; a deployment running only the league that does not is
+    // never asked for it.
+    expect(readDailyFetchJobConfig({
+      DATABASE_URL: "postgresql://localhost/benchmark",
+      SEASON: "2026-27",
+      FOOTBALL_DATA_SEASON: "2025-26",
+      FOOTBALL_DATA_ORG_TOKEN: "  token  "
+    })).toMatchObject({ footballDataOrgToken: "token" });
 
     expect(() => readDailyFetchJobConfig({
       DATABASE_URL: "postgresql://localhost/benchmark",

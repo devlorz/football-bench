@@ -1,0 +1,409 @@
+import pg from "pg";
+import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import {
+  fetchFootballDataOrgCompetition,
+  FootballDataOrgHttpError,
+  FootballDataOrgValidationError,
+  KickoffInsideDeadlineError,
+  MissingFootballDataOrgTokenError,
+  parseFootballDataOrgMatches,
+  StaleCompetitionSourceError
+} from "../src/football-data-org/fetch-competition.js";
+import type { HttpFetcher } from "../src/http.js";
+import { archivedBody } from "./archived-fixture.js";
+import { resetSchema } from "./schema-fixture.js";
+
+const { Client } = pg;
+
+const SEASON = "2026-27";
+const COMPETITION = "PD";
+const TOKEN = "a-football-data-org-token";
+
+/**
+ * A football-data.org v4 `/competitions/PD/matches` body: La Liga's opening two
+ * matchdays in the shape the API documents, envelope fields and all, including
+ * the three opening Fixtures ADR-0036 names as already carrying late-August
+ * dates and one postponed Fixture in matchday 2.
+ *
+ * Constructed to the documented shape rather than recorded off the wire — the
+ * free-tier token this repository will fetch with does not exist yet, and a
+ * parser test that waited for it would be a parser with no test. So this pins
+ * the parser against the format and **cannot** catch the format being wrong,
+ * which is the half of spec story 36 that stays open: ticket 3's snapshot box
+ * is deliberately unticked, and ticket 8's day-one live-source checks are
+ * where the first real response replaces this.
+ */
+const snapshot = async (): Promise<string> =>
+  archivedBody("football-data-org-2026-27-PD.json.gz");
+
+const MATCHES_URL =
+  "https://api.football-data.org/v4/competitions/PD/matches?season=2026";
+
+function respondingWith(
+  body: string,
+  status = 200
+): { http: HttpFetcher; requests: { url: string; token: string | undefined }[] } {
+  const requests: { url: string; token: string | undefined }[] = [];
+  const http: HttpFetcher = async (url, options) => {
+    requests.push({ url, token: options?.headers?.["X-Auth-Token"] });
+    return { status, body };
+  };
+  return { http, requests };
+}
+
+describe("a Competition read from football-data.org", () => {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+
+  beforeAll(async () => {
+    await client.connect();
+    await resetSchema(client);
+
+    return async () => {
+      await client.end();
+    };
+  });
+
+  beforeEach(async () => {
+    await client.query(
+      `truncate fixtures, gameweeks, raw_snapshots, models, contexts
+       restart identity cascade`
+    );
+  });
+
+  /** The documented-shape body with one match's status rewritten. */
+  const withStatus = async (
+    id: number,
+    status: string
+  ): Promise<string> => {
+    const body = JSON.parse(await snapshot());
+    for (const match of body.matches) {
+      if (match.id === id) {
+        match.status = status;
+      }
+    }
+    return JSON.stringify(body, null, 2);
+  };
+
+  const fetchAt = async (
+    at: string,
+    body?: string,
+    status = 200
+  ): Promise<{ requests: { url: string; token: string | undefined }[] }> => {
+    const { http, requests } = respondingWith(body ?? await snapshot(), status);
+    await fetchFootballDataOrgCompetition({
+      database: client,
+      competition: COMPETITION,
+      season: SEASON,
+      apiToken: TOKEN,
+      http,
+      now: () => new Date(at)
+    });
+    return { requests };
+  };
+
+  const gameweeks = async (): Promise<{ gw: number; deadline: string }[]> => {
+    const { rows } = await client.query(
+      `select gw, deadline_at from gameweeks
+        where competition = $1 and season = $2 order by gw`,
+      [COMPETITION, SEASON]
+    );
+    return rows.map(({ gw, deadline_at: deadlineAt }) => ({
+      gw: gw as number,
+      deadline: (deadlineAt as Date).toISOString()
+    }));
+  };
+
+  test("parses the documented-shape fixture, envelope fields and all", async () => {
+    const matches = parseFootballDataOrgMatches("test", await snapshot());
+
+    expect(matches).toHaveLength(9);
+    expect(matches[0]).toMatchObject({
+      id: 550001,
+      utcDate: "2026-08-15T17:00:00Z",
+      status: "FINISHED",
+      matchday: 1,
+      homeTeam: { name: "Girona FC" },
+      awayTeam: { name: "Villarreal CF" }
+    });
+    expect(matches[0]?.score.fullTime).toEqual({ home: 2, away: 1 });
+  });
+
+  test("refuses a settled match with no score", async () => {
+    const body = (await snapshot())
+      .replace(/"home": 2,\n(\s*)"away": 1/, '"home": null,\n$1"away": null');
+
+    expect(() => parseFootballDataOrgMatches("test", body))
+      .toThrow(FootballDataOrgValidationError);
+    expect(() => parseFootballDataOrgMatches("test", body))
+      .toThrow("FINISHED match 550001 has no home score");
+  });
+
+  test("refuses a body that is not the documented shape", () => {
+    expect(() => parseFootballDataOrgMatches("test", "<html>429</html>"))
+      .toThrow("test.$: invalid JSON");
+    expect(() => parseFootballDataOrgMatches("test", '{"matches": [{}]}'))
+      .toThrow(FootballDataOrgValidationError);
+  });
+
+  test("writes the Gameweeks, their derived deadlines and the Fixtures",
+    async () => {
+      const { requests } = await fetchAt("2026-08-10T06:00:00Z");
+
+      expect(requests).toEqual([{ url: MATCHES_URL, token: TOKEN }]);
+      // Ninety minutes before each Gameweek's earliest kickoff — the three
+      // Fixtures held back to late August are matchday 1 all the same and do
+      // not move it.
+      expect(await gameweeks()).toEqual([
+        { gw: 1, deadline: "2026-08-15T15:30:00.000Z" },
+        { gw: 2, deadline: "2026-08-22T15:30:00.000Z" }
+      ]);
+
+      const { rows } = await client.query(
+        `select fixture_id, gw, locked_in_gw, home_team, away_team,
+                kickoff_at, result, deferred, unscheduled
+           from fixtures where competition = $1 and season = $2
+          order by fixture_id`,
+        [COMPETITION, SEASON]
+      );
+      // The postponed Fixture is off the calendar entirely: never Locked, so
+      // it holds nothing the feed cannot rebuild (ADR-0024).
+      expect(rows.map(({ fixture_id: id }) => id))
+        .toEqual([
+          550001, 550002, 550003, 550004, 550005, 550006, 550011, 550012
+        ]);
+      expect(rows[0]).toMatchObject({
+        gw: 1,
+        locked_in_gw: null,
+        home_team: "Girona FC",
+        away_team: "Villarreal CF",
+        deferred: false,
+        unscheduled: false,
+        result: { home_goals: 2, away_goals: 1, outcome: "H" }
+      });
+      expect((rows[0]?.kickoff_at as Date).toISOString())
+        .toBe("2026-08-15T17:00:00.000Z");
+      // A Fixture still to be played carries no result to be scored against.
+      expect(rows[3]).toMatchObject({ fixture_id: 550004, result: null });
+    });
+
+  test("archives the response under its own source name", async () => {
+    await fetchAt("2026-08-10T06:00:00Z");
+
+    const { rows } = await client.query(
+      "select source, body from raw_snapshots"
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.source).toBe("football_data_org:2026-27:PD");
+    expect(rows[0]?.body).toBe(await snapshot());
+  });
+
+  test("recomputes an open Gameweek's deadline and freezes a Locked one",
+    async () => {
+      await fetchAt("2026-08-10T06:00:00Z");
+
+      // Kickoffs move: matchday 1's earliest is brought forward inside a
+      // window still open, matchday 2's is pushed back.
+      const moved = (await snapshot())
+        .replace('"2026-08-15T17:00:00Z"', '"2026-08-15T16:00:00Z"')
+        .replace('"2026-08-22T17:00:00Z"', '"2026-08-22T20:00:00Z"');
+      await fetchAt("2026-08-12T06:00:00Z", moved);
+
+      expect(await gameweeks()).toEqual([
+        { gw: 1, deadline: "2026-08-15T14:30:00.000Z" },
+        { gw: 2, deadline: "2026-08-22T18:00:00.000Z" }
+      ]);
+
+      // Past matchday 1's deadline, it is a stored fact. Matchday 2 is still
+      // following the schedule.
+      await fetchAt("2026-08-16T06:00:00Z", await snapshot());
+      expect(await gameweeks()).toEqual([
+        { gw: 1, deadline: "2026-08-15T14:30:00.000Z" },
+        { gw: 2, deadline: "2026-08-22T15:30:00.000Z" }
+      ]);
+    });
+
+  test("alerts and writes nothing when a kickoff lands inside the Lock",
+    async () => {
+      await fetchAt("2026-08-10T06:00:00Z");
+      const before = await gameweeks();
+
+      // Matchday 2 is Locked, and only then does a Fixture appear inside the
+      // deadline the Entrants committed at.
+      await fetchAt("2026-08-22T16:00:00Z");
+      const broughtForward = (await snapshot())
+        .replace('"2026-08-22T17:00:00Z"', '"2026-08-22T14:00:00Z"');
+
+      await expect(fetchAt("2026-08-22T18:00:00Z", broughtForward))
+        .rejects.toThrow(KickoffInsideDeadlineError);
+      await expect(fetchAt("2026-08-22T18:00:00Z", broughtForward))
+        .rejects.toThrow(/Gameweek 2 has a kickoff at 2026-08-22T14:00/);
+
+      expect(await gameweeks()).toEqual(before);
+      const { rows } = await client.query(
+        "select kickoff_at from fixtures where fixture_id = 550011"
+      );
+      expect((rows[0]?.kickoff_at as Date).toISOString())
+        .toBe("2026-08-22T17:00:00.000Z");
+    });
+
+  test("fails loudly when the source produces no Fixture", async () => {
+    await expect(fetchAt("2026-08-10T06:00:00Z", '{"matches": []}'))
+      .rejects.toThrow(StaleCompetitionSourceError);
+    // Still archived: an empty response is the evidence for the alert.
+    const { rows } = await client.query("select count(*) from raw_snapshots");
+    expect(Number(rows[0]?.count)).toBe(1);
+  });
+
+  test("a league that postponed everything is not a stale source", async () => {
+    const body = JSON.parse(await snapshot());
+    for (const match of body.matches) {
+      match.status = "POSTPONED";
+    }
+
+    // The source is working perfectly and the league is in chaos. Sending the
+    // operator to check their Competition code and their token would send them
+    // after a fault that is not theirs.
+    await fetchAt("2026-08-10T06:00:00Z", JSON.stringify(body));
+
+    expect(await gameweeks()).toEqual([]);
+    const { rows } = await client.query("select count(*)::int from fixtures");
+    expect(rows[0]?.count).toBe(0);
+  });
+
+  test("fails loudly on an unusable response, archiving it first", async () => {
+    await expect(
+      fetchAt("2026-08-10T06:00:00Z", "Your API token is invalid.", 403)
+    ).rejects.toThrow(FootballDataOrgHttpError);
+
+    const { rows } = await client.query("select body from raw_snapshots");
+    expect(rows[0]?.body).toBe("Your API token is invalid.");
+    expect(await gameweeks()).toEqual([]);
+  });
+
+  test("says so when the token it needs is absent", async () => {
+    const { http } = respondingWith(await snapshot());
+
+    await expect(fetchFootballDataOrgCompetition({
+      database: client,
+      competition: COMPETITION,
+      season: SEASON,
+      apiToken: null,
+      http,
+      now: () => new Date("2026-08-10T06:00:00Z")
+    })).rejects.toThrow(MissingFootballDataOrgTokenError);
+  });
+
+  test("a Locked Fixture withdrawn from the schedule keeps its Prediction",
+    async () => {
+      await fetchAt("2026-08-10T06:00:00Z");
+      // The Lock the predict path performs (`assignCanonicalLock`), and the
+      // Prediction it was performed for. This is the state ADR-0013 is about:
+      // the Entrants have already committed.
+      await client.query(
+        `insert into models (
+           id, name, base_model, provider, prompt_version, role
+         ) values (
+           'entrant/v1', 'Entrant', 'provider/model', 'provider',
+           'match/2026-27-v1', 'entrant'
+         );
+         insert into contexts (
+           competition, season, gw, track, fixture_id, hash, body
+         ) values ('PD', '2026-27', 2, 'match', 550011, 'hash', 'context');
+         update fixtures set locked_in_gw = 2
+          where competition = 'PD' and season = '2026-27'
+            and fixture_id = 550011;
+         insert into predictions (
+           model_id, competition, season, fixture_id, probs, pred_home,
+           pred_away, context_id, attempts_used, predicted_at
+         )
+         select
+           'entrant/v1', 'PD', '2026-27', 550011,
+           '{"H":0.5,"D":0.3,"A":0.2}', 2, 1, id, 0, '2026-08-22T15:00:00Z'
+         from contexts
+         where competition = 'PD' and season = '2026-27' and fixture_id = 550011`
+      );
+
+      const withdrawn = await withStatus(550011, "POSTPONED");
+      const fixture = async (): Promise<Record<string, unknown>> => {
+        const { rows } = await client.query(
+          `select gw, locked_in_gw, deferred, unscheduled,
+                  (select count(*)::int from predictions p
+                    where p.competition = f.competition
+                      and p.season = f.season
+                      and p.fixture_id = f.fixture_id) as predictions
+             from fixtures f
+            where competition = 'PD' and season = '2026-27'
+              and fixture_id = 550011`
+        );
+        return rows[0] as Record<string, unknown>;
+      };
+
+      await fetchAt("2026-08-23T06:00:00Z", withdrawn);
+      // Kept, not deleted: only a never-Locked Fixture is one the feed can
+      // rebuild (ADR-0024). It leaves the live calendar and its Prediction
+      // stays scoreable in the Gameweek it was Locked in (ADR-0013, ADR-0015).
+      expect(await fixture()).toEqual({
+        gw: 2,
+        locked_in_gw: 2,
+        deferred: true,
+        unscheduled: true,
+        predictions: 1
+      });
+
+      // Observing the same withdrawal again touches nothing.
+      await fetchAt("2026-08-23T07:00:00Z", withdrawn);
+      expect(await fixture()).toEqual({
+        gw: 2,
+        locked_in_gw: 2,
+        deferred: true,
+        unscheduled: true,
+        predictions: 1
+      });
+
+      // Back on the schedule: `unscheduled` reports the live calendar and
+      // clears, `deferred` records history and does not.
+      await fetchAt("2026-08-23T08:00:00Z");
+      expect(await fixture()).toEqual({
+        gw: 2,
+        locked_in_gw: 2,
+        deferred: true,
+        unscheduled: false,
+        predictions: 1
+      });
+    });
+
+  test("adopted mid-Season, splits played Fixtures from unplayed ones",
+    async () => {
+      // The whole schedule arrives for the first time on 18 August, with
+      // matchday 1 Locked on sight. Its Fixtures divide in two, and the
+      // division is the result rather than the Gameweek: 550001–550003 were
+      // played on the 15th and 16th, 550004–550006 are the three held back to
+      // the 25th, 26th and 27th and are still to come.
+      await fetchAt("2026-08-18T06:00:00Z");
+
+      const { rows } = await client.query(
+        `select fixture_id, locked_in_gw, result is not null as played
+           from fixtures
+          where competition = $1 and season = $2 and gw = 1
+          order by fixture_id`,
+        [COMPETITION, SEASON]
+      );
+
+      expect(rows).toEqual([
+        // Played before the record ever saw them. `locked_in_gw` stays null,
+        // which leaves them under their own Locked Gameweek 1: history the
+        // context can read, and work no prediction run will ever pick up.
+        // The predict path selects on `coalesce(locked_in_gw, gw)` and asks
+        // nothing about the result, so a `locked_in_gw` of 2 here would have
+        // put three Fixtures with published scores in front of the Entrants.
+        { fixture_id: 550001, locked_in_gw: null, played: true },
+        { fixture_id: 550002, locked_in_gw: null, played: true },
+        { fixture_id: 550003, locked_in_gw: null, played: true },
+        // Still to be played, and their own Gameweek's Lock has passed, so
+        // they join the next open one (ADR-0015).
+        { fixture_id: 550004, locked_in_gw: 2, played: false },
+        { fixture_id: 550005, locked_in_gw: 2, played: false },
+        { fixture_id: 550006, locked_in_gw: 2, played: false }
+      ]);
+    });
+});

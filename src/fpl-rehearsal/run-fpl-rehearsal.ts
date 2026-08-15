@@ -119,6 +119,9 @@ export async function runFplRehearsal({
       database: target,
       season,
       footballDataSeason: season,
+      // The rehearsal answers every request from its script and calls no live
+      // source, so it holds no token.
+      footballDataOrgToken: null,
       http: createRehearsalFetcher({
         season,
         snapshots: [

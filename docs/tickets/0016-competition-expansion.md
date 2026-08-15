@@ -103,20 +103,128 @@ FPL path observes one at FPL's. Demoable on a temporary Postgres end to end.
 
 **Blocked by:** 1.
 
-- [ ] The fetch dispatches per Competition row: `PL` takes the existing path, untouched;
+- [x] The fetch dispatches per Competition row: `PL` takes the existing path, untouched;
       everything else the football-data.org client, writing the same tables.
-- [ ] A Gameweek with no observed Lock carries `deadline_at` = earliest kickoff minus
+      _One `select competition from competitions where competition <> 'PL'` and a loop —
+      the same shape ticket 2 gave the scheduler and the scorer, so opening a league is an
+      insert in all three places and a branch in none. `src/fpl/fetch-gameweek.ts` is not
+      touched by this ticket at all, which is story 7 read literally.
+      Each Competition's failure joins the daily fetch's collected `errors` rather than
+      throwing where it happens: one league's dead token must not cost another league its
+      schedule, and the run still fails loudly at the end.
+      **The FPL half is not gated on a `competitions` row, and that is asymmetric with the
+      scheduler and the scorer.** Raised by review and left as it is: the FPL fetch is the
+      Premier League by nature (ADR-0035), and the convention ticket 2 and ticket 5 settled
+      is that a PL-only caller states the literal at its own boundary rather than looking
+      itself up — the same reading as `daily-fetch.ts`'s and `fpl-gameweek-context.ts`'s
+      `competition = 'PL'` filters. The asymmetry is also protective in the direction that
+      matters: the fetch is what creates the Gameweeks the scheduler later walks, so a
+      missing row silencing it would leave a record with nothing in it, which is a quieter
+      failure than the one the row is there to prevent. Worth revisiting only alongside the
+      other PL literals, as one decision._
+- [x] A Gameweek with no observed Lock carries `deadline_at` = earliest kickoff minus
       ninety minutes, recomputed every fetch; the derived-deadline rules live in a pure
       module with its own tests.
-- [ ] The first fetch at or past the deadline performs the Lock; from then the deadline is
+      _`src/football-data-org/derived-deadline.ts`, one function over
+      `(kickoffs, storedDeadline, observedAt)` and no clock, database or schedule of its
+      own. It is the only place the Lock's timing is decided._
+- [x] The first fetch at or past the deadline performs the Lock; from then the deadline is
       immutable and the Fixture owns the Gameweek it Locked in (ADR-0015), with postponed
       and unscheduled Fixtures handled by the existing machinery (ADR-0013, ADR-0024).
-- [ ] A kickoff observed earlier than the current derived deadline raises the loud alert
+      _"Performs the Lock" here is the Gameweek's deadline ceasing to be recomputed. The
+      `locked_in_gw` write stays where it already was — `assignCanonicalLock` on the
+      predict path — so this ticket adds no second Lock mechanism; the fetch's only
+      `locked_in_gw` is the FPL path's insert-time one, for a Fixture first seen after its
+      own Gameweek's Lock had passed.
+      **One Locked Gameweek is written anyway**: the one the record has never seen. A
+      Competition adopted after its Season began arrives holding played Gameweeks, and
+      skipping them left their Fixtures with no Gameweek row to point at — a foreign key
+      violation the first test of it found. Its deadline is a fact from birth rather than
+      one that moved.
+      **A Fixture that already has a result is never given a `locked_in_gw`.** Copying the
+      FPL rule whole put every Fixture of a Locked Gameweek into the next open one, which
+      on a Competition adopted mid-Season means three matches with published scores queued
+      for Entrants to predict: the predict path selects on `coalesce(locked_in_gw, gw)`
+      (`predict-gameweek.ts:172`) and asks nothing about the result. The FPL path cannot
+      reach the case — its fetch has always started before Gameweek 1 — but ticket 8's
+      "launch at Gameweek 3" escape hatch makes it a plan here, so the module that claims
+      to support mid-Season adoption has to get it right. A played Fixture keeps
+      `locked_in_gw = null` and stays under its own Locked Gameweek: history the context
+      reads, work no run picks up, and nothing the scorer attributes. **Found by review**;
+      the test that had blessed the old behaviour now asserts the split.
+      A Gameweek whose every Fixture is withdrawn keeps its stored deadline, because there
+      is no kickoff left to derive one from. Deliberate, and recorded at the code.
+      **`migrations/0025` makes the freeze a database rule, not an `if`.** Spec 0016 asks
+      for the deadline to be "immutable — enforced the same way `locked_in_gw` is", and
+      `locked_in_gw` has had a trigger since 0022 while this had one writer's guard; review
+      found the gap. The condition is **not the clock**: "now is past the deadline" depends
+      on `now()`, which every replay, rehearsal and Season seed writes against a simulated
+      instant instead, and it would refuse the first write of a mid-Season adoption — rows
+      Locked on arrival with nothing committed under them. The condition is a Fixture whose
+      `locked_in_gw` points at the Gameweek, which is exactly the trace of a commitment: a
+      Prediction requires a Locked Fixture (0022) and `assignCanonicalLock` is what sets
+      `locked_in_gw` when one is written, so every case where moving the deadline would
+      make a stored record false is covered, and the case it leaves movable is the one
+      where nothing has committed yet. It composes with 0022: `locked_in_gw` is immutable
+      and now so is the instant it was Locked at, so no single `update` can rewrite either
+      half of "these Entrants committed before X". Guarded on `is distinct from` like its
+      sibling, because every fetch upserts the deadlines it derived and rewriting the same
+      value must stay a no-op._
+      The withdrawn set is `matchday is null` plus `POSTPONED`, `SUSPENDED` and
+      `CANCELLED`, which then take the FPL path's three statements unchanged. Reading the
+      status is not optional: football-data.org keeps a postponed match on its old matchday
+      with a placeholder date, so a status-blind parser would leave it on the calendar.
+      **Those three statements are copied from `src/fpl/fetch-gameweek.ts`, not shared with
+      it.** Sharing them would mean editing the FPL path, which story 7 keeps byte-for-byte
+      untouched — so the duplication is the cost of that story and is deliberate. Because
+      it is a copy, the Premier League's coverage proves nothing about it, and it carries
+      its own end-to-end proof: a review found the copy tested only for a Fixture withdrawn
+      before its Lock. "a Locked Fixture withdrawn from the schedule keeps its Prediction"
+      now walks the whole state machine on `PD` rows — Locked with a stored Prediction,
+      withdrawn (kept, `deferred`, `unscheduled`, Prediction retained), withdrawn again
+      (idempotent), restored (`unscheduled` clears, `deferred` does not)._
+- [x] A kickoff observed earlier than the current derived deadline raises the loud alert
       and never silently relocks.
-- [ ] A Competition whose source has produced no rows by its first derived deadline fails
+      _`KickoffInsideDeadlineError`, thrown before the transaction opens, so an alerted
+      fetch writes nothing at all. Two shapes reach it: a kickoff inside a frozen deadline,
+      and a recomputation that would land in the past while the Gameweek is still open —
+      story 13's "shrink `deadline_at` into the past". Loud is the daily fetch failing,
+      which is what opens the issue `fetch.yml` already opens.
+      **A Gameweek the record has never seen cannot breach**, deliberately: it has no
+      deadline to have moved, and without the exception a Competition adopted mid-Season
+      would alert once per Gameweek already played, on a margin nobody was relying on.
+      The two comparisons meet exactly: the Lock is `observedAt >= deadline`, so the breach
+      is `derived <= observedAt`. A strict `<` left `derived === observedAt` belonging to
+      neither — no alert, and a deadline written equal to the instant of writing, a
+      zero-second window recorded as a normal one. **Found by review.**_
+- [x] A Competition whose source has produced no rows by its first derived deadline fails
       the fetch loudly (the per-Competition stale-source guard).
+      _`StaleCompetitionSourceError`, and **stricter than the box**: it fires on any empty
+      response, not only one after a deadline. With no rows there is no derived deadline to
+      be past, so the box's condition can never be met by the case it is about — and a
+      listed Competition is one an operator opened because they want it fetched, against
+      leagues that all publish a full schedule before the Season. An empty response is a
+      wrong code, a wrong Season or a dead token, every time.
+      It counts **what the source sent**, not what survived the withdrawal filter. Counting
+      the survivors made a league that postponed everything report "the source produced no
+      Fixture; check the Competition code and the token" — sending an operator after a
+      fault that was not theirs, on the one day they could least afford it. **Found by
+      review.**_
 - [ ] Every response is stored in raw snapshots under its own source name, and the parser
       is tested against recorded snapshots.
+      _**Half done, and left unticked for the half that is not.** The archiving is real:
+      `football_data_org:${season}:${competition}`, written before validation like every
+      other source, so a 403 body is still evidence — `test/fetch-football-data-org-`
+      `competition.test.ts` proves both.
+      The parser is tested against a **constructed** fixture, not recorded bytes: no
+      free-tier token exists for this repository yet, and a parser that waited for one
+      would be a parser with no test at all. It carries the full documented v4 envelope
+      (`filters`, `resultSet`, `competition`, per-match `area`/`season`/`odds`), La Liga's
+      opening two matchdays including the two Fixtures ADR-0036 names as already held back
+      to late August, and one postponed Fixture. What it pins is the parser against the
+      format — it cannot catch the format being wrong, which is exactly what spec story 36
+      asks for. **Ticket 8's day-one live-source checks are where the first real response
+      is captured; ticking this box is part of that change, not this one.**_
 
 ## 4 — Ten seats under a frozen La Liga prompt
 

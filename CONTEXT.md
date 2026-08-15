@@ -104,6 +104,10 @@ incoherent.
 **Lock**:
 The instant after which a Prediction for a Fixture is no longer eligible. A Prediction is
 only scored if it existed before its Lock. Every Entrant for a Fixture shares the same Lock.
+The Premier League's is published by FPL; every other Competition's is **derived** — its
+Gameweek's earliest kickoff minus ninety minutes, recomputed at every fetch until a Lock is
+observed at it and frozen from then (ADR-0036). Derived or published, it is one stored
+instant per Gameweek and means the same thing.
 
 **Gap**:
 A Fixture for which an Entrant produced no valid Prediction. Gaps are recorded, never

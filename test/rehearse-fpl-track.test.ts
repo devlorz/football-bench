@@ -109,6 +109,7 @@ describe("rehearsing the FPL track over archived Gameweeks", () => {
       database: client,
       season: SEASON,
       footballDataSeason: FOOTBALL_DATA_SEASON,
+      footballDataOrgToken: null,
       http: createRehearsalFetcher({
         season: SEASON,
         snapshots: [
