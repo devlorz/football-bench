@@ -13,19 +13,25 @@ import { readFetchJobConfig } from "./config.js";
  */
 const { Client } = pg;
 const config = readFetchJobConfig(process.env);
+// Defaulted, unlike the backfill's, because nothing here writes: the worst a
+// wrong Competition does is print the wrong league's packet to a terminal,
+// where it is immediately obvious. The Premier League stays the bare
+// `npm run context:show`, which is what every runbook that names this command
+// already assumes.
+const competition = process.env.COMPETITION?.trim() || "PL";
 
 const database = new Client({ connectionString: config.databaseUrl });
 await database.connect();
 try {
   const fixtures = await database.query<MatchPromptFixture>(
     `select fixture_id, home_team, away_team, kickoff_at from fixtures
-      where competition = 'PL' and season = $1
-        and coalesce(locked_in_gw, gw) = $2 and not deferred
+      where competition = $1 and season = $2
+        and coalesce(locked_in_gw, gw) = $3 and not deferred
       order by kickoff_at, fixture_id`,
-    [config.season, config.gameweek]
+    [competition, config.season, config.gameweek]
   );
   const data = await loadMatchContextData(
-    database, "PL", config.season, config.gameweek
+    database, competition, config.season, config.gameweek
   );
   for (const fixture of fixtures.rows) {
     console.log(`\n${"=".repeat(76)}`);
@@ -37,7 +43,8 @@ try {
     console.log(buildMatchContext(fixture, data));
   }
   console.log(
-    `\n${fixtures.rows.length} fixtures, `
+    `\n${competition} ${config.season} Gameweek ${config.gameweek}: `
+    + `${fixtures.rows.length} fixtures, `
     + `${data.historicalMatches.length} historical matches behind the form `
     + `lines, ${data.fplPlayers.length} FPL player rows`
   );
