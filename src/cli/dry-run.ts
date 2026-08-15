@@ -107,7 +107,7 @@ try {
 
   console.log(
     `\n${"=".repeat(72)}\n`
-    + `  Gameweek \n`
+    + `${competition} ${config.season} Gameweek ${config.gameweek}\n`
     + `Deadline:    ${result.deadline.toISOString()}\n`
     + `Ran at:      ${result.instant.toISOString()} (${config.at})\n`
     + `Contexts:    ${result.contexts.length}\n`

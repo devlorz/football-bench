@@ -1,6 +1,7 @@
 import type { Client } from "pg";
 import type { GapAlert } from "../predictions/gap-alert.js";
 import { predictGameweek } from "../predictions/predict-gameweek.js";
+import { matchPromptOf } from "../predictions/openrouter-entrant.js";
 import { createArchiveReplayFetcher } from "./archive-replay-fetcher.js";
 import { prepareArchivedGameweek } from "./prepare-archived-gameweek.js";
 import { resolveDryRunInstant } from "./dry-run-clock.js";
@@ -175,7 +176,14 @@ export async function runDryRun({
     contexts: await readContexts(target, competition, season, gameweek),
     phases,
     expected: expectedDryRunOutcome({
-      entrants: archive.entrants.filter(({ role }) => role === "entrant"),
+      // The seats of this Competition, not every seat in the archive. Since
+      // ticket 4 each Competition freezes its own Prompt Version and the
+      // prediction path selects on it, so a roster of thirty across three
+      // versions answers a Gameweek with ten — and an expectation counting all
+      // thirty reported four hundred and twenty Gaps against a hundred and
+      // forty that were right.
+      entrants: archive.entrants.filter(({ role, prompt_version: version }) =>
+        role === "entrant" && version === matchPromptOf(competition).version),
       snapshots: archive.snapshots,
       fixtureIds,
       beforeLock: instant.getTime() < deadline.getTime()

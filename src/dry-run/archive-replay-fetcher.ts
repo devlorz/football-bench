@@ -1,4 +1,6 @@
 import type { HttpFetcher, HttpRequestOptions } from "../http.js";
+import { squadChangeSource } from "../squad-changes/fetch-squad-changes.js";
+import { transferWindowByPage } from "../squad-changes/transfer-window.js";
 
 export interface ArchivedSnapshot {
   source: string;
@@ -68,6 +70,51 @@ function understatSource(url: string): string | null {
   return `understat:${startYear}-${endYear}:${league}`;
 }
 
+const FOOTBALL_DATA_ORG_URL =
+  /^https:\/\/api\.football-data\.org\/v4\/competitions\/([A-Z0-9]+)\/matches\?season=(\d{4})$/;
+
+/**
+ * football-data.org names a Season by the calendar year it opens in, the same
+ * translation Understat's URL needs. Absent until La Liga's first rehearsal,
+ * which is when it mattered: this is the source a non-`PL` Competition gets
+ * its whole schedule from, and without it the replay reported no known source
+ * for bytes it was holding.
+ */
+function footballDataOrgSource(url: string): string | null {
+  const match = FOOTBALL_DATA_ORG_URL.exec(url);
+  if (match === null) {
+    return null;
+  }
+  const [, competition, startYear] = match;
+  const endYear = String((Number(startYear) + 1) % 100).padStart(2, "0");
+  return `football_data_org:${startYear}-${endYear}:${competition}`;
+}
+
+const WIKIPEDIA_TRANSFERS_URL =
+  /^https:\/\/en\.wikipedia\.org\/w\/index\.php\?title=([^&]+)&action=raw$/;
+
+/**
+ * A transfer list is archived under its window's name and requested by its
+ * page title, so the title is translated back through the windows themselves.
+ *
+ * Missing since Squad Changes joined the context, and quiet the whole time for
+ * the reason ADR-0031 makes their absence quiet: an unreachable Wikipedia is a
+ * stated absence rather than a failure, so every rehearsal since has replayed
+ * a packet whose Squad Changes section read "no Squad Change data stored" over
+ * an archive that held the page. The rehearsed context and the production
+ * context differed, and nothing in the run pointed at it — the same sentence
+ * the Understat gap above earned, one source later.
+ */
+function squadChangeSourceFor(url: string): string | null {
+  const match = WIKIPEDIA_TRANSFERS_URL.exec(url);
+  if (match?.[1] === undefined) {
+    return null;
+  }
+  const page = decodeURIComponent(match[1]).replace(/_/g, " ");
+  const window = transferWindowByPage(page);
+  return window === undefined ? null : squadChangeSource(window);
+}
+
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 /**
@@ -99,6 +146,8 @@ function archiveSource(
   return FPL_SOURCE_BY_URL.get(url)
     ?? footballDataSource(url)
     ?? understatSource(url)
+    ?? footballDataOrgSource(url)
+    ?? squadChangeSourceFor(url)
     ?? openRouterSource(url, options);
 }
 

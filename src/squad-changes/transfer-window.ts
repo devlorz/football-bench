@@ -126,3 +126,16 @@ export function squadChangeWindow(
     deadline.getTime() >= window.opensOn.getTime()
     && deadline.getTime() <= window.closesOn.getTime() + GATE_DAYS * DAY_MS);
 }
+
+/**
+ * The window a Wikipedia page title belongs to, for a reader holding a URL and
+ * needing the name its snapshot was archived under. The archive replay is that
+ * reader: a page title is what a request carries and a window name is what the
+ * bytes are filed as, and nothing else in the system needs to walk that
+ * direction.
+ */
+export function transferWindowByPage(page: string): TransferWindow | undefined {
+  return Object.values(TRANSFER_WINDOWS)
+    .flat()
+    .find((window) => window.page === page);
+}
