@@ -63,6 +63,14 @@ One league the match track runs, named by football-data.org's code — `PL`, `PD
 `BL1`, `FL1`. Each is its own benchmark with its own leaderboard; no ranking spans two.
 _Avoid_: league (in identifiers), tournament
 
+**Active Competition**:
+A Competition the benchmark is running for a Season. A Competition that is not Active has a
+leaderboard that has not opened — distinct from an Active one whose first Gameweek is not
+scored yet, which will fill. Whether a Competition becomes Active is a decision, not a
+schedule: opening one is an act and closing one is an act, and nothing records an intention
+to open.
+_Avoid_: enabled, live
+
 **Division**:
 One tier of a Competition's league pyramid as football-data.co.uk names it, stored on
 every historical result and rendered as a heading in the packet — "Premier League" and
