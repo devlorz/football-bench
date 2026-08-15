@@ -7,7 +7,8 @@ context, per-Competition seats, and La Liga live. Source:
 [CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0035–0038](../adr/).
 
 Work the **frontier**: after ticket 1, four tickets open at once (2, 3, 4, 5). Ticket 9
-waits on an external event — Premier League Gameweek 1 settling — and on nothing here.
+waited on an external event — a first Gameweek settling — and La Liga's arrived before the
+Premier League's.
 
 ## Where this stands, 2026-08-15
 
@@ -15,12 +16,14 @@ waits on an external event — Premier League Gameweek 1 settling — and on not
 seats under `match-pd/2026-27-v1`, Gameweek 1 in the record at sixty Predictions with no
 Gap, and Gameweek 2 rehearsed clean. The Premier League runs beside it as it always has.
 
-**Serie A, the Bundesliga and Ligue 1 are not opened and are not next by default.**
-ADR-0035 gates them on two things, and only the first is done: La Liga has now completed a
-full fetch → Lock → predict → score cycle, but the per-Fixture cost has still not been read
-(ticket 9). Every code path they need is in — the Competition dimension, the derived Lock,
-the per-Competition context, seats and maps — so opening one is the runbook's six edits
-plus its curation, not new machinery. What is deliberately absent is the decision.
+**Serie A, the Bundesliga and Ligue 1 are not opened, and what is missing is a decision.**
+ADR-0035 gated them on two things and both are now answered: La Liga has completed a full
+fetch → Lock → predict → score cycle, and the per-Fixture cost has been read off its
+Gameweek 1 — **$0.1845 per Fixture**, **$323.24** for a five-Competition Season against
+**$140.22** for the two running now
+([report](../reports/2026-08-15-five-league-price.md)). Every code path they need is in —
+the Competition dimension, the derived Lock, the per-Competition context, seats and maps —
+so opening one is the runbook's six edits plus its curation, not new machinery.
 
 Two things a fourth league would meet first, both recorded below: the stale-source guard is
 still the Premier League's alone and each Competition needs its own before its own first
@@ -1008,13 +1011,36 @@ for `PL` since the Season opened.
 ## 9 — The five-league price read from Gameweek 1
 
 **What to build:** The number the expansion's remaining gate needs: the real per-Fixture
-cost of the match track, read from Premier League Gameweek 1's recorded attempts, and the
-five-league projection written down where the gate decision for the other three
+cost of the match track, read from the first Gameweek any Competition actually played, and
+the five-league projection written down where the gate decision for the other three
 Competitions can cite it.
 
-**Blocked by:** None — waits only on Premier League Gameweek 1 settling.
+**Blocked by:** None — waited on a first Gameweek settling, and La Liga's arrived first.
 
-- [ ] Per-Fixture prompt and completion cost is read from the recorded attempts, per
+- [x] Per-Fixture prompt and completion cost is read from the recorded attempts, per
       entrant route.
-- [ ] The five-Competition projection is recorded as a report, and the ADR-0035 gate for
+      _Read from `PD` Gameweek 1, not the Premier League's: La Liga went first and a
+      per-Fixture cost does not care which league produced it. The acceptance text is
+      amended to say so._
+
+      _**And read as money rather than as tokens.** Every OpenRouter response carries
+      `usage.cost` — what the provider actually charged — and the write path stores the
+      response verbatim (ADR-0007), so the figure is the record's own arithmetic over
+      money already spent rather than tokens priced against a rate sheet that has since
+      moved. No price list exists in this repository and none had to be invented._
+
+- [x] The five-Competition projection is recorded as a report, and the ADR-0035 gate for
       Serie A, the Bundesliga and Ligue 1 cites it.
+      _[docs/reports/2026-08-15-five-league-price.md](../reports/2026-08-15-five-league-price.md).
+      **$1.1069** for the Gameweek, **$0.1845 per Fixture** across all ten seats, and
+      **$323.24** for a five-Competition Season against **$140.22** for the two now
+      running. Fixtures per Season differ by league — 380 for a twenty-club Competition,
+      306 for eighteen — so the five-league total is not five times anything._
+
+      _What the shape of the bill says: one seat is 32% of it, the field spans 36× from
+      cheapest to dearest, and Repairs are 5%. The report states what the number is not,
+      at more length than what it is — one Gameweek, one Competition, six Fixtures because
+      four were deferred, and the Match track only._
+
+      _**The gate is now the operator's to take.** Both of ADR-0035's conditions are
+      answered; the report deliberately does not answer whether $323.24 is acceptable._
