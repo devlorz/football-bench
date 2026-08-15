@@ -9,6 +9,26 @@ context, per-Competition seats, and La Liga live. Source:
 Work the **frontier**: after ticket 1, four tickets open at once (2, 3, 4, 5). Ticket 9
 waits on an external event — Premier League Gameweek 1 settling — and on nothing here.
 
+## Where this stands, 2026-08-15
+
+**One league has opened, not four.** La Liga (`PD`) is live: listed in `competitions`, ten
+seats under `match-pd/2026-27-v1`, Gameweek 1 in the record at sixty Predictions with no
+Gap, and Gameweek 2 rehearsed clean. The Premier League runs beside it as it always has.
+
+**Serie A, the Bundesliga and Ligue 1 are not opened and are not next by default.**
+ADR-0035 gates them on two things, and only the first is done: La Liga has now completed a
+full fetch → Lock → predict → score cycle, but the per-Fixture cost has still not been read
+(ticket 9). Every code path they need is in — the Competition dimension, the derived Lock,
+the per-Competition context, seats and maps — so opening one is the runbook's six edits
+plus its curation, not new machinery. What is deliberately absent is the decision.
+
+Two things a fourth league would meet first, both recorded below: the stale-source guard is
+still the Premier League's alone and each Competition needs its own before its own first
+deadline, and `FOOTBALL_DATA_SEASON` is a single variable for every league while
+football-data.co.uk publishes one file at a time.
+
+---
+
 One note on shape: ticket 1 is this set's wide refactor, and it is deliberately **not**
 sequenced as expand–contract. ADR-0035 chose a single rehearsed pass: carrying two schemas
 side by side through the most deadline-critical week of the Season is a larger risk than
@@ -932,6 +952,35 @@ for `PL` since the Season opened.
       football-data.co.uk publishes the 2026-27 files, which it had not as of
       2026-08-15; §4 calls leaving it behind the dangerous direction, and the guard is
       what makes the danger loud rather than silent. Watch for the file, then advance.
+
+      _Checked 2026-08-15, and **not one of the four files exists**. Every request is
+      answered the way the runbook warns — a redirect to a near-miss filename returning
+      `200`:_
+
+      ```
+      2627/E0.csv   → 301 → 2627/EC.csv  (English Conference)
+      2627/SP1.csv  → 301 → 2627/P1.csv  (Portuguese first division)
+      2627/E1.csv   → 300 Multiple Choices
+      ```
+
+      _So advancing today would fetch the English fifth tier as the Premier League and
+      Portugal as La Liga. The per-file `Div` check refuses both, loudly, for every
+      league equally — nothing lands wrong and nothing lands quietly._
+
+      _**The variable is one and the files publish one at a time.** If England's lands
+      before Spain's, advancing satisfies the Premier League's guard and fails La Liga's
+      fetch every day until Spain's appears — collected as that Competition's error, so
+      the other league's day still lands, but noisy enough to bury a real failure. The
+      guard itself names `PL` on both halves, so a lagging La Liga is caught by its own
+      fetch and not by the guard._
+
+      _Check before advancing, and require four `200`s:_
+
+      ```bash
+      for d in E0 E1 SP1 SP2; do printf "%s: " "$d"; \
+        curl -sI --max-time 20 \
+          "https://www.football-data.co.uk/mmz4281/2627/$d.csv" | head -1; done
+      ```
 - [ ] If curation slipped past Gameweek 2, the escape hatch was taken as decided —
       launch at Gameweek 3 with the sections that are ready — and the stored contexts
       record exactly what shipped.
