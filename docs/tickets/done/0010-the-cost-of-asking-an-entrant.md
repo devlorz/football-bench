@@ -2,10 +2,10 @@
 
 Four tracer-bullet slices that stop the FPL track paying for its own plumbing: replay on
 retry, a timeout knob, a uniform cache breakpoint, and the opening sentence. Source:
-[spec 0010](../specs/0010-the-cost-of-asking-an-entrant.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0001–0026](../adr/), especially
-[ADR 0025](../adr/0025-the-opening-retry-replays-the-recorded-legal-action.md) and
-[ADR 0026](../adr/0026-a-prompt-version-no-context-has-used-may-still-be-amended.md).
+[spec 0010](../../specs/0010-the-cost-of-asking-an-entrant.md). Vocabulary:
+[CONTEXT.md](../../../CONTEXT.md). Decisions: [ADR 0001–0026](../../adr/), especially
+[ADR 0025](../../adr/0025-the-opening-retry-replays-the-recorded-legal-action.md) and
+[ADR 0026](../../adr/0026-a-prompt-version-no-context-has-used-may-still-be-amended.md).
 
 Work the **frontier**: all four slices are independent and can run in parallel.
 Everything lands before the season's first FPL Lock — the sentence absolutely (ADR

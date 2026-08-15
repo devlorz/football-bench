@@ -2,10 +2,10 @@
 
 Three tracer-bullet slices that put two Settled performance windows on every pool line and
 freeze the result as `fpl/2026-27-v2` before the FPL track's first Lock. Source:
-[spec 0005](../specs/0005-player-performance-in-the-fpl-context.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0001–0020](../adr/), especially
-[ADR 0018](../adr/0018-raw-signals-only-in-the-entrant-context.md) and
-[ADR 0020](../adr/0020-per-player-gameweek-performance-joins-the-fpl-context-for-2026-27-v2.md).
+[spec 0005](../../specs/0005-player-performance-in-the-fpl-context.md). Vocabulary:
+[CONTEXT.md](../../../CONTEXT.md). Decisions: [ADR 0001–0020](../../adr/), especially
+[ADR 0018](../../adr/0018-raw-signals-only-in-the-entrant-context.md) and
+[ADR 0020](../../adr/0020-per-player-gameweek-performance-joins-the-fpl-context-for-2026-27-v2.md).
 
 Work the **frontier**: the first two tickets are independent and can run in parallel; the
 opening ticket needs both.

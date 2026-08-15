@@ -3,9 +3,9 @@
 Four slices that take the codebase from ADR-0014's nine to ADR-0034's ten: a prefactor
 that gives the rehearsal's world a falling price, the atomic move of everything the
 roster size guards, the dashboard skeleton, and the tests that prove the road in refuses
-its half-done states. Source: [spec 0015](../specs/0015-the-roster-refreshes-to-ten-entrants.md).
-Vocabulary: [CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0001–0034](../adr/), especially
-[ADR-0034](../adr/0034-the-roster-refreshes-to-ten-entrants-before-the-first-lock.md).
+its half-done states. Source: [spec 0015](../../specs/0015-the-roster-refreshes-to-ten-entrants.md).
+Vocabulary: [CONTEXT.md](../../../CONTEXT.md). Decisions: [ADR 0001–0034](../../adr/), especially
+[ADR-0034](../../adr/0034-the-roster-refreshes-to-ten-entrants-before-the-first-lock.md).
 
 The size guard couples on purpose: the roster constant, its declared size and the
 rehearsal's seat script must move together or the guards fire — which is why the second

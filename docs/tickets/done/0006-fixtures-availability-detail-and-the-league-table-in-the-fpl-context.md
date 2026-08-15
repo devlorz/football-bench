@@ -2,10 +2,10 @@
 
 Three tracer-bullet slices that put the Gameweek's world state into the FPL context
 inside the same `fpl/2026-27-v2` freeze spec 0005 introduces. Source:
-[spec 0006](../specs/0006-fixtures-availability-detail-and-the-league-table-in-the-fpl-context.md).
-Vocabulary: [CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0001–0021](../adr/), especially
-[ADR 0018](../adr/0018-raw-signals-only-in-the-entrant-context.md) and
-[ADR 0021](../adr/0021-fixtures-availability-detail-and-the-league-table-join-the-fpl-context-for-2026-27-v2.md).
+[spec 0006](../../specs/0006-fixtures-availability-detail-and-the-league-table-in-the-fpl-context.md).
+Vocabulary: [CONTEXT.md](../../../CONTEXT.md). Decisions: [ADR 0001–0021](../../adr/), especially
+[ADR 0018](../../adr/0018-raw-signals-only-in-the-entrant-context.md) and
+[ADR 0021](../../adr/0021-fixtures-availability-detail-and-the-league-table-join-the-fpl-context-for-2026-27-v2.md).
 
 Work the **frontier**: any ticket whose blockers are all done. The three slices are
 independent of one another; every one is gated by spec 0005's opening ticket, because all
@@ -45,8 +45,8 @@ fix belongs to the FPL fetch — drop the never-Locked rows FPL has unscheduled,
 Locked ones as unscheduled rather than leaving `deferred` to mean two things — which spec
 0006 rules out here ("nothing new is fetched, nothing new is stored"). It needs its own
 spec, and must land before the first FPL Lock for stories 3 and 4 to hold.
-[Spec 0009](../specs/0009-unscheduled-fixtures-leave-the-schedule.md) and
-[ADR 0024](../adr/0024-an-unscheduled-fixture-leaves-the-stored-schedule.md) now own the
+[Spec 0009](../../specs/0009-unscheduled-fixtures-leave-the-schedule.md) and
+[ADR 0024](../../adr/0024-an-unscheduled-fixture-leaves-the-stored-schedule.md) now own the
 fix; its [ticket](./0009-unscheduled-fixtures-leave-the-schedule.md) closed this note: the
 fetch tells a withdrawn Fixture from a scheduled one, and the schedule read excludes the
 Unscheduled ones.

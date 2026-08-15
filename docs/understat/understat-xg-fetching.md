@@ -1,6 +1,6 @@
 # Understat xG Data Fetching Guide
 
-> **Reference implementation:** [`understatService.ts`](docs/understat/understatService.ts)
+> **Reference implementation:** [`understatService.ts`](./understatService.ts)
 
 Understat has **no official public API**. All data is fetched by scraping embedded JSON from their HTML pages, or by hitting undocumented internal API endpoints that Understat's own frontend uses.
 

@@ -2,8 +2,8 @@
 
 Nine tracer-bullet slices that turn stored Predictions and settled results into a ranked,
 interval-qualified Match track record. Source:
-[spec 0002](../specs/0002-match-track-scoring.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0001–0016](../adr/).
+[spec 0002](../../specs/0002-match-track-scoring.md). Vocabulary:
+[CONTEXT.md](../../../CONTEXT.md). Decisions: [ADR 0001–0016](../../adr/).
 
 Work the **frontier**: any ticket whose blockers are all done. Results ingestion and
 operational-behaviour reporting can begin independently; probability scoring follows the

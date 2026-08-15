@@ -3,9 +3,9 @@
 Five tracer-bullet slices that let a late-arriving Base Model replay the Season as an
 Exhibition Run and appear, labelled, on the scoreboard — Match track first, FPL track
 second. Source:
-[spec 0013](../specs/0013-exhibition-runs.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0001–0032](../adr/), especially
-[ADR-0032](../adr/0032-exhibition-runs-join-the-record-after-the-fact.md).
+[spec 0013](../../specs/0013-exhibition-runs.md). Vocabulary:
+[CONTEXT.md](../../../CONTEXT.md). Decisions: [ADR 0001–0032](../../adr/), especially
+[ADR-0032](../../adr/0032-exhibition-runs-join-the-record-after-the-fact.md).
 
 Work the **frontier**: any ticket whose blockers are all done. Two tickets open immediately —
 the Exhibition seat, and the splice, which is a pure function with no dependency on the

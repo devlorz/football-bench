@@ -1,12 +1,12 @@
 # Tickets: Prior-Season points per game and Squad Changes in the match context
 
 Four tracer-bullet slices delivering
-[spec 0012](../specs/0012-prior-season-ppg-and-squad-changes-in-the-match-context.md):
+[spec 0012](../../specs/0012-prior-season-ppg-and-squad-changes-in-the-match-context.md):
 each club's prior-Season rate and the transfer window's real squad movement inside
 `match/2026-27-v2`, before the 2026/27 Season's first Lock — 2026-08-21 17:30 UTC.
-Vocabulary: [CONTEXT.md](../../CONTEXT.md), note **Squad Change**. Decisions:
-[ADR 0030](../adr/0030-prior-season-points-per-game-joins-the-match-context-for-2026-27-v2.md),
-[ADR 0031](../adr/0031-squad-changes-join-the-match-context-for-2026-27-v2.md).
+Vocabulary: [CONTEXT.md](../../../CONTEXT.md), note **Squad Change**. Decisions:
+[ADR 0030](../../adr/0030-prior-season-points-per-game-joins-the-match-context-for-2026-27-v2.md),
+[ADR 0031](../../adr/0031-squad-changes-join-the-match-context-for-2026-27-v2.md).
 
 Work the **frontier**: any ticket whose blockers are all done. Tickets 1 and 2 are
 independent; ticket 3 waits on 2 alone; ticket 4 waits on 1 and 3.
@@ -136,6 +136,6 @@ Document numbers 0012, 0030 and 0031 are re-checked for collisions at merge, per
 - [x] A dated report in the reports directory records both runs' roster resolution and
       the freeze counts, in the style of its predecessors
 
-      [2026-08-12-prior-season-ppg-squad-changes-preflight.md](../reports/2026-08-12-prior-season-ppg-squad-changes-preflight.md)
+      [2026-08-12-prior-season-ppg-squad-changes-preflight.md](../../reports/2026-08-12-prior-season-ppg-squad-changes-preflight.md)
 - [ ] The per-call token cost of the additions is read from recorded attempts after
       Gameweek 1 — measured, not estimated

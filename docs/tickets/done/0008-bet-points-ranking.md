@@ -2,9 +2,9 @@
 
 Two tracer-bullet slices that read every Prediction's Predicted Score as a five-market Bet
 Slip and rank the Entrants by Bet Points, the match track's second readable ranking. Source:
-[spec 0008](../specs/0008-bet-points-ranking.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0001–0023](../adr/), especially
-[ADR-0023](../adr/0023-a-second-readable-ranking-reads-a-bet-slip-off-the-predicted-score.md).
+[spec 0008](../../specs/0008-bet-points-ranking.md). Vocabulary:
+[CONTEXT.md](../../../CONTEXT.md). Decisions: [ADR 0001–0023](../../adr/), especially
+[ADR-0023](../../adr/0023-a-second-readable-ranking-reads-a-bet-slip-off-the-predicted-score.md).
 
 Work the **frontier**: any ticket whose blockers are all done. Both tickets sit downstream of
 spec 0002's tickets — results ingestion and the readable scoring slice must land before the

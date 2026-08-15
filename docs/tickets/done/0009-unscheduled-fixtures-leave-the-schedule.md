@@ -3,10 +3,10 @@
 Two tracer-bullet slices that make the FPL fetch tell an Unscheduled Fixture from a
 scheduled one, so the context's schedule section stops listing matches that will not be
 played and the Blank they create renders as absence. Source:
-[spec 0009](../specs/0009-unscheduled-fixtures-leave-the-schedule.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0001–0024](../adr/), especially
-[ADR 0013](../adr/0013-a-postponed-fixture-keeps-its-original-prediction.md) and
-[ADR 0024](../adr/0024-an-unscheduled-fixture-leaves-the-stored-schedule.md).
+[spec 0009](../../specs/0009-unscheduled-fixtures-leave-the-schedule.md). Vocabulary:
+[CONTEXT.md](../../../CONTEXT.md). Decisions: [ADR 0001–0024](../../adr/), especially
+[ADR 0013](../../adr/0013-a-postponed-fixture-keeps-its-original-prediction.md) and
+[ADR 0024](../../adr/0024-an-unscheduled-fixture-leaves-the-stored-schedule.md).
 
 Work the **frontier**: any ticket whose blockers are all done — here a linear chain, top
 to bottom. Everything lands before the season's first FPL Lock: this pair is what makes

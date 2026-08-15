@@ -2,11 +2,11 @@
 
 Six tracer-bullet slices that put the first reader in front of the benchmark: a seeded Season,
 a read-only API, three pages, and one deploy done by hand. Source:
-[spec 0011](../specs/0011-match-track-dashboard.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0001–0029](../adr/), especially
-[ADR 0027](../adr/0027-the-read-api-reaches-postgres-directly-under-a-select-only-role.md) and
-[ADR 0028](../adr/0028-the-dashboard-is-a-static-build-that-fetches-at-runtime.md).
-Design of record: [docs/design_handoff_match_track](../design_handoff_match_track/).
+[spec 0011](../../specs/0011-match-track-dashboard.md). Vocabulary:
+[CONTEXT.md](../../../CONTEXT.md). Decisions: [ADR 0001–0029](../../adr/), especially
+[ADR 0027](../../adr/0027-the-read-api-reaches-postgres-directly-under-a-select-only-role.md) and
+[ADR 0028](../../adr/0028-the-dashboard-is-a-static-build-that-fetches-at-runtime.md).
+Design of record: [docs/design_handoff_match_track](../../design_handoff_match_track/).
 
 Work the **frontier**: the first three are a chain, and once the Leaderboard page lands the
 last three open at once.
@@ -186,7 +186,7 @@ work. Doing it by hand once means the deploy is understood before anything autom
 ### The deploy
 
 Live at **<https://football-bench.leelorz6.workers.dev>**, against the production Supabase.
-Runbook: [docs/runbooks/dashboard-deploy.md](../runbooks/dashboard-deploy.md).
+Runbook: [docs/runbooks/dashboard-deploy.md](../../runbooks/dashboard-deploy.md).
 
 Production was at migration 0016, so `0017_dashboard_read_role.sql` was applied as part of
 this. `dashboard_worker` was then created by hand with a generated password, granted
@@ -281,7 +281,7 @@ Roughly ninety seconds dark. All six paths and the grant were verified back afte
 
 **The deployed topology now has an ADR.** ADR-0028 mandated Pages plus a Worker route and was
 left standing against a deploy that does neither.
-[ADR-0029](../adr/0029-the-dashboard-deploys-as-one-worker-serving-both-the-assets-and-the-read-api.md)
+[ADR-0029](../../adr/0029-the-dashboard-deploys-as-one-worker-serving-both-the-assets-and-the-read-api.md)
 supersedes its topology and its preview consequence; ADR-0028 carries the status note, and the
 `dashboard/README.md` opening and the `astro.config.mjs` comment no longer describe Pages.
 
@@ -351,7 +351,7 @@ the two runs happen.
 ### The manual acceptance walk
 
 Seventeen tests in
-[test/dashboard-fixtures-api.test.ts](../../test/dashboard-fixtures-api.test.ts) cover the
+[test/dashboard-fixtures-api.test.ts](../../../test/dashboard-fixtures-api.test.ts) cover the
 endpoint over a real Postgres under `dashboard_read` — fourteen when this walk was recorded,
 plus three the review round added: the FPL seat on this endpoint, and both branches of the
 deferred keep/drop rule; `astro check`, `astro build` and
@@ -444,12 +444,12 @@ behind all of it. Switching Entrant redraws everything at once and costs no seco
 ### The manual acceptance walk
 
 Ten tests in
-[test/dashboard-entrants-api.test.ts](../../test/dashboard-entrants-api.test.ts) cover the
+[test/dashboard-entrants-api.test.ts](../../../test/dashboard-entrants-api.test.ts) cover the
 endpoint over a real Postgres under `dashboard_read`, one of them through the Worker's own
 driver — this is the first body carrying whole `jsonb` columns across the seam, and a driver
 handing `detail` back as text would empty every series, tier and market without an error
 anywhere. Four more in
-[test/dashboard-entrant-chart.test.ts](../../test/dashboard-entrant-chart.test.ts) cover the
+[test/dashboard-entrant-chart.test.ts](../../../test/dashboard-entrant-chart.test.ts) cover the
 chart's two domains, which are the one part of the page's script that can be wrong while still
 rendering as a chart. `astro check`, `astro build` and `tsc --noEmit` are clean;
 `modernist.css` is still byte-for-byte the vendored file.
