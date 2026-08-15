@@ -466,9 +466,18 @@ reviewed identity maps.
       under `PD` until ticket 8, so there is no stale Spanish table to leave behind yet —
       **ticket 8 turns the two calls into a loop over the listed Competitions**, which is
       also where the canned Spanish responses `test/daily-fetch.test.ts` would need belong._
-- [ ] The prior Season's first- and second-division history is backfilled, with the second
+- [x] The prior Season's first- and second-division history is backfilled, with the second
       division playing the Championship's role for promoted clubs; the current Season
       follows from the daily fetch, which closes this box in ticket 8.
+      _**Closed in ticket 8, as written.** The backfill holds 380 La Liga and 462 Segunda
+      rows for 2025-26, and the daily fetch's `PL` literal became a loop over the listed
+      Competitions, so the current Season now follows for `PD` on exactly the terms it
+      follows for `PL`._
+
+      _No 2026-27 row is stored for **either** league yet: football-data.co.uk has still
+      published no 2026-27 file, and `FOOTBALL_DATA_SEASON` still reads `2025-26`. That is
+      the same position the Premier League is in, which is what this box asked for — see
+      the season-variable note in ticket 8._
       _Acceptance text amended, and the box put back. It read "Two seasons … are
       backfilled", which the notes below then contradicted by recording one. ADR-0037's
       scope is "two seasons … **mirroring what the Premier League context reads today**",
@@ -510,8 +519,13 @@ reviewed identity maps.
       leagues are asked the same question over different amounts of past. `PD`'s 2026-27
       is blocked twice over: football-data.co.uk has published no 2026-27 file at all yet,
       and the daily fetch holds the `PL` literal until ticket 8._
-- [ ] The Understat league is a parameter and the prior Season's La Liga xG is backfilled;
+- [x] The Understat league is a parameter and the prior Season's La Liga xG is backfilled;
       the current Season follows from the daily fetch, which closes this box in ticket 8.
+      _**Closed in ticket 8, with the loop.** 380 rows of 2025-26 La Liga xG are stored,
+      and `getLeagueData/La_liga/2026` is now fetched daily and archived — the snapshot
+      landed at 17:19:30Z on 2026-08-15 and holds an empty `dates`, which is Understat
+      opening a Season rather than a failure. The Premier League's 2026-27 is empty on the
+      same terms._
       _Amended and put back for the same reason as the history box above, and caught by
       applying that finding rather than by being told twice: this said "two seasons" and
       was ticked over one. The parameter half is done and the 2025-26 half is stored;
@@ -789,7 +803,7 @@ for `PL` since the Season opened.
 
 **Blocked by:** 2, 3, 4, 5, 6.
 
-- [ ] The day-one live-source checks pass: the three deferred opening Fixtures carry
+- [x] The day-one live-source checks pass: the three deferred opening Fixtures carry
       usable round numbers, and kickoff timestamps are timezone-sound against the
       published schedule.
       _**Read early, off the real response, during ticket 7** — the token arrived there
@@ -909,6 +923,15 @@ for `PL` since the Season opened.
       committed under it, so nothing was rewritten. What it costs — a thirty-minute
       cut-off where every other Gameweek has ninety, so this one is not strictly
       comparable — is written down rather than smoothed over._
+- [ ] **`FOOTBALL_DATA_SEASON` must advance to `2026-27`, and there is a date on it.**
+      Checklist §4 says to advance it after the first matchday; both leagues have now had
+      one and it still reads `2025-26`, so no current-Season history is stored for either.
+      The guard that catches this fires once **Premier League Gameweek 1's deadline
+      (2026-08-21T17:30Z)** passes with no 2026-27 rows for `SEASON` — from then the daily
+      fetch fails every day until the variable moves. It cannot move until
+      football-data.co.uk publishes the 2026-27 files, which it had not as of
+      2026-08-15; §4 calls leaving it behind the dangerous direction, and the guard is
+      what makes the danger loud rather than silent. Watch for the file, then advance.
 - [ ] If curation slipped past Gameweek 2, the escape hatch was taken as decided —
       launch at Gameweek 3 with the sections that are ready — and the stored contexts
       record exactly what shipped.
