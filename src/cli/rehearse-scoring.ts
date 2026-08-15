@@ -47,6 +47,7 @@ const result = await rehearseInThrowawayPostgres({
   rehearse: (target) => rehearseScoring({
     target,
     archive,
+    competition: "PL",
     season: config.season,
     footballDataSeason: config.footballDataSeason,
     gameweek: config.gameweek,

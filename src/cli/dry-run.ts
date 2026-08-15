@@ -15,6 +15,10 @@ import { writeCompletedRunAlert } from "./write-gap-alert.js";
 
 const { Client } = pg;
 const config = readDryRunJobConfig(process.env);
+// Defaulted like the other read-only commands: a dry run writes to a database
+// that exists for the run and is thrown away, so a wrong Competition costs a
+// rehearsal and nothing else. The archive has to hold its snapshots.
+const competition = process.env.COMPETITION?.trim() || "PL";
 
 const archiveDatabase = new Client({ connectionString: config.databaseUrl });
 await archiveDatabase.connect();
@@ -43,6 +47,7 @@ try {
   const result = await runDryRun({
     target,
     archive,
+    competition,
     season: config.season,
     footballDataSeason: config.footballDataSeason,
     gameweek: config.gameweek,
@@ -102,7 +107,7 @@ try {
 
   console.log(
     `\n${"=".repeat(72)}\n`
-    + `Season ${config.season} Gameweek ${config.gameweek}\n`
+    + `  Gameweek \n`
     + `Deadline:    ${result.deadline.toISOString()}\n`
     + `Ran at:      ${result.instant.toISOString()} (${config.at})\n`
     + `Contexts:    ${result.contexts.length}\n`

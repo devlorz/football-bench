@@ -15,6 +15,11 @@ type Database = Pick<Client, "query">;
 export interface RunDryRunOptions {
   target: Database;
   archive: DryRunArchive;
+  /**
+   * The Competition being rehearsed. Whatever it is, the archive has to hold
+   * its snapshots: a dry run replays bytes and invents none.
+   */
+  competition: string;
   season: string;
   footballDataSeason: string;
   gameweek: number;
@@ -45,12 +50,14 @@ export interface DryRunResult {
 
 async function readDeadline(
   database: Database,
+  competition: string,
   season: string,
   gameweek: number
 ): Promise<Date> {
   const result = await database.query<{ deadline_at: Date }>(
-    "select deadline_at from gameweeks where season = $1 and gw = $2",
-    [season, gameweek]
+    `select deadline_at from gameweeks
+      where competition = $1 and season = $2 and gw = $3`,
+    [competition, season, gameweek]
   );
   const deadline = result.rows[0]?.deadline_at;
   if (deadline === undefined) {
@@ -63,32 +70,37 @@ async function readDeadline(
 
 async function readFixtureIds(
   database: Database,
+  competition: string,
   season: string,
   gameweek: number
 ): Promise<number[]> {
   const result = await database.query<{ fixture_id: number }>(
     `select fixture_id
        from fixtures
-      where season = $1 and coalesce(locked_in_gw, gw) = $2
+      where competition = $1 and season = $2
+        and coalesce(locked_in_gw, gw) = $3
       order by fixture_id`,
-    [season, gameweek]
+    [competition, season, gameweek]
   );
   return result.rows.map(({ fixture_id: fixtureId }) => fixtureId);
 }
 
 async function countPredictions(
   database: Database,
+  competition: string,
   season: string
 ): Promise<number> {
   const result = await database.query<{ n: number }>(
-    "select count(*)::int as n from predictions where season = $1",
-    [season]
+    `select count(*)::int as n from predictions
+      where competition = $1 and season = $2`,
+    [competition, season]
   );
   return result.rows[0]?.n ?? 0;
 }
 
 async function readContexts(
   database: Database,
+  competition: string,
   season: string,
   gameweek: number
 ): Promise<DryRunContext[]> {
@@ -99,10 +111,12 @@ async function readContexts(
             c.body
        from contexts c
        join fixtures f
-         on f.season = c.season and f.fixture_id = c.fixture_id
-      where c.season = $1 and c.gw = $2 and c.track = 'match'
+         on f.competition = c.competition and f.season = c.season
+        and f.fixture_id = c.fixture_id
+      where c.competition = $1 and c.season = $2 and c.gw = $3
+        and c.track = 'match'
       order by c.fixture_id`,
-    [season, gameweek]
+    [competition, season, gameweek]
   );
   return result.rows;
 }
@@ -116,6 +130,7 @@ async function readContexts(
 export async function runDryRun({
   target,
   archive,
+  competition,
   season,
   footballDataSeason,
   gameweek,
@@ -125,7 +140,7 @@ export async function runDryRun({
   const http = createArchiveReplayFetcher(archive.snapshots);
   await prepareArchivedGameweek({ target, archive, season, footballDataSeason });
 
-  const deadline = await readDeadline(target, season, gameweek);
+  const deadline = await readDeadline(target, competition, season, gameweek);
   const instant = resolveDryRunInstant(at, deadline);
 
   // The Fill is rehearsed as well as the main run: it is the newest machinery
@@ -137,9 +152,7 @@ export async function runDryRun({
   for (const trigger of ["main", "fill"] as const) {
     const gapAlert = await predictGameweek({
       database: target,
-      // The archive a dry run replays is the Premier League's, and the target
-      // database holds nothing else.
-      competition: "PL",
+      competition,
       season,
       gameweek,
       concurrency,
@@ -151,15 +164,15 @@ export async function runDryRun({
     phases.push({
       trigger,
       gapAlert,
-      predictions: await countPredictions(target, season)
+      predictions: await countPredictions(target, competition, season)
     });
   }
 
-  const fixtureIds = await readFixtureIds(target, season, gameweek);
+  const fixtureIds = await readFixtureIds(target, competition, season, gameweek);
   return {
     instant,
     deadline,
-    contexts: await readContexts(target, season, gameweek),
+    contexts: await readContexts(target, competition, season, gameweek),
     phases,
     expected: expectedDryRunOutcome({
       entrants: archive.entrants.filter(({ role }) => role === "entrant"),

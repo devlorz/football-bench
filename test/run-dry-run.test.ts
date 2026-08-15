@@ -73,6 +73,7 @@ describe("a dry run against an archived Gameweek", () => {
     return runDryRun({
       target: client,
       archive,
+      competition: "PL",
       season: SEASON,
       footballDataSeason: FOOTBALL_DATA_SEASON,
       gameweek: GAMEWEEK,

@@ -30,6 +30,39 @@ async function seedEntrants(
   }
 }
 
+/**
+ * Lists the Competitions the archive can actually answer for, because the
+ * fetch below walks that table and a Season listing none reaches no source at
+ * all — which in a database built from scratch is every database this function
+ * is ever handed.
+ *
+ * Read off the snapshot names rather than declared: `PL` because its sources
+ * are the ones every archive has, and one row per football-data.org snapshot,
+ * whose source name carries the code it was fetched for. An archive that never
+ * saw a league cannot rehearse it, and listing it anyway would replay a fetch
+ * against bytes that are not there.
+ */
+async function listArchivedCompetitions(
+  database: Database,
+  archive: DryRunArchive,
+  season: string
+): Promise<void> {
+  const codes = new Set(["PL"]);
+  for (const { source } of archive.snapshots) {
+    const code = /^football_data_org:[^:]+:(.+)$/.exec(source)?.[1];
+    if (code !== undefined) {
+      codes.add(code);
+    }
+  }
+  for (const competition of [...codes].sort()) {
+    await database.query(
+      `insert into competitions (competition, season) values ($1, $2)
+       on conflict do nothing`,
+      [competition, season]
+    );
+  }
+}
+
 export interface PrepareArchivedGameweekOptions {
   target: Database;
   archive: DryRunArchive;
@@ -54,14 +87,19 @@ export async function prepareArchivedGameweek({
   footballDataSeason
 }: PrepareArchivedGameweekOptions): Promise<void> {
   await seedEntrants(target, archive.entrants);
+  await listArchivedCompetitions(target, archive, season);
   await runDailyFetch({
     database: target,
     season,
     footballDataSeason,
-    // A replay answers from the archive and reaches no live source, so there
-    // is no token to hold. A Competition the archive covers replays through
-    // its stored snapshots like every other source.
-    footballDataOrgToken: null,
+    // A replay answers from the archive and reaches no live source, so this is
+    // a stand-in and never a credential: the fetch refuses a Competition whose
+    // token is absent before it looks at the fetcher at all, which is right
+    // against the network and wrong against bytes already on disk. `null` here
+    // failed every rehearsal of a Competition that reads football-data.org,
+    // with a message about a missing secret that was not missing and would not
+    // have been spent.
+    footballDataOrgToken: "archive-replay",
     http: createArchiveReplayFetcher(archive.snapshots),
     now: () => archive.observedAt
   });

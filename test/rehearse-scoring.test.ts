@@ -125,6 +125,7 @@ describe("rehearsing the complete scorer on the archived Gameweek", () => {
     rehearseScoring({
       target: client,
       archive,
+      competition: "PL",
       season: SEASON,
       footballDataSeason: FOOTBALL_DATA_SEASON,
       gameweek: GAMEWEEK,
