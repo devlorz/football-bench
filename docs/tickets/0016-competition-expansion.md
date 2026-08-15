@@ -850,18 +850,32 @@ for `PL` since the Season opened.
       dates itself from Gameweek 1's deadline and asks whether the **English** feed is
       live. **Each Competition needs its own before its own first deadline** — open, and
       the first thing to write for Serie A._
-- [ ] The pre-cron checklist runs for the new Competition and comes back clean.
-      _Most of it did, out of order, under the Gameweek 1 clock: §1's `competitions`
-      insert and `roster:enter`, §3's token, §5's hand-dispatched `fetch.yml` (green on
-      the new code at 15:53Z), and §5's prior-Season xG, which ticket 6 had already
-      ingested for `PD`. **Not done: §5's dry run against archived data.** It is the one
-      step that rehearses the whole write path before it writes, and it was skipped for
-      the reason the checklist exists to prevent — there was no time. Run it for `PD`
-      before Gameweek 2._
+- [x] The pre-cron checklist runs for the new Competition and comes back clean.
+      _Most of it ran out of order, under the Gameweek 1 clock: §1's `competitions`
+      insert and `roster:enter`, §5's hand-dispatched `fetch.yml`, and §5's prior-Season
+      xG, which ticket 6 had already ingested for `PD`._
 
       _§5 also says not to hand-dispatch a Prediction as a smoke test. That was not the
       hazard here: the run was the real one, and in the end the scheduler beat it to the
       work anyway._
+
+      _**§3's secret was the step skipping the checklist actually cost.**
+      `FOOTBALL_DATA_ORG_TOKEN` lived in `.env` and was never set as a repository secret,
+      which §3 says to do *in the same change that inserts the second Competition's row*.
+      The `PD` row went in at 16:05Z and the next scheduled fetch failed by name. Every
+      daily fetch would have failed the same way until somebody looked._
+
+      _**§5's dry run then found four more**, which is the whole argument for running it
+      before rather than after: the archive replay had never learnt football-data.org or
+      Wikipedia, the replay's `null` token failed any Competition reading
+      football-data.org, and the expected outcome counted every seat in the archive
+      rather than the Competition's ten. The Wikipedia gap was the oldest — every
+      rehearsal since Squad Changes joined the context had replayed a packet missing that
+      section, quietly, because a missing page is a stated absence and not a failure._
+
+      _`COMPETITION=PD GAMEWEEK=2 DRY_RUN_AT=deadline-6h npm run dry-run` now matches the
+      archive: fourteen contexts, every club name resolved, every Squad Changes section
+      rendered, 140 Gaps against 140 expected._
 - [x] The first derived deadline is observed, the Gameweek Locks, and every Entrant's
       Prediction with its stored context predates the Lock.
       _Sixty of sixty — ten Entrants over six Fixtures, **no Gap** — six stored contexts
