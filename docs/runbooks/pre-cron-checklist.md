@@ -84,7 +84,7 @@ league's.
 | Variable | Value | Notes |
 |---|---|---|
 | `SEASON` | `2026-27` | `YYYY-YY` |
-| `FOOTBALL_DATA_SEASON` | `2025-26` | `YYYY-YY`. **Advance to `2026-27` after the first matchday.** |
+| `FOOTBALL_DATA_SEASON` | `2025-26` | `YYYY-YY`. **Advance to `2026-27` — overdue, see below.** |
 | `PREDICT_CONCURRENCY` | e.g. `10` | Defaults to the Season Roster size, one call per seat |
 | `FETCH_ALERT_ASSIGNEE` | | Optional; see below |
 | `PREDICT_ALERT_ASSIGNEE` | | Optional; see below |
@@ -96,6 +96,39 @@ Leaving it on the prior Season after the first matchday is the dangerous directi
 keeps succeeding while current-Season results never load. A guard fails the run once
 Gameweek 1's deadline has passed with no stored matches for `SEASON` — but its tolerance is
 tight, see [§7](#7-known-imperfections).
+
+### It is overdue right now, and cannot be done yet
+
+**Both leagues have played their first matchday and this still reads `2025-26`, so no
+2026-27 result is stored for either.** The guard starts failing the daily fetch once
+**Premier League Gameweek 1's deadline (2026-08-21T17:30Z)** passes with nothing stored —
+correctly, because at that point the claim "current-Season results are loading" is false.
+
+It cannot be advanced until football-data.co.uk publishes the files, and on 2026-08-15 it
+had published none. Requests for one it does not hold are answered by a redirect to a
+near-miss filename returning `200`:
+
+```
+2627/E0.csv   → 301 → 2627/EC.csv  (English Conference)
+2627/SP1.csv  → 301 → 2627/P1.csv  (Portuguese first division)
+2627/E1.csv   → 300 Multiple Choices
+```
+
+Advancing early therefore fetches the English fifth tier as the Premier League and Portugal
+as La Liga. The per-file `Div` check refuses both, loudly, so nothing lands wrong — but the
+fetch fails daily until the files are real. Check before advancing, and require four `200`s:
+
+```bash
+for d in E0 E1 SP1 SP2; do printf "%s: " "$d"; \
+  curl -sI --max-time 20 \
+    "https://www.football-data.co.uk/mmz4281/2627/$d.csv" | head -1; done
+```
+
+**One variable serves every Competition and the files publish one at a time.** If England's
+lands before Spain's, advancing satisfies the Premier League's guard and fails La Liga's
+fetch every day until Spain's appears — collected as that Competition's error, so the other
+league's day still lands. The guard itself names `PL` on both halves, so a lagging La Liga
+is caught by its own fetch and not by the guard.
 
 Assignees are optional. Without them, notification depends on watch settings rather than being
 addressed to a person.

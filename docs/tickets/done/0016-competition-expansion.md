@@ -3,8 +3,8 @@
 Nine tracer-bullet slices that take the match track from one league to five — the
 Competition dimension, a second schedule source with a derived Lock, a Competition-scoped
 context, per-Competition seats, and La Liga live. Source:
-[spec 0016](../specs/0016-competition-expansion.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0035–0038](../adr/).
+[spec 0016](../../specs/0016-competition-expansion.md). Vocabulary:
+[CONTEXT.md](../../../CONTEXT.md). Decisions: [ADR 0035–0038](../../adr/).
 
 Work the **frontier**: after ticket 1, four tickets open at once (2, 3, 4, 5). Ticket 9
 waited on an external event — a first Gameweek settling — and La Liga's arrived before the
@@ -21,7 +21,7 @@ ADR-0035 gated them on two things and both are now answered: La Liga has complet
 fetch → Lock → predict → score cycle, and the per-Fixture cost has been read off its
 Gameweek 1 — **$0.1845 per Fixture**, **$323.24** for a five-Competition Season against
 **$140.22** for the two running now
-([report](../reports/2026-08-15-five-league-price.md)). Every code path they need is in —
+([report](../../reports/2026-08-15-five-league-price.md)). Every code path they need is in —
 the Competition dimension, the derived Lock, the per-Competition context, seats and maps —
 so opening one is the runbook's six edits plus its curation, not new machinery.
 
@@ -67,7 +67,7 @@ Lock.
       _Rehearsed green 2026-08-15 over a `pg_dump` copy of the live record (38 Gameweeks,
       380 Fixtures, nothing else written yet): `npm run db:rehearse`. The migration has
       **not** been applied to the live database; the window checks in
-      [the runbook](../runbooks/the-competition-migration.md) were clear at the time of
+      [the runbook](../../runbooks/the-competition-migration.md) were clear at the time of
       the rehearsal and must be re-run immediately before it is._
 - [x] The Fixture id rename is carried through the whole suite, dashboard tests and the
       Season seed included; its blast radius grew with the FPL dashboard work.
@@ -88,7 +88,7 @@ coexistence proof spec 0016 requires before any La Liga row reaches the live dat
       when it was due rather than by which league was walked first. A Season with
       Gameweeks and no `competitions` row now has nothing due, which is the operational
       act the migration left listing as; the manual insert is
-      [pre-cron checklist](../runbooks/pre-cron-checklist.md) §1._
+      [pre-cron checklist](../../runbooks/pre-cron-checklist.md) §1._
 - [x] Two Competitions due in the same run are both processed, with disjoint prediction
       run rows — the overwrite the old key made possible is proven dead.
 - [x] The scorer is scoped by `(competition, season)` and derives its Gameweek list per
@@ -955,10 +955,15 @@ for `PL` since the Season opened.
       committed under it, so nothing was rewritten. What it costs — a thirty-minute
       cut-off where every other Gameweek has ninety, so this one is not strictly
       comparable — is written down rather than smoothed over._
-- [ ] **Blocked upstream — `FOOTBALL_DATA_SEASON` must advance to `2026-27`, and there is
-      a date on it.** Nothing in this repository can close this box: it waits on
+- [~] **Handed to the runbook — `FOOTBALL_DATA_SEASON` must advance to `2026-27`, and
+      there is a date on it.** Nothing in this repository can close this box: it waits on
       football-data.co.uk publishing files that did not exist when it was written, and the
-      only work it holds is watching for them and then changing one variable.
+      only work it holds is watching for them and then changing one variable. A ticket in
+      `done/` is the wrong place to keep a standing operational trap, so it now lives in
+      [the pre-cron checklist](../../runbooks/pre-cron-checklist.md) §4, under a heading that
+      says it is overdue — with the redirect evidence, the 2026-08-21T17:30Z date, the
+      one-line check, and the one-variable-many-leagues consequence. What follows here is
+      the record of how it was found.
       Checklist §4 says to advance it after the first matchday; both leagues have now had
       one and it still reads `2025-26`, so no current-Season history is stored for either.
       The guard that catches this fires once **Premier League Gameweek 1's deadline
@@ -1031,7 +1036,7 @@ Competitions can cite it.
 
 - [x] The five-Competition projection is recorded as a report, and the ADR-0035 gate for
       Serie A, the Bundesliga and Ligue 1 cites it.
-      _[docs/reports/2026-08-15-five-league-price.md](../reports/2026-08-15-five-league-price.md).
+      _[docs/reports/2026-08-15-five-league-price.md](../../reports/2026-08-15-five-league-price.md).
       **$1.1069** for the Gameweek, **$0.1845 per Fixture** across all ten seats, and
       **$323.24** for a five-Competition Season against **$140.22** for the two now
       running. Fixtures per Season differ by league — 380 for a twenty-club Competition,
