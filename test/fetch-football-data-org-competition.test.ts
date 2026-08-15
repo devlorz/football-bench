@@ -20,18 +20,32 @@ const COMPETITION = "PD";
 const TOKEN = "a-football-data-org-token";
 
 /**
- * A football-data.org v4 `/competitions/PD/matches` body: La Liga's opening two
- * matchdays in the shape the API documents, envelope fields and all, including
- * the three opening Fixtures ADR-0036 names as already carrying late-August
- * dates and one postponed Fixture in matchday 2.
+ * The response football-data.org actually returned for La Liga 2026-27, kept
+ * as it arrived: 380 matches over 38 Gameweeks, every envelope field, and not
+ * one settled result — it was fetched on the Season's opening day, which is
+ * why every status reads `TIMED` or `SCHEDULED`.
  *
- * Constructed to the documented shape rather than recorded off the wire — the
- * free-tier token this repository will fetch with does not exist yet, and a
- * parser test that waited for it would be a parser with no test. So this pins
- * the parser against the format and **cannot** catch the format being wrong,
- * which is the half of spec story 36 that stays open: ticket 3's snapshot box
- * is deliberately unticked, and ticket 8's day-one live-source checks are
- * where the first real response replaces this.
+ * This is what answers "does the parser accept the format the API really
+ * publishes", and nothing constructed can answer it. A hand-made body proves
+ * the parser matches what its author believed the shape to be.
+ */
+const recorded = async (): Promise<string> =>
+  archivedBody("football-data-org-2026-27-PD-recorded.json.gz");
+
+/**
+ * A constructed body, and deliberately still here: it holds states the
+ * recorded response does not and no recorded response could be relied on to —
+ * a settled match, a settled match with its score missing, a postponed one, a
+ * league that postponed everything, a kickoff brought forward inside a Lock.
+ * Those are the parser's and the fetch's failure paths, and waiting for a live
+ * response to happen to contain them is waiting forever.
+ *
+ * Its twenty clubs are **not** La Liga's twenty — it carries `Girona FC` and
+ * `RCD Mallorca`, both relegated, and it names Real Sociedad by a shorter
+ * string than the API does. That is harmless in this file, which never
+ * resolves a club against a map, and it is why `test/daily-fetch.test.ts` uses
+ * the recorded response instead: there the Squad Change club map refuses them,
+ * correctly.
  */
 const snapshot = async (): Promise<string> =>
   archivedBody("football-data-org-2026-27-PD.json.gz");
@@ -112,6 +126,27 @@ describe("a Competition read from football-data.org", () => {
       deadline: (deadlineAt as Date).toISOString()
     }));
   };
+
+  test("parses the response the API really returned, all 380 of it", async () => {
+    // The claim a constructed body cannot make: the schema accepts a whole
+    // live Season as published, not one row in the shape its author expected.
+    const matches = parseFootballDataOrgMatches("test", await recorded());
+
+    expect(matches).toHaveLength(380);
+    expect(new Set(matches.map(({ matchday }) => matchday)).size).toBe(38);
+    expect(matches[0]).toMatchObject({
+      id: 564634,
+      utcDate: "2026-08-15T17:30:00Z",
+      status: "TIMED",
+      matchday: 1,
+      homeTeam: { name: "Deportivo Alavés" },
+      awayTeam: { name: "Getafe CF" }
+    });
+    // Fetched on the opening day, so nothing has settled and every score is
+    // null — which is the state the Lock guard reads, and worth pinning as the
+    // shape a first fetch of a Season really has.
+    expect(matches.every(({ score }) => score.fullTime.home === null)).toBe(true);
+  });
 
   test("parses the documented-shape fixture, envelope fields and all", async () => {
     const matches = parseFootballDataOrgMatches("test", await snapshot());
@@ -418,10 +453,7 @@ describe("a Competition read from football-data.org", () => {
       // The test is the kick-off, because that is the promise: a Prediction
       // precedes its Fixture. Whether the score has been published yet is the
       // source's business and changes nothing about what may still be asked.
-      const recorded = await archivedBody(
-        "football-data-org-2026-27-PD-recorded.json.gz"
-      );
-      await fetchAt("2026-08-16T06:00:00Z", recorded);
+      await fetchAt("2026-08-16T06:00:00Z", await recorded());
 
       const [open] = (await client.query<{ gw: number; deadline_at: Date }>(
         `select gw, deadline_at from gameweeks

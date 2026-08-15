@@ -230,21 +230,30 @@ FPL path observes one at FPL's. Demoable on a temporary Postgres end to end.
       Fixture; check the Competition code and the token" — sending an operator after a
       fault that was not theirs, on the one day they could least afford it. **Found by
       review.**_
-- [ ] Every response is stored in raw snapshots under its own source name, and the parser
+- [x] Every response is stored in raw snapshots under its own source name, and the parser
       is tested against recorded snapshots.
-      _**Half done, and left unticked for the half that is not.** The archiving is real:
+      _**Closed 2026-08-15, once a real response existed.** `parses the response the API
+      really returned, all 380 of it` reads the recorded bytes and asserts the whole live
+      Season parses: 380 matches over 38 Gameweeks, the documented envelope, and every
+      score `null` — it was fetched on the Season's opening day, so nothing had settled,
+      which is the shape a first fetch of a Season really has and worth pinning as such._
+
+      _**The constructed fixture stays, with its job narrowed.** It holds the states no
+      recorded response can be relied on to contain — a settled match, a settled match
+      missing its score, a postponed one, a league that postponed everything, a kickoff
+      brought forward inside a Lock — and those are the failure paths. Waiting for a live
+      response to happen to carry them is waiting forever. What changed is that the format
+      claim no longer rests on it._
+
+      _Its twenty clubs are not La Liga's twenty (`Girona FC` and `RCD Mallorca` were both
+      relegated, and Real Sociedad is named by a shorter string than the API uses), which
+      is harmless here — this file never resolves a club against a map — and is why
+      `test/daily-fetch.test.ts` uses the recorded response instead: there the Squad
+      Change club map refuses them, correctly._
+
+      _The archiving half was real from the start:
       `football_data_org:${season}:${competition}`, written before validation like every
-      other source, so a 403 body is still evidence — `test/fetch-football-data-org-`
-      `competition.test.ts` proves both.
-      The parser is tested against a **constructed** fixture, not recorded bytes: no
-      free-tier token exists for this repository yet, and a parser that waited for one
-      would be a parser with no test at all. It carries the full documented v4 envelope
-      (`filters`, `resultSet`, `competition`, per-match `area`/`season`/`odds`), La Liga's
-      opening two matchdays including the two Fixtures ADR-0036 names as already held back
-      to late August, and one postponed Fixture. What it pins is the parser against the
-      format — it cannot catch the format being wrong, which is exactly what spec story 36
-      asks for. **Ticket 8's day-one live-source checks are where the first real response
-      is captured; ticking this box is part of that change, not this one.**_
+      other source, so a 403 body is still evidence — the same test file proves both._
 
 ## 4 — Ten seats under a frozen La Liga prompt
 
