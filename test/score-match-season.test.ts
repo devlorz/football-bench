@@ -117,7 +117,9 @@ describe("scoring a whole Season in one daily run", () => {
   };
 
   const scoreSeason = (at = SCORED_AT): Promise<number[]> =>
-    scoreMatchSeason({ database: client, season: SEASON, now: () => at });
+    scoreMatchSeason({
+      database: client, competition: "PL", season: SEASON, now: () => at
+    });
 
   const points = async (
     entrantId: string,

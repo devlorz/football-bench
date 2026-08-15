@@ -26,6 +26,7 @@ type Database = Pick<Client, "query">;
 
 export interface PredictGameweekOptions {
   database: Database;
+  competition: string;
   season: string;
   gameweek: number;
   concurrency: number;
@@ -59,20 +60,23 @@ function sha256(value: string): string {
 
 async function storeContext(
   database: Database,
+  competition: string,
   season: string,
   gameweek: number,
   fixture: FixtureRow,
   body: string
 ): Promise<StoredContext> {
   const inserted = await database.query<{ id: number }>(
-    `insert into contexts (season, gw, track, fixture_id, hash, body)
-     values ($1, $2, 'match', $3, $4, $5)
+    `insert into contexts (
+       competition, season, gw, track, fixture_id, hash, body
+     )
+     values ($1, $2, $3, 'match', $4, $5, $6)
      on conflict (
        competition, season, gw, track,
        (coalesce(fixture_id, -1)), (coalesce(model_id, ''))
      ) do nothing
      returning id`,
-    [season, gameweek, fixture.fixture_id, sha256(body), body]
+    [competition, season, gameweek, fixture.fixture_id, sha256(body), body]
   );
   const id = inserted.rows[0]?.id;
   if (id !== undefined) {
@@ -82,11 +86,12 @@ async function storeContext(
   const stored = await database.query<{ id: number; body: string }>(
     `select id, body
        from contexts
-      where season = $1
-        and gw = $2
+      where competition = $1
+        and season = $2
+        and gw = $3
         and track = 'match'
-        and fixture_id = $3`,
-    [season, gameweek, fixture.fixture_id]
+        and fixture_id = $4`,
+    [competition, season, gameweek, fixture.fixture_id]
   );
   const context = stored.rows[0];
   if (context === undefined) {
@@ -97,6 +102,7 @@ async function storeContext(
 
 async function loadStoredContext(
   database: Database,
+  competition: string,
   season: string,
   gameweek: number,
   fixtureId: number,
@@ -105,11 +111,12 @@ async function loadStoredContext(
   const stored = await database.query<{ id: number; body: string }>(
     `select id, body
        from contexts
-      where season = $1
-        and gw = $2
+      where competition = $1
+        and season = $2
+        and gw = $3
         and track = 'match'
-        and fixture_id = $3`,
-    [season, gameweek, fixtureId]
+        and fixture_id = $4`,
+    [competition, season, gameweek, fixtureId]
   );
   const context = stored.rows[0];
   if (context === undefined) {
@@ -123,6 +130,7 @@ async function loadStoredContext(
 
 export async function predictGameweek({
   database,
+  competition,
   season,
   gameweek,
   concurrency,
@@ -159,23 +167,25 @@ export async function predictGameweek({
        m.id as entrant_id, m.base_model, m.provider, m.quantization, m.role
       from fixtures f
       cross join models m
-      where f.season = $1
-        and coalesce(f.locked_in_gw, f.gw) = $2
+      where f.competition = $1
+        and f.season = $2
+        and coalesce(f.locked_in_gw, f.gw) = $3
         and m.role = 'entrant'
-        and m.prompt_version = $3
+        and m.prompt_version = $4
         and not exists (
           select 1
             from predictions p
            where p.model_id = m.id
+             and p.competition = f.competition
              and p.season = f.season
              and p.fixture_id = f.fixture_id
         )
       order by f.fixture_id, m.id`,
-    [season, gameweek, MATCH_PROMPT_VERSION]
+    [competition, season, gameweek, MATCH_PROMPT_VERSION]
   );
 
   const contextData = trigger === "main"
-    ? await loadMatchContextData(database, season, gameweek)
+    ? await loadMatchContextData(database, competition, season, gameweek)
     : null;
 
   const contexts = new Map<number, StoredContext>();
@@ -186,6 +196,7 @@ export async function predictGameweek({
         trigger === "main"
           ? await storeContext(
             database,
+            competition,
             season,
             gameweek,
             item,
@@ -193,6 +204,7 @@ export async function predictGameweek({
           )
           : await loadStoredContext(
             database,
+            competition,
             season,
             gameweek,
             item.fixture_id,
@@ -224,6 +236,7 @@ export async function predictGameweek({
 
   await attemptMatchCalls({
     database,
+    competition,
     season,
     gameweek,
     concurrency,
@@ -233,5 +246,5 @@ export async function predictGameweek({
     trigger,
     calls
   });
-  return readGapAlert(database, season, gameweek, now);
+  return readGapAlert(database, competition, season, gameweek, now);
 }

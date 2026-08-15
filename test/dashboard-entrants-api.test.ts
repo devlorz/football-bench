@@ -287,6 +287,7 @@ describe("the Entrant record endpoint with a Gameweek wholly Gapped", () => {
     await writer.query("delete from scores where season = $1", [SEASON]);
     await scoreMatchSeason({
       database: writer,
+      competition: "PL",
       season: SEASON,
       now: () => new Date("2026-11-15T12:00:00Z")
     });

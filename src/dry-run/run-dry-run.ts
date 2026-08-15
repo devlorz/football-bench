@@ -137,6 +137,9 @@ export async function runDryRun({
   for (const trigger of ["main", "fill"] as const) {
     const gapAlert = await predictGameweek({
       database: target,
+      // The archive a dry run replays is the Premier League's, and the target
+      // database holds nothing else.
+      competition: "PL",
       season,
       gameweek,
       concurrency,

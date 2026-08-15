@@ -345,6 +345,7 @@ export interface SeedSeasonOptions {
    */
   score?: (options: {
     database: Database;
+    competition: string;
     season: string;
     now: () => Date;
   }) => Promise<unknown>;
@@ -385,7 +386,9 @@ export async function seedSeason({
   // daily run would have written on the morning after Gameweek 14 settled, and
   // it leaves the leaderboard through 14 while the Fixtures page shows 15.
   // It opens its own transaction, so it runs outside the one above.
-  await score({ database, season, now: () => SEED_SCORED_AT });
+  await score({
+    database, competition: "PL", season, now: () => SEED_SCORED_AT
+  });
 
   // And the FPL track's, one Gameweek at a time, exactly as the scheduled run
   // reaches them: the record at each Gameweek is what the rank movement

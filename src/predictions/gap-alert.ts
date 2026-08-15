@@ -31,6 +31,7 @@ export interface PredictionGap {
 }
 
 export interface GapAlert {
+  competition: string;
   season: string;
   gameweek: number;
   deadlineAt: Date;
@@ -92,7 +93,12 @@ function formatGapDetails(gaps: PredictionGap[]): string[] {
 
 export function formatGapAlert(alert: GapAlert): string {
   return [
-    `Prediction Gaps remain for ${alert.season} Gameweek ${alert.gameweek}.`,
+    // The Competition is named because a Gameweek number is not unique across
+    // Competitions: two leagues share a Season and a numbering, so an alert
+    // that named neither would page an operator about a Gameweek 1 without
+    // saying whose.
+    `Prediction Gaps remain for ${alert.competition} ${alert.season} `
+    + `Gameweek ${alert.gameweek}.`,
     formatLockStatus(alert),
     ...formatGapDetails(alert.gaps)
   ].join("\n");
@@ -118,6 +124,7 @@ interface GapRow {
 
 export async function readGapAlert(
   database: Database,
+  competition: string,
   season: string,
   gameweek: number,
   now: () => Date
@@ -133,13 +140,15 @@ export async function readGapAlert(
        g.deadline_at
      from fixtures f
      join gameweeks g
-       on g.season = f.season
+       on g.competition = f.competition
+      and g.season = f.season
       and g.gw = f.locked_in_gw
      cross join models m
      left join lateral (
        select a.error_kind
          from attempts a
         where a.model_id = m.id
+          and a.competition = f.competition
           and a.season = f.season
           and a.gw = g.gw
           and a.track = 'match'
@@ -148,14 +157,16 @@ export async function readGapAlert(
         order by a.attempted_at desc, a.id desc
         limit 1
      ) latest_attempt on true
-     where f.season = $1
-       and f.locked_in_gw = $2
+     where f.competition = $1
+       and f.season = $2
+       and f.locked_in_gw = $3
        and m.role = 'entrant'
-       and m.prompt_version = $3
+       and m.prompt_version = $4
        and not exists (
          select 1
            from predictions p
           where p.model_id = m.id
+            and p.competition = f.competition
             and p.season = f.season
             and p.fixture_id = f.fixture_id
        )
@@ -165,7 +176,7 @@ export async function readGapAlert(
     // every FPL seat as a Gap on every Fixture, and one with no recorded cause
     // at that, because the attempt it looks for is a Match attempt it never
     // made.
-    [season, gameweek, MATCH_PROMPT_VERSION]
+    [competition, season, gameweek, MATCH_PROMPT_VERSION]
   );
   const first = result.rows[0];
   if (first === undefined) {
@@ -181,6 +192,7 @@ export async function readGapAlert(
   const observedAt = now();
 
   return {
+    competition,
     season,
     gameweek,
     deadlineAt: first.deadline_at,

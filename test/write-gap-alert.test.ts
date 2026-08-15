@@ -22,6 +22,7 @@ describe("completed scheduled Prediction alerts", () => {
     directory = mkdtempSync("/tmp/prediction-fill-gaps-");
     const reportPath = join(directory, "report.md");
     const gapAlert = {
+      competition: "PL",
       season: "2026-27",
       gameweek: 1,
       deadlineAt: new Date("2026-08-21T17:30:00Z"),
@@ -39,11 +40,13 @@ describe("completed scheduled Prediction alerts", () => {
       FILL_GAP_REPORT_PATH: reportPath
     };
     const main: CompletedPredictionRun = {
+      competition: "PL",
       gameweek: 1,
       trigger: "main",
       gapAlert
     };
     const fill: CompletedPredictionRun = {
+      competition: "PL",
       gameweek: 1,
       trigger: "fill",
       gapAlert

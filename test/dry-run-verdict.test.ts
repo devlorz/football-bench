@@ -7,6 +7,7 @@ function phase(trigger: "main" | "fill", predictions: number, gaps: number) {
     trigger,
     predictions,
     gapAlert: {
+      competition: "PL",
       season: "2026-27",
       gameweek: 1,
       deadlineAt: new Date(0),

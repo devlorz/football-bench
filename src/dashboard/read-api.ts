@@ -18,6 +18,27 @@ import {
 } from "../predictions/score-match-gameweek.js";
 
 /**
+ * Every query below that filters by Season also filters `competition = 'PL'`,
+ * as a literal, and that is the whole of this API's Competition awareness for
+ * now.
+ *
+ * A ranking spans one Competition and never two (ADR-0035), and once a second
+ * league writes rows, a query that named only the Season would rank the two
+ * leagues' Entrants against each other by silently unioning them -- so the
+ * filter has to exist before those rows do. Both tracks carry it, not the Match
+ * track alone: the FPL track's tables gained the column because the Gameweek
+ * deadline triggers made `(season, gw)` ambiguous, and a read of theirs that
+ * named only the Season would be exactly as unionable as a Match one, whatever
+ * currently writes them.
+ *
+ * What it deliberately is not is a parameter: which Competition a reader is
+ * looking at, and how a reader says so, is a shape ADR-0035 defers to the
+ * dashboard's own decision. A literal keeps every response exactly what it is
+ * today, and `competition = 'PL'` is one greppable string -- twenty-seven
+ * occurrences of it, not one place -- for that decision to replace.
+ */
+
+/**
  * The minimum both runtimes satisfy: SQL and its parameters in, rows out.
  *
  * It exists because ADR-0027 puts `postgres.js` on the Worker and `pg`
@@ -194,7 +215,8 @@ async function scoredThrough(
 ): Promise<number | null> {
   const [scored] = await query(
     `select max(gw) as through_gw from scores
-      where season = $1 and track = 'match' and metric = $2`,
+      where competition = 'PL' and season = $1
+        and track = 'match' and metric = $2`,
     [season, RPS_METRIC]
   );
   return numberOrNull(scored?.through_gw);
@@ -227,7 +249,7 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
   const [lock] = throughGw === null
     ? await query(
       `select gw, deadline_at from gameweeks
-        where season = $1 order by gw limit 1`,
+        where competition = 'PL' and season = $1 order by gw limit 1`,
       [season]
     )
     : [];
@@ -237,7 +259,8 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
   // to any Entrant, so one Entrant's Gap cannot move it.
   const [settled] = await query(
     `select count(*) as settled from fixtures
-      where season = $1 and locked_in_gw is not null and result is not null`,
+      where competition = 'PL' and season = $1
+        and locked_in_gw is not null and result is not null`,
     [season]
   );
 
@@ -287,18 +310,21 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
        from models m
        left join lateral (
          select max(predicted_at) as at from predictions
-          where model_id = m.id and season = $1
+          where model_id = m.id and competition = 'PL' and season = $1
        ) last_prediction on true
        left join lateral (
          select max(gw) as gw from gameweeks
-          where season = $1 and deadline_at < last_prediction.at
+          where competition = 'PL' and season = $1
+            and deadline_at < last_prediction.at
        ) ran_after on true
        left join scores points
-         on points.model_id = m.id and points.season = $1
+         on points.model_id = m.id and points.competition = 'PL'
+        and points.season = $1
         and points.track = 'match' and points.gw = $4
         and points.metric = $2
        left join scores bets
-         on bets.model_id = m.id and bets.season = $1
+         on bets.model_id = m.id and bets.competition = 'PL'
+        and bets.season = $1
         and bets.track = 'match' and bets.gw = $4
         and bets.metric = $3
       where m.prompt_version = $5
@@ -498,15 +524,18 @@ async function fixtures(
     `with current as (
        select coalesce(
          (select min(coalesce(locked_in_gw, gw)) from fixtures
-           where season = $1 and not deferred and result is null),
+           where competition = 'PL' and season = $1
+             and not deferred and result is null),
          (select max(coalesce(locked_in_gw, gw)) from fixtures
-           where season = $1 and (not deferred or locked_in_gw is not null))
+           where competition = 'PL' and season = $1
+             and (not deferred or locked_in_gw is not null))
        ) as gw
      )
      select current.gw, gameweeks.deadline_at
        from current
        left join gameweeks
-         on gameweeks.season = $1 and gameweeks.gw = current.gw`,
+         on gameweeks.competition = 'PL' and gameweeks.season = $1
+        and gameweeks.gw = current.gw`,
     [season]
   );
   const gw = numberOrNull(current?.gw);
@@ -520,7 +549,8 @@ async function fixtures(
   // all, and would read as ten Gaps.
   const rows = await query(
     `select fixture_id, home_team, away_team, kickoff_at from fixtures
-      where season = $1 and coalesce(locked_in_gw, gw) = $2
+      where competition = 'PL' and season = $1
+        and coalesce(locked_in_gw, gw) = $2
         and (not deferred or locked_in_gw is not null)
       order by kickoff_at, fixture_id`,
     [season, gw]
@@ -539,8 +569,11 @@ async function fixtures(
             p.rationale, p.attempts_used as repairs, c.hash as context_hash
        from predictions p
        join contexts c on c.id = p.context_id
-       join fixtures f on f.season = p.season and f.fixture_id = p.fixture_id
-      where p.season = $1 and coalesce(f.locked_in_gw, f.gw) = $2`,
+       join fixtures f
+         on f.competition = p.competition and f.season = p.season
+        and f.fixture_id = p.fixture_id
+      where p.competition = 'PL' and p.season = $1
+        and coalesce(f.locked_in_gw, f.gw) = $2`,
     [season, gw]
   );
 
@@ -719,17 +752,21 @@ async function entrants(query: Query, season: string): Promise<Response> {
             gaps.detail as gaps_detail
        from models m
        left join scores points
-         on points.model_id = m.id and points.season = $1
+         on points.model_id = m.id and points.competition = 'PL'
+        and points.season = $1
         and points.track = 'match' and points.gw = $6
         and points.metric = $2
        left join scores bets
-         on bets.model_id = m.id and bets.season = $1
+         on bets.model_id = m.id and bets.competition = 'PL'
+        and bets.season = $1
         and bets.track = 'match' and bets.gw = $6 and bets.metric = $3
        left join scores rps
-         on rps.model_id = m.id and rps.season = $1
+         on rps.model_id = m.id and rps.competition = 'PL'
+        and rps.season = $1
         and rps.track = 'match' and rps.gw = $6 and rps.metric = $4
        left join scores gaps
-         on gaps.model_id = m.id and gaps.season = $1
+         on gaps.model_id = m.id and gaps.competition = 'PL'
+        and gaps.season = $1
         and gaps.track = 'match' and gaps.gw = $6 and gaps.metric = $5
       where m.role = 'entrant' and m.prompt_version = $7
       order by m.id`,
@@ -914,7 +951,8 @@ async function fplScoredThrough(
 ): Promise<number | null> {
   const [scored] = await query(
     `select max(gw) as through_gw from scores
-      where season = $1 and track = 'fpl' and metric = $2`,
+      where competition = 'PL' and season = $1
+        and track = 'fpl' and metric = $2`,
     [season, FPL_POINTS_METRIC]
   );
   return numberOrNull(scored?.through_gw);
@@ -951,7 +989,7 @@ async function listedPool(
       `select distinct on (fpl_id)
               fpl_id, web_name, team_name, position, price_tenths
          from fpl_players
-        where season = $1 and gw <= $2
+        where competition = 'PL' and season = $1 and gw <= $2
         order by fpl_id, gw desc`,
       [season, gw]
     )).map((row) => [Number(row.fpl_id), {
@@ -995,7 +1033,8 @@ async function fplLeaderboard(query: Query, season: string): Promise<Response> {
   const totals = throughGw === null ? [] : await query(
     `select model_id, gw, value, detail ->> 'qualification' as qualification
        from scores
-      where season = $1 and track = 'fpl' and metric = $2 and gw <= $3
+      where competition = 'PL' and season = $1
+        and track = 'fpl' and metric = $2 and gw <= $3
       order by gw`,
     [season, FPL_POINTS_SEASON_TO_DATE_METRIC, throughGw]
   );
@@ -1014,11 +1053,13 @@ async function fplLeaderboard(query: Query, season: string): Promise<Response> {
             state.squad, state.chips_used
        from models m
        left join scores points
-         on points.model_id = m.id and points.season = $1
+         on points.model_id = m.id and points.competition = 'PL'
+        and points.season = $1
         and points.track = 'fpl' and points.gw = $2 and points.metric = $3
        left join lateral (
          select squad, chips_used from manager_states
-          where model_id = m.id and season = $1 and gw <= $2
+          where model_id = m.id and competition = 'PL'
+            and season = $1 and gw <= $2
           order by gw desc limit 1
        ) state on true
       where m.role = 'entrant' and m.prompt_version = $4
@@ -1269,16 +1310,20 @@ async function fplSquads(query: Query, season: string): Promise<Response> {
             refused.error_kind as last_violation
        from models m
        left join scores points
-         on points.model_id = m.id and points.season = $1
+         on points.model_id = m.id and points.competition = 'PL'
+        and points.season = $1
         and points.track = 'fpl' and points.gw = $2 and points.metric = $3
        left join scores totals
-         on totals.model_id = m.id and totals.season = $1
+         on totals.model_id = m.id and totals.competition = 'PL'
+        and totals.season = $1
         and totals.track = 'fpl' and totals.gw = $2 and totals.metric = $4
        left join manager_states state
-         on state.model_id = m.id and state.season = $1 and state.gw = $2
+         on state.model_id = m.id and state.competition = 'PL'
+        and state.season = $1 and state.gw = $2
        left join lateral (
          select gw, squad from manager_states
-          where model_id = m.id and season = $1 and gw < $2
+          where model_id = m.id and competition = 'PL'
+            and season = $1 and gw < $2
           order by gw desc limit 1
        ) previous on true
        -- Ordered by the instant and not by the attempt number: a Gameweek can
@@ -1289,7 +1334,8 @@ async function fplSquads(query: Query, season: string): Promise<Response> {
        -- conversation inside one.
        left join lateral (
          select error_kind from attempts
-          where model_id = m.id and season = $1 and gw = $2
+          where model_id = m.id and competition = 'PL'
+            and season = $1 and gw = $2
             and track = 'fpl'
             and error_kind = any(string_to_array($6, ','))
           order by attempted_at desc, attempt_no desc limit 1

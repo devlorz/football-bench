@@ -93,7 +93,9 @@ export async function rehearseScoring({
   const { target, season, gameweek } = dryRunOptions;
   const dryRun = await runDryRun(dryRunOptions);
   const settled = await settleScriptedResults(target, season);
-  await scoreMatchGameweek({ database: target, season, gameweek, now });
+  await scoreMatchGameweek({
+    database: target, competition: "PL", season, gameweek, now
+  });
 
   const report: ScoringRehearsalReport = {
     settled,

@@ -302,6 +302,7 @@ export async function preflightBaseModels({
 
   const contextData = await loadMatchContextData(
     database,
+    "PL",
     season,
     fixture.gw
   );

@@ -99,6 +99,7 @@ describe("predicting a Gameweek", () => {
     let prompt = "";
 
     await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -179,6 +180,7 @@ describe("predicting a Gameweek", () => {
     let prompt = "";
 
     await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -252,6 +254,7 @@ describe("predicting a Gameweek", () => {
     let prompt = "";
 
     await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -348,6 +351,7 @@ describe("predicting a Gameweek", () => {
     ].join("\n");
 
     await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -526,6 +530,7 @@ describe("predicting a Gameweek", () => {
     let calls = 0;
 
     await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 2,
@@ -610,6 +615,7 @@ describe("predicting a Gameweek", () => {
     let calls = 0;
 
     await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 2,
@@ -635,6 +641,7 @@ describe("predicting a Gameweek", () => {
     let calls = 0;
 
     await expect(predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -670,6 +677,7 @@ describe("predicting a Gameweek", () => {
     let prompt = "";
 
     await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -724,6 +732,7 @@ describe("predicting a Gameweek", () => {
     let calls = 0;
 
     await expect(predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -778,6 +787,7 @@ describe("predicting a Gameweek", () => {
     let batchReleased = false;
 
     await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -893,6 +903,7 @@ describe("predicting a Gameweek", () => {
 
   test("stores a valid Prediction when telemetry is absent", async () => {
     await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -939,6 +950,7 @@ describe("predicting a Gameweek", () => {
 
   test("records a structured refusal with its routing telemetry", async () => {
     await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -995,6 +1007,7 @@ describe("predicting a Gameweek", () => {
     );
 
     await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -1055,6 +1068,7 @@ describe("predicting a Gameweek", () => {
     ];
 
     await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -1105,6 +1119,7 @@ describe("predicting a Gameweek", () => {
 
   test("leaves a Gap after the third failed Repair and logs every attempt", async () => {
     await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -1189,6 +1204,7 @@ describe("predicting a Gameweek", () => {
     ];
 
     await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -1310,6 +1326,7 @@ describe("predicting a Gameweek", () => {
     const called: string[] = [];
 
     await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -1363,6 +1380,7 @@ describe("predicting a Gameweek", () => {
     const called: string[] = [];
 
     const alert = await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -1410,6 +1428,7 @@ describe("predicting a Gameweek", () => {
     let calls = 0;
 
     await expect(predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -1427,6 +1446,7 @@ describe("predicting a Gameweek", () => {
   test("does not duplicate or replace a Prediction when the job is run twice", async () => {
     let calls = 0;
     const options = {
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -1477,6 +1497,7 @@ describe("predicting a Gameweek", () => {
 
   test("logs an unsuccessful OpenRouter call and continues without a Prediction", async () => {
     await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -1514,6 +1535,7 @@ describe("predicting a Gameweek", () => {
 
   test("records an OpenRouter 429 as a rate limit", async () => {
     await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -1538,6 +1560,7 @@ describe("predicting a Gameweek", () => {
 
   test("records a signalled HTTP timeout separately", async () => {
     await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -1563,6 +1586,7 @@ describe("predicting a Gameweek", () => {
 
   test("logs an unexpected OpenRouter envelope instead of aborting", async () => {
     await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -1599,6 +1623,7 @@ describe("predicting a Gameweek", () => {
     let calls = 0;
 
     await predictGameweek({
+      competition: "PL",
       database: client,
       season: "2026-27",
       gameweek: 1,
@@ -1703,6 +1728,7 @@ describe("predicting a Gameweek", () => {
       };
     };
     const common = {
+      competition: "PL",
       season: "2026-27",
       gameweek: 1,
       concurrency: 1,
@@ -1761,6 +1787,7 @@ describe("predicting a Gameweek", () => {
 
     try {
       await expect(predictGameweek({
+        competition: "PL",
         database: client,
         season: "2026-27",
         gameweek: 1,

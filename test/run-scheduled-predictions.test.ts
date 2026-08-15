@@ -33,9 +33,17 @@ describe("scheduled Prediction runs", () => {
   beforeEach(async () => {
     await client.query(
       `truncate
-         prediction_runs, predictions, contexts, fixtures, attempts, models,
-         gameweeks, historical_matches, fpl_players, raw_snapshots
+         competitions, prediction_runs, predictions, contexts, fixtures,
+         attempts, models, gameweeks, historical_matches, fpl_players,
+         raw_snapshots
        restart identity cascade`
+    );
+    // The scheduler walks the listed Competitions, so a Season with Gameweeks
+    // and no `competitions` row has nothing due -- listing one is the
+    // operational act the migration left it as, and this is the row a deploy
+    // makes by hand (docs/runbooks/pre-cron-checklist.md).
+    await client.query(
+      "insert into competitions (competition, season) values ('PL', '2026-27')"
     );
     const bootstrapBody = await archivedBody(
       "fpl-bootstrap-2026-27.json.gz"
@@ -84,7 +92,9 @@ describe("scheduled Prediction runs", () => {
       })
     });
 
-    expect(runs).toEqual([{ gameweek: 1, trigger: "main" }]);
+    expect(runs).toEqual([{
+      competition: "PL", gameweek: 1, trigger: "main"
+    }]);
     const stored = await client.query(
       `select
          (select count(*)::int from predictions) as predictions,
@@ -166,7 +176,9 @@ describe("scheduled Prediction runs", () => {
       }
     });
 
-    expect(runs).toEqual([{ gameweek: 1, trigger: "fill" }]);
+    expect(runs).toEqual([{
+      competition: "PL", gameweek: 1, trigger: "fill"
+    }]);
     expect(fillRequests).toEqual([{
       model: "vendor/gap",
       context: mainContext
@@ -240,9 +252,11 @@ describe("scheduled Prediction runs", () => {
     });
 
     expect(runs).toEqual([{
+      competition: "PL",
       gameweek: 1,
       trigger: "main",
       gapAlert: {
+        competition: "PL",
         season: "2026-27",
         gameweek: 1,
         deadlineAt: new Date("2026-08-21T17:30:00Z"),
@@ -340,9 +354,11 @@ describe("scheduled Prediction runs", () => {
     observedAt = new Date("2026-08-21T17:30:00Z");
     const recoveredRuns = await runScheduledPredictions(options);
     expect(recoveredRuns).toEqual([{
+      competition: "PL",
       gameweek: 1,
       trigger: "main",
       gapAlert: {
+        competition: "PL",
         season: "2026-27",
         gameweek: 1,
         deadlineAt: new Date("2026-08-21T17:30:00Z"),

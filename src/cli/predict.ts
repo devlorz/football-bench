@@ -12,6 +12,10 @@ await database.connect();
 try {
   const gapAlert = await predictGameweek({
     database,
+    // The hand-run Prediction is the Premier League's. The scheduled run walks
+    // every active Competition; this one names the Gameweek an operator typed,
+    // and a Gameweek number means nothing until a Competition is named too.
+    competition: "PL",
     season: config.season,
     gameweek: config.gameweek,
     concurrency: config.concurrency,

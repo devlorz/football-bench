@@ -328,6 +328,7 @@ describe("the dashboard read API on a Locked Gameweek nothing has settled", () =
     );
     await scoreMatchSeason({
       database: writer,
+      competition: "PL",
       season: SEASON,
       now: () => new Date("2026-08-14T18:00:00Z")
     });
@@ -472,6 +473,7 @@ describe("the dashboard read API when the whole roster Gapped a Gameweek", () =>
     );
     await scoreMatchSeason({
       database: writer,
+      competition: "PL",
       season: SEASON,
       now: () => new Date("2026-08-16T10:00:00Z")
     });
@@ -719,6 +721,7 @@ describe("the dashboard read API with an Exhibition Run on the Season", () => {
     // row as a figure the Exhibition Run moved.
     await scoreMatchSeason({
       database: writer,
+      competition: "PL",
       season: SEASON,
       now: () => new Date("2026-11-15T12:00:00Z")
     });
@@ -789,6 +792,7 @@ describe("the dashboard read API with an Exhibition Run on the Season", () => {
     }
     await scoreMatchSeason({
       database: writer,
+      competition: "PL",
       season: SEASON,
       now: () => new Date("2026-11-16T10:00:00Z")
     });

@@ -58,15 +58,41 @@ coexistence proof spec 0016 requires before any La Liga row reaches the live dat
 
 **Blocked by:** 1.
 
-- [ ] The scheduler is one loop under the existing advisory lock, walking the active
+- [x] The scheduler is one loop under the existing advisory lock, walking the active
       Competitions read from the database — adding a Competition is an insert, not a
       workflow edit.
-- [ ] Two Competitions due in the same run are both processed, with disjoint prediction
+      _One due query joining `competitions`, so the whole Season's due work is ordered by
+      when it was due rather than by which league was walked first. A Season with
+      Gameweeks and no `competitions` row now has nothing due, which is the operational
+      act the migration left listing as; the manual insert is
+      [pre-cron checklist](../runbooks/pre-cron-checklist.md) §1._
+- [x] Two Competitions due in the same run are both processed, with disjoint prediction
       run rows — the overwrite the old key made possible is proven dead.
-- [ ] The scorer is scoped by `(competition, season)` and derives its Gameweek list per
+- [x] The scorer is scoped by `(competition, season)` and derives its Gameweek list per
       Competition; scores rows land disjoint and each leaderboard reads only its own.
-- [ ] The coexistence test drives the same entry points the crons call, over a temporary
+      _Every read API query that filters by Season filters `competition = 'PL'` beside it,
+      both tracks, as a literal rather than a parameter: a ranking must not be able to
+      span two leagues before any second league's rows exist, while which Competition a
+      reader asks for stays the shape ADR-0035 defers to the dashboard's own decision.
+      **The FPL-track reads are the one place this set reaches past its own scope.** The
+      spec puts the FPL track entirely out of scope, and ADR-0035 asks the read API to
+      filter by Competition everywhere it filters today; the tables carry the column
+      either way, because ticket 1 was forced to give it to them. Filtering them costs
+      one grant — `migrations/0023`, the `competition` column on the column-level
+      `attempts` grant the FPL squads endpoint reads through — and leaves no read whose
+      Competition-blindness needs its own explanation. A later ticket that decides the
+      FPL track should never have been filtered removes both together._
+      The scorer's stored `scores.detail` calls the Fixture id `fixtureId`, not `fplId` —
+      a football-data.org id under an FPL name would have been a false label on the
+      record's own evidence, and `scores` is empty in every deployed database, so the
+      rename cost nothing. The dashboard's published `fplId` **API field** is untouched
+      and stays a contract (ADR-0035)._
+- [x] The coexistence test drives the same entry points the crons call, over a temporary
       Postgres, and is green before ticket 8 may begin.
+      _`test/competition-coexistence.test.ts`, over `runScheduledPredictions` and
+      `scoreMatchCompetitions` — the functions `predict:scheduled` and `match:score` call.
+      The scorer's per-Competition loop moved out of the CLI into
+      `scoreMatchCompetitions` so that the test covers it rather than a copy of it._
 
 ## 3 — A derived-Lock Gameweek from football-data.org
 

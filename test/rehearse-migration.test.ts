@@ -45,7 +45,10 @@ describe("rehearsing a migration against a copy of the record", () => {
       connect
     });
 
-    expect(rehearsal.applied).toEqual(["0022_the_competition_dimension.sql"]);
+    expect(rehearsal.applied).toEqual([
+      "0022_the_competition_dimension.sql",
+      "0023_dashboard_reads_the_competition_column.sql"
+    ]);
     // The record the copy carried, not a shape asserted about the schema: an
     // operator reading a rehearsal needs to see that it ran over rows.
     expect(rehearsal.rows).toEqual({

@@ -198,7 +198,10 @@ describe("applying migrations", () => {
     await snapshotKeyedRecord(client);
 
     const applied = await applyMigrations(client);
-    expect(applied).toEqual(["0022_the_competition_dimension.sql"]);
+    expect(applied).toEqual([
+      "0022_the_competition_dimension.sql",
+      "0023_dashboard_reads_the_competition_column.sql"
+    ]);
 
     // Relabelled, not rewritten: every row of every rekeyed table comes back
     // carrying `PL` and otherwise identical, with the Fixture id under its
@@ -271,7 +274,8 @@ describe("applying migrations", () => {
       "0019_exhibition_role.sql",
       "0020_dashboard_reads_the_fpl_tables.sql",
       "0021_dashboard_reads_the_squad_record.sql",
-      "0022_the_competition_dimension.sql"
+      "0022_the_competition_dimension.sql",
+      "0023_dashboard_reads_the_competition_column.sql"
     ]);
     const backfill = await client.query<{
       observed_at: Date;

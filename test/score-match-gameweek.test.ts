@@ -180,6 +180,7 @@ describe("scoring the readable Match Points layer", () => {
   const score = (gameweek: number, at = SCORED_AT): Promise<void> =>
     scoreMatchGameweek({
       database: client,
+      competition: "PL",
       season: SEASON,
       gameweek,
       now: () => at

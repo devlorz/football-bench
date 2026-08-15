@@ -19,7 +19,8 @@ try {
     now: () => new Date(),
     onCompletedRun: (run) => {
       console.log(
-        `Completed ${run.trigger} Prediction run for Gameweek ${run.gameweek}`
+        `Completed ${run.trigger} Prediction run for ${run.competition} `
+        + `Gameweek ${run.gameweek}`
       );
       writeCompletedRunAlert(run);
     }

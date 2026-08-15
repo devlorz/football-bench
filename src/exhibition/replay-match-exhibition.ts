@@ -211,6 +211,9 @@ async function replayCoveredGameweeks({
     }));
     await attemptMatchCalls({
       database,
+      // An Exhibition Run replays a Premier League Gameweek's stored contexts;
+      // no other Competition has ever had one.
+      competition: "PL",
       season,
       gameweek,
       concurrency,

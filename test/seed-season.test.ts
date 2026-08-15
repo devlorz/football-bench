@@ -208,7 +208,8 @@ describe("the seeded Season and its three stopping points", () => {
       await client.query("delete from scores where track = 'match'");
       expect(await storedScores()).toEqual([]);
       await scoreMatchSeason({
-        database: client, season: SEASON, now: () => SEED_SCORED_AT
+        database: client, competition: "PL", season: SEASON,
+        now: () => SEED_SCORED_AT
       });
       expect(await storedScores()).toEqual(seeded);
     });

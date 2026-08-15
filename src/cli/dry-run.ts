@@ -80,6 +80,7 @@ try {
     try {
       writeCompletedRunAlert(
         {
+          competition: fill.gapAlert.competition,
           gameweek: config.gameweek,
           trigger: "fill",
           gapAlert: fill.gapAlert

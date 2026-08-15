@@ -76,6 +76,7 @@ export async function previewGameweek({
   const startedAt = Date.now();
   const gapAlert = await predictGameweek({
     database: target,
+    competition: "PL",
     season,
     gameweek,
     concurrency,

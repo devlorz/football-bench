@@ -75,18 +75,21 @@ export interface MatchContextData {
 
 export async function loadMatchContextData(
   database: Database,
+  competition: string,
   season: string,
   gameweek: number
 ): Promise<MatchContextData> {
   const deadlineResult = await database.query<{ deadline_at: Date }>(
     `select deadline_at
        from gameweeks
-      where season = $1 and gw = $2`,
-    [season, gameweek]
+      where competition = $1 and season = $2 and gw = $3`,
+    [competition, season, gameweek]
   );
   const deadline = deadlineResult.rows[0]?.deadline_at;
   if (deadline === undefined) {
-    throw new Error(`Gameweek ${season} ${gameweek} does not exist`);
+    throw new Error(
+      `Gameweek ${competition} ${season} ${gameweek} does not exist`
+    );
   }
   const historicalMatches = await database.query<HistoricalMatch>(
     `select
@@ -111,17 +114,17 @@ export async function loadMatchContextData(
        fpl_id, team_name, web_name, position, price_tenths, status,
        chance_of_playing_next_round, news, news_added
        from fpl_players
-      where season = $1 and gw = $2
+      where competition = $1 and season = $2 and gw = $3
       order by team_name, price_tenths desc, fpl_id`,
-    [season, gameweek]
+    [competition, season, gameweek]
   );
   // Only the Gameweek's own partition: the fetch writes one per rendering
   // Gameweek, and a Gameweek outside the gate simply has none.
   const squadChanges = await database.query<SquadChangeRow>(
     `select club, direction, player, counterpart_club, fee, loan, dated_on
        from squad_changes
-      where season = $1 and gw = $2`,
-    [season, gameweek]
+      where competition = $1 and season = $2 and gw = $3`,
+    [competition, season, gameweek]
   );
   return {
     season,
