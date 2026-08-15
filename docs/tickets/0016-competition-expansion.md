@@ -816,6 +816,14 @@ for `PL` since the Season opened.
       _Inserted 2026-08-15. `roster:enter` then seated twenty — ten per listed
       Competition, the Premier League's re-upserted harmlessly — and the scheduled run
       needed no edit to find them._
+
+      _**The cron did the Gameweek, not the hand-run command.** `prediction_runs` holds
+      `gw1 main` and `gw1 fill`, both started 16:24:02Z and completed by 16:27:59Z, and
+      every one of the sixty `predicted_at` falls inside that window. Both triggers were
+      due at once because the Lock was less than two hours away when the Competition was
+      listed. This is the box's actual proof: a league opened by one insert, and the
+      scheduled workflow found it, built its packets and wrote its Predictions with no
+      edit anywhere._
 - [ ] The football-data.org club names are mapped to football-data.co.uk's and reviewed,
       from the captured real response — ticket 6's second identity map, which could not
       honestly be drafted without it.
@@ -823,14 +831,49 @@ for `PL` since the Season opened.
       (see the first box). The twenty names this map's keys come from are the twenty
       ticket 7 already derived its own map's keys from._ Until it exists every La Liga club's history section
       reads "none in stored data" over a complete backfill, and nothing fails.
-- [ ] The daily fetch's two history sources become a loop over the listed Competitions,
+- [x] The daily fetch's two history sources become a loop over the listed Competitions,
       which is also what closes **ticket 6's history and xG boxes**: their prior Season is
       backfilled and their current Season arrives here. Both hold the `PL` literal today, which ticket 6
       was right to leave — but from the moment `PD` is live its backfilled table would
       otherwise never move again.
+      _Three sources, not two: Squad Changes carried the same literal and cost the same
+      staleness. La Liga's 137 reached the record through a one-off script during the
+      Gameweek 1 scramble, which is what a literal looks like when it finally bites; the
+      script is deleted._
+
+      _A Season listing no Competition now reaches no source at all — the scheduler's
+      behaviour since ticket 2, and what the pre-cron checklist already calls the quietest
+      way for a deployment to do nothing. The suite's tests seated the `competitions` row
+      they had been letting the literal stand in for._
+
+      _The stale-source guard stays Premier League only and now says so in the code: it
+      dates itself from Gameweek 1's deadline and asks whether the **English** feed is
+      live. **Each Competition needs its own before its own first deadline** — open, and
+      the first thing to write for Serie A._
 - [ ] The pre-cron checklist runs for the new Competition and comes back clean.
-- [ ] The first derived deadline is observed, the Gameweek Locks, and every Entrant's
+      _Most of it did, out of order, under the Gameweek 1 clock: §1's `competitions`
+      insert and `roster:enter`, §3's token, §5's hand-dispatched `fetch.yml` (green on
+      the new code at 15:53Z), and §5's prior-Season xG, which ticket 6 had already
+      ingested for `PD`. **Not done: §5's dry run against archived data.** It is the one
+      step that rehearses the whole write path before it writes, and it was skipped for
+      the reason the checklist exists to prevent — there was no time. Run it for `PD`
+      before Gameweek 2._
+
+      _§5 also says not to hand-dispatch a Prediction as a smoke test. That was not the
+      hazard here: the run was the real one, and in the end the scheduler beat it to the
+      work anyway._
+- [x] The first derived deadline is observed, the Gameweek Locks, and every Entrant's
       Prediction with its stored context predates the Lock.
+      _Sixty of sixty — ten Entrants over six Fixtures, **no Gap** — six stored contexts
+      with six distinct hashes, four Repairs spent of a possible one hundred and eighty,
+      and eight failed attempts all recovered. Latest `predicted_at` 16:26:28Z against a
+      Lock of 17:00:00Z and an earliest kick-off of 17:30:00Z._
+
+      _**The Lock was set by hand, and ADR-0036 carries a dated banner saying so.** The
+      derived 16:00Z had passed before the Competition was activated; nothing had been
+      committed under it, so nothing was rewritten. What it costs — a thirty-minute
+      cut-off where every other Gameweek has ninety, so this one is not strictly
+      comparable — is written down rather than smoothed over._
 - [ ] If curation slipped past Gameweek 2, the escape hatch was taken as decided —
       launch at Gameweek 3 with the sections that are ready — and the stored contexts
       record exactly what shipped.
