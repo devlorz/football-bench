@@ -1,5 +1,5 @@
 import pg from "pg";
-import { enterSeasonRoster } from "../season-roster.js";
+import { enterActiveCompetitionRosters } from "../season-roster.js";
 import { readScoreJobConfig } from "./config.js";
 
 const { Client } = pg;
@@ -10,7 +10,7 @@ const database = new Client({ connectionString: config.databaseUrl });
 
 await database.connect();
 try {
-  const entered = await enterSeasonRoster(database, config.season);
+  const entered = await enterActiveCompetitionRosters(database, config.season);
   console.log(`Entered ${entered.length} Entrants: ${entered.join(", ")}`);
 } finally {
   await database.end();

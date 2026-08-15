@@ -11,7 +11,10 @@ import {
 import { footballDataTeamName } from "../football-data/team-identity.js";
 import { emptyRepairDistribution } from "../repairs.js";
 import { GAP_CAUSES, type GapCause } from "./gap-alert.js";
-import { MATCH_PROMPT_VERSION } from "./openrouter-entrant.js";
+import {
+  MATCH_PROMPT_VERSION,
+  matchPromptOf
+} from "./openrouter-entrant.js";
 
 type Database = Pick<Client, "query">;
 
@@ -1203,6 +1206,10 @@ async function ensureReferenceLines(database: Database): Promise<void> {
               provider = excluded.provider,
               prompt_version = excluded.prompt_version,
               role = excluded.role`,
+      // One row per line for every Competition, not one per Competition: a
+      // Reference Line is asked nothing, so its Prompt Version selects no
+      // seat and every read of it goes by id. Ten Entrants multiply per
+      // Competition (ADR-0038); three arithmetic rules do not.
       [id, name, MATCH_PROMPT_VERSION]
     );
   }
@@ -1557,22 +1564,28 @@ async function targetGameweeks(
 }
 
 /**
- * The Season roster: every Match Entrant `models` holds. No exclusion is
- * representable and removing one would need its own decision (CONTEXT.md).
- * Reference Lines are not in it, and so neither empty a complete case nor stand
- * as a Comparison Anchor.
+ * The Season roster: every Match Entrant `models` holds for this Competition.
+ * No exclusion is representable and removing one would need its own decision
+ * (CONTEXT.md). Reference Lines are not in it, and so neither empty a complete
+ * case nor stand as a Comparison Anchor.
  *
  * An FPL seat holds the same `entrant` role and is told apart by its Prompt
  * Version, here as in every other place that asks who was asked to answer. The
  * role alone would carry the whole FPL roster into a Match complete case and
- * empty it, since an FPL seat writes no Match Prediction.
+ * empty it, since an FPL seat writes no Match Prediction. A second
+ * Competition's seats are told apart the same way, by the Prompt Version its
+ * own ten are entered under (ADR-0038) — the Premier League's ten would empty
+ * every La Liga complete case for exactly the same reason.
  */
-export async function matchRoster(database: Database): Promise<string[]> {
+export async function matchRoster(
+  database: Database,
+  competition: string
+): Promise<string[]> {
   const stored = await database.query<{ id: string }>(
     `select id from models
       where role = 'entrant' and prompt_version = $1
       order by id`,
-    [MATCH_PROMPT_VERSION]
+    [matchPromptOf(competition).version]
   );
   return stored.rows.map(({ id }) => id);
 }
@@ -1625,7 +1638,7 @@ export async function scoreMatchGameweek({
   // carries the same stamp however long the pass takes.
   const scoredAt = now();
 
-  const roster = await matchRoster(database);
+  const roster = await matchRoster(database, competition);
 
   // Over every Fixture the Season's Locks own rather than only this Gameweek's,
   // so scoring one Gameweek back-fills the lines across the Season the Entrants

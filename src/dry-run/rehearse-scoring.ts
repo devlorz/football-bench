@@ -99,7 +99,7 @@ export async function rehearseScoring({
 
   const report: ScoringRehearsalReport = {
     settled,
-    entrants: await matchRoster(target),
+    entrants: await matchRoster(target, "PL"),
     metrics: await readMetrics(target, season)
   };
   return { report, dryRun, ...verifyScoringRehearsal(report) };

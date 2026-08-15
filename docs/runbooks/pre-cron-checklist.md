@@ -39,6 +39,19 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
 psql "$DATABASE_URL" -c "select competition, season from competitions"
 ```
 
+**Then enter the roster, not before.** `npm run roster:enter` seats the ten Entrants in
+every Competition the table lists, each under that Competition's own frozen Prompt Version
+(ADR-0038), so a Competition inserted afterwards has no seats until it is run again — and a
+Gameweek predicted with no seat throws `No Entrants are configured for <code>` rather than
+quietly predicting nothing. It is safe to re-run: the seats are upserted.
+
+```bash
+set -a; . ./.env; set +a; npm run --silent roster:enter
+```
+
+A Competition with no frozen Prompt Version fails by name here, which is the check that a
+league was opened in the code as well as in the table.
+
 ## 2. Create the repository
 
 Create it on GitHub, push `main`, and keep it **public**.

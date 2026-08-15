@@ -29,6 +29,14 @@ export interface CalledRow {
  * The frozen Prompt Versions a run can be at — which is the same thing as
  * which track it is. Named as the two constants rather than as `string`, so a
  * caller cannot ask this door to admit a version nothing builds.
+ *
+ * Narrower than that since ADR-0038: the match track now builds one Prompt
+ * Version per Competition, and this admits only the Premier League's. Left
+ * narrow deliberately — an Exhibition Run replays one Competition's stored
+ * contexts under that Competition's version (ADR-0038's own consequence), and
+ * deciding what that means is the work that should widen this, not a `string`
+ * here ahead of it. Until then a non-`PL` Exhibition is unsayable rather than
+ * silently replayed under the wrong league's prompt.
  */
 type FrozenPromptVersion =
   | typeof MATCH_PROMPT_VERSION

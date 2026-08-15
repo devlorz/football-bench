@@ -27,7 +27,10 @@ _Avoid_: tier (Tier is the Match Points tier and nothing else)
 
 **Prompt Version**:
 A frozen (prompt template + context builder) pair. Held constant across all Entrants within
-a season so that any difference between them is attributable to the Base Model alone.
+a season so that any difference between them is attributable to the Base Model alone. One
+per Competition on the match track (ADR-0038): the template is shared and its only variable
+is the Competition's name, so a difference between two leagues is the league's name and
+nothing else.
 _Avoid_: prompt variant, prompt config
 
 **Reference Line**:
@@ -36,9 +39,12 @@ for orientation. Reference Lines are not ranked and cannot win.
 _Avoid_: baseline as a competitor (a Reference Line never competes)
 
 **Season Roster**:
-The Entrants included in Season-wide comparisons. One per track: every `models` row with
-`role = 'entrant'` carrying that track's Prompt Version, since a seat is entered for a track
-and both tracks' seats hold the same role. No exclusion within a track is representable.
+The Entrants included in Season-wide comparisons. One per track and, on the match track,
+per Competition: every `models` row with `role = 'entrant'` carrying that Prompt Version,
+since a seat is entered for a track and a Competition while every seat holds the same role.
+The roster itself is one roster — what multiplies is seats, not Entrants, and every
+Competition seats the roster that stood at the Season's first Lock however late it opens
+(ADR-0034, ADR-0038). No exclusion within a track is representable.
 Removing an Entrant would require a new recorded decision, ADR and storage representation.
 
 **Exhibition Run**:

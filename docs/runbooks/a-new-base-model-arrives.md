@@ -95,12 +95,18 @@ Walking away from a candidate at this point is deleting one row.
 
 Only once the replacement has answered:
 
-1. Delete the outgoing Entrant rows and the temporary candidate row.
+1. Delete the outgoing Entrant rows — **one per Competition**, not one: the match track
+   seats the roster in every listed Competition under that Competition's own Prompt
+   Version (ADR-0038), so `match/NAME` has a `match-pd/NAME` beside it. Delete the
+   temporary candidate row too.
 2. Edit the roster of record — the seat's id names the Base Model, so a succession is a
    new id, and the `canonicalSlug` and catalog-checked date are the ones section 3
    observed.
-3. Enter both tracks. `npm run roster:enter` writes the Match seats; the FPL seats are
-   entered by hand at the FPL Prompt Version, one per Base Model.
+3. Enter both tracks. `npm run roster:enter` writes the Match seats for every Competition
+   the `competitions` table lists; the FPL seats are entered by hand at the FPL Prompt
+   Version, one per Base Model. If step 1 left an outgoing seat behind, this refuses by
+   name rather than seating over it — the Season Roster closed at the first Lock and the
+   stored seats are the record of what stood there.
 4. Run the full-roster pre-flight and write its report into `docs/reports`, in the shape
    of the ones already there.
 

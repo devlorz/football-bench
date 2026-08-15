@@ -1,5 +1,5 @@
 import type { Client } from "pg";
-import { MATCH_PROMPT_VERSION } from "./openrouter-entrant.js";
+import { matchPromptOf } from "./openrouter-entrant.js";
 
 type Database = Pick<Client, "query">;
 
@@ -176,7 +176,7 @@ export async function readGapAlert(
     // every FPL seat as a Gap on every Fixture, and one with no recorded cause
     // at that, because the attempt it looks for is a Match attempt it never
     // made.
-    [competition, season, gameweek, MATCH_PROMPT_VERSION]
+    [competition, season, gameweek, matchPromptOf(competition).version]
   );
   const first = result.rows[0];
   if (first === undefined) {

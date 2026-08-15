@@ -176,6 +176,7 @@ export function buildMatchContext(
         awayTeam: fixture.away_team,
         changes: data.squadChanges
       })
-    ].filter((section) => section !== undefined).join("\n\n")
+    ].filter((section) => section !== undefined).join("\n\n"),
+    data.competition
   );
 }

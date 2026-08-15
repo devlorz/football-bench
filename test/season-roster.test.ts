@@ -3,7 +3,8 @@ import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
 import { MATCH_PROMPT_VERSION } from "../src/predictions/openrouter-entrant.js";
 import {
-  enterSeasonRoster, SEASON_ROSTER, SEASON_ROSTER_SIZE
+  enterActiveCompetitionRosters, enterSeasonRoster, SEASON_ROSTER,
+  SEASON_ROSTER_SIZE, seatPrefixOf
 } from "../src/season-roster.js";
 
 const { Client } = pg;
@@ -35,7 +36,9 @@ describe("entering the Season Roster", () => {
   });
 
   beforeEach(async () => {
-    await client.query("truncate models restart identity cascade");
+    await client.query(
+      "truncate models, competitions restart identity cascade"
+    );
   });
 
   const entrants = async (): Promise<ModelRow[]> => (
@@ -46,7 +49,7 @@ describe("entering the Season Roster", () => {
 
   test("writes the ten seats of ADR-0034 under the Season's Prompt Version",
     async () => {
-      await enterSeasonRoster(client, SEASON);
+      await enterSeasonRoster(client, "PL", SEASON);
 
       const rows = await entrants();
       expect(rows).toHaveLength(SEASON_ROSTER_SIZE);
@@ -78,7 +81,7 @@ describe("entering the Season Roster", () => {
 
   test("names the dated Base Model each seat resolves to, never as the request id",
     async () => {
-      await enterSeasonRoster(client, SEASON);
+      await enterSeasonRoster(client, "PL", SEASON);
 
       for (const row of await entrants()) {
         const entrant = SEASON_ROSTER.find(({ id }) => id === row.id);
@@ -97,7 +100,7 @@ describe("entering the Season Roster", () => {
 
   test("re-entering changes nothing and keeps a key it did not write",
     async () => {
-      await enterSeasonRoster(client, SEASON);
+      await enterSeasonRoster(client, "PL", SEASON);
       const before = await entrants();
       const [first] = before;
       await client.query(
@@ -106,7 +109,7 @@ describe("entering the Season Roster", () => {
         [first?.id]
       );
 
-      await enterSeasonRoster(client, SEASON);
+      await enterSeasonRoster(client, "PL", SEASON);
 
       const rows = await entrants();
       expect(rows).toHaveLength(SEASON_ROSTER_SIZE);
@@ -120,7 +123,7 @@ describe("entering the Season Roster", () => {
 
   test("leaves the two seats ADR-0034 declined to move exactly as they were",
     async () => {
-      await enterSeasonRoster(client, SEASON);
+      await enterSeasonRoster(client, "PL", SEASON);
 
       // The DeepSeek and Gemini rejections are recorded in ADR-0034 as an
       // absence of change, which is invisible in a roster of ten unless
@@ -148,30 +151,202 @@ describe("entering the Season Roster", () => {
         });
     });
 
-  test("refuses a roster whose length disagrees with the recorded size",
-    async () => {
-      // A seat dropped from the constant, or one added to it, is a Season
-      // entered at a size no decision records — and every number read against
-      // the roster would still be produced, meaning something else.
-      await expect(enterSeasonRoster(client, SEASON, SEASON_ROSTER.slice(1)))
-        .rejects.toThrow(
-          `The roster holds ${SEASON_ROSTER_SIZE - 1} Entrants, not `
-          + `${SEASON_ROSTER_SIZE} (ADR-0034)`
-        );
-      await expect(enterSeasonRoster(
-        client, SEASON, [...SEASON_ROSTER, SEASON_ROSTER[0]!]
-      )).rejects.toThrow(
-        `The roster holds ${SEASON_ROSTER_SIZE + 1} Entrants, not `
-        + `${SEASON_ROSTER_SIZE} (ADR-0034)`
+  test("refuses any roster but the Season Roster of record", async () => {
+    // A seat dropped from the constant, or one added to it, is a Season
+    // entered at a size no decision records — and every number read against
+    // the roster would still be produced, meaning something else.
+    const short = SEASON_ROSTER.slice(1);
+    await expect(enterSeasonRoster(client, "PL", SEASON, short))
+      .rejects.toThrow(
+        `PL would be seated with ${SEASON_ROSTER_SIZE - 1} Entrants`
+      );
+    await expect(enterSeasonRoster(
+      client, "PL", SEASON, [...SEASON_ROSTER, SEASON_ROSTER[0]!]
+    )).rejects.toThrow(
+      `PL would be seated with ${SEASON_ROSTER_SIZE + 1} Entrants`
+    );
+
+    // And a swap, which keeps the count: the door ADR-0034 shut at the first
+    // Lock is exactly the one a Competition opening later would reopen, and a
+    // guard that counted alone would hold it open (story 39).
+    const swapped = [
+      { ...SEASON_ROSTER[0]!, id: "match/late-arrival" },
+      ...SEASON_ROSTER.slice(1)
+    ];
+    await expect(enterSeasonRoster(client, "PD", SEASON, swapped))
+      .rejects.toThrow(
+        `PD seat 1 (${SEASON_ROSTER[0]!.id}) disagrees with the Season Roster `
+        + "as it stood at the Season's first Lock on id"
       );
 
-      // And it refuses before writing anything, not part way through.
-      expect(await entrants()).toHaveLength(0);
+    // And a transplant, which keeps the count *and* the ids: the seat reads
+    // as the roster's while the Base Model behind it is one the cutoff
+    // excluded. Ids alone would have admitted it — a `models` row's identity
+    // is the whole row, and `base_model` is what goes on the wire.
+    const transplanted = [
+      ...SEASON_ROSTER.slice(0, 9),
+      {
+        ...SEASON_ROSTER[9]!,
+        baseModel: "vendor/late-arrival",
+        canonicalSlug: "vendor/late-arrival-20260901"
+      }
+    ];
+    await expect(enterSeasonRoster(client, "PD", SEASON, transplanted))
+      .rejects.toThrow(
+        `PD seat ${SEASON_ROSTER_SIZE} (${SEASON_ROSTER[9]!.id}) disagrees `
+        + "with the Season Roster as it stood at the Season's first Lock on "
+        + "baseModel, canonicalSlug"
+      );
+
+    // And it refuses before writing anything, not part way through.
+    expect(await entrants()).toHaveLength(0);
+  });
+
+  // The guard above compares an argument against the constant, which across a
+  // deployment is the constant compared with itself: `SEASON_ROSTER` is
+  // editable, and an edit that kept the ids would be invisible to it. What
+  // stood at the Season's first Lock is in the database, so these three drive
+  // the drift through the stored rows rather than through the argument.
+  describe("against the seats the record already holds", () => {
+    test("refuses a Base Model swapped in behind a seat that is already stored",
+      async () => {
+        await enterSeasonRoster(client, "PL", SEASON);
+        // Indistinguishable, from here, from `SEASON_ROSTER` having been
+        // edited after the Premier League was seated: stored and constant
+        // disagree, and only the stored row is evidence of the first Lock.
+        await client.query(
+          "update models set base_model = 'vendor/late' where id = $1",
+          [SEASON_ROSTER[0]!.id]
+        );
+
+        // A Competition opening later must not get the new Base Model...
+        await expect(enterSeasonRoster(client, "PD", SEASON)).rejects.toThrow(
+          `Seat ${SEASON_ROSTER[0]!.id} is stored as a different Base Model `
+          + "and the Season Roster closed at the Season's first Lock: "
+          + `base_model vendor/late -> ${SEASON_ROSTER[0]!.baseModel}`
+        );
+        // ...and re-entering the Competition already seated must not rewrite
+        // its identity through the upsert, which is the same door from the
+        // inside.
+        await expect(enterSeasonRoster(client, "PL", SEASON)).rejects
+          .toThrow(/closed at the Season's first Lock/);
+
+        const stored = await client.query<{ base_model: string }>(
+          "select base_model from models where id = $1",
+          [SEASON_ROSTER[0]!.id]
+        );
+        expect(stored.rows[0]?.base_model).toBe("vendor/late");
+        expect(await entrants()).toHaveLength(SEASON_ROSTER_SIZE);
+      });
+
+    test("refuses a stored Match seat the roster no longer names", async () => {
+      await client.query(
+        `insert into models (
+           id, name, base_model, provider, prompt_version, role
+         ) values ('match/late-arrival', 'Late Arrival', 'vendor/late',
+                   'vendor', $1, 'entrant')`,
+        [MATCH_PROMPT_VERSION]
+      );
+
+      await expect(enterSeasonRoster(client, "PD", SEASON)).rejects.toThrow(
+        "Seat match/late-arrival is stored at a Match Prompt Version and is "
+        + "not in the roster being entered"
+      );
     });
 
+    test("lets a re-checked seat through: the date is not an identity",
+      async () => {
+        await enterSeasonRoster(client, "PL", SEASON);
+        // ADR-0009's per-seat catalog check moves whenever an operator looks
+        // again. Refusing that would make the guard a reason not to check.
+        await client.query(
+          `update models
+              set config = config || '{"catalog_checked_at": "2026-09-01"}'
+            where id = $1`,
+          [SEASON_ROSTER[0]!.id]
+        );
+
+        await enterSeasonRoster(client, "PD", SEASON);
+
+        expect(await entrants()).toHaveLength(SEASON_ROSTER_SIZE * 2);
+      });
+  });
+
+  // The seat prefix is the Prompt Version's leading segment, and it is what
+  // the upsert keys on — so a `MATCH_PROMPTS` entry at another track's version
+  // would overwrite that track's seats in silence. Neither refusal is
+  // reachable through `MATCH_PROMPTS` as it stands, which is the reason to
+  // walk into them here rather than take them on trust.
+  test("refuses a Prompt Version that is not this Season's match track", () => {
+    expect(seatPrefixOf(MATCH_PROMPT_VERSION, SEASON)).toBe("match");
+    expect(seatPrefixOf("match-pd/2026-27-v1", SEASON)).toBe("match-pd");
+
+    expect(() => seatPrefixOf("fpl/2026-27-v2", SEASON))
+      .toThrow("Prompt Version fpl/2026-27-v2 is not the match track's");
+    expect(() => seatPrefixOf("matchless/2026-27-v1", SEASON))
+      .toThrow("is not the match track's");
+    expect(() => seatPrefixOf(MATCH_PROMPT_VERSION, "2027-28"))
+      .toThrow(`SEASON 2027-28 does not own Prompt Version ${
+        MATCH_PROMPT_VERSION}`);
+  });
+
   test("refuses a Season the frozen Prompt Version does not name", async () => {
-    await expect(enterSeasonRoster(client, "2027-28")).rejects
+    await expect(enterSeasonRoster(client, "PL", "2027-28")).rejects
       .toThrow(/does not own Prompt Version/);
     expect(await entrants()).toHaveLength(0);
   });
+
+  test("refuses a Competition with no frozen Prompt Version", async () => {
+    await expect(enterSeasonRoster(client, "SA", SEASON)).rejects
+      .toThrow("Competition SA has no frozen Prompt Version");
+    expect(await entrants()).toHaveLength(0);
+  });
+
+  test("seats the same ten in a second Competition under its own version",
+    async () => {
+      await enterSeasonRoster(client, "PL", SEASON);
+      await enterSeasonRoster(client, "PD", SEASON);
+
+      const rows = await entrants();
+      expect(rows).toHaveLength(SEASON_ROSTER_SIZE * 2);
+
+      // The same ten Base Models, seated twice: what multiplies is seats, not
+      // Entrants (ADR-0038).
+      const byVersion = new Map<string, string[]>();
+      for (const row of rows) {
+        byVersion.set(row.prompt_version, [
+          ...byVersion.get(row.prompt_version) ?? [],
+          row.base_model
+        ]);
+      }
+      const baseModels = SEASON_ROSTER.map(({ baseModel }) => baseModel).sort();
+      expect([...byVersion.keys()].sort())
+        .toEqual(["match-pd/2026-27-v1", MATCH_PROMPT_VERSION]);
+      for (const seated of byVersion.values()) {
+        expect(seated.sort()).toEqual(baseModels);
+      }
+
+      // Distinct ids, because `models.id` is the primary key — and the
+      // Premier League's ten are the ones that do not move.
+      expect(rows.filter(({ id }) => id.startsWith("match-pd/")))
+        .toHaveLength(SEASON_ROSTER_SIZE);
+      expect(rows.map(({ id }) => id)).toContain("match/claude-opus-5");
+      expect(rows.map(({ id }) => id)).toContain("match-pd/claude-opus-5");
+    });
+
+  test("seats every Competition the Season lists, read from the table",
+    async () => {
+      await client.query(
+        `insert into competitions (competition, season)
+         values ('PL', $1), ('PD', $1)`,
+        [SEASON]
+      );
+
+      // Opening a league is the insert above and no edit here — the shape the
+      // scheduler, the scorer and the daily fetch already take.
+      const entered = await enterActiveCompetitionRosters(client, SEASON);
+
+      expect(entered).toHaveLength(SEASON_ROSTER_SIZE * 2);
+      expect(await entrants()).toHaveLength(SEASON_ROSTER_SIZE * 2);
+    });
 });

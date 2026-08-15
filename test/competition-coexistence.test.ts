@@ -9,7 +9,7 @@ import {
 import {
   handleDashboardRequest, type LeaderboardBody
 } from "../src/dashboard/read-api.js";
-import { MATCH_PROMPT_VERSION } from "../src/predictions/openrouter-entrant.js";
+import { matchPromptOf } from "../src/predictions/openrouter-entrant.js";
 import { outcomeOf, type FixtureResult } from "../src/fixture-result.js";
 import { archivedBase64Body } from "./archived-fixture.js";
 import { resetSchema } from "./schema-fixture.js";
@@ -18,7 +18,14 @@ const { Client } = pg;
 
 const SEASON = "2026-27";
 const DEADLINE = "2026-08-21T17:30:00Z";
-const ENTRANT = "entrant/a";
+/**
+ * One tracer seat per Competition. Two rows and not one, because a seat is a
+ * `models` row carrying a Prompt Version and each Competition freezes its own
+ * (ADR-0038) — so the ten Entrants of the roster are ten rows per Competition,
+ * and a single row would be a seat in whichever league its version names.
+ */
+const SEATS = { PL: "entrant/a", PD: "entrant-pd/a" } as const;
+const ENTRANT = SEATS.PL;
 
 /**
  * The Fixture id both Competitions use. Deliberately the same number in both:
@@ -79,13 +86,15 @@ describe("two Competitions through one scheduler and scorer", () => {
         [competition, SEASON, FIXTURE]
       );
     }
-    await client.query(
-      `insert into models (
-         id, name, base_model, provider, prompt_version, role
-       ) values ($1, 'Tracer Entrant', 'openai/gpt-5.2', 'openai', $2,
-                 'entrant')`,
-      [ENTRANT, MATCH_PROMPT_VERSION]
-    );
+    for (const [competition, seat] of Object.entries(SEATS)) {
+      await client.query(
+        `insert into models (
+           id, name, base_model, provider, prompt_version, role
+         ) values ($1, 'Tracer Entrant', 'openai/gpt-5.2', 'openai', $2,
+                   'entrant')`,
+        [seat, matchPromptOf(competition).version]
+      );
+    }
   });
 
   test("both Competitions due in one run land disjoint rows", async () => {
@@ -214,7 +223,7 @@ describe("two Competitions through one scheduler and scorer", () => {
                 '{"H":0.5,"D":0.3,"A":0.2}', 2, 1, c.id, 0
            from contexts c
           where c.competition = $2 and c.season = $3 and c.fixture_id = $4`,
-        [ENTRANT, competition, SEASON, FIXTURE]
+        [SEATS[competition], competition, SEASON, FIXTURE]
       );
       await client.query(
         `update fixtures
@@ -243,17 +252,24 @@ describe("two Competitions through one scheduler and scorer", () => {
       { competition: "PL", gameweeks: [1] }
     ]);
 
-    const points = await client.query<{ competition: string; value: string }>(
-      `select competition, value from scores
-        where model_id = $1 and season = $2 and gw = 1 and track = 'match'
-          and metric = $3
+    const points = await client.query<{
+      competition: string;
+      model_id: string;
+      value: string;
+    }>(
+      `select competition, model_id, value from scores
+        where model_id = any($1) and season = $2 and gw = 1
+          and track = 'match' and metric = $3
         order by competition`,
-      [ENTRANT, SEASON, MATCH_POINTS_METRIC]
+      [Object.values(SEATS), SEASON, MATCH_POINTS_METRIC]
     );
-    // Five for the exact score, nought for the wrong outcome (CONTEXT.md).
+    // Five for the exact score, nought for the wrong outcome (CONTEXT.md) —
+    // and each figure against the seat of its own Competition, so a scorer
+    // reading the Premier League's roster into La Liga would leave the PD row
+    // missing rather than merely wrong.
     expect(points.rows).toEqual([
-      { competition: "PD", value: "0" },
-      { competition: "PL", value: "5" }
+      { competition: "PD", model_id: SEATS.PD, value: "0" },
+      { competition: "PL", model_id: SEATS.PL, value: "5" }
     ]);
 
     // Every score identity the run produced, under each Competition. The two
@@ -266,14 +282,21 @@ describe("two Competitions through one scheduler and scorer", () => {
       competition: string;
       keys: string[];
     }>(
+      // The seat id is normalised out: each Competition seats its own ten
+      // (ADR-0038), so the ids differ by design and what has to match between
+      // the two sets is every metric and every Reference Line.
       `select competition,
-              array_agg(model_id || ' ' || gw || ' ' || metric
+              array_agg(replace(model_id, seat, 'seat')
+                        || ' ' || gw || ' ' || metric
                         order by model_id, gw, metric) as keys
          from scores
+         cross join lateral (
+           select case when competition = 'PD' then $2::text else $3::text end
+         ) as seats(seat)
         where season = $1 and track = 'match'
         group by competition
         order by competition`,
-      [SEASON]
+      [SEASON, SEATS.PD, SEATS.PL]
     );
     const [spain, england] = identities.rows;
     expect(spain?.competition).toBe("PD");

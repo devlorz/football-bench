@@ -12,7 +12,7 @@ import {
   type StoredContext
 } from "./attempt-match-calls.js";
 import {
-  MATCH_PROMPT_VERSION,
+  matchPromptOf,
   type MatchPromptFixture
 } from "./openrouter-entrant.js";
 import type { AttemptTrigger } from "./prediction-trigger.js";
@@ -155,10 +155,10 @@ export async function predictGameweek({
        from models
       where role = 'entrant' and prompt_version = $1
       order by id`,
-    [MATCH_PROMPT_VERSION]
+    [matchPromptOf(competition).version]
   );
   if (entrantResult.rows.length === 0) {
-    throw new Error("No Entrants are configured");
+    throw new Error(`No Entrants are configured for ${competition}`);
   }
 
   const work = await database.query<WorkItemRow>(
@@ -181,7 +181,7 @@ export async function predictGameweek({
              and p.fixture_id = f.fixture_id
         )
       order by f.fixture_id, m.id`,
-    [competition, season, gameweek, MATCH_PROMPT_VERSION]
+    [competition, season, gameweek, matchPromptOf(competition).version]
   );
 
   const contextData = trigger === "main"

@@ -235,17 +235,115 @@ seats.
 
 **Blocked by:** 1.
 
-- [ ] One template whose only variable is the Competition's name; each Competition's
+- [x] One template whose only variable is the Competition's name; each Competition's
       rendered text is a frozen constant with a sha over the rendered form.
-- [ ] A render test proves each Competition's text differs from the Premier League's
+      _`MATCH_PROMPTS` in `src/predictions/openrouter-entrant.ts`, one entry per
+      Competition holding its version, its sha and the one word the template varies by —
+      the same single-edit shape `competitions` and `DIVISIONS` already have. `matchContext`
+      takes the Competition and renders the name; there is no second wording to keep in
+      step.
+      **The sha is over a fully rendered context, not over the template.** That is the
+      mechanism that already exists — `MATCH_PROMPT_SHA256` has always pinned one whole
+      rendered packet, not the template alone — and a hash over the template would have
+      pinned the one part of the prompt no test was in danger of losing. The consequence is
+      recorded at the code: `PD`'s hash moves once ticket 6 names the Spanish divisions and
+      the league table stops reading "unavailable". That is legitimate rather than a break
+      of ADR-0026 — the freeze binds at first use (ADR-0038) and nothing predicts under
+      `match-pd/2026-27-v1` until ticket 8._
+- [x] A render test proves each Competition's text differs from the Premier League's
       rendering by exactly the Competition name.
-- [ ] The `PL` prompt constants are byte-for-byte untouched (ADR-0026).
-- [ ] Ten seats per active Competition are entered through the existing roster machinery,
+      _`test/openrouter-entrant.test.ts`, over one history string shared by both renderings
+      so the template is the only thing under test: `PD`'s rendering must equal `PL`'s with
+      "Premier League" replaced by "La Liga", character for character. Story 38 read
+      mechanically — comparing two frozen constants that look alike would have proved
+      nothing about the template they came from. `replaceAll` and not `replace`, so a
+      template naming the league twice fails rather than passing on its first occurrence.
+      **A Competition's name has two sources rendering into one packet** — this one and
+      `divisionsOf`'s top-division name in `build-historical-context.ts` — and they agree
+      invisibly today because the Premier League spells the same in both. Ticket 6 is where
+      they can part: Spanish divisions named "LaLiga" or "Primera División" would have one
+      packet calling one league two things, with the frozen sha holding the disagreement in
+      place. A test now asserts they agree for every Competition that has both. **Found by
+      review.**_
+- [x] The `PL` prompt constants are byte-for-byte untouched (ADR-0026).
+      _Both `export const` lines are the same bytes, and `MATCH_PROMPTS.PL` refers to them
+      rather than restating them, so there is no second copy to drift. The pinned hash test
+      passing unchanged is what proves the rendering did not move under the refactor._
+- [x] Ten seats per active Competition are entered through the existing roster machinery,
       and the Season-prefix validation on version strings carries the Competition.
-- [ ] The seats are the Season Roster that stood at the Season's first Lock; a later
+      _`enterSeasonRoster` takes the Competition and reads its version from
+      `matchPromptOf`; `enterActiveCompetitionRosters` loops the `competitions` table, which
+      is the shape the scheduler, the scorer and the daily fetch already take, so opening a
+      league is the insert plus one `MATCH_PROMPTS` entry. One transaction per Competition,
+      so a league whose Prompt Version has not been frozen fails by name and leaves the
+      leagues already seated seated — and the refusal names which ones those were, since an
+      operator reading only the error would otherwise not know whether any landed. **Found
+      by review.**
+      `seatPrefixOf` reads the seat prefix off the version having refused two things: a
+      version that is not this Season's, and one that is not the **match track's**. The
+      second was missing at first, on the reasoning that the version is the Competition's by
+      having been looked up by it — but the same change gave that segment a new job, as the
+      seat id the upsert keys on, so a `MATCH_PROMPTS` entry beginning `fpl/` would have
+      built ten `fpl/…` ids and overwritten the FPL track's seats in silence. Story 25
+      *extends* the Season-prefix rule to carry the Competition; extending is not dropping
+      the half it already had. **Found by review.** It is exported so both refusals can be
+      walked into — neither is reachable through `MATCH_PROMPTS` as it stands.
+      **A seat's `models` id carries the Competition too** — `match-pd/claude-opus-5` beside
+      `match/claude-opus-5` — because `id` is the primary key and ADR-0038 grows ten rows
+      per Competition. The prefix is the Prompt Version's own leading segment, so the seat
+      and the version cannot name different leagues, and the Premier League's ten ids do not
+      move. It is **not** a Track and is not named one: a Track is `match` or `fpl`
+      (CONTEXT.md) and ADR-0035 refused representing a Competition as one. **Found by
+      review.** `test/competition-coexistence.test.ts` seats one tracer per Competition for the
+      same reason and normalises the id out of its disjointness assertion.
+      The three Reference Lines stay one row each for every Competition, recorded at the
+      code: a Reference Line is asked nothing, so its Prompt Version selects no seat and
+      every read of it goes by id._
+- [x] The seats are the Season Roster that stood at the Season's first Lock; a later
       Competition is not a door for a Base Model that missed ADR-0034's cutoff.
-- [ ] Prediction runs, fill runs and gap alerts operate per Competition through their
+      _The guard compares whole Entrant identities against `SEASON_ROSTER`, field for field,
+      rather than counting seats (story 39). Two doors, not one: a **swap** keeps the count,
+      and a **transplant** keeps the count *and* the ids — the same id and name over a
+      different `baseModel`, `provider`, `quantization` or `canonicalSlug`, which is what a
+      `models` row actually sends on the wire. A guard on ids alone let the second one
+      through, and a Competition opening after the first Lock is exactly where a Base Model
+      that missed the cutoff would arrive. **The id-only version was found by review**; both
+      shapes now have a test.
+      The message names the failing seat's position and the fields that disagree rather than
+      its id — under a transplant the id is the roster's, and naming it would say a seat is
+      not itself. It names the Competition too, since the seating is now per Competition and
+      "the roster" alone would not say which one was refused.
+      **That guard alone is still the constant compared with itself, so it is not the
+      first-Lock rule.** `SEASON_ROSTER` is editable; an edit that kept the ids reads
+      identically on both sides of the comparison, and a Competition seated afterwards would
+      get the new Base Model while re-running an already-seated one would rewrite its stored
+      identity through the upsert. **Found by review, twice — the second time on the fix for
+      the first.** The record of what stood at the Season's first Lock is the **stored
+      seats**, not a constant in a file, so `refuseARosterTheRecordDisagreesWith` reads every
+      Competition's Match seats from `models` and refuses a roster that disagrees with them:
+      a Base Model swapped in behind a stored seat, and a stored seat the roster no longer
+      names. Every Competition's seats and not this one's, because the ten are one roster
+      across the leagues (ADR-0038) — the Premier League's stored seats are what La Liga's
+      are checked against.
+      `catalogCheckedAt` is the one field outside the identity, deliberately: ADR-0009's
+      per-seat check moves whenever an operator looks again, and refusing that would make
+      the guard a reason not to look. Three tests drive the drift through the stored rows
+      rather than through the argument, which is the only way the cross-deployment case is
+      reachable at all._
+- [x] Prediction runs, fill runs and gap alerts operate per Competition through their
       existing Prompt Version filters, unchanged.
+      _The filters are unchanged; what they are given is the Competition's version.
+      `predict-gameweek.ts` (both queries — the roster read and the work query, so a fill
+      run is covered by the same change as a main run) and `gap-alert.ts`.
+      **`matchRoster` too, which the box does not name.** Ticket 2 scoped the scorer by
+      Competition when there was one Prompt Version to read; with two, the Premier League's
+      ten would have been the roster of every league — emptying every La Liga complete case
+      (ADR-0011) and dropping `gap_rate` and `attempts_to_valid` from its scores, which is
+      how the coexistence test found it. Leaving it for a later ticket would have shipped a
+      scorer that silently reports a Competition as unscored.
+      `read-api.ts`, `preflight-base-models.ts` and `seed-season.ts` keep the `PL` literal:
+      each is the Premier League by nature and states the literal at its own boundary, the
+      convention tickets 2, 3 and 5 settled._
 
 ## 5 — A Competition-scoped context
 
