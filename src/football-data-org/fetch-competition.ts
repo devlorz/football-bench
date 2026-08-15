@@ -378,23 +378,37 @@ export async function fetchFootballDataOrgCompetition({
 
     for (const match of scheduled) {
       // A Fixture whose Gameweek Locked before the record ever saw it joins
-      // the next open Gameweek (ADR-0015) — unless it has already been played.
-      // A played Fixture was never predictable: handing it a `locked_in_gw`
-      // that points at an open Gameweek would queue it for Entrants who can
-      // read its score, because the predict path selects on
-      // `coalesce(locked_in_gw, gw)` and asks nothing about the result. It
-      // stays `null`, which leaves it under its own Locked Gameweek — history
-      // the context can read and the scorer ignores.
+      // the next open Gameweek (ADR-0015) — but only if that Gameweek's Lock
+      // still precedes its kick-off. A Prediction that postdates kick-off is
+      // the one thing this benchmark cannot allow, and the predict path
+      // selects on `coalesce(locked_in_gw, gw)` and asks nothing about the
+      // clock, so the refusal has to be here.
       //
-      // The FPL path this was copied from cannot reach the case, because its
-      // fetch has always started before Gameweek 1. This one is reached the
-      // first time a Competition is adopted mid-Season, which ticket 8's
-      // "launch at Gameweek 3" escape hatch makes a real plan rather than a
-      // hypothetical.
+      // The kickoff is the test, not the result. A Fixture already played is
+      // caught by it, and so is one this fetch found in flight or one whose
+      // result the source has not posted yet — the recorded first response for
+      // La Liga carried all ten of its opening Fixtures as `TIMED` hours after
+      // they kicked off, and a result-only test would have queued six of them
+      // for a Lock five days later. What stays `null` sits under its own
+      // Locked Gameweek: history the context can read and the scorer ignores.
+      //
+      // The three Fixtures ADR-0036 names as deferred to late August still
+      // move, because their kick-offs are after the open Gameweek's Lock,
+      // which is the case ADR-0015 exists for.
+      //
+      // The FPL path this was copied from cannot reach any of it: its fetch has
+      // always started before Gameweek 1. This one is reached the first time a
+      // Competition is adopted mid-Season, which ticket 8's "launch at
+      // Gameweek 3" escape hatch makes a real plan rather than a hypothetical.
+      const openDeadline = nextOpenGameweek === undefined
+        ? undefined
+        : deadlines.get(nextOpenGameweek)?.deadlineAt;
       const lockedInGameweek =
         deadlines.get(match.matchday)?.locked === true
-        && settledResult(match) === null
-          ? nextOpenGameweek ?? null
+        && nextOpenGameweek !== undefined
+        && openDeadline !== undefined
+        && match.kickoffAt.getTime() > openDeadline.getTime()
+          ? nextOpenGameweek
           : null;
       await database.query(
         `insert into fixtures (

@@ -406,4 +406,38 @@ describe("a Competition read from football-data.org", () => {
         { fixture_id: 550006, locked_in_gw: 2, played: false }
       ]);
     });
+
+  test("refuses a Gameweek to a Fixture that kicked off before its Lock",
+    async () => {
+      // The recorded first response, whose matchday 1 the API still called
+      // `TIMED` hours after all ten had kicked off — the source posts results
+      // when it posts them, and this is what it actually returned. A test that
+      // asked only whether a result was stored would let all ten into
+      // Gameweek 2, and six of them kicked off before Gameweek 2's Lock.
+      //
+      // The test is the kick-off, because that is the promise: a Prediction
+      // precedes its Fixture. Whether the score has been published yet is the
+      // source's business and changes nothing about what may still be asked.
+      const recorded = await archivedBody(
+        "football-data-org-2026-27-PD-recorded.json.gz"
+      );
+      await fetchAt("2026-08-16T06:00:00Z", recorded);
+
+      const [open] = (await client.query<{ gw: number; deadline_at: Date }>(
+        `select gw, deadline_at from gameweeks
+          where competition = $1 and season = $2 and deadline_at > $3
+          order by deadline_at limit 1`,
+        [COMPETITION, SEASON, new Date("2026-08-16T06:00:00Z")]
+      )).rows;
+      expect(open?.gw).toBe(2);
+
+      const { rows } = await client.query<{ count: string }>(
+        `select count(*) as count from fixtures
+          where competition = $1 and season = $2
+            and coalesce(locked_in_gw, gw) = $3
+            and kickoff_at <= $4`,
+        [COMPETITION, SEASON, open?.gw, open?.deadline_at]
+      );
+      expect(rows[0]?.count).toBe("0");
+    });
 });
