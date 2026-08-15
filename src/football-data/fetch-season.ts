@@ -333,18 +333,19 @@ export async function fetchFootballDataSeason({
   try {
     await database.query(
       `delete from historical_matches
-        where season = $1
-          and division = any($2::text[])`,
-      [season, DIVISIONS.map(({ name }) => name)]
+        where competition = $1 and season = $2
+          and division = any($3::text[])`,
+      [COMPETITION, season, DIVISIONS.map(({ name }) => name)]
     );
     for (const match of matches) {
       await database.query(
         `insert into historical_matches (
-           season, division, played_on, home_team, away_team,
+           competition, season, division, played_on, home_team, away_team,
            home_goals, away_goals,
            home_shots, away_shots, home_shots_on_target, away_shots_on_target
-         ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+         ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
         [
+          COMPETITION,
           match.season,
           match.division,
           match.playedOn,

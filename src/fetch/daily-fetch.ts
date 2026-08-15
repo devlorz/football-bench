@@ -71,16 +71,21 @@ async function requireCurrentSeasonMatchesAfterFirstDeadline(
   footballDataSeason: string,
   observedAt: Date
 ): Promise<void> {
+  // Premier League on both halves, as a literal: the feed this guards is
+  // football-data.co.uk's English one, and the Gameweek 1 whose deadline dates
+  // the guard has to be the same Competition's. Without it `gw = 1` returns a
+  // row per listed Competition and `rows[0]` picks between them by luck, while
+  // a Spanish result would answer "the English feed is live".
   const currentSeasonState = await database.query(
     `select
        g.deadline_at,
        exists (
          select 1
            from historical_matches h
-          where h.season = g.season
+          where h.season = g.season and h.competition = 'PL'
        ) as has_matches
        from gameweeks g
-      where g.season = $1 and g.gw = 1`,
+      where g.season = $1 and g.gw = 1 and g.competition = 'PL'`,
     [season]
   );
   const state = currentSeasonState.rows[0] as

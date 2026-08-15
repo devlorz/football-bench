@@ -5,6 +5,12 @@ the only migration in the repository with a window: it rekeys every table the wr
 touches, including the two — `attempts` and `prediction_runs` — that a run in flight is
 writing to at that moment.
 
+The pass carries whatever is pending behind it, and by now that is `0023` (one grant) and
+`0024` (the Competition column on `historical_matches` and `understat_match_xg`). Both are
+plain column work with no window of their own; the window below is `0022`'s and governs
+the pass. Re-run the rehearsal after any ticket adds a migration — one that predates the
+migrations it is supposed to cover has rehearsed nothing.
+
 Decisions: [ADR-0035](../adr/0035-the-match-track-grows-a-competition-dimension.md).
 Spec: [0016](../specs/0016-competition-expansion.md), stories 4 and 32.
 Vocabulary: [CONTEXT.md](../../CONTEXT.md).

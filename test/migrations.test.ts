@@ -200,7 +200,8 @@ describe("applying migrations", () => {
     const applied = await applyMigrations(client);
     expect(applied).toEqual([
       "0022_the_competition_dimension.sql",
-      "0023_dashboard_reads_the_competition_column.sql"
+      "0023_dashboard_reads_the_competition_column.sql",
+      "0024_history_and_xg_know_their_competition.sql"
     ]);
 
     // Relabelled, not rewritten: every row of every rekeyed table comes back
@@ -275,7 +276,8 @@ describe("applying migrations", () => {
       "0020_dashboard_reads_the_fpl_tables.sql",
       "0021_dashboard_reads_the_squad_record.sql",
       "0022_the_competition_dimension.sql",
-      "0023_dashboard_reads_the_competition_column.sql"
+      "0023_dashboard_reads_the_competition_column.sql",
+      "0024_history_and_xg_know_their_competition.sql"
     ]);
     const backfill = await client.query<{
       observed_at: Date;

@@ -111,14 +111,14 @@ describe("the benchmark database", () => {
   test("keeps a historical match whose source carried no shot counts", async () => {
     await client.query(
       `insert into historical_matches (
-         season, division, played_on, home_team, away_team,
+         competition, season, division, played_on, home_team, away_team,
          home_goals, away_goals,
          home_shots, away_shots, home_shots_on_target, away_shots_on_target
        ) values (
-         '2025-26', 'Premier League', '2025-08-15T00:00:00Z',
+         'PL', '2025-26', 'Premier League', '2025-08-15T00:00:00Z',
          'Liverpool', 'Bournemouth', 4, 2, 19, 10, 10, 3
        ), (
-         '1993-94', 'Premier League', '1993-08-14T00:00:00Z',
+         'PL', '1993-94', 'Premier League', '1993-08-14T00:00:00Z',
          'Arsenal', 'Coventry', 0, 3, null, null, null, null
        )`
     );
@@ -159,10 +159,10 @@ describe("the benchmark database", () => {
       const [column, value] = negativeCount.split(" = ");
       await expect(client.query(
         `insert into historical_matches (
-           season, division, played_on, home_team, away_team,
+           competition, season, division, played_on, home_team, away_team,
            home_goals, away_goals, ${column}
          ) values (
-           '2025-26', 'Premier League', '2025-08-15T00:00:00Z',
+           'PL', '2025-26', 'Premier League', '2025-08-15T00:00:00Z',
            'Liverpool', 'Bournemouth', 4, 2, ${value}
          )`
       )).rejects.toMatchObject({ code: "23514" });

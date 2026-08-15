@@ -1097,10 +1097,13 @@ const priorSeason = (season: string): string => {
  * Both stored divisions count: a promoted club spent the prior Season in the
  * Championship, and starting it level with a club that survived the Premier
  * League would say less than its own results do. A club neither division
- * mentions starts level, which is the most anything stored supports.
+ * mentions starts level, which is the most anything stored supports. Both
+ * divisions of the Competition being scored, that is: a rating carried over
+ * from another league's results would be a number about nobody.
  */
 async function priorSeasonResults(
   database: Database,
+  competition: string,
   season: string
 ): Promise<EloResult[]> {
   const rows = await database.query<{
@@ -1111,9 +1114,9 @@ async function priorSeasonResults(
   }>(
     `select home_team, away_team, home_goals, away_goals
        from historical_matches
-      where season = $1
+      where competition = $1 and season = $2
       order by played_on, home_team, away_team`,
-    [priorSeason(season)]
+    [competition, priorSeason(season)]
   );
   return rows.rows.map(({ home_team, away_team, home_goals, away_goals }) => ({
     homeTeam: home_team,
@@ -1633,7 +1636,7 @@ export async function scoreMatchGameweek({
     {
       id: REFERENCE_ELO,
       forecast: eloForecast(
-        await priorSeasonResults(database, season), locked
+        await priorSeasonResults(database, competition, season), locked
       )
     }
   ];

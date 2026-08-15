@@ -62,21 +62,21 @@ describe("predicting a Gameweek", () => {
   test("builds the stored context from historical rows available at the Gameweek deadline", async () => {
     await client.query(
       `insert into historical_matches (
-         season, division, played_on, home_team, away_team,
+         competition, season, division, played_on, home_team, away_team,
          home_goals, away_goals
        ) values
          (
-           '2025-26', 'Premier League', '2026-05-01T00:00:00Z',
+           'PL', '2025-26', 'Premier League', '2026-05-01T00:00:00Z',
            'Arsenal', 'Everton',
            3, 1
          ),
          (
-           '2025-26', 'Championship', '2026-05-02T00:00:00Z',
+           'PL', '2025-26', 'Championship', '2026-05-02T00:00:00Z',
            'Coventry', 'Hull',
            2, 0
          ),
          (
-           '2026-27', 'Premier League', '2026-08-22T00:00:00Z',
+           'PL', '2026-27', 'Premier League', '2026-08-22T00:00:00Z',
            'Coventry', 'Arsenal',
            9, 9
          )`
@@ -148,32 +148,32 @@ describe("predicting a Gameweek", () => {
   test("carries stored shots and joins Understat xG onto the form lines", async () => {
     await client.query(
       `insert into historical_matches (
-         season, division, played_on, home_team, away_team,
+         competition, season, division, played_on, home_team, away_team,
          home_goals, away_goals,
          home_shots, away_shots, home_shots_on_target, away_shots_on_target
        ) values
          (
-           '2025-26', 'Premier League', '2026-05-01T00:00:00Z',
+           'PL', '2025-26', 'Premier League', '2026-05-01T00:00:00Z',
            'Arsenal', 'Nott''m Forest',
            3, 1, 15, 8, 7, 3
          ),
          (
-           '2025-26', 'Championship', '2026-05-02T00:00:00Z',
+           'PL', '2025-26', 'Championship', '2026-05-02T00:00:00Z',
            'Coventry', 'Hull',
            2, 0, 19, 6, 8, 2
          )`
     );
     await client.query(
       `insert into understat_match_xg (
-         season, understat_match_id, kicked_off_at,
+         competition, season, understat_match_id, kicked_off_at,
          home_team, away_team, home_xg, away_xg
        ) values
          (
-           '2025-26', '26001', '2026-05-01T14:00:00Z',
+           'PL', '2025-26', '26001', '2026-05-01T14:00:00Z',
            'Arsenal', 'Nottingham Forest', 2.10, 0.85
          ),
          (
-           '2025-26', '26002', '2026-05-08T14:00:00Z',
+           'PL', '2025-26', '26002', '2026-05-08T14:00:00Z',
            'Arsenal', 'Everton', 1.40, 1.10
          )`
     );
@@ -233,21 +233,21 @@ describe("predicting a Gameweek", () => {
     // carries a real kick-off instant and must not ride in with it.
     await client.query(
       `insert into historical_matches (
-         season, division, played_on, home_team, away_team,
+         competition, season, division, played_on, home_team, away_team,
          home_goals, away_goals,
          home_shots, away_shots, home_shots_on_target, away_shots_on_target
        ) values (
-         '2026-27', 'Premier League', '2026-08-21T00:00:00Z',
+         'PL', '2026-27', 'Premier League', '2026-08-21T00:00:00Z',
          'Arsenal', 'Everton',
          3, 1, 15, 8, 7, 3
        )`
     );
     await client.query(
       `insert into understat_match_xg (
-         season, understat_match_id, kicked_off_at,
+         competition, season, understat_match_id, kicked_off_at,
          home_team, away_team, home_xg, away_xg
        ) values (
-         '2026-27', '27001', '2026-08-21T19:00:00Z',
+         'PL', '2026-27', '27001', '2026-08-21T19:00:00Z',
          'Arsenal', 'Everton', 2.10, 0.85
        )`
     );

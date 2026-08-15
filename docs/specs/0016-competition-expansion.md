@@ -110,10 +110,15 @@ filter.
 
 ### The context
 
-16. As a developer, I want every context builder to take the Competition it is building
-    for, and the two date-only queries (`historical_matches`, `understat_match_xg`) to
+16. As a developer, I want every context builder that selects rows or names a division to
+    take the Competition it is building for — narrowed from "every context builder" by
+    ADR-0037's amendment of 2026-08-15, which records why — and every read of
+    `historical_matches` and `understat_match_xg` that filters by date or Season alone to
     filter by Competition before any second league's rows land in those tables, so that
     no league's packet can silently blend another league's data.
+    _There were five such reads, not the two this story named: the context's history and
+    xG, the Elo line's prior Season, the daily fetch's staleness guard, and the FPL
+    track's league table._
 17. As an operator, I want La Liga's historical results, league table and prior-season
     points-per-game read from football-data.co.uk `SP1`, with `SP2` playing the
     Championship's role for promoted clubs, so that the league-table and PPG sections

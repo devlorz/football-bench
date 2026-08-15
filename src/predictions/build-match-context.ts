@@ -98,17 +98,17 @@ export async function loadMatchContextData(
        home_goals, away_goals,
        home_shots, away_shots, home_shots_on_target, away_shots_on_target
        from historical_matches
-      where played_on < $1
+      where competition = $1 and played_on < $2
       order by played_on`,
-    [deadline]
+    [competition, deadline]
   );
   // Bounded by the same deadline as the results: an xG row for a Match played
   // after the Lock can never reach a form line.
   const storedXg = await database.query<StoredMatchXg>(
     `select kicked_off_at, home_team, away_team, home_xg, away_xg
        from understat_match_xg
-      where kicked_off_at < $1`,
-    [deadline]
+      where competition = $1 and kicked_off_at < $2`,
+    [competition, deadline]
   );
   const fplPlayers = await database.query<FplPlayer>(
     `select

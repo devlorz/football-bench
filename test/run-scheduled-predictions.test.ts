@@ -141,9 +141,9 @@ describe("scheduled Prediction runs", () => {
     });
     await client.query(
       `insert into historical_matches (
-         season, division, played_on, home_team, away_team,
+         competition, season, division, played_on, home_team, away_team,
          home_goals, away_goals
-       ) values (
+       ) values ('PL', 
          '2026-27', 'Premier League', '2026-08-21T13:00:00Z',
          'Arsenal', 'Coventry', 9, 9
        )`

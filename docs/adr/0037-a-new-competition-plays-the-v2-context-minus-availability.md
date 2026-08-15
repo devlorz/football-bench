@@ -1,5 +1,16 @@
 # A new Competition plays the v2 context minus availability
 
+> Amended 2026-08-15 by ticket 5 of spec 0016, the ticket that implemented this: "every
+> builder takes the Competition it is building for" is narrowed to every builder that
+> selects rows or names a division — the packet loader and the historical builder, which
+> picks the table, the promoted flag and the points-per-game division out of a division
+> pair. `buildFplContext` and `buildSquadChangesContext` are handed rows their loader has
+> already scoped and do not take it: a Competition they could only re-filter by decides
+> nothing, and each parameter that decides nothing is another place a future league can
+> be forgotten. The sentence below stands as written and as decided; this is a narrowing
+> of its scope, made with the code in front of us, not a claim that it meant this. If the
+> narrowing is wrong, the code is what should move.
+
 A new Competition launches with every v2 context section that has a source, and only those.
 For La Liga that is: historical results, shots, the league table and prior-season
 points-per-game from football-data.co.uk (`SP1`, with `SP2` playing the Championship's role

@@ -1502,9 +1502,9 @@ describe("scoring the readable Match Points layer", () => {
   ): Promise<unknown> =>
     client.query(
       `insert into historical_matches (
-         season, division, played_on, home_team, away_team, home_goals,
-         away_goals
-       ) values ('2025-26', 'Premier League', $1, $2, $3, $4, $5)`,
+         competition, season, division, played_on, home_team, away_team,
+         home_goals, away_goals
+       ) values ('PL', '2025-26', 'Premier League', $1, $2, $3, $4, $5)`,
       [playedOn, homeTeam, awayTeam, homeGoals, awayGoals]
     );
 
@@ -1547,6 +1547,34 @@ describe("scoring the readable Match Points layer", () => {
       }
     });
   });
+
+  test("rates a club from its own Competition's prior Season alone",
+    async () => {
+      // The same seeding as above, plus a thrashing of the same two clubs in
+      // another Competition. The Elo line replays the prior Season by date, so
+      // an unfiltered read would take this row too -- and, being the later of
+      // the two, it would leave Tottenham the weaker side and invert the
+      // forecast. Both rows sit under one `division` deliberately, for the
+      // reason `test/competition-context-contamination.test.ts` records.
+      await played("Tottenham", "Everton", 3, 0);
+      await client.query(
+        `insert into historical_matches (
+           competition, season, division, played_on, home_team, away_team,
+           home_goals, away_goals
+         ) values ('PD', '2025-26', 'Premier League', '2026-05-17T14:00:00Z',
+                   'Everton', 'Tottenham', 5, 0)`
+      );
+      await storeFixture(1, 1, 1, { teams: ["Spurs", "Everton"] });
+      await settle(1, 1, 1);
+
+      await score(1);
+
+      // Bit for bit the Premier-League-only forecast above.
+      expect(await storedValue(REFERENCE_ELO, 1, RPS_METRIC)).toMatchObject({
+        value: expect.closeTo(0.141362885673172, 12),
+        n: 1
+      });
+    });
 
   test("forecasts each Fixture from the ratings that stood before it", async () => {
     // The same two clubs twice in one Gameweek, the lower Fixture id kicking

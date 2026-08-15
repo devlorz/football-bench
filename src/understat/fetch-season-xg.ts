@@ -240,16 +240,21 @@ export async function fetchUnderstatSeasonXg({
     for (const match of matches) {
       await database.query(
         `insert into understat_match_xg (
-           season, understat_match_id, kicked_off_at,
+           competition, season, understat_match_id, kicked_off_at,
            home_team, away_team, home_xg, away_xg
-         ) values ($1, $2, $3, $4, $5, $6, $7)
+         ) values ($1, $2, $3, $4, $5, $6, $7, $8)
          on conflict (season, understat_match_id) do update set
+           competition   = excluded.competition,
            kicked_off_at = excluded.kicked_off_at,
            home_team     = excluded.home_team,
            away_team     = excluded.away_team,
            home_xg       = excluded.home_xg,
            away_xg       = excluded.away_xg`,
         [
+          // Premier League as a literal at this boundary: Understat's league
+          // is a path segment this fetch hard-codes, so the Competition it
+          // writes and the league it reads move together or not at all.
+          "PL",
           match.season,
           match.understatMatchId,
           match.kickedOffAt,

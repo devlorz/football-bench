@@ -1268,9 +1268,9 @@ describe("opening the FPL track for a Gameweek", () => {
   ): Promise<void> {
     await client.query(
       `insert into historical_matches (
-         season, division, played_on, home_team, away_team,
+         competition, season, division, played_on, home_team, away_team,
          home_goals, away_goals
-       ) values ($1, $2, $3, $4, $5, $6, $7)`,
+       ) values ('PL', $1, $2, $3, $4, $5, $6, $7)`,
       [
         season,
         division,

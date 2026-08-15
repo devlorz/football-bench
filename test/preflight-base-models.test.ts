@@ -56,15 +56,15 @@ describe("pre-flight for the Base Model roster", () => {
          '2026-08-21T19:00:00Z'
        );
        insert into historical_matches (
-         season, division, played_on, home_team, away_team,
+         competition, season, division, played_on, home_team, away_team,
          home_goals, away_goals
        ) values
          (
-           '2025-26', 'Premier League', '2026-05-01T00:00:00Z',
+           'PL', '2025-26', 'Premier League', '2026-05-01T00:00:00Z',
            'Arsenal', 'Everton', 3, 1
          ),
          (
-           '2025-26', 'Championship', '2026-05-02T00:00:00Z',
+           'PL', '2025-26', 'Championship', '2026-05-02T00:00:00Z',
            'Coventry', 'Hull', 2, 0
          )`
     );

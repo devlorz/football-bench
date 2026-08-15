@@ -215,6 +215,11 @@ async function schedule(
  * at the deadline: `historical_matches` holds matches that have been played,
  * and the announced date of the latest one is what states the coverage — a
  * cutoff mapped onto Gameweeks would lag every midweek round (ADR-0021).
+ *
+ * `competition = 'PL'` beside the division, both literals: the FPL track is the
+ * Premier League by nature and takes no Competition of its own (ADR-0035), but
+ * a division belongs to a Competition only by convention -- nothing in the
+ * schema holds it -- so the division alone is not the filter it looks like.
  */
 async function currentSeasonTable(
   database: Database,
@@ -224,7 +229,8 @@ async function currentSeasonTable(
     `select season, division, played_on, home_team, away_team,
             home_goals, away_goals
        from historical_matches
-      where season = $1 and division = 'Premier League'
+      where season = $1
+        and competition = 'PL' and division = 'Premier League'
       order by played_on`,
     [season]
   );

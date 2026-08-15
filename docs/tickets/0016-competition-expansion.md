@@ -147,15 +147,70 @@ the two date-only queries before any second league's rows can land in their tabl
 
 **Blocked by:** 1.
 
-- [ ] Every context builder takes the Competition it is building for.
-- [ ] The historical-matches and xG reads filter by Competition; a contamination test
+- [x] Every context builder takes the Competition it is building for.
+      _`loadMatchContextData` already did; `MatchContextData` carries the Competition
+      through to `buildMatchContext`, which is what lets the availability decision be made
+      in the pure builder and tested without a database.
+      `buildHistoricalContext` takes it too, and needs it: it selected the table, the
+      prior-Season position line, the points-per-game rate and the promoted flag on the
+      literals `'Premier League'` and `'Championship'`, so a `PD` packet would have
+      rendered another league's table or none with no way to tell which.
+      The pair now comes from `src/football-data/divisions.ts` — **the same list the fetch
+      writes the rows by**, not a second copy. That is what keeps a missing entry from
+      becoming silent history loss: a Competition absent from the list cannot be fetched
+      either, so "no divisions" means "no rows yet" rather than rows the context has
+      dropped. Two lists would each have been correct alone while a full backfill rendered
+      as an empty table. **Ticket 6 adds the `PD` entry once**, and the reader and the
+      context light up together; until then a `PD` packet says the table is unavailable
+      rather than implying an empty league.
+      The remaining two take rows that are already scoped and are left alone:
+      `buildFplContext` is only ever called for `PL` (see the next box), and
+      `buildSquadChangesContext` reads a per-Gameweek partition its loader has already
+      filtered — a Competition either could only re-filter by would decide nothing.
+      ADR-0037 read "every builder"; it carries a dated amendment recording this narrowing
+      and why, with its original sentence left standing, and spec story 16 points at the
+      amendment. Three places, one rule._
+- [x] The historical-matches and xG reads filter by Competition; a contamination test
       seeds two leagues' rows and proves each packet contains only its own, both
       directions.
-- [ ] A `PD` packet renders every v2 section whose data is present, and no availability
+      _`migrations/0024` gives both tables the column and then **drops the default**:
+      neither primary key contains it, so unlike 0022 the default would have been the only
+      net, and a writer that omitted the Competition would file Spanish rows under the
+      Premier League with no collision and no check to catch it. Both writers name their
+      Competition as of this change. Dropping it broke 27 tests across 8 files that had
+      been seeding history through the default — which is the number worth recording,
+      because every one of them was a place the mistake was already possible.
+      **Five reads, not the two the story named:** the context's history and xG, the Elo
+      reference line's `priorSeasonResults` (a rating carried over from another league's
+      results is a number about nobody), the daily fetch's staleness guard (`gw = 1`
+      returns a row per Competition now, and `rows[0]` was picking between them by luck),
+      and the FPL track's league table. The last two filter `competition = 'PL'` as
+      literals: both are the Premier League by nature, and a division belongs to a
+      Competition only by convention — nothing in the schema holds it — so the division
+      alone was never the filter it looked like. Spec story 16 is corrected to match.
+      The contamination test is `test/competition-context-contamination.test.ts`; its
+      docblock records why both leagues are seeded under one `division` and under English
+      club names, which is the part of the test that is easiest to undo by tidying._
+- [x] A `PD` packet renders every v2 section whose data is present, and no availability
       section exists for a non-`PL` Competition (ADR-0037) — its absence is the recorded
       structural difference, not an error.
-- [ ] Team-identity misses keep failing loudly; a name missing from a map costs an alert,
+      _The branch is on `data.competition`, not a flag: the empty FPL section reads "no
+      player snapshot loaded for this Gameweek", which in a league that will never have
+      one apologises for a Gap that is not one. The prompt's own "Predict this Premier
+      League Fixture." line is untouched — that is ticket 4's frozen per-Competition
+      prompt, not this one's.
+      A `PD` packet today renders its form lines, records and head-to-head, and states
+      that the league table is unavailable — the one section that cannot exist before
+      ticket 6 names the Spanish divisions. Every PL rendering is byte-identical, which
+      the pinned prompt hash in `test/openrouter-entrant.test.ts` is what proves: the
+      frozen v2 context (ADR-0026) may not move under a refactor._
+- [x] Team-identity misses keep failing loudly; a name missing from a map costs an alert,
       never silent history loss.
+      _Unchanged and deliberately so: the escalation is at the ingest boundary
+      (`fetch-season-xg.ts` raises `unknown Understat team name` as a validation issue,
+      pinned by `test/fetch-understat-season-xg.test.ts`), and `joinXg` skipping an
+      unresolvable row is downstream of it. No fallback was added; ticket 6's maps are the
+      next thing to feed it._
 
 ## 6 — La Liga's history and xG backfilled
 
@@ -167,8 +222,18 @@ reviewed identity maps.
 
 - [ ] The football-data.co.uk reader takes the Spanish division codes, the division check
       constraint grows in the same change, and the per-file division validation holds.
+      _Both backfill writers — `football-data/fetch-season.ts` and
+      `understat/fetch-season-xg.ts` — take their Competition explicitly here.
+      `migrations/0024` left `historical_matches.competition` and
+      `understat_match_xg.competition` defaulting to `'PL'` with the column outside both
+      primary keys, so a writer that omits it files Spanish rows under the Premier League
+      in silence: no collision, no check, and a contaminated packet that reads normally._
 - [ ] Two seasons of first- and second-division history are backfilled, with the second
       division playing the Championship's role for promoted clubs.
+      _`build-historical-context.ts` reads its top and second division from the
+      `DIVISIONS` map ticket 5 introduced, which has no `PD` entry. Add it here, with the
+      same two names the reader stores, or `PD` renders "league table: unavailable" over
+      a full backfill._
 - [ ] The Understat league is a parameter and two seasons of La Liga xG are backfilled.
 - [ ] Both identity maps (source names to football-data names; Understat names to
       football-data names) are reviewed by a human before the backfill runs — a wrong

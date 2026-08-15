@@ -402,9 +402,9 @@ describe("the seeded Season and its three stopping points", () => {
     // the seed is supposed to produce identically every time.
     await client.query(
       `insert into historical_matches (
-         season, division, played_on, home_team, away_team, home_goals,
-         away_goals
-       ) values ('2025-26', 'Premier League', '2026-05-01', 'Arsenal',
+         competition, season, division, played_on, home_team, away_team,
+         home_goals, away_goals
+       ) values ('PL', '2025-26', 'Premier League', '2026-05-01', 'Arsenal',
                  'Chelsea', 1, 0)`
     );
 
