@@ -2,9 +2,12 @@
 
 Every edit a new league needs, in one place. Three comments in the codebase each say
 opening a league is "one entry" or "a single edit"; each is true about its own file and
-none of them is true about the change. There are **five** places, plus the curation, and
+none of them is true about the change. There are **six** places, plus the curation, and
 this page is the only thing that gathers them — a review found the gap after La Liga's
-history landed, when four of the five had been made and nothing said what the fifth was.
+history landed, when four of the then-five had been made and nothing said what the fifth
+was. The sixth arrived with ticket 7 and is the same story one more time: the transfer
+window and its club map were "one entry" in a file that had never had a second league in
+it.
 
 Vocabulary: [CONTEXT.md](../../CONTEXT.md) — Competition, Division, Track.
 Decisions: [ADR-0035](../adr/0035-the-match-track-grows-a-competition-dimension.md)
@@ -21,9 +24,9 @@ This page is what to write before that one runs.
 
 ---
 
-## 1. The five edits
+## 1. The six edits
 
-In this order. Each is small; the risk is entirely in stopping after four.
+In this order. Each is small; the risk is entirely in stopping one short.
 
 | # | Where | What | If it is missing |
 | --- | --- | --- | --- |
@@ -32,6 +35,7 @@ In this order. Each is small; the risk is entirely in stopping after four.
 | 3 | `src/football-data/divisions.ts` — `BY_COMPETITION` | Top and second division, source codes and stored names | The packet says the league table is unavailable |
 | 4 | `migrations/00XX` — `historical_matches_division_check` | The two names edit 3 added, character for character | The backfill fails on its first insert |
 | 5 | `src/understat/team-identity.ts` + `UNDERSTAT_LEAGUES` | The league slug and that league's ~20 club names | No xG, or — with the slug wrong — another league's rows relabelled |
+| 6 | `src/squad-changes/transfer-window.ts` + `club-identity.ts` | The country's two windows with their page titles and page `format`, and that league's ~20 clubs by live-source spelling | No Squad Changes section, and — with the format wrong — a page parsed as a shape it is not |
 
 Edits 3 and 4 are one change and are checked against each other by
 `test/schema.test.ts`; edit 2's `competitionName` must equal edit 3's top-flight name and
@@ -44,8 +48,8 @@ also the only step that is not a code change, which is the property ADR-0035 wan
 
 ## 2. The curation, which is the real cost
 
-Roughly twenty clubs across two to three maps per Competition, refreshed every Season as
-clubs are promoted and relegated (ADR-0037). Two of them:
+Roughly twenty clubs across three maps per Competition, refreshed every Season as
+clubs are promoted and relegated (ADR-0037). All three:
 
 - **Understat name → football-data.co.uk name**, per Competition
   (`src/understat/team-identity.ts`). Derive it, do not transcribe it: read the club
@@ -58,8 +62,22 @@ clubs are promoted and relegated (ADR-0037). Two of them:
   club's history section reads "none in stored data" over a complete backfill, and
   nothing fails.
 
-Both must be reviewed by a person before the backfill runs. A name *missing* from a map
-fails loudly; a name mapped *wrongly* fails nothing, ever.
+- **Live-source name → Wikipedia club**, per Competition
+  (`src/squad-changes/club-identity.ts`). Keyed by the roster spelling `fixtures`
+  carries, which is the live source's — FPL's short names for the Premier League and
+  football-data.org's long ones everywhere else — and holding both the club's article
+  title and its displayed name, because English Wikipedia's transfer lists head their
+  club sections with a link in some editions and with bare text in others. Derive it the
+  same way: the live source's team names against the page's own section headings, both
+  sets the same size with nothing left over.
+
+All three must be reviewed by a person before the backfill runs. A name *missing* from a
+map fails loudly; a name mapped *wrongly* fails nothing, ever.
+
+**The transfer window itself is not curation and is not a map.** It is two frozen dates
+and a page title per window, read off that page's own lead, and it ships inside the
+Prompt Version — so it cannot move without a new one (ADR-0026, ADR-0031). Windows differ
+by country: Spain opened its 2026 summer on 1 July where England opened on 15 June.
 
 ## 3. Backfill and activate
 
@@ -86,3 +104,18 @@ first division — which `fetch` follows and returns as a 200. The per-file `Div
 refuses it. Understat opens a Season with an empty `dates`, so a new Season's promoted
 clubs cannot be added to a map until it publishes; they arrive as `unknown Understat team
 name` at the first pre-Season fetch, which is where that failure is meant to land.
+
+English Wikipedia's transfer lists are **two formats, not one**, and which one a country
+uses is not guessable from the title. England publishes two wikitables — `Transfers` and
+`Loans` — whose first column is the date every move is filed under and whose last is the
+fee. Spain publishes one section per club holding two `{{fs player}}` lists, arrivals
+first and departures second, with **no date and no fee anywhere on the page**; a Spanish
+row is therefore stored with both null, which is what migration 0027 made room for. The
+window's `format` field picks the parser. A new country's page has to be read before its
+window is written down — check for `{|` under a heading, and if there is none it is the
+club-section shape.
+
+The winter page for a Season does not exist in August, for either country. Its title is
+frozen from the naming convention the previous ones used
+(`List of Spanish football transfers winter 2026–27`, en dash) and is not verifiable
+until it is created.

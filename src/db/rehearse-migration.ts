@@ -14,23 +14,48 @@ export const KEYED_TABLES = [
   "prediction_runs", "scores"
 ] as const;
 
+/**
+ * Every table the rehearsal compares with itself. The seven above plus
+ * `squad_changes`, which 0022 gave a Competition without rekeying and which
+ * 0027 then took the primary key off — a table no pass may quietly lose rows
+ * from is a table this list has to name, whoever rekeyed it.
+ */
+const COMPARED_TABLES = [...KEYED_TABLES, "squad_changes"] as const;
+
 const RENAMED_TABLES = ["fixtures", "contexts", "predictions", "attempts"];
 
 const quoted = (names: readonly string[]): string =>
   names.map((name) => `'${name}'`).join(", ");
 
 /**
- * Copies every row of the rekeyed tables into a schema the migration does not
+ * Copies every row of the compared tables into a schema the migration does not
  * touch, so the record can be compared with itself afterwards.
  */
-const SNAPSHOT = "create schema before;\n" + KEYED_TABLES
+const SNAPSHOT = "create schema before;\n" + COMPARED_TABLES
   .map((table) => `create table before.${table} as select * from ${table};`)
   .join("\n");
 
 /**
- * Proves the migration relabelled the record rather than rewriting it: every
- * row comes back carrying `PL`, and identical once the Competition is taken
- * off and the Fixture id is read under its old name.
+ * Proves the pass moved the record rather than rewriting it: every row comes
+ * back identical, once whatever that pass was supposed to change is allowed
+ * for.
+ *
+ * **What it allows for is read from the snapshot, not assumed.** The first
+ * version of this asked every pass the question only 0022's could answer — it
+ * stripped `competition` off the migrated side and read `fixture_id` under its
+ * old name unconditionally, which is right exactly once, against a record that
+ * predates 0022. Run against a record already carrying the column, every row
+ * differs from itself by that column and the rehearsal reports the whole
+ * record lost. That is what it did the first time a later ticket followed the
+ * runbook's own instruction to rehearse again, and a safety harness that fails
+ * on a healthy record is one an operator learns to talk themselves past.
+ *
+ * So: the Competition is taken off only where the snapshot has no such column,
+ * the Fixture id is renamed only where the snapshot still calls it `fpl_id`,
+ * and the everything-came-back-`PL` assertion is made only of the tables this
+ * pass actually relabelled. A pass that relabels nothing is held to the
+ * stronger claim instead, that nothing moved at all — and once a second
+ * Competition is listed, that is the only one of the two that stays true.
  *
  * Whole rows as `jsonb`, so a column this file has never heard of is compared
  * too — the claim is that *nothing* else changed, and a check listing the
@@ -46,16 +71,34 @@ do $$
 declare
   target      text;
   projection  text;
+  relabelled  boolean;
+  renamed     boolean;
   missing     bigint;
   extra       bigint;
   mislabelled bigint;
 begin
-  foreach target in array array[${quoted(KEYED_TABLES)}] loop
-    projection := case when target in (${quoted(RENAMED_TABLES)})
-      then '(to_jsonb(a) - ''competition'' - ''fixture_id'') || '
-           || 'jsonb_build_object(''fpl_id'', to_jsonb(a) -> ''fixture_id'')'
-      else 'to_jsonb(a) - ''competition'''
-    end;
+  foreach target in array array[${quoted(COMPARED_TABLES)}] loop
+    select not exists (
+      select 1 from information_schema.columns
+       where table_schema = 'before'
+         and table_name = target
+         and column_name = 'competition')
+      into relabelled;
+    select exists (
+      select 1 from information_schema.columns
+       where table_schema = 'before'
+         and table_name = target
+         and column_name = 'fpl_id')
+      into renamed;
+
+    projection := 'to_jsonb(a)';
+    if relabelled then
+      projection := projection || ' - ''competition''';
+    end if;
+    if renamed and target in (${quoted(RENAMED_TABLES)}) then
+      projection := '(' || projection || ' - ''fixture_id'') || '
+        || 'jsonb_build_object(''fpl_id'', to_jsonb(a) -> ''fixture_id'')';
+    end if;
 
     execute format(
       'select count(*) from ('
@@ -69,14 +112,17 @@ begin
       || ' except all '
       || 'select to_jsonb(b) from before.%1$I b) as difference',
       target, projection) into extra;
-    execute format(
-      'select count(*) from %1$I where competition <> ''PL''', target)
-      into mislabelled;
+    mislabelled := 0;
+    if relabelled then
+      execute format(
+        'select count(*) from %1$I where competition <> ''PL''', target)
+        into mislabelled;
+    end if;
 
     if missing > 0 or extra > 0 or mislabelled > 0 then
       raise exception
-        'the migration did not relabel %: % rows lost, % rows unaccounted for, '
-        '% rows not PL', target, missing, extra, mislabelled;
+        'the migration did not carry % across: % rows lost, % rows '
+        'unaccounted for, % rows not PL', target, missing, extra, mislabelled;
     end if;
   end loop;
 end $$;
@@ -147,7 +193,7 @@ const copyRecord = (sourceUrl: string, targetUrl: string): void => {
 export interface MigrationRehearsal {
   /** The migrations the rehearsal applied, in the order it applied them. */
   applied: string[];
-  /** How many rows of each rekeyed table the copied record held. */
+  /** How many rows of each compared table the copied record held. */
   rows: Record<string, number>;
 }
 
@@ -193,7 +239,7 @@ export async function rehearseMigration({
     await verifyRelabelledAsPl(target);
 
     const rows: Record<string, number> = {};
-    for (const table of KEYED_TABLES) {
+    for (const table of COMPARED_TABLES) {
       const counted = await target.query<{ count: number }>(
         `select count(*)::int as count from ${table}`
       );

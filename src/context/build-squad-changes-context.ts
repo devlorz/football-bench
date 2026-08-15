@@ -8,10 +8,18 @@ export interface SquadChangeRow {
   counterpart_club: string;
   fee: string | null;
   loan: boolean;
-  dated_on: Date;
+  /**
+   * Null for a source that files its moves under no date at all, which is
+   * every Spanish row: the page carries neither a date column nor a fee one
+   * (migration 0027). It has never reached an Entrant -- `changeText` does not
+   * render it and the heading dates itself from the window -- so it is an
+   * ordering key here and nothing else.
+   */
+  dated_on: Date | null;
 }
 
 export interface BuildSquadChangesContextOptions {
+  competition: string;
   deadline: Date;
   homeTeam: string;
   awayTeam: string;
@@ -45,14 +53,35 @@ function feeAmount(fee: string | null): number | undefined {
   return Number(match[1].replace(/,/g, "")) * scale;
 }
 
+/** By code point: the same answer on every runtime, for all time. */
+function compare(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function orderChangesForDisplay(changes: SquadChangeRow[]): SquadChangeRow[] {
   return [...changes].sort((left, right) => {
     const leftFee = feeAmount(left.fee);
     const rightFee = feeAmount(right.fee);
     return (leftFee === undefined ? 1 : 0) - (rightFee === undefined ? 1 : 0)
       || (rightFee ?? 0) - (leftFee ?? 0)
-      || left.dated_on.getTime() - right.dated_on.getTime()
-      || left.player.localeCompare(right.player);
+      // Undated after dated, on the same terms as a fee stated in words: the
+      // page said nothing, which sorts last rather than as an early date. A
+      // partition where every row is undated -- every Spanish one -- falls
+      // through to the player, which is deterministic, and it has to be:
+      // a context is hashed and stored as evidence, so one Gameweek's facts
+      // must render in one order every time.
+      || (left.dated_on === null ? 1 : 0) - (right.dated_on === null ? 1 : 0)
+      || (left.dated_on?.getTime() ?? 0) - (right.dated_on?.getTime() ?? 0)
+      // Total over the row's whole stored identity, and by code point rather
+      // than by locale. Two rows that tie this far are two different moves --
+      // the same player leaving for two different clubs in one window -- and
+      // if the comparator called them equal their order would be the order
+      // Postgres happened to return them in. The rendered context is hashed
+      // and kept as the evidence of what an Entrant was handed, so an order
+      // that depends on the database's mood, or on which ICU the runtime was
+      // built against, is not an order at all.
+      || compare(left.player, right.player)
+      || compare(left.counterpart_club, right.counterpart_club);
   });
 }
 
@@ -111,7 +140,7 @@ function clubSection(club: string, changes: SquadChangeRow[]): string[] {
 export function buildSquadChangesContext(
   options: BuildSquadChangesContextOptions
 ): string | undefined {
-  const window = squadChangeWindow(options.deadline);
+  const window = squadChangeWindow(options.competition, options.deadline);
   if (window === undefined) {
     return undefined;
   }

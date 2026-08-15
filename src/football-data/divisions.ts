@@ -21,7 +21,7 @@
  * and a constraint cannot read a TypeScript module. Two edits, in one change,
  * and a mismatch is refused at write time rather than discovered in a packet.
  *
- * Two of five, counting the whole change: `docs/runbooks/opening-a-competition.md`
+ * Two of six, counting the whole change: `docs/runbooks/opening-a-competition.md`
  * has the list.
  */
 export interface Division {

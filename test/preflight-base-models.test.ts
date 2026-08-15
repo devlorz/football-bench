@@ -89,16 +89,16 @@ describe("pre-flight for the Base Model roster", () => {
     );
     await client.query(
       `insert into squad_changes (
-         season, gw, club, direction, player, counterpart_club,
+         competition, season, gw, club, direction, player, counterpart_club,
          fee, loan, dated_on, observed_at
        ) values
          (
-           '2026-27', 1, 'Arsenal', 'in', 'Signed Player',
+           'PL', '2026-27', 1, 'Arsenal', 'in', 'Signed Player',
            'Newcastle United', '£92.5m', false, '2026-07-06',
            '2026-08-21T17:00:00Z'
          ),
          (
-           '2026-27', 1, 'Arsenal', 'out', 'Loaned Player', 'Hull City',
+           'PL', '2026-27', 1, 'Arsenal', 'out', 'Loaned Player', 'Hull City',
            null, true, '2026-08-01', '2026-08-21T17:00:00Z'
          )`
     );

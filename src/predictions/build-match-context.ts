@@ -174,6 +174,7 @@ export function buildMatchContext(
       // Undefined outside the render gate, and then the section is absent
       // rather than empty.
       buildSquadChangesContext({
+        competition: data.competition,
         deadline: data.deadline,
         homeTeam: fixture.home_team,
         awayTeam: fixture.away_team,

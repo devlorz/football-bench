@@ -92,6 +92,17 @@ It writes nothing to `DATABASE_URL` and it exits non-zero on any difference. Rea
 counts it prints: a green rehearsal over a record of zero rows has proven nothing about
 the live one.
 
+**The check adapts to where the record already is, as of ticket 7 of spec 0016.** It reads
+the snapshot's own columns and allows only for what the pending pass is supposed to
+change: the Competition is subtracted where the record does not yet carry one, the Fixture
+id is read as `fpl_id` only where it still is one, and the everything-came-back-`PL`
+assertion is made only of tables the pass relabelled. Before that it asked every pass
+0022's question, so rehearsing anything against a record already carrying `competition`
+reported the entire record lost — which is what happened the first time this instruction
+above was followed, and a harness that fails on a healthy record is one an operator learns
+to talk past. `squad_changes` is compared too, though 0022 never rekeyed it: 0027 takes
+its primary key off.
+
 `pg_dump`, `psql` and `initdb` must be on the path, and their major version must be at
 least the server's — an older `pg_dump` refuses a newer server outright.
 

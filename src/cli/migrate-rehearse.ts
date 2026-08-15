@@ -23,9 +23,11 @@ const rehearsal = await rehearseMigration({
 console.log(rehearsal.applied.length === 0
   ? "Nothing to rehearse: the copied record is already at the latest migration."
   : `Rehearsed ${rehearsal.applied.join(", ")} over a copy of the record:`);
+// "came back whole" rather than "relabelled and unchanged": relabelling is
+// what one pass did, and after 0022 no pass does it. A line that says a thing
+// the run did not do is a line an operator stops reading.
 for (const [table, count] of Object.entries(rehearsal.rows)) {
   console.log(
-    `  ${table}: ${count} row${count === 1 ? "" : "s"}, `
-    + "every one relabelled and unchanged"
+    `  ${table}: ${count} row${count === 1 ? "" : "s"}, every one came back whole`
   );
 }

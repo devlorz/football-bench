@@ -340,10 +340,10 @@ describe("the benchmark database", () => {
 
     await expect(client.query(
       `insert into squad_changes (
-         season, gw, club, direction, player, counterpart_club,
+         competition, season, gw, club, direction, player, counterpart_club,
          fee, loan, dated_on, observed_at
        ) values (
-         '2026-27', 1, 'Spurs', 'in', 'Sandro Tonali', 'Newcastle United',
+         'PL', '2026-27', 1, 'Spurs', 'in', 'Sandro Tonali', 'Newcastle United',
          '£92.5m', false, '2026-07-06', '2026-08-21T17:30:00Z'
        )`
     )).rejects.toMatchObject({
@@ -351,14 +351,74 @@ describe("the benchmark database", () => {
     });
   });
 
-  test("rejects moving a deadline across an existing Squad Change", async () => {
+  // Migration 0027. The Spanish transfer list files no move under a date, so
+  // the column has to take a null -- and the identity index has to keep
+  // meaning something once it does, which is what `nulls not distinct` buys.
+  // Without it Postgres holds every pair of nulls apart and the constraint
+  // stops applying to exactly the league that introduced the case.
+  describe("a Squad Change the source stated no date for", () => {
+    const move = (player: string): Promise<unknown> => client.query(
+      `insert into squad_changes (
+         competition, season, gw, club, direction, player, counterpart_club,
+         fee, loan, dated_on, observed_at
+       ) values (
+         'PL', '2026-27', 1, 'Spurs', 'in', $1, 'Real Madrid',
+         null, false, null, '2026-08-21T17:00:00Z'
+       )`,
+      [player]
+    );
+
+    test("is stored with a null date", async () => {
+      await storeGameweek();
+
+      await move("Undated Player");
+
+      const stored = await client.query<{ dated_on: Date | null }>(
+        "select dated_on from squad_changes"
+      );
+      expect(stored.rows).toEqual([{ dated_on: null }]);
+    });
+
+    test("is refused a second time under the same identity", async () => {
+      await storeGameweek();
+      await move("Undated Player");
+
+      await expect(move("Undated Player")).rejects.toMatchObject({
+        constraint: "squad_changes_identity"
+      });
+    });
+  });
+
+  // The hazard 0024 named for the two history tables, one ticket later and one
+  // table over: a Spanish row *saying* `PL` is what nothing downstream can
+  // catch, because it points at a real Premier League Gameweek. A row saying
+  // nothing is caught, and this pins where -- the Lock trigger reaches the
+  // unsaid Competition before the not-null does, because it runs `before
+  // insert` and its `select ... into` finds no Gameweek to match a null. The
+  // message names a Gameweek rather than a Competition, which is the level the
+  // guard actually works at; what matters is that the row does not land.
+  test("refuses a Squad Change that does not name its Competition", async () => {
     await storeGameweek();
-    await client.query(
+
+    await expect(client.query(
       `insert into squad_changes (
          season, gw, club, direction, player, counterpart_club,
          fee, loan, dated_on, observed_at
        ) values (
          '2026-27', 1, 'Spurs', 'in', 'Sandro Tonali', 'Newcastle United',
+         '£92.5m', false, '2026-07-06', '2026-08-21T17:00:00Z'
+       )`
+    )).rejects.toThrow("a Squad Change requires a Gameweek");
+  });
+
+  test("rejects moving a deadline across an existing Squad Change", async () => {
+    await storeGameweek();
+    await client.query(
+      `insert into squad_changes (
+         competition, season, gw, club, direction, player, counterpart_club,
+         fee, loan, dated_on, observed_at
+       ) values (
+         'PL', '2026-27', 1, 'Spurs', 'in', 'Sandro Tonali', 'Newcastle United',
          '£92.5m', false, '2026-07-06', '2026-08-21T17:00:00Z'
        )`
     );
@@ -474,10 +534,10 @@ describe("the benchmark database", () => {
       ),
       () => client.query(
         `insert into squad_changes (
-           season, gw, club, direction, player, counterpart_club,
+           competition, season, gw, club, direction, player, counterpart_club,
            fee, loan, dated_on, observed_at
          ) values (
-           '2026-27', 99, 'Spurs', 'in', 'Sandro Tonali', 'Newcastle United',
+           'PL', '2026-27', 99, 'Spurs', 'in', 'Sandro Tonali', 'Newcastle United',
            '£92.5m', false, '2026-07-06', '2026-08-21T17:00:00Z'
          )`
       )

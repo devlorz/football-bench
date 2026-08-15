@@ -11,6 +11,10 @@ import {
   type SquadChange
 } from "../src/squad-changes/parse-squad-changes.js";
 import {
+  buildSquadChangesContext,
+  type SquadChangeRow
+} from "../src/context/build-squad-changes-context.js";
+import {
   resolveWikipediaClub,
   type WikipediaClub
 } from "../src/squad-changes/club-identity.js";
@@ -47,9 +51,12 @@ async function summerPage(): Promise<string> {
   return body;
 }
 
-function pinnedClubs(clubs: string[] = CLUBS): PinnedClubs {
+function pinnedClubs(
+  competition = "PL",
+  clubs: string[] = CLUBS
+): PinnedClubs {
   return new Map(clubs.map((club) =>
-    [club, resolveWikipediaClub(club) as WikipediaClub]));
+    [club, resolveWikipediaClub(competition, club) as WikipediaClub]));
 }
 
 function movement(changes: SquadChange[], club: string, direction: "in" | "out") {
@@ -64,7 +71,8 @@ describe("parsing a window's Wikipedia transfer list", () => {
     const changes = parseSquadChanges(
       "wikipedia:squad-changes:summer-2026",
       await summerPage(),
-      pinnedClubs()
+      pinnedClubs(),
+      "tables"
     );
 
     expect(movement(changes, "Spurs", "in")).toEqual([
@@ -81,7 +89,8 @@ describe("parsing a window's Wikipedia transfer list", () => {
     const changes = parseSquadChanges(
       "wikipedia:squad-changes:summer-2026",
       await summerPage(),
-      pinnedClubs()
+      pinnedClubs(),
+      "tables"
     );
 
     expect(movement(changes, "Spurs", "out")).toEqual([
@@ -103,7 +112,8 @@ describe("parsing a window's Wikipedia transfer list", () => {
     const changes = parseSquadChanges(
       "wikipedia:squad-changes:summer-2026",
       await summerPage(),
-      pinnedClubs()
+      pinnedClubs(),
+      "tables"
     );
 
     expect(movement(changes, "Newcastle", "out")).toContainEqual(
@@ -122,7 +132,8 @@ describe("parsing a window's Wikipedia transfer list", () => {
           "[[Tottenham Hotspur F.C.|Tottenham Hotspur]]",
           `[[Tottenham Hotspur F.C.|${displayed}]]`
         ),
-        pinnedClubs()
+        pinnedClubs(),
+        "tables"
       );
 
       expect(movement(changes, "Spurs", "in")).toHaveLength(6);
@@ -139,7 +150,8 @@ describe("parsing a window's Wikipedia transfer list", () => {
     expect(() => parseSquadChanges(
       "wikipedia:squad-changes:summer-2026",
       renamed,
-      pinnedClubs()
+      pinnedClubs(),
+      "tables"
     )).toThrow(
       /no move on the page links Spurs's article Tottenham Hotspur F\.C\./
     );
@@ -160,7 +172,8 @@ describe("parsing a window's Wikipedia transfer list", () => {
     expect(() => parseSquadChanges(
       "wikipedia:squad-changes:summer-2026",
       relinked,
-      pinnedClubs()
+      pinnedClubs(),
+      "tables"
     )).toThrow(
       /displays Tottenham Hotspur but links to /
     );
@@ -170,7 +183,8 @@ describe("parsing a window's Wikipedia transfer list", () => {
     const changes = parseSquadChanges(
       "wikipedia:squad-changes:summer-2026",
       await summerPage(),
-      pinnedClubs()
+      pinnedClubs(),
+      "tables"
     );
 
     expect(changes.some(({ player }) => player === "Tomas Kalinauskas"))
@@ -235,6 +249,7 @@ describe("fetching a window's Squad Changes", () => {
 
     const result = await fetchSquadChanges({
       database: client,
+      competition: "PL",
       season: "2026-27",
       http,
       now: () => new Date("2026-08-12T09:00:00Z")
@@ -268,6 +283,7 @@ describe("fetching a window's Squad Changes", () => {
     await storeSeason();
     await fetchSquadChanges({
       database: client,
+      competition: "PL",
       season: "2026-27",
       http: pageFetcher().http,
       now: () => new Date("2026-08-12T09:00:00Z")
@@ -284,6 +300,7 @@ describe("fetching a window's Squad Changes", () => {
     );
     await fetchSquadChanges({
       database: client,
+      competition: "PL",
       season: "2026-27",
       http: pageFetcher(edited).http,
       now: () => new Date("2026-08-22T09:00:00Z")
@@ -309,16 +326,18 @@ describe("fetching a window's Squad Changes", () => {
 
     await expect(fetchSquadChanges({
       database: client,
+      competition: "PL",
       season: "2026-27",
       http,
       now: () => new Date("2026-08-12T09:00:00Z")
     })).rejects.toThrow(SquadChangeSourceValidationError);
     await expect(fetchSquadChanges({
       database: client,
+      competition: "PL",
       season: "2026-27",
       http,
       now: () => new Date("2026-08-12T09:00:00Z")
-    })).rejects.toThrow(/unknown Premier League club spelling Wrexham/);
+    })).rejects.toThrow(/unknown PL club spelling Wrexham/);
 
     expect(requested).toEqual([]);
     const stored = await client.query(
@@ -335,6 +354,7 @@ describe("fetching a window's Squad Changes", () => {
     await storeSeason();
     await fetchSquadChanges({
       database: client,
+      competition: "PL",
       season: "2026-27",
       http: pageFetcher().http,
       now: () => new Date("2026-08-12T09:00:00Z")
@@ -347,6 +367,7 @@ describe("fetching a window's Squad Changes", () => {
     // Gameweek 6's deadline is thirty-nine days after the window closed.
     const result = await fetchSquadChanges({
       database: client,
+      competition: "PL",
       season: "2026-27",
       http,
       now: () => new Date("2026-09-30T09:00:00Z")
@@ -372,6 +393,7 @@ describe("fetching a window's Squad Changes", () => {
     // no window at all -- the section renders nowhere in September for it.
     const result = await fetchSquadChanges({
       database: client,
+      competition: "PL",
       season: "2026-27",
       http,
       now: () => new Date("2026-09-30T09:00:00Z")
@@ -400,12 +422,367 @@ describe("fetching a window's Squad Changes", () => {
     // nearest deadline is not this window's business.
     const result = await fetchSquadChanges({
       database: client,
+      competition: "PL",
       season: "2026-27",
       http,
       now: () => new Date("2026-09-20T09:00:00Z")
     });
 
     expect(result).toEqual({ stored: false });
+    expect(requested).toEqual([]);
+  });
+});
+
+/**
+ * La Liga's twenty as football-data.org spells them, which is the identity
+ * `fixtures` stores for a Competition that reads its schedule from there
+ * (ADR-0036) and so the identity a Spanish Squad Change row is keyed by.
+ */
+const SPANISH_CLUBS = [
+  "Athletic Club", "CA Osasuna", "Club Atlético de Madrid", "Deportivo Alavés",
+  "Elche CF", "FC Barcelona", "Getafe CF", "Levante UD", "Málaga CF",
+  "RC Celta de Vigo", "RC Deportivo La Coruña", "RCD Espanyol de Barcelona",
+  "Rayo Vallecano de Madrid", "Real Betis Balompié", "Real Madrid CF",
+  "Real Racing Club de Santander", "Real Sociedad de Fútbol", "Sevilla FC",
+  "Valencia CF", "Villarreal CF"
+];
+
+const SPANISH_PAGE_URL =
+  "https://en.wikipedia.org/w/index.php"
+  + "?title=List_of_Spanish_football_transfers_summer_2026&action=raw";
+
+/**
+ * The real page, fetched on 2026-08-15 and pinned on the same terms as the
+ * English one above. Re-pinning this digest means re-reading the assertions
+ * below.
+ */
+const SPANISH_PAGE_SHA256 =
+  "60466f3b743ec854d3c72760aa9684fde41df991c6975f3c821ba07be06ab52a";
+
+async function spanishPage(): Promise<string> {
+  const body = await archivedBody(
+    "wikipedia-transfers-spain-summer-2026.txt.gz"
+  );
+  expect(createHash("sha256").update(body, "utf8").digest("hex"))
+    .toBe(SPANISH_PAGE_SHA256);
+  return body;
+}
+
+describe("parsing a window published as one section per club", () => {
+  const parse = (wikitext: string, clubs = SPANISH_CLUBS) =>
+    parseSquadChanges(
+      "wikipedia:squad-changes:spain-summer-2026",
+      wikitext,
+      pinnedClubs("PD", clubs),
+      "clubSections"
+    );
+
+  test("reads both directions, with the null date and null fee the page states",
+    async () => {
+      const changes = parse(await spanishPage());
+
+      // The layout is the direction: the arrivals list comes first under the
+      // club's heading and the departures list second, and neither is labelled
+      // anywhere a parser can read.
+      expect(movement(changes, "FC Barcelona", "in")).toEqual([
+        [null, "Karim Adeyemi", "Borussia Dortmund", null, false],
+        [null, "Anthony Gordon", "Newcastle United", null, false]
+      ]);
+      expect(movement(changes, "FC Barcelona", "out")).toEqual([
+        [null, "Robert Lewandowski", "Chicago Fire", null, false],
+        // "loan return to Manchester United, later TBD" -- the counterpart is
+        // the first club the sentence links, and the loan is the word in it.
+        [null, "Marcus Rashford", "Manchester United", null, true]
+      ]);
+    });
+
+  test("records both sides of a move between two La Liga clubs", async () => {
+    const changes = parse(await spanishPage());
+
+    expect(movement(changes, "Real Betis Balompié", "in")).toContainEqual(
+      [null, "Fran García", "Real Madrid", null, false]
+    );
+    expect(movement(changes, "Real Madrid CF", "out")).toContainEqual(
+      [null, "Fran García", "Betis", null, false]
+    );
+  });
+
+  // The `other=` cell is prose, and its later clauses are a career summary
+  // rather than this move. Reading the whole sentence called thirty of the two
+  // real pages' rows loans that are not — twenty-one here and nine on the
+  // winter edition — all of them "previously on loan at". **Found by review.**
+  test("reads the loan marker from the move, not from the career behind it",
+    async () => {
+      const changes = parse(await spanishPage());
+
+      // "from Fiorentina, previously on loan at Las Palmas" — a permanent
+      // signing whose sentence says loan. Five of the twenty clubs' rows read
+      // this way; the page even misspells it "previouly" once, which the
+      // clause rule does not care about.
+      expect(movement(changes, "RC Deportivo La Coruña", "in")).toContainEqual(
+        [null, "Lorenzo Amatucci", "Fiorentina", null, false]
+      );
+      expect(movement(changes, "Getafe CF", "in")).toContainEqual(
+        [null, "Ramón Terrats", "Villarreal", null, false]
+      );
+      // "on loan from Paris Saint-Germain, previously on loan at Braga" — a
+      // loan whose sentence says loan twice, and the first clause is enough.
+      expect(movement(changes, "RCD Espanyol de Barcelona", "in"))
+        .toContainEqual(
+          [null, "Gabriel Moscardo", "Paris Saint-Germain", null, true]
+        );
+      // "loan return to [[Fortaleza EC|Fortaleza]], later loaned to
+      // [[SC Internacional|Internacional]]" — a loan ending, counted against
+      // the club it returns to and not the club it goes on to.
+      expect(movement(changes, "Deportivo Alavés", "out")).toContainEqual(
+        [null, "Calebe", "Fortaleza", null, true]
+      );
+    });
+
+  test("keeps a counterpart the page links to nothing as the page says it",
+    async () => {
+      const changes = parse(await spanishPage());
+
+      // `other=to TBD` and `other=retired` are the whole sentence, and the two
+      // are the only unlinked counterparts on the page. Stored as displayed,
+      // on the same terms as every other counterpart: the alternative is this
+      // pipeline inventing a club for a move that has not found one.
+      expect(new Set(changes.map(({ counterpartClub }) => counterpartClub)))
+        .toContain("TBD");
+      expect(changes.filter(({ counterpartClub }) => counterpartClub === "TBD"))
+        .not.toHaveLength(0);
+    });
+
+  test("reads a club from a heading the page does not link", async () => {
+    // Every winter edition of this page heads its sections with bare text --
+    // `===Real Madrid===` -- where the 2026 summer edition links them. The
+    // displayed name is the only identity a bare heading offers.
+    const changes = parse(
+      (await spanishPage()).replace("=== [[Real Madrid]] ===", "===Real Madrid===")
+    );
+
+    expect(movement(changes, "Real Madrid CF", "out")).toContainEqual(
+      [null, "Fran García", "Betis", null, false]
+    );
+  });
+
+  test("fails naming a club the page carries no section for", async () => {
+    // The article moved: the heading still displays Real Madrid, and a linked
+    // heading is read by its article alone, exactly as a row is on the English
+    // page.
+    const moved = (await spanishPage()).replace(
+      "=== [[Real Madrid]] ===",
+      "=== [[Real Madrid CF (2026)|Real Madrid]] ==="
+    );
+
+    expect(() => parse(moved))
+      .toThrow(/the page carries no section for Real Madrid CF/);
+  });
+
+  test("fails on a club section that is not two squad lists", async () => {
+    const halved = (await spanishPage()).replace(
+      "=== [[Real Madrid]] ===",
+      "=== [[Real Madrid]] ===\n{{fs start}}\n{{Fs end}}\n"
+    );
+
+    expect(() => parse(halved))
+      .toThrow(/Real Madrid CF's section holds 3 squad lists, expected 2/);
+  });
+
+  test("skips the Segunda sections the page lists beside La Liga's", async () => {
+    const changes = parse(await spanishPage());
+
+    // The page carries forty-two club sections and only twenty are ours; a
+    // Segunda club is a counterpart, never a `club`.
+    expect(new Set(changes.map(({ club }) => club)))
+      .toEqual(new Set(SPANISH_CLUBS));
+  });
+});
+
+describe("fetching a second Competition's Squad Changes", () => {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+
+  beforeAll(async () => {
+    await client.connect();
+    await resetSchema(client);
+
+    return async () => {
+      await client.end();
+    };
+  });
+
+  beforeEach(async () => {
+    await client.query(
+      "truncate squad_changes, fixtures, gameweeks, raw_snapshots "
+      + "restart identity cascade"
+    );
+    // Both Competitions carry a Gameweek 1, which is the whole hazard: the
+    // number is shared and the partition is not.
+    await client.query(
+      `insert into gameweeks (competition, season, gw, deadline_at) values
+         ('PL', '2026-27', 1, '2026-08-21T17:30:00Z'),
+         ('PD', '2026-27', 1, '2026-08-15T16:00:00Z')`
+    );
+    for (const [index, club] of SPANISH_CLUBS.entries()) {
+      await client.query(
+        `insert into fixtures (
+           competition, season, fixture_id, gw, home_team, away_team, kickoff_at
+         ) values ('PD', $1, $2, 1, $3, $4, '2026-08-15T17:30:00Z')`,
+        [
+          "2026-27",
+          index + 1,
+          club,
+          SPANISH_CLUBS[(index + 1) % SPANISH_CLUBS.length]
+        ]
+      );
+    }
+  });
+
+  const spanishFetcher = async () => {
+    const body = await spanishPage();
+    const requested: string[] = [];
+    return {
+      requested,
+      http: async (url: string) => {
+        requested.push(url);
+        return { status: 200, body };
+      }
+    };
+  };
+
+  test("stores La Liga's window under its own Competition", async () => {
+    const { http, requested } = await spanishFetcher();
+
+    const result = await fetchSquadChanges({
+      database: client,
+      competition: "PD",
+      season: "2026-27",
+      http,
+      now: () => new Date("2026-08-15T09:00:00Z")
+    });
+
+    expect(requested).toEqual([SPANISH_PAGE_URL]);
+    expect(result).toMatchObject({ stored: true, gameweek: 1 });
+    const stored = await client.query(
+      `select competition, gw, direction, counterpart_club, fee, dated_on, loan
+         from squad_changes
+        where club = 'FC Barcelona' and player = 'Marcus Rashford'`
+    );
+    expect(stored.rows).toEqual([{
+      competition: "PD",
+      gw: 1,
+      direction: "out",
+      counterpart_club: "Manchester United",
+      fee: null,
+      dated_on: null,
+      loan: true
+    }]);
+    const archived = await client.query<{ source: string }>(
+      "select source from raw_snapshots"
+    );
+    expect(archived.rows).toEqual([{
+      source: "wikipedia:squad-changes:spain-summer-2026"
+    }]);
+  });
+
+  test("leaves the Premier League's Gameweek 1 partition untouched", async () => {
+    // The write path's own delete-then-insert is keyed by Gameweek, and both
+    // leagues number theirs from 1. Unscoped, this fetch empties the Premier
+    // League's window on its way past and the section it feeds goes on reading
+    // as an absence rather than as a loss.
+    await client.query(
+      `insert into squad_changes (
+         competition, season, gw, club, direction, player, counterpart_club,
+         fee, loan, dated_on, observed_at
+       ) values (
+         'PL', '2026-27', 1, 'Spurs', 'in', 'Sandro Tonali',
+         'Newcastle United', '£92.5m', false, '2026-07-06',
+         '2026-08-15T09:00:00Z'
+       )`
+    );
+
+    await fetchSquadChanges({
+      database: client,
+      competition: "PD",
+      season: "2026-27",
+      http: (await spanishFetcher()).http,
+      now: () => new Date("2026-08-15T09:00:00Z")
+    });
+
+    const partitions = await client.query(
+      `select competition, count(*)::int as rows
+         from squad_changes group by competition order by competition`
+    );
+    expect(partitions.rows).toEqual([
+      { competition: "PD", rows: 137 },
+      { competition: "PL", rows: 1 }
+    ]);
+  });
+
+  // The one path the seams above only meet at: the recorded page, through the
+  // fetch, into the database, and back out through the query
+  // `loadMatchContextData` runs into the section an Entrant reads. It is what
+  // proves the null date survives the round trip rather than throwing in the
+  // comparator, which is where it would have, inside the Lock window.
+  test("renders a stored La Liga window as the section a packet carries",
+    async () => {
+      await fetchSquadChanges({
+        database: client,
+        competition: "PD",
+        season: "2026-27",
+        http: (await spanishFetcher()).http,
+        now: () => new Date("2026-08-15T09:00:00Z")
+      });
+
+      const stored = await client.query<SquadChangeRow>(
+        `select club, direction, player, counterpart_club, fee, loan, dated_on
+           from squad_changes
+          where competition = 'PD' and season = '2026-27' and gw = 1`
+      );
+      const section = buildSquadChangesContext({
+        competition: "PD",
+        deadline: new Date("2026-08-15T16:00:00Z"),
+        homeTeam: "FC Barcelona",
+        awayTeam: "Deportivo Alavés",
+        changes: stored.rows
+      });
+
+      expect(section).toBe([
+        "Squad changes since 2 Feb 2026:",
+        "",
+        "FC Barcelona",
+        "In: Anthony Gordon (from Newcastle United, fee not stated), "
+        + "Karim Adeyemi (from Borussia Dortmund, fee not stated)",
+        // Every Spanish row ties on fee and on date, both being null the whole
+        // way down, so the whole section orders by player and the loan sits
+        // wherever its name puts it rather than last.
+        "Out: Marcus Rashford (to Manchester United) (loan), "
+        + "Robert Lewandowski (to Chicago Fire, fee not stated)",
+        "",
+        "Deportivo Alavés",
+        "In: Miguel Rodríguez (from Utrecht, fee not stated), "
+        + "Mikel Rodríguez (from Real Sociedad B, fee not stated)",
+        "Out: Calebe (to Fortaleza) (loan), "
+        + "Jon Guridi (to Sevilla, fee not stated), "
+        + "Raúl Fernández (to Leganés, fee not stated), "
+        + "Víctor Parada (to Spartak Moscow, fee not stated)"
+      ].join("\n"));
+    });
+
+  test("refuses a Competition whose club spellings it does not hold", async () => {
+    await client.query(
+      "update fixtures set home_team = 'Girona FC' where fixture_id = 1"
+    );
+    const { http, requested } = await spanishFetcher();
+
+    await expect(fetchSquadChanges({
+      database: client,
+      competition: "PD",
+      season: "2026-27",
+      http,
+      now: () => new Date("2026-08-15T09:00:00Z")
+    })).rejects.toThrow(/unknown PD club spelling Girona FC/);
+
     expect(requested).toEqual([]);
   });
 });

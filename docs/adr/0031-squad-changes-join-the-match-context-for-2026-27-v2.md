@@ -1,5 +1,35 @@
 # Squad Changes join the match context for 2026-27-v2
 
+> Amended 2026-08-15 by ticket 7 of spec 0016, the ticket that took this to a second
+> Competition. Everything below was written from the English page and describes it
+> correctly. English Wikipedia publishes a country's transfer list in **two formats**, and
+> Spain's shares none of the English one's structure: no wikitable, one section per club
+> holding two `{{fs player}}` lists, and **no date column and no fee column anywhere on
+> it**. Three sentences below are therefore English-only statements of fact rather than
+> rules a second league broke:
+>
+> - "each fee row carrying its own BBC or club-site citation" — Spain's rows cite the
+>   signing club, and they are not fee rows because there are no fees.
+> - "A row is player, counterpart club, and fee exactly as the page states it" — **stands
+>   exactly as written**, and for Spain what the page states is nothing, so the fee is
+>   null and the line reads "fee not stated". The rule did the work; it is the page that
+>   is different.
+> - "ties by date" — Spain files no move under a date, so `dated_on` is null there
+>   (migration 0027) and the order falls through to player and then counterpart club, by
+>   code point. `window.since` would have fit the column and would have been this pipeline
+>   asserting a date nobody published, which the fee rule above already refuses.
+>
+> Two things below are narrowed from one to per-Competition rather than changed: the
+> **window** (Spain opened its 2026 summer on 1 July where England opened on 15 June, so
+> the same June deadline gates one league and not the other) and the **alias table** (a
+> flat one would resolve a club from the wrong country as confidently as from the right
+> one). The 21-day gate, the frozen close dates, the membership rule, the pre-Lock
+> triggers and the archive-every-response discipline are unchanged and apply to both.
+>
+> The text below stands as written and as decided. This records what a second country's
+> page turned out to be, with the page in front of us; it is not a claim that the original
+> meant this. If any of it is wrong, the code is what should move.
+
 The first full Gameweek 1 run (local, 2026-08-12) produced ninety Predictions, and for
 Brentford v Spurs all nine rationales reasoned from the squad that no longer exists: every
 one cited the 17th-place finish and the old squad's injuries, and none mentioned any of the

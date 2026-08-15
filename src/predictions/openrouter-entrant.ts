@@ -23,9 +23,10 @@ export interface MatchPrompt {
  * unmovable: `match/2026-27-v2` has been used, and a used Prompt Version is
  * unamendable (ADR-0026). Every other Competition takes
  * `match-<code, lowercased>/2026-27-v1`, and opening a league is one entry
- * here. One of five, though: this file, `DIVISIONS`, the division check
- * constraint, the Understat league and its club map, and the `competition_code`
- * domain if the code is new — gathered in
+ * here. One of six, though: this file, `DIVISIONS`, the division check
+ * constraint, the Understat league and its club map, the transfer windows with
+ * their own club map, and the `competition_code` domain if the code is new —
+ * gathered in
  * `docs/runbooks/opening-a-competition.md`, because each of these files used to
  * describe its own edit as the single one and none of them was wrong.
  *

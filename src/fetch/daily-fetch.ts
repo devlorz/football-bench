@@ -247,6 +247,12 @@ export async function runDailyFetch({
   try {
     squadChanges = await fetchSquadChanges({
       database,
+      // The `PL` literal the two history sources above still carry, for the
+      // same reason and closing at the same moment: nothing predicts under
+      // `PD` until ticket 8, so there is no Spanish partition to leave stale,
+      // and ticket 8's loop over the listed Competitions is where this becomes
+      // a third call inside it rather than a fourth literal.
+      competition: "PL",
       season,
       http,
       now: () => observedAt

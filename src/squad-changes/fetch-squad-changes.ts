@@ -24,6 +24,11 @@ export class SquadChangeSourceHttpError extends Error {
   }
 }
 
+/**
+ * The window's name already carries its country, so the Premier League's
+ * archived snapshots keep the source strings they are stored under and no two
+ * Competitions can file a page over each other.
+ */
 export function squadChangeSource(window: TransferWindow): string {
   return `wikipedia:squad-changes:${window.name}`;
 }
@@ -40,6 +45,13 @@ const REQUEST_HEADERS = {
 
 export interface FetchSquadChangesOptions {
   database: Database;
+  /**
+   * Named explicitly and with no default, for the reason migration 0027
+   * dropped the column's: a writer that says nothing files its rows under the
+   * Premier League with no collision and no check, and the packet that reads
+   * them reads perfectly.
+   */
+  competition: string;
   season: string;
   http: HttpFetcher;
   now: () => Date;
@@ -57,6 +69,7 @@ export type FetchSquadChangesResult =
  */
 export async function fetchSquadChanges({
   database,
+  competition,
   season,
   http,
   now
@@ -67,30 +80,32 @@ export async function fetchSquadChanges({
   // out-of-gate Gameweek hide the in-gate one behind it, and lets a September
   // fetch pull January's page for a winter deadline that is inside the winter
   // gate but months from rendering.
-  const window = squadChangeWindow(observedAt);
+  const window = squadChangeWindow(competition, observedAt);
   if (window === undefined) {
     return { stored: false };
   }
   const upcoming = await database.query<{ gw: number; deadline_at: Date }>(
     `select gw, deadline_at
        from gameweeks
-      where season = $1 and deadline_at > $2
+      where competition = $1 and season = $2 and deadline_at > $3
       order by deadline_at, gw`,
-    [season, observedAt]
+    [competition, season, observedAt]
   );
   const gameweek = upcoming.rows.find(({ deadline_at: deadline }) =>
-    squadChangeWindow(deadline) === window);
+    squadChangeWindow(competition, deadline) === window);
   if (gameweek === undefined) {
     return { stored: false };
   }
 
   const source = squadChangeSource(window);
+  // Scoped, or a second Competition's clubs arrive in this one's roster and
+  // every one of them is reported as a spelling this page has never heard of.
   const roster = await database.query<{ club: string }>(
     `select distinct home_team as club
        from fixtures
-      where season = $1
+      where competition = $1 and season = $2
       order by club`,
-    [season]
+    [competition, season]
   );
   // A Season whose Fixtures have not been fetched yet has no clubs to key a
   // Squad Change on, and every row on the page would be skipped as somebody
@@ -103,18 +118,18 @@ export async function fetchSquadChanges({
   // each of the twenty to its pinned article -- needs the page and lives in
   // the parser.
   const unknown = roster.rows.flatMap(({ club }) =>
-    resolveWikipediaClub(club) === undefined ? [club] : []);
+    resolveWikipediaClub(competition, club) === undefined ? [club] : []);
   if (unknown.length > 0) {
     throw new SquadChangeSourceValidationError(
       source,
       unknown.map((club) => ({
         field: "club",
-        detail: `unknown Premier League club spelling ${club}`
+        detail: `unknown ${competition} club spelling ${club}`
       }))
     );
   }
   const pinned = new Map(roster.rows.map(({ club }) =>
-    [club, resolveWikipediaClub(club) as WikipediaClub]));
+    [club, resolveWikipediaClub(competition, club) as WikipediaClub]));
 
   const url = sourceUrl(window);
   const response = await http(url, {
@@ -130,21 +145,28 @@ export async function fetchSquadChanges({
     throw new SquadChangeSourceHttpError(source, response.status, url);
   }
 
-  const changes = parseSquadChanges(source, response.body, pinned);
+  const changes = parseSquadChanges(
+    source, response.body, pinned, window.format
+  );
 
   await database.query("begin");
   try {
+    // Scoped, or a La Liga fetch empties the Premier League's partition of the
+    // same Gameweek number on its way past: two Competitions share `gw` 1
+    // through 38 and this delete is what replaces a window's movement.
     await database.query(
-      "delete from squad_changes where season = $1 and gw = $2",
-      [season, gameweek.gw]
+      `delete from squad_changes
+        where competition = $1 and season = $2 and gw = $3`,
+      [competition, season, gameweek.gw]
     );
     for (const change of changes) {
       await database.query(
         `insert into squad_changes (
-           season, gw, club, direction, player, counterpart_club,
+           competition, season, gw, club, direction, player, counterpart_club,
            fee, loan, dated_on, observed_at
-         ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+         ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
+          competition,
           season,
           gameweek.gw,
           change.club,

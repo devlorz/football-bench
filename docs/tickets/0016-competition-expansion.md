@@ -627,9 +627,155 @@ path: the spec allows it to trail into the Season.
 
 **Blocked by:** 5.
 
-- [ ] The transfer list for the Spanish season is fetched and parsed behind a curated
+- [x] The transfer list for the Spanish season is fetched and parsed behind a curated
       club map, and an unknown club spelling fails loudly.
-- [ ] The squad-changes section appears in the `PD` packet when the data is present.
+      _**English Wikipedia publishes a country's transfers in two formats that share
+      nothing.** The English page is two wikitables — `Transfers` and `Loans` — whose
+      first column is the date and whose last is the fee. The Spanish page has **no
+      wikitable on it at all**: it is one section per club holding two `{{fs player}}`
+      lists, arrivals first and departures second, and it states **neither a date nor a
+      fee anywhere**. `tableRows`, `TABLES`, the rowspan carry and `parseDate` are all
+      unreachable for it. The window carries a `format` and the parser is chosen by it,
+      because it is the page that has a shape and the window is what names the page._
+
+      _**Migration 0027** is what that costs: `dated_on` drops its not-null, the primary
+      key becomes a unique index, and `competition` joins that index. Null rather than a
+      stand-in — `window.since` would fit the column and would be this pipeline asserting
+      a date nobody published, which `feeAmount` already refuses one column over
+      (ADR-0018). Nothing is lost from the packet: `changeText` renders the player, the
+      counterpart, the fee and the loan marker and has never rendered the date, and the
+      heading dates itself from the window. `dated_on` works in two places only, the
+      third key of the display ordering and the row's identity._
+
+      _**Rehearsing 0027 found that the rehearsal harness could not rehearse anything
+      after 0022.** `verifyRelabelledAsPl` subtracted `competition` from the migrated side
+      and read `fixture_id` as `fpl_id` unconditionally — right exactly once, against a
+      record predating 0022. Against the deployed record, which has carried the column
+      since yesterday, every row differed from itself by that column: "38 rows lost, 38
+      rows unaccounted for, **0 rows not PL**", the last number saying plainly that the
+      labelling was fine and the projection was not. The runbook's own instruction to
+      "re-run the rehearsal after any ticket adds a migration" had therefore been
+      unfollowable since the day 0022 landed. The check now reads the snapshot's columns
+      and allows only for what the pending pass changes, and `squad_changes` joins the
+      compared set because 0022 never rekeyed it and 0027 takes its key off. A test pins
+      the case that failed. **Found by running it**, not by reading it._
+
+      _**Rehearsed green over the live record on 2026-08-15**, all four preconditions read
+      clean first (ten seats, no attempt ever recorded, no open run, no Lock window inside
+      the ±window): 38 Gameweeks, 380 Fixtures and **291 Squad Changes came back whole**._
+
+      _**Applied to the deployed database on 2026-08-15**, preconditions read a second
+      time immediately before, over the session pooler on 5432. `schema_migrations` head
+      is `0027`; all **291 rows survived**, still dated and still one Competition; the
+      primary key is gone and `squad_changes_identity` stands in its place carrying
+      `NULLS NOT DISTINCT`; the Gameweek foreign key and the direction check are
+      untouched; `dated_on` is nullable and `competition` has no default. The §4 schema
+      diff against a Postgres built from the repository's migrations comes back **zero
+      lines**. `competitions` still holds the single `PL` row, so nothing about the
+      schedule moved. The runbook's last box — the next scheduled run completing — is
+      open by definition until the next cron fires._
+
+      _`nulls not distinct` needs Postgres 15 or later. **Read off the deployed instance
+      rather than assumed: `server_version` is 17.6**, and this machine's is 17.9. There
+      is no CI to pin — `.github/workflows/` holds fetch, fpl, predict and score and no
+      test workflow, so the suite runs against the throwaway cluster `initdb` builds from
+      whatever Postgres the machine carries. **Raised by review.**_
+
+      _Two traps had to close in the same change or 0027 would have been worse than not
+      doing it. **`nulls not distinct`**: Postgres holds two nulls apart by default, so an
+      index carrying `dated_on` would enforce nothing for the league that introduced the
+      case — every Spanish row is null there. The writer is a delete-then-insert over the
+      whole partition with no `on conflict`, so the one job left to the constraint is
+      catching a page that lists the same move twice, and it would have gone on doing that
+      for England while silently declining to for Spain. And **the comparator**:
+      `build-squad-changes-context.ts` read `left.dated_on.getTime()` directly, which
+      throws on the first Spanish row — inside the Lock window, at the moment a context is
+      built. Undated now sorts after dated, the same shape `feeAmount` uses for a fee
+      stated in words, and a partition that is undated throughout falls through to the
+      player and then the counterpart — which has to be a total order, and a
+      locale-independent one, because a context is hashed and stored as evidence. The
+      first pass at this stopped at `player.localeCompare` and called it deterministic;
+      the paragraph below has why neither half of that held._
+
+      _**A data-loss bug of ticket 6's exact shape was sitting in the write path.**
+      `fetchSquadChanges` named no Competition anywhere: the roster read
+      `from fixtures where season = $1` (two leagues' clubs in one roster, every one of
+      them reported as a spelling the page has never heard of), the insert leaned on the
+      `default 'PL'` that 0022 added and 0024's reasoning had already condemned, and
+      `delete from squad_changes where season = $1 and gw = $2` — **a La Liga fetch
+      empties the Premier League's partition of the same Gameweek number on its way
+      past**, because two Competitions share `gw` 1 through 38 and the Gameweek foreign
+      key does not separate them. The read side (`build-match-context.ts`) had been scoped
+      since ticket 1; only the writer was blind. `test/fetch-squad-changes.test.ts` drives
+      the whole shape: a `PD` fetch storing its 137 rows with the Premier League's one row
+      still there afterwards._
+
+      _**The loan marker read the whole `other=` sentence, and that sentence is
+      prose.** Its later clauses are a career summary: `from Fiorentina, previously on
+      loan at Las Palmas` is a permanent signing and `loan return to Fortaleza, later
+      loaned to Internacional` is a loan ending at a club this Competition never had.
+      Reading all of it called **thirty rows of the two real pages loans that are not** —
+      twenty-one on the 2026 summer edition, nine on the winter edition before it, every
+      one of them "previously on loan at", and one of those spelled "previouly". Both the
+      marker and the counterpart now come from the first clause, found by bracket depth so
+      that `[[Fran García (footballer, born 1999)|Fran García]]` does not end it. Three
+      recorded rows pin it, one of each shape. **Found by review**, and it was a real
+      misreading rather than a hypothetical one — the reviewer's example is on the page._
+
+      _The display comparator was not a total order: two rows could tie on fee, date and
+      player and differ only by counterpart, leaving them in whatever order Postgres
+      returned. No such pair exists on the real page — 427 rows, no repeated
+      `(club, direction, player)` — but a rendered context is hashed and kept as evidence
+      of what an Entrant was handed, so an order that depends on the database's mood is
+      not an order. `counterpart_club` is the final key and both string comparisons are
+      by code point rather than `localeCompare`, which also takes the runtime's ICU build
+      out of the hash. Neither frozen sha moved: the pinned renderings hold no tie that
+      reaches a name. **Found by review.**_
+
+      _One consequence worth stating, because it is visible in every Spanish section: with
+      fee and date null the whole way down, `PD` orders by player alone, so a loan sits
+      wherever its name puts it rather than after the fees. `PL`'s ordering is untouched._
+
+      _The club map is keyed by Competition on ticket 6's Understat argument — a flat map
+      would resolve a club from the wrong country just as correctly as from the right one
+      — and so are the windows, which are a country's and not the world's: Spain opened
+      its 2026 summer on **1 July** where England opened on 15 June, so the same June
+      deadline gates one league and not the other. The Premier League's window names are
+      deliberately not regularised into `england-…`; they name archived snapshots already
+      stored under them._
+
+      _**The map is derived, not transcribed, and this is what the token bought.** Every
+      key is a `homeTeam.name` in the real `competitions/PD/matches?season=2026` response
+      and every value a section heading under `==La Liga==` on the real page; both sets
+      are exactly twenty with nothing left over on either side. Ten are a straight match
+      and cannot be wrong; of the ten that are not, none is ambiguous against another —
+      the three clubs carrying "Real" resolve to Madrid, Sociedad and Racing Santander
+      with no overlap. Both entries carry the article **and** the displayed name because
+      the 2026 summer edition links its club headings and every winter edition before it
+      writes them as bare text; identity is the article where there is one and the name
+      where there is not._
+- [x] The squad-changes section appears in the `PD` packet when the data is present.
+      _`buildMatchContext` passes its Competition to `buildSquadChangesContext`, which
+      picks `PD`'s own windows. Neither frozen sha moved: the two countries' summer
+      windows share a `since` of 2 Feb 2026 and the same gate, so the rendering the
+      Premier League's hash pins and the one `match-pd/2026-27-v1` pins are both
+      unchanged by this ticket._
+
+      _One test carries the whole path rather than the seams either side of it: the
+      recorded page, through the fetch, into the database, and back out through the query
+      `loadMatchContextData` runs, into the rendered section. It is what proves the null
+      date survives the round trip instead of throwing in the comparator — which is where
+      it would have, inside the Lock window. **Added after review** pointed out the claim
+      of "end to end" was carried by adjacent seams._
+
+      _**"When the data is present" is doing real work in that sentence.** `daily-fetch.ts`
+      still holds the `PL` literal on this source, exactly as it does on the two history
+      sources, and for the same reason — nothing predicts under `PD` until ticket 8, so
+      there is no Spanish partition to leave stale. **Ticket 8's loop is where this
+      becomes a third call inside it rather than a fourth literal**, and until then no
+      Spanish row reaches the database through the daily fetch. The parse, the write and
+      the render are proved end to end against the real page; what is not wired is the
+      schedule that would call them._
 
 ## 8 — La Liga goes live
 
@@ -643,11 +789,36 @@ for `PL` since the Season opened.
 - [ ] The day-one live-source checks pass: the three deferred opening Fixtures carry
       usable round numbers, and kickoff timestamps are timezone-sound against the
       published schedule.
+      _**Read early, off the real response, during ticket 7** — the token arrived there
+      because ticket 7's club map needed the live source's own spellings, and the same
+      bytes answer this box's two questions. Captured as
+      `test/fixtures/football-data-org-2026-27-PD-recorded.json.gz`, unwired: 380
+      matches, 20 clubs, `resultSet` first 2026-08-15 and last 2027-05-30._
+
+      _**No `matchday` is null**, on any of the 380 — the `null` path ADR-0024 handles is
+      not exercised here. **The deferred openers are four, not three**, and they do keep
+      matchday 1: Valencia v Betis 25 Aug, Real Madrid v Real Sociedad 26 Aug, Celta v
+      Osasuna 27 Aug and Barcelona v Athletic 27 Aug, against an opening weekend of
+      15–19 Aug. So Gameweek 1 spans thirteen days after its own Lock rather than a
+      weekend, which is the shape to check `deriveDeadline` against before Locking it.
+      Kickoffs read 15:00–19:30Z, which is 17:00–21:30 in Spain in August and the
+      published slots exactly; timezone-sound._
+
+      _**Ticket 3's fixture is wrong, as ticket 6 suspected it might be.** Its comment
+      says "Constructed to the documented shape rather than recorded off the wire", and
+      the wire disagrees: it carries `Girona FC` and `RCD Mallorca`, **neither of which is
+      in La Liga in 2026-27**, and writes `Real Sociedad` where the source says
+      `Real Sociedad de Fútbol`. Twelve of its twenty clubs were never the right twenty.
+      Swapping the recorded response in is this ticket's, not ticket 7's — it moves
+      `test/fetch-football-data-org-competition.test.ts`'s expectations._
 - [ ] The `PD` row is inserted and the scheduler picks the Competition up with no
       workflow edit.
 - [ ] The football-data.org club names are mapped to football-data.co.uk's and reviewed,
       from the captured real response — ticket 6's second identity map, which could not
-      honestly be drafted without it. Until it exists every La Liga club's history section
+      honestly be drafted without it.
+      _**No longer blocked.** The token is in `.env` and the real response is captured
+      (see the first box). The twenty names this map's keys come from are the twenty
+      ticket 7 already derived its own map's keys from._ Until it exists every La Liga club's history section
       reads "none in stored data" over a complete backfill, and nothing fails.
 - [ ] The daily fetch's two history sources become a loop over the listed Competitions,
       which is also what closes **ticket 6's history and xG boxes**: their prior Season is
