@@ -16,7 +16,7 @@ function result(shortfalls: string[]): ScoringRehearsalResult {
           metric: MATCH_POINTS_METRIC,
           value: 5,
           n: 1,
-          detail: { fixtures: [{ fplId: 1, points: 5 }] }
+          detail: { fixtures: [{ fixtureId: 1, points: 5 }] }
         },
         {
           entrantId: "two",
@@ -24,7 +24,7 @@ function result(shortfalls: string[]): ScoringRehearsalResult {
           metric: MATCH_POINTS_METRIC,
           value: 0,
           n: 1,
-          detail: { fixtures: [{ fplId: 1, points: 0 }] }
+          detail: { fixtures: [{ fixtureId: 1, points: 0 }] }
         }
       ]
     },
@@ -50,7 +50,7 @@ describe("reading a scoring rehearsal", () => {
     // The per-Fixture detail, not just the total: a reviewer who cannot see
     // which Fixture paid the 5 cannot disagree with it.
     expect(output).toContain(`gw 1 ${MATCH_POINTS_METRIC} = 5 (n=1)`);
-    expect(output).toContain('{"fixtures":[{"fplId":1,"points":5}]}');
+    expect(output).toContain('{"fixtures":[{"fixtureId":1,"points":5}]}');
     expect(output).toContain("The rehearsal produced the whole scoring record.");
   });
 

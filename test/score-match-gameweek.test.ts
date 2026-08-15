@@ -93,12 +93,12 @@ describe("scoring the readable Match Points layer", () => {
    * played in `gw`, which is the same Gameweek unless the Fixture was deferred.
    */
   const storeFixture = async (
-    fplId: number,
+    fixtureId: number,
     lockedInGw: number,
     gw = lockedInGw,
     /** Only the Elo line reads either, so both default out of the way. */
     {
-      teams = [`Home ${fplId}`, `Away ${fplId}`],
+      teams = [`Home ${fixtureId}`, `Away ${fixtureId}`],
       kickoff = "2026-08-21T19:00:00Z"
     }: { teams?: [string, string]; kickoff?: string } = {}
   ): Promise<void> => {
@@ -106,17 +106,17 @@ describe("scoring the readable Match Points layer", () => {
       `insert into fixtures (
          season, fixture_id, gw, locked_in_gw, home_team, away_team, kickoff_at
        ) values ($1, $2, $3, $4, $5, $6, $7)`,
-      [SEASON, fplId, gw, lockedInGw, teams[0], teams[1], kickoff]
+      [SEASON, fixtureId, gw, lockedInGw, teams[0], teams[1], kickoff]
     );
     await client.query(
       `insert into contexts (season, gw, track, fixture_id, hash, body)
        values ($1, $2, 'match', $3, $4, 'context')`,
-      [SEASON, lockedInGw, fplId, `hash-${fplId}`]
+      [SEASON, lockedInGw, fixtureId, `hash-${fixtureId}`]
     );
   };
 
   const settle = async (
-    fplId: number,
+    fixtureId: number,
     home: number,
     away: number
   ): Promise<void> => {
@@ -124,7 +124,7 @@ describe("scoring the readable Match Points layer", () => {
       "update fixtures set result = $3 where season = $1 and fixture_id = $2",
       [
         SEASON,
-        fplId,
+        fixtureId,
         // The same shape and the same derivation the fetch stores, so the
         // fixture cannot drift into proving the scorer against a result no
         // Season would ever hold.
@@ -139,7 +139,7 @@ describe("scoring the readable Match Points layer", () => {
 
   const predict = async (
     entrantId: string,
-    fplId: number,
+    fixtureId: number,
     home: number,
     away: number,
     probs: Probs = { H: 0.5, D: 0.3, A: 0.2 },
@@ -154,7 +154,7 @@ describe("scoring the readable Match Points layer", () => {
        select $1, $2, $3, $6, $4, $5, c.id, $7
          from contexts c
         where c.season = $2 and c.track = 'match' and c.fixture_id = $3`,
-      [entrantId, SEASON, fplId, home, away, JSON.stringify(probs), repairs]
+      [entrantId, SEASON, fixtureId, home, away, JSON.stringify(probs), repairs]
     );
   };
 
@@ -164,7 +164,7 @@ describe("scoring the readable Match Points layer", () => {
    */
   const attempt = async (
     entrantId: string,
-    fplId: number,
+    fixtureId: number,
     lockedInGw: number,
     cause: string | null
   ): Promise<void> => {
@@ -173,7 +173,7 @@ describe("scoring the readable Match Points layer", () => {
          model_id, season, gw, track, fixture_id, attempt_no, ok, error_kind,
          trigger
        ) values ($1, $2, $3, 'match', $4, 0, $5, $6, 'main')`,
-      [entrantId, SEASON, lockedInGw, fplId, cause === null, cause]
+      [entrantId, SEASON, lockedInGw, fixtureId, cause === null, cause]
     );
   };
 
@@ -348,7 +348,7 @@ describe("scoring the readable Match Points layer", () => {
         qualification: MATCH_POINTS_QUALIFICATION,
         fixtures: [
           {
-            fplId: 1,
+            fixtureId: 1,
             predicted: [3, 2],
             result: [2, 1],
             outcome: "H",
@@ -399,7 +399,7 @@ describe("scoring the readable Match Points layer", () => {
           n: 1,
           points: 5,
           fixtures: [
-            { fplId: 1, predicted: [2, 1], result: [2, 1], outcome: "H", points: 5 }
+            { fixtureId: 1, predicted: [2, 1], result: [2, 1], outcome: "H", points: 5 }
           ]
         },
         {
@@ -407,7 +407,7 @@ describe("scoring the readable Match Points layer", () => {
           n: 1,
           points: 3,
           fixtures: [
-            { fplId: 2, predicted: [1, 1], result: [0, 0], outcome: "D", points: 3 }
+            { fixtureId: 2, predicted: [1, 1], result: [0, 0], outcome: "D", points: 3 }
           ]
         }
       ]
@@ -542,8 +542,8 @@ describe("scoring the readable Match Points layer", () => {
     // row: nothing else stored says why a Fixture fell on the side it did.
     expect((await storedValue("entrant/a", 1, ACCURACY_METRIC))?.detail)
       .toEqual({
-        hits: [{ fplId: 1, probs: PROBS, likeliest: "H", outcome: "H" }],
-        misses: [{ fplId: 2, probs: PROBS, likeliest: "H", outcome: "A" }]
+        hits: [{ fixtureId: 1, probs: PROBS, likeliest: "H", outcome: "H" }],
+        misses: [{ fixtureId: 2, probs: PROBS, likeliest: "H", outcome: "A" }]
       });
   });
 
@@ -566,8 +566,8 @@ describe("scoring the readable Match Points layer", () => {
     // that is the half of the comparison Coherence actually made.
     expect((await storedValue("entrant/a", 1, COHERENCE_METRIC))?.detail)
       .toEqual({
-        hits: [{ fplId: 1, probs: PROBS, likeliest: "H", predicted: [2, 1] }],
-        misses: [{ fplId: 2, probs: PROBS, likeliest: "H", predicted: [1, 2] }]
+        hits: [{ fixtureId: 1, probs: PROBS, likeliest: "H", predicted: [2, 1] }],
+        misses: [{ fixtureId: 2, probs: PROBS, likeliest: "H", predicted: [1, 2] }]
       });
   });
 
@@ -615,12 +615,12 @@ describe("scoring the readable Match Points layer", () => {
 
     expect((await storedValue("entrant/a", 1, RPS_METRIC))?.detail).toEqual({
       fixtures: [
-        { fplId: 1, probs: PROBS, outcome: "H", rps: expect.closeTo(0.09125, 12) }
+        { fixtureId: 1, probs: PROBS, outcome: "H", rps: expect.closeTo(0.09125, 12) }
       ]
     });
     expect((await storedValue("entrant/a", 1, BRIER_METRIC))?.detail).toEqual({
       fixtures: [
-        { fplId: 1, probs: PROBS, outcome: "H", brier: expect.closeTo(0.245, 12) }
+        { fixtureId: 1, probs: PROBS, outcome: "H", brier: expect.closeTo(0.245, 12) }
       ]
     });
   });
@@ -663,7 +663,7 @@ describe("scoring the readable Match Points layer", () => {
           mean: expect.closeTo(0.09125, 12),
           fixtures: [
             {
-              fplId: 1,
+              fixtureId: 1,
               probs: PROBS,
               outcome: "H",
               rps: expect.closeTo(0.09125, 12)
@@ -676,7 +676,7 @@ describe("scoring the readable Match Points layer", () => {
           mean: expect.closeTo(0.54125, 12),
           fixtures: [
             {
-              fplId: 2,
+              fixtureId: 2,
               probs: PROBS,
               outcome: "A",
               rps: expect.closeTo(0.54125, 12)
@@ -805,14 +805,14 @@ describe("scoring the readable Match Points layer", () => {
       fixtures: [
         {
           gw: 1,
-          fplId: 1,
+          fixtureId: 1,
           anchorRps: expect.closeTo(0.1, 12),
           entrantRps: expect.closeTo(0.2, 12),
           difference: expect.closeTo(0.1, 12)
         },
         {
           gw: 1,
-          fplId: 2,
+          fixtureId: 2,
           anchorRps: expect.closeTo(0.04, 12),
           entrantRps: expect.closeTo(0.065, 12),
           difference: expect.closeTo(0.025, 12)
@@ -853,7 +853,8 @@ describe("scoring the readable Match Points layer", () => {
     // Every published comparison, not only the one that happens to be read
     // first: the Fixture leaves the complete case, so it leaves all of them.
     for (const { detail } of await comparisons(1)) {
-      expect(detail.fixtures.map(({ fplId }) => fplId)).toEqual([1, 2]);
+      expect(detail.fixtures.map(({ fixtureId }) => fixtureId))
+        .toEqual([1, 2]);
     }
   });
 
@@ -954,13 +955,13 @@ describe("scoring the readable Match Points layer", () => {
     // Two Gameweek 2 Fixtures that entrant/d wins outright, taking it to 15
     // Match Points against entrant/a's 10. Everyone predicts both, so the
     // Gameweek 2 complete case is all four Fixtures.
-    for (const fplId of [3, 4]) {
-      await storeFixture(fplId, 2);
-      await settle(fplId, 1, 0);
-      await predict("entrant/a", fplId, 3, 3);
-      await predict("entrant/b", fplId, 0, 2);
-      await predict("entrant/c", fplId, 0, 2);
-      await predict("entrant/d", fplId, 1, 0);
+    for (const fixtureId of [3, 4]) {
+      await storeFixture(fixtureId, 2);
+      await settle(fixtureId, 1, 0);
+      await predict("entrant/a", fixtureId, 3, 3);
+      await predict("entrant/b", fixtureId, 0, 2);
+      await predict("entrant/c", fixtureId, 0, 2);
+      await predict("entrant/d", fixtureId, 1, 0);
     }
 
     await score(1);
@@ -1099,7 +1100,7 @@ describe("scoring the readable Match Points layer", () => {
       n: 2,
       detail: {
         causes: { ...NO_GAPS, schema: 1 },
-        gaps: [{ fplId: 2, cause: "schema", attempts: 2 }]
+        gaps: [{ fixtureId: 2, cause: "schema", attempts: 2 }]
       }
     });
   });
@@ -1121,9 +1122,9 @@ describe("scoring the readable Match Points layer", () => {
       detail: {
         causes: { ...NO_GAPS, refusal: 1, deadline: 1, unattempted: 1 },
         gaps: [
-          { fplId: 1, cause: "refusal", attempts: 1 },
-          { fplId: 2, cause: "deadline", attempts: 1 },
-          { fplId: 3, cause: "unattempted", attempts: 0 }
+          { fixtureId: 1, cause: "refusal", attempts: 1 },
+          { fixtureId: 2, cause: "deadline", attempts: 1 },
+          { fixtureId: 3, cause: "unattempted", attempts: 0 }
         ]
       }
     });
@@ -1169,8 +1170,8 @@ describe("scoring the readable Match Points layer", () => {
     await storeFixture(2, 1);
     await storeFixture(3, 2);
     await storeFixture(4, 2);
-    for (const fplId of [1, 2, 3]) {
-      await predict("entrant/a", fplId, 2, 1);
+    for (const fixtureId of [1, 2, 3]) {
+      await predict("entrant/a", fixtureId, 2, 1);
     }
     await attempt("entrant/a", 4, 2, "provider");
 
@@ -1193,7 +1194,7 @@ describe("scoring the readable Match Points layer", () => {
               gw: 2,
               n: 2,
               causes: { ...NO_GAPS, provider: 1 },
-              gaps: [{ fplId: 4, cause: "provider", attempts: 1 }]
+              gaps: [{ fixtureId: 4, cause: "provider", attempts: 1 }]
             }
           ]
         }
@@ -1231,7 +1232,7 @@ describe("scoring the readable Match Points layer", () => {
             failed: 1,
             unattempted: 1
           },
-          fixtures: [{ fplId: 1, repairs: 0 }, { fplId: 2, repairs: 2 }]
+          fixtures: [{ fixtureId: 1, repairs: 0 }, { fixtureId: 2, repairs: 2 }]
         }
       });
   });
@@ -1276,7 +1277,7 @@ describe("scoring the readable Match Points layer", () => {
             distribution: {
               "0": 0, "1": 0, "2": 0, "3": 1, failed: 0, unattempted: 0
             },
-            fixtures: [{ fplId: 1, repairs: 3 }]
+            fixtures: [{ fixtureId: 1, repairs: 3 }]
           },
           {
             gw: 2,
@@ -1284,7 +1285,7 @@ describe("scoring the readable Match Points layer", () => {
             distribution: {
               "0": 0, "1": 1, "2": 0, "3": 0, failed: 1, unattempted: 0
             },
-            fixtures: [{ fplId: 2, repairs: 1 }]
+            fixtures: [{ fixtureId: 2, repairs: 1 }]
           }
         ]
       }
@@ -1360,7 +1361,7 @@ describe("scoring the readable Match Points layer", () => {
     expect((await storedValue(REFERENCE_HOME, 1, RPS_METRIC))?.detail).toEqual({
       fixtures: [
         {
-          fplId: 1,
+          fixtureId: 1,
           probs: { H: 0.44, D: 0.28, A: 0.28 },
           outcome: "H",
           rps: expect.closeTo(0.196, 12)
@@ -1467,7 +1468,7 @@ describe("scoring the readable Match Points layer", () => {
       detail: {
         fixtures: [
           {
-            fplId: 1,
+            fixtureId: 1,
             probs: {
               H: expect.closeTo(0.445498678671810, 12),
               D: 0.28,
@@ -1534,7 +1535,7 @@ describe("scoring the readable Match Points layer", () => {
       detail: {
         fixtures: [
           {
-            fplId: 1,
+            fixtureId: 1,
             probs: {
               H: expect.closeTo(0.468456837835021, 12),
               D: 0.28,
@@ -1579,12 +1580,12 @@ describe("scoring the readable Match Points layer", () => {
       detail: {
         fixtures: [
           {
-            fplId: 1,
+            fixtureId: 1,
             probs: { H: expect.closeTo(0.468456837835021, 12) },
             rps: expect.closeTo(0.172906047838151, 12)
           },
           {
-            fplId: 2,
+            fixtureId: 2,
             probs: { H: expect.closeTo(0.445498678671810, 12) },
             rps: expect.closeTo(0.191411345382816, 12)
           }
@@ -1729,8 +1730,8 @@ describe("scoring the readable Match Points layer", () => {
       n: 2,
       detail: {
         fixtures: [
-          { fplId: 2, probs: { H: expect.closeTo(0.445498678671810, 12) } },
-          { fplId: 3, probs: { H: expect.closeTo(0.468456837835021, 12) } }
+          { fixtureId: 2, probs: { H: expect.closeTo(0.445498678671810, 12) } },
+          { fixtureId: 3, probs: { H: expect.closeTo(0.468456837835021, 12) } }
         ]
       }
     });
@@ -1786,7 +1787,7 @@ describe("scoring the readable Match Points layer", () => {
         qualification: BET_POINTS_QUALIFICATION,
         fixtures: [
           {
-            fplId: 1,
+            fixtureId: 1,
             predicted: [0, 0],
             result: [2, 1],
             slip: [
@@ -1834,8 +1835,8 @@ describe("scoring the readable Match Points layer", () => {
   });
 
   test("divides Bet hit % by the markets actually bet", async () => {
-    for (const fplId of [1, 2, 3, 4]) {
-      await storeFixture(fplId, 1);
+    for (const fixtureId of [1, 2, 3, 4]) {
+      await storeFixture(fixtureId, 1);
     }
     await settle(1, 2, 1);
     await settle(2, 0, 0);
@@ -1945,10 +1946,10 @@ describe("scoring the readable Match Points layer", () => {
       [3, [2, 2], ["over", "over", "under"]],
       [4, [3, 2], ["over", "over", "over"]]
     ];
-    for (const [fplId, [home, away]] of totals) {
-      await storeFixture(fplId, 1);
-      await settle(fplId, home, away);
-      await predict("entrant/a", fplId, home, away);
+    for (const [fixtureId, [home, away]] of totals) {
+      await storeFixture(fixtureId, 1);
+      await settle(fixtureId, home, away);
+      await predict("entrant/a", fixtureId, home, away);
     }
 
     await score(1);

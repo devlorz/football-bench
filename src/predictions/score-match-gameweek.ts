@@ -352,7 +352,7 @@ export interface BetLeg {
 /** What a Bet Points row retains: one slip per Fixture it settled. */
 export interface BetSlipDetail {
   fixtures: {
-    fplId: number;
+    fixtureId: number;
     predicted: [number, number];
     result: [number, number];
     slip: BetLeg[];
@@ -405,7 +405,7 @@ function betSlip(
  */
 interface ForecastFixture {
   gw: number;
-  fplId: number;
+  fixtureId: number;
   probs: Probs;
   /** The Outcome the probabilities call likeliest, ties broken canonically. */
   likeliest: Outcome;
@@ -530,7 +530,7 @@ async function predictedFixtures(
     const result = row.result;
     const predicted: PredictedFixture = {
       gw: row.gw,
-      fplId: row.fixture_id,
+      fixtureId: row.fixture_id,
       predicted: [row.pred_home, row.pred_away],
       probs: row.probs,
       likeliest,
@@ -704,7 +704,7 @@ async function writeProbabilityRows(
     const mean = (scoped: SettledForecast[]) => meanOf(scoped, key);
     const detail = (scoped: SettledForecast[]) => ({
       fixtures: scoped.map((fixture) => ({
-        fplId: fixture.fplId,
+        fixtureId: fixture.fixtureId,
         probs: fixture.probs,
         outcome: fixture.settled.outcome,
         [key]: fixture.settled[key]
@@ -730,8 +730,8 @@ async function writeProbabilityRows(
     cumulative ? ACCURACY_SEASON_TO_DATE_METRIC : ACCURACY_METRIC,
     settled,
     ({ settled: result }) => result.accurate,
-    ({ fplId, probs, likeliest, settled: result }) =>
-      ({ fplId, probs, likeliest, outcome: result.outcome }),
+    ({ fixtureId, probs, likeliest, settled: result }) =>
+      ({ fixtureId, probs, likeliest, outcome: result.outcome }),
     cumulative
   );
 }
@@ -761,8 +761,8 @@ async function writeRows(
 
   if (settled.length > 0) {
     const pointsDetail = (scoped: SettledFixture[]) => ({
-      fixtures: scoped.map(({ fplId, predicted: named, settled: result }) => ({
-        fplId,
+      fixtures: scoped.map(({ fixtureId, predicted: named, settled: result }) => ({
+        fixtureId,
         predicted: named,
         result: result.result,
         outcome: result.outcome,
@@ -791,8 +791,8 @@ async function writeRows(
     // Entrant wins is the breakdown the ranking exists to make readable, and a
     // count would leave a surprising total to be recomputed to be understood.
     const slipDetail = (scoped: SettledFixture[]): BetSlipDetail => ({
-      fixtures: scoped.map(({ fplId, predicted: named, settled: result }) => ({
-        fplId,
+      fixtures: scoped.map(({ fixtureId, predicted: named, settled: result }) => ({
+        fixtureId,
         predicted: named,
         result: result.result,
         slip: result.slip
@@ -855,18 +855,18 @@ async function writeRows(
     [
       SCORE_PCT_METRIC, SCORE_PCT_SEASON_TO_DATE_METRIC, settled,
       ({ settled: result }) => result?.points === 5,
-      ({ fplId }) => fplId
+      ({ fixtureId }) => fixtureId
     ],
     [
       OUTCOME_PCT_METRIC, OUTCOME_PCT_SEASON_TO_DATE_METRIC, settled,
       ({ settled: result }) => result !== null && result.points >= 2,
-      ({ fplId }) => fplId
+      ({ fixtureId }) => fixtureId
     ],
     [
       COHERENCE_METRIC, COHERENCE_SEASON_TO_DATE_METRIC, predicted,
       ({ coherent }) => coherent,
-      ({ fplId, probs, likeliest, predicted: named }) =>
-        ({ fplId, probs, likeliest, predicted: named })
+      ({ fixtureId, probs, likeliest, predicted: named }) =>
+        ({ fixtureId, probs, likeliest, predicted: named })
     ]
   ];
   for (const [metric, cumulativeMetric, fixtures, hit, describe] of shares) {
@@ -884,7 +884,7 @@ async function writeRows(
 /** One Fixture a Lock owns, whoever answered it and whether or not it settled. */
 interface LockedFixture {
   gw: number;
-  fplId: number;
+  fixtureId: number;
   /** Both sides and when they met, which only the Elo replay below reads. */
   homeTeam: string;
   awayTeam: string;
@@ -924,7 +924,7 @@ async function lockedFixtures(
   return rows.rows.map(
     ({ gw, fixture_id, home_team, away_team, kickoff_at, result }) => ({
       gw,
-      fplId: fixture_id,
+      fixtureId: fixture_id,
       homeTeam: home_team,
       awayTeam: away_team,
       kickoffAt: kickoff_at,
@@ -986,12 +986,12 @@ const referenceForecast = (
   fixtures: LockedFixture[]
 ): ForecastFixture[] =>
   fixtures.map((fixture) => {
-    const { gw, fplId, result } = fixture;
+    const { gw, fixtureId, result } = fixture;
     const probs = probsOf(fixture);
     const likeliest = argmaxOutcome(probs);
     return {
       gw,
-      fplId,
+      fixtureId,
       probs,
       likeliest,
       settled: result === null
@@ -1058,7 +1058,7 @@ export function eloProbabilities(home: number, away: number): Probs {
 const chronological = (fixtures: LockedFixture[]): LockedFixture[] =>
   [...fixtures].sort((one, other) =>
     one.kickoffAt.getTime() - other.kickoffAt.getTime()
-      || one.fplId - other.fplId
+      || one.fixtureId - other.fixtureId
   );
 
 /** One result, as the replay reads it: who met, and how it went. */
@@ -1142,10 +1142,10 @@ const eloForecast = (
   history.forEach(record);
 
   const forecast = new Map<number, Probs>();
-  for (const { fplId, homeTeam, awayTeam, result } of chronological(fixtures)) {
+  for (const { fixtureId, homeTeam, awayTeam, result } of chronological(fixtures)) {
     const home = footballDataTeamName(homeTeam);
     const away = footballDataTeamName(awayTeam);
-    forecast.set(fplId, eloProbabilities(rating(home), rating(away)));
+    forecast.set(fixtureId, eloProbabilities(rating(home), rating(away)));
     // After the forecast, never before it: a Fixture is answered on what stood
     // when it kicked off. An unsettled Fixture moves nothing and is passed
     // over, which is also what makes a later-settled deferred Fixture reach
@@ -1157,7 +1157,7 @@ const eloForecast = (
   // Every Fixture was just forecast, so the lookup below cannot miss; the
   // Fixtures are mapped in their own order rather than the replay's, because
   // the detail a row carries reads in Gameweek order like every other.
-  return referenceForecast(({ fplId }) => forecast.get(fplId)!, fixtures);
+  return referenceForecast(({ fixtureId }) => forecast.get(fixtureId)!, fixtures);
 };
 
 /**
@@ -1198,8 +1198,8 @@ interface AttemptSummary {
   cause: GapCause | null;
 }
 
-const attemptKey = (entrantId: string, fplId: number): string =>
-  `${entrantId}\u0000${fplId}`;
+const attemptKey = (entrantId: string, fixtureId: number): string =>
+  `${entrantId}\u0000${fixtureId}`;
 
 /**
  * How many times each Entrant was asked for each Fixture, and what the last
@@ -1258,12 +1258,12 @@ async function writeGapRate(
   const split = (scoped: LockedFixture[]) => {
     const causes = emptyGapProfile();
     const gaps = scoped
-      .filter(({ fplId }) => !answered.has(fplId))
-      .map(({ fplId }) => {
-        const summary = tried.get(attemptKey(entrantId, fplId));
+      .filter(({ fixtureId }) => !answered.has(fixtureId))
+      .map(({ fixtureId }) => {
+        const summary = tried.get(attemptKey(entrantId, fixtureId));
         const cause = summary?.cause ?? UNATTEMPTED;
         causes[cause] += 1;
-        return { fplId, cause, attempts: summary?.attempts ?? 0 };
+        return { fixtureId, cause, attempts: summary?.attempts ?? 0 };
       });
     return { causes, gaps };
   };
@@ -1305,9 +1305,9 @@ async function writeAttemptsToValid(
   scoredAt: Date
 ): Promise<void> {
   const valid = (scoped: LockedFixture[]) =>
-    scoped.flatMap(({ fplId }) => {
-      const repairs = repairsBy.get(fplId);
-      return repairs === undefined ? [] : [{ fplId, repairs }];
+    scoped.flatMap(({ fixtureId }) => {
+      const repairs = repairsBy.get(fixtureId);
+      return repairs === undefined ? [] : [{ fixtureId, repairs }];
     });
   const own = valid(fixtures);
   if (own.length === 0) {
@@ -1328,9 +1328,9 @@ async function writeAttemptsToValid(
     // and got nowhere is not a Fixture the run never asked it about, and a
     // single `failed` bucket over both would make a `0.75` failure rate out of
     // a Season the Entrant was only asked a quarter of.
-    const missing = scoped.filter(({ fplId }) => !repairsBy.has(fplId));
-    const unattempted = missing.filter(({ fplId }) =>
-      tried.get(attemptKey(entrantId, fplId)) === undefined).length;
+    const missing = scoped.filter(({ fixtureId }) => !repairsBy.has(fixtureId));
+    const unattempted = missing.filter(({ fixtureId }) =>
+      tried.get(attemptKey(entrantId, fixtureId)) === undefined).length;
     distribution[UNATTEMPTED] = unattempted;
     distribution["failed"] = missing.length - unattempted;
     return { distribution, fixtures: reached };
@@ -1358,7 +1358,7 @@ export interface PairedDifferenceDetail {
   entrant: string;
   fixtures: {
     gw: number;
-    fplId: number;
+    fixtureId: number;
     anchorRps: number;
     entrantRps: number;
     /**
@@ -1440,7 +1440,7 @@ async function writeComparisons(
   // dropped the silent Entrant would be the pairwise deletion the ADR rejects.
   const shared = anchor?.fixtures.filter((fixture) =>
     roster.every((entrantId) =>
-      through.get(entrantId)?.some(({ fplId }) => fplId === fixture.fplId)))
+      through.get(entrantId)?.some(({ fixtureId }) => fixtureId === fixture.fixtureId)))
     ?? [];
 
   const declared: string[] = [];
@@ -1451,11 +1451,11 @@ async function writeComparisons(
       const own = through.get(entrantId) ?? [];
       const fixtures = shared.map((anchorFixture) => {
         const entrantFixture = own.find(
-          ({ fplId }) => fplId === anchorFixture.fplId
+          ({ fixtureId }) => fixtureId === anchorFixture.fixtureId
         )!;
         return {
           gw: anchorFixture.gw,
-          fplId: anchorFixture.fplId,
+          fixtureId: anchorFixture.fixtureId,
           anchorRps: anchorFixture.settled.rps,
           entrantRps: entrantFixture.settled.rps,
           difference: entrantFixture.settled.rps - anchorFixture.settled.rps
@@ -1634,7 +1634,7 @@ export async function scoreMatchGameweek({
         // the Fixture lists below are already scoped to the Gameweeks in view.
         const repairsBy = new Map(
           (byEntrant.get(entrantId) ?? []).map(
-            ({ fplId, repairs }) => [fplId, repairs]
+            ({ fixtureId, repairs }) => [fixtureId, repairs]
           )
         );
         const answered = new Set(repairsBy.keys());

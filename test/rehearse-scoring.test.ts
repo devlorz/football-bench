@@ -198,7 +198,7 @@ describe("rehearsing the complete scorer on the archived Gameweek", () => {
       detail: {
         qualification: BET_POINTS_QUALIFICATION,
         fixtures: [
-          { fplId: 1, predicted: [3, 0], result: [2, 0], slip }
+          { fixtureId: 1, predicted: [3, 0], result: [2, 0], slip }
         ]
       }
     });
@@ -226,7 +226,7 @@ describe("rehearsing the complete scorer on the archived Gameweek", () => {
             gw: GAMEWEEK,
             n: 1,
             points: 4,
-            fixtures: [{ fplId: 1, predicted: [3, 0], result: [2, 0], slip }]
+            fixtures: [{ fixtureId: 1, predicted: [3, 0], result: [2, 0], slip }]
           }
         ]
       }
