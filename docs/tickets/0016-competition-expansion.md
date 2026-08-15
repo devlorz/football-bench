@@ -531,9 +531,12 @@ reviewed identity maps.
       is by date and resolved name with **deliberately no fallback** (`joinXg`), and a
       day's tolerance to rescue one line in 380 would be exactly the fallback that
       docblock refuses; the line reads "xG unavailable", which is what that state is for._
-- [ ] Both identity maps (source names to football-data names; Understat names to
+- [x] Both identity maps (source names to football-data names; Understat names to
       football-data names) are reviewed by a human before the backfill runs — a wrong
       mapping, unlike a missing one, fails nothing.
+      _Both halves are approved as of 2026-08-15; the source-names half is recorded in
+      ticket 8's own box, along with the six pairs the review was actually asked to
+      decide._
       _**The Understat half is reviewed and approved (2026-08-15). The review happened
       after its backfill ran, not before, which is the order the box asks for and not the
       order it went in** — recorded rather than smoothed over, because the box's
@@ -824,13 +827,31 @@ for `PL` since the Season opened.
       listed. This is the box's actual proof: a league opened by one insert, and the
       scheduled workflow found it, built its packets and wrote its Predictions with no
       edit anywhere._
-- [ ] The football-data.org club names are mapped to football-data.co.uk's and reviewed,
+- [x] The football-data.org club names are mapped to football-data.co.uk's and reviewed,
       from the captured real response — ticket 6's second identity map, which could not
       honestly be drafted without it.
-      _**No longer blocked.** The token is in `.env` and the real response is captured
-      (see the first box). The twenty names this map's keys come from are the twenty
-      ticket 7 already derived its own map's keys from._ Until it exists every La Liga club's history section
-      reads "none in stored data" over a complete backfill, and nothing fails.
+      _**Reviewed and approved 2026-08-15**, before the backfill it governs was ever read
+      through — which is the order ticket 6's box asked for and did not get for the
+      Understat half._
+
+      _Derived, not transcribed: every key is a `homeTeam.name` in the recorded
+      `competitions/PD/matches?season=2026` response and every value a `HomeTeam`
+      football-data.co.uk stored for 2025-26 — seventeen in `SP1` and the three promoted
+      clubs in `SP2`. Both sets are exactly twenty with nothing left over on either side._
+
+      _What the review was asked to decide, since reading twenty lines and saying yes is
+      not a control: **none** of the twenty is the same string on both sides, so every one
+      is a judgement, and fourteen are the club with its legal form taken off. The six
+      that are not are `Athletic Club`→`Ath Bilbao`, `Club Atlético de Madrid`→
+      `Ath Madrid`, `RCD Espanyol de Barcelona`→`Espanol`, `Rayo Vallecano de Madrid`→
+      `Vallecano`, `Real Racing Club de Santander`→`Santander` and `RC Deportivo La
+      Coruña`→`La Coruna`. `Real Sociedad de Fútbol`→`Sociedad` has the one near miss
+      beside it: `Sociedad B` is a separate club in the stored second division, and the
+      match is exact rather than by prefix._
+
+      _It was missing until the packet was rendered and read: every La Liga club's history
+      section said "team name did not resolve against stored results" over 842 correct
+      rows, and nothing failed._
 - [x] The daily fetch's two history sources become a loop over the listed Competitions,
       which is also what closes **ticket 6's history and xG boxes**: their prior Season is
       backfilled and their current Season arrives here. Both hold the `PL` literal today, which ticket 6
