@@ -66,6 +66,7 @@ function joinXg(
 }
 
 export interface MatchContextData {
+  competition: string;
   season: string;
   deadline: Date;
   historicalMatches: HistoricalMatch[];
@@ -127,6 +128,7 @@ export async function loadMatchContextData(
     [competition, season, gameweek]
   );
   return {
+    competition,
     season,
     deadline,
     historicalMatches: joinXg(historicalMatches.rows, storedXg.rows),
@@ -147,17 +149,25 @@ export function buildMatchContext(
     fixture,
     [
       buildHistoricalContext({
+        competition: data.competition,
         season: data.season,
         asOf: data.deadline,
         homeTeam: fixture.home_team,
         awayTeam: fixture.away_team,
         matches: data.historicalMatches
       }),
-      buildFplContext({
-        homeTeam: fixture.home_team,
-        awayTeam: fixture.away_team,
-        players: data.fplPlayers
-      }),
+      // Availability is Premier League only and structurally so (ADR-0037):
+      // the section is built from the FPL player feed, which has no equivalent
+      // in the other leagues. Absent rather than empty -- the empty section
+      // reads "no player snapshot loaded for this Gameweek", which in a league
+      // that will never have one would apologise for a Gap that is not one.
+      data.competition === "PL"
+        ? buildFplContext({
+          homeTeam: fixture.home_team,
+          awayTeam: fixture.away_team,
+          players: data.fplPlayers
+        })
+        : undefined,
       // Undefined outside the render gate, and then the section is absent
       // rather than empty.
       buildSquadChangesContext({

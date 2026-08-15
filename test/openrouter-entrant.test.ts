@@ -17,6 +17,7 @@ describe("the Match Prompt Version", () => {
     const context = buildMatchContext(
       fixture,
       {
+        competition: "PL",
         season: "2026-27",
         deadline: new Date("2026-08-21T17:30:00Z"),
         // Between them these four span every way a form line can render, so

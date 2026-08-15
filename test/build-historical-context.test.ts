@@ -73,6 +73,7 @@ describe("building historical Match context", () => {
     ];
 
     expect(buildHistoricalContext({
+      competition: "PL",
       season: "2026-27",
       asOf: new Date("2026-08-21T17:30:00.000Z"),
       homeTeam: "Arsenal",
@@ -152,6 +153,7 @@ describe("building historical Match context", () => {
     ];
 
     const context = buildHistoricalContext({
+      competition: "PL",
       season: "2026-27",
       asOf: new Date("2026-08-21T17:30:00.000Z"),
       homeTeam: "Arsenal",
@@ -173,6 +175,7 @@ describe("building historical Match context", () => {
 
   test("rates the real stored 2025-26 record, each club in its own division", async () => {
     const context = buildHistoricalContext({
+      competition: "PL",
       season: "2026-27",
       asOf: new Date("2026-08-21T17:30:00.000Z"),
       homeTeam: "Tottenham",
@@ -199,6 +202,7 @@ describe("building historical Match context", () => {
 
   test("states a venue with no stored prior-Season match rather than dividing by zero", () => {
     expect(buildHistoricalContext({
+      competition: "PL",
       season: "2026-27",
       asOf: new Date("2026-08-21T17:30:00.000Z"),
       homeTeam: "Arsenal",
@@ -213,6 +217,7 @@ describe("building historical Match context", () => {
 
   test("carries both sides' shots and xG on a form line", () => {
     const context = buildHistoricalContext({
+      competition: "PL",
       season: "2026-27",
       asOf: new Date("2026-08-21T17:30:00.000Z"),
       homeTeam: "Arsenal",
@@ -252,6 +257,7 @@ describe("building historical Match context", () => {
       away_shots_on_target: 2
     };
     const context = buildHistoricalContext({
+      competition: "PL",
       season: "2026-27",
       asOf: new Date("2026-08-21T17:30:00.000Z"),
       homeTeam: "Arsenal",
@@ -296,6 +302,7 @@ describe("building historical Match context", () => {
 
   test("omits the shot segment rather than printing zeros", () => {
     const context = buildHistoricalContext({
+      competition: "PL",
       season: "2026-27",
       asOf: new Date("2026-08-21T17:30:00.000Z"),
       homeTeam: "Arsenal",
@@ -324,6 +331,7 @@ describe("building historical Match context", () => {
 
   test("keeps the head-to-head section score-only and adds no aggregates", () => {
     const context = buildHistoricalContext({
+      competition: "PL",
       season: "2026-27",
       asOf: new Date("2026-08-21T17:30:00.000Z"),
       homeTeam: "Arsenal",
@@ -366,6 +374,7 @@ describe("building historical Match context", () => {
 
   test("sums shots, on target and xG this-team-first on all three record lines", () => {
     const context = buildHistoricalContext({
+      competition: "PL",
       season: "2026-27",
       asOf: new Date("2026-08-21T17:30:00.000Z"),
       homeTeam: "Arsenal",
@@ -427,6 +436,7 @@ describe("building historical Match context", () => {
 
   test("renders a stat with no covered matches as unavailable", () => {
     const context = buildHistoricalContext({
+      competition: "PL",
       season: "2026-27",
       asOf: new Date("2026-08-21T17:30:00.000Z"),
       homeTeam: "Arsenal",
@@ -452,6 +462,7 @@ describe("building historical Match context", () => {
       );
 
     expect(buildHistoricalContext({
+      competition: "PL",
       season: "2026-27",
       asOf: new Date("2026-08-31T17:30:00.000Z"),
       homeTeam: "Arsenal",
@@ -496,6 +507,7 @@ describe("building historical Match context", () => {
     // Gameweek 1's normal case, with the prior-Season line still the only
     // position an Entrant is given.
     const context = buildHistoricalContext({
+      competition: "PL",
       season: "2026-27",
       asOf: new Date("2026-08-21T17:30:00.000Z"),
       homeTeam: "Arsenal",
@@ -518,6 +530,7 @@ describe("building historical Match context", () => {
 
   test("makes an unresolved Fixture team name visible", () => {
     expect(buildHistoricalContext({
+      competition: "PL",
       season: "2026-27",
       asOf: new Date("2026-08-21T17:30:00.000Z"),
       homeTeam: "New Club",
@@ -539,6 +552,7 @@ describe("building historical Match context", () => {
 
   test("states genuine absence for known teams without calling it unresolved", () => {
     const context = buildHistoricalContext({
+      competition: "PL",
       season: "2026-27",
       asOf: new Date("2026-08-21T17:30:00.000Z"),
       homeTeam: "Arsenal",
@@ -554,6 +568,7 @@ describe("building historical Match context", () => {
 
   test("accepts an unreviewed team name that exactly matches stored results", () => {
     const context = buildHistoricalContext({
+      competition: "PL",
       season: "2026-27",
       asOf: new Date("2026-08-21T17:30:00.000Z"),
       homeTeam: "Future Town",

@@ -1,3 +1,4 @@
+import { divisionsOf } from "../football-data/divisions.js";
 import {
   footballDataTeamName,
   resolveFootballDataTeamName
@@ -5,7 +6,7 @@ import {
 
 export interface HistoricalMatch {
   season: string;
-  division: "Premier League" | "Championship";
+  division: string;
   played_on: Date;
   home_team: string;
   away_team: string;
@@ -26,12 +27,30 @@ export interface HistoricalMatch {
 }
 
 export interface BuildHistoricalContextOptions {
+  competition: string;
   season: string;
   asOf: Date;
   homeTeam: string;
   awayTeam: string;
   matches: HistoricalMatch[];
 }
+
+/**
+ * The names this Competition's rows are stored under, read from the one list
+ * the fetch writes them by (`football-data/divisions.ts`). Undefined means the
+ * Competition has no curated divisions, and therefore no stored rows for the
+ * sections built on them to have lost.
+ */
+function divisionNames(
+  competition: string
+): { top: string; second: string } | undefined {
+  const divisions = divisionsOf(competition);
+  return divisions === undefined
+    ? undefined
+    : { top: divisions[0].name, second: divisions[1].name };
+}
+
+type Divisions = NonNullable<ReturnType<typeof divisionNames>>;
 
 interface TeamRecord {
   played: number;
@@ -288,33 +307,35 @@ function matchLine(match: HistoricalMatch, team?: string): string {
 
 function priorSeasonLine(
   matches: HistoricalMatch[],
+  divisions: Divisions | undefined,
   priorSeason: string,
   team: string
 ): { line: string; promoted: boolean } {
+  const noData = {
+    line: `Prior-Season final position: no ${priorSeason} league data.`,
+    promoted: false
+  };
+  if (divisions === undefined) {
+    return noData;
+  }
   const teamMatches = matches.filter((match) =>
     match.season === priorSeason && includesTeam(match, team)
   );
-  const division = (["Premier League", "Championship"] as const)
+  const division = [divisions.top, divisions.second]
     .find((candidate) =>
       teamMatches.some((match) => match.division === candidate)
     );
   if (division === undefined) {
-    return {
-      line: `Prior-Season final position: no ${priorSeason} league data.`,
-      promoted: false
-    };
+    return noData;
   }
   const divisionMatches = matches.filter((match) =>
     match.season === priorSeason && match.division === division
   );
   const position = positionIn(divisionMatches, team);
   if (position === undefined) {
-    return {
-      line: `Prior-Season final position: no ${priorSeason} league data.`,
-      promoted: false
-    };
+    return noData;
   }
-  const promoted = division === "Championship";
+  const promoted = division === divisions.second;
   const canonical = footballDataTeamName(team);
   // The club's rows inside the division the line above names, and only those:
   // a rate mixing two divisions would be the normalisation ADR-0030 refuses.
@@ -344,6 +365,7 @@ function priorSeasonLine(
 
 function teamSection(
   options: BuildHistoricalContextOptions,
+  divisions: Divisions | undefined,
   team: string,
   eligibleMatches: HistoricalMatch[],
   currentMatches: HistoricalMatch[]
@@ -365,11 +387,12 @@ function teamSection(
   );
   const prior = priorSeasonLine(
     eligibleMatches,
+    divisions,
     previousSeason(options.season),
     canonical
   );
-  const hasPremierLeagueHistory = eligibleMatches.some((match) =>
-    match.division === "Premier League" && includesTeam(match, canonical)
+  const hasTopFlightHistory = eligibleMatches.some((match) =>
+    match.division === divisions?.top && includesTeam(match, canonical)
   );
   const form = eligibleMatches
     .filter((match) => includesTeam(match, canonical))
@@ -384,11 +407,15 @@ function teamSection(
       : []),
     prior.line
   ];
-  if (!hasPremierLeagueHistory) {
+  // Silent for a Competition with no curated divisions: "no top-flight
+  // history" is a claim about stored results, and there are none to be absent
+  // from until its backfill lands.
+  if (divisions !== undefined && !hasTopFlightHistory) {
     lines.push(
       prior.promoted
-        ? "Premier League history: none in stored data; promoted from the Championship."
-        : "Premier League history: none in stored data."
+        ? `${divisions.top} history: none in stored data; promoted from the `
+          + `${divisions.second}.`
+        : `${divisions.top} history: none in stored data.`
     );
   }
   lines.push(
@@ -426,15 +453,26 @@ function teamSection(
  * the table by its latest included result, the same coverage statement the FPL
  * track makes (ADR-0021), and an empty table says so rather than vanishing.
  */
-function tableSection(currentMatches: HistoricalMatch[]): string[] {
+function tableSection(
+  divisions: Divisions | undefined,
+  currentMatches: HistoricalMatch[]
+): string[] {
+  if (divisions === undefined) {
+    return [
+      "League table: unavailable; no division history is stored for this "
+      + "Competition."
+    ];
+  }
   if (currentMatches.length === 0) {
-    return ["Premier League table: no result has been played yet this Season."];
+    return [
+      `${divisions.top} table: no result has been played yet this Season.`
+    ];
   }
   const through = Math.max(
     ...currentMatches.map((match) => match.played_on.getTime())
   );
   return [
-    "Premier League table (results through "
+    `${divisions.top} table (results through `
     + `${new Date(through).toISOString().slice(0, 10)}):`,
     ...leagueTable(currentMatches).map((row, index) =>
       `${index + 1}. ${row.club} — Pld ${row.played}, W ${row.wins}, `
@@ -459,20 +497,23 @@ export function buildHistoricalContext(
     .slice(0, 5);
 
   // The one filter both the table and the record lines are built on, applied
-  // once: the current Season's Premier League, and nothing else.
+  // once: the current Season in this Competition's top flight, and nothing
+  // else. An uncurated Competition matches no division and gets no rows,
+  // which is what every section built on this says out loud.
+  const divisions = divisionNames(options.competition);
   const currentMatches = eligibleMatches.filter((match) =>
     match.season === options.season
-    && match.division === "Premier League"
+    && match.division === divisions?.top
   );
 
   return [
     `Historical context as of ${options.asOf.toISOString()}`,
     "",
-    ...tableSection(currentMatches),
+    ...tableSection(divisions, currentMatches),
     "",
-    ...teamSection(options, options.homeTeam, eligibleMatches, currentMatches),
+    ...teamSection(options, divisions, options.homeTeam, eligibleMatches, currentMatches),
     "",
-    ...teamSection(options, options.awayTeam, eligibleMatches, currentMatches),
+    ...teamSection(options, divisions, options.awayTeam, eligibleMatches, currentMatches),
     "",
     "Head-to-head history:",
     ...(headToHead.length === 0

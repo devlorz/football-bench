@@ -1,15 +1,17 @@
 import type { Client } from "pg";
 import type { HttpFetcher } from "../http.js";
 import { storeRawSnapshots } from "../snapshots/store-raw-snapshots.js";
+import { divisionsOf, type Division } from "./divisions.js";
 
 type Database = Pick<Client, "query">;
 
-const DIVISIONS = [
-  { code: "E0", name: "Premier League" },
-  { code: "E1", name: "Championship" }
-] as const;
+// Premier League as a literal at this boundary, the convention for a caller
+// that is one Competition by nature rather than by argument: the Spanish
+// division codes and the Competition to read them for arrive together, in the
+// same change, or the reader stores rows the context cannot select.
+const COMPETITION = "PL";
 
-type Division = typeof DIVISIONS[number];
+const DIVISIONS = divisionsOf(COMPETITION)!;
 
 const REQUIRED_COLUMNS = [
   "Div",
