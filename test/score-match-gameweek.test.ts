@@ -104,12 +104,12 @@ describe("scoring the readable Match Points layer", () => {
   ): Promise<void> => {
     await client.query(
       `insert into fixtures (
-         season, fpl_id, gw, locked_in_gw, home_team, away_team, kickoff_at
+         season, fixture_id, gw, locked_in_gw, home_team, away_team, kickoff_at
        ) values ($1, $2, $3, $4, $5, $6, $7)`,
       [SEASON, fplId, gw, lockedInGw, teams[0], teams[1], kickoff]
     );
     await client.query(
-      `insert into contexts (season, gw, track, fpl_id, hash, body)
+      `insert into contexts (season, gw, track, fixture_id, hash, body)
        values ($1, $2, 'match', $3, $4, 'context')`,
       [SEASON, lockedInGw, fplId, `hash-${fplId}`]
     );
@@ -121,7 +121,7 @@ describe("scoring the readable Match Points layer", () => {
     away: number
   ): Promise<void> => {
     await client.query(
-      "update fixtures set result = $3 where season = $1 and fpl_id = $2",
+      "update fixtures set result = $3 where season = $1 and fixture_id = $2",
       [
         SEASON,
         fplId,
@@ -148,12 +148,12 @@ describe("scoring the readable Match Points layer", () => {
   ): Promise<void> => {
     await client.query(
       `insert into predictions (
-         model_id, season, fpl_id, probs, pred_home, pred_away, context_id,
+         model_id, season, fixture_id, probs, pred_home, pred_away, context_id,
          attempts_used
        )
        select $1, $2, $3, $6, $4, $5, c.id, $7
          from contexts c
-        where c.season = $2 and c.track = 'match' and c.fpl_id = $3`,
+        where c.season = $2 and c.track = 'match' and c.fixture_id = $3`,
       [entrantId, SEASON, fplId, home, away, JSON.stringify(probs), repairs]
     );
   };
@@ -170,7 +170,7 @@ describe("scoring the readable Match Points layer", () => {
   ): Promise<void> => {
     await client.query(
       `insert into attempts (
-         model_id, season, gw, track, fpl_id, attempt_no, ok, error_kind,
+         model_id, season, gw, track, fixture_id, attempt_no, ok, error_kind,
          trigger
        ) values ($1, $2, $3, 'match', $4, 0, $5, $6, 'main')`,
       [entrantId, SEASON, lockedInGw, fplId, cause === null, cause]

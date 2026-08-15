@@ -77,7 +77,7 @@ export async function runScheduledPredictions({
         `insert into prediction_runs (
            season, gw, trigger, scheduled_for, started_at
          ) values ($1, $2, $3, $4, $5)
-         on conflict (season, gw, trigger) do update
+         on conflict (competition, season, gw, trigger) do update
            set scheduled_for = excluded.scheduled_for,
                started_at = excluded.started_at,
                completed_at = null,

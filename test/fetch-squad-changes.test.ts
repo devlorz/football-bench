@@ -213,7 +213,7 @@ describe("fetching a window's Squad Changes", () => {
     for (const [index, club] of clubs.entries()) {
       await client.query(
         `insert into fixtures (
-           season, fpl_id, gw, home_team, away_team, kickoff_at
+           season, fixture_id, gw, home_team, away_team, kickoff_at
          ) values ($1, $2, 1, $3, $4, '2026-08-21T19:00:00Z')`,
         ["2026-27", index + 1, club, clubs[(index + 1) % clubs.length]]
       );
@@ -389,7 +389,7 @@ describe("fetching a window's Squad Changes", () => {
     for (const [index, club] of CLUBS.entries()) {
       await client.query(
         `insert into fixtures (
-           season, fpl_id, gw, home_team, away_team, kickoff_at
+           season, fixture_id, gw, home_team, away_team, kickoff_at
          ) values ($1, $2, 19, $3, $4, '2027-01-03T15:00:00Z')`,
         ["2026-27", index + 1, club, CLUBS[(index + 1) % CLUBS.length]]
       );

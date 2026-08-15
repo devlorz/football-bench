@@ -439,6 +439,16 @@ async function writeSeason(
     }
   }
 
+  // The Competition the seeded Season is played in. Written before its first
+  // Gameweek and at every stopping point, because a Season with Gameweeks and
+  // no active Competition is a state the record cannot reach: it is what the
+  // scheduler and the fetch walk (ADR-0035), so a seeded database without it
+  // is one where every job finds nothing to do and says so as success.
+  await database.query(
+    "insert into competitions (competition, season) values ('PL', $1)",
+    [season]
+  );
+
   // Only as far as the Fixtures go: pre-season is the roster and Gameweek 1,
   // and a Gameweek 15 row sitting in a pre-season database is a deadline the
   // page could read and the state does not have.
@@ -451,7 +461,7 @@ async function writeSeason(
     for (const fixture of fixturesOf(gameweek)) {
       await database.query(
         `insert into fixtures (
-           season, fpl_id, gw, home_team, away_team, kickoff_at, updated_at
+           season, fixture_id, gw, home_team, away_team, kickoff_at, updated_at
          ) values ($1, $2, $3, $4, $5, $6, $7)`,
         [
           season, fixture.fplId, fixture.gw,
@@ -471,7 +481,7 @@ async function writeSeason(
       const away = goalsOf(fixture.fplId, "away");
       await database.query(
         `update fixtures set result = $3, updated_at = $4
-          where season = $1 and fpl_id = $2`,
+          where season = $1 and fixture_id = $2`,
         [
           season,
           fixture.fplId,
@@ -826,12 +836,12 @@ async function lockAndPredict(
   for (const fixture of fixturesOf(gameweek)) {
     await database.query(
       `update fixtures set locked_in_gw = $3
-        where season = $1 and fpl_id = $2`,
+        where season = $1 and fixture_id = $2`,
       [season, fixture.fplId, gameweek]
     );
     const body = `${fixture.homeTeam} v ${fixture.awayTeam}: seeded context`;
     const context = await database.query<{ id: string }>(
-      `insert into contexts (season, gw, track, fpl_id, hash, body, built_at)
+      `insert into contexts (season, gw, track, fixture_id, hash, body, built_at)
        values ($1, $2, 'match', $3, $4, $5, $6) returning id`,
       [
         season,
@@ -868,7 +878,7 @@ async function lockAndPredict(
         : named;
       await database.query(
         `insert into predictions (
-           model_id, season, fpl_id, probs, pred_home, pred_away, context_id,
+           model_id, season, fixture_id, probs, pred_home, pred_away, context_id,
            rationale, attempts_used, predicted_at
          ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [

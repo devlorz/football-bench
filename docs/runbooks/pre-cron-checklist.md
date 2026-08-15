@@ -24,6 +24,21 @@ To confirm the deployed schema matches the repository, build a temporary Postgre
 migrations and compare `pg_dump --schema-only` output from both, filtering
 `^--|^$|^SET |^SELECT pg_catalog|^\(un)?restrict`. This has caught real drift twice.
 
+**On a database migrated from empty, list the Season's Competitions by hand.** Migration
+0022 relabels the record it finds, so a database with no Gameweek in it gets no
+`competitions` row — and that table is what the scheduler and the fetch walk (ADR-0035).
+Left empty, every job correctly finds nothing to do and reports success, which is the
+quietest possible way for a deployment to do nothing at all. A database migrated over an
+existing record already has its row and this is a no-op.
+
+```bash
+set -a; . ./.env; set +a
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -c "insert into competitions (competition, season)
+      values ('PL', '$SEASON') on conflict do nothing"
+psql "$DATABASE_URL" -c "select competition, season from competitions"
+```
+
 ## 2. Create the repository
 
 Create it on GitHub, push `main`, and keep it **public**.

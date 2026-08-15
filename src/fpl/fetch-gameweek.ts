@@ -375,7 +375,7 @@ async function fetchFpl({
         await database.query(
           `insert into gameweeks (season, gw, deadline_at)
            values ($1, $2, $3)
-           on conflict (season, gw)
+           on conflict (competition, season, gw)
            do update set deadline_at = excluded.deadline_at`,
           [season, event.id, event.deadline_time]
         );
@@ -422,7 +422,7 @@ async function fetchFpl({
       await database.query(
         `delete from fixtures
           where season = $1
-            and fpl_id = any($2::integer[])
+            and fixture_id = any($2::integer[])
             and locked_in_gw is null`,
         [season, unscheduledFixtureIds]
       );
@@ -432,7 +432,7 @@ async function fetchFpl({
                 updated_at = now()
            from gameweeks locked_gameweek
           where f.season = $1
-            and f.fpl_id = any($2::integer[])
+            and f.fixture_id = any($2::integer[])
             and f.locked_in_gw = locked_gameweek.gw
             and f.season = locked_gameweek.season
             and locked_gameweek.deadline_at <= $3
@@ -446,7 +446,7 @@ async function fetchFpl({
             set unscheduled = true,
                 updated_at = now()
           where season = $1
-            and fpl_id = any($2::integer[])
+            and fixture_id = any($2::integer[])
             and not unscheduled`,
         [season, unscheduledFixtureIds]
       );
@@ -462,11 +462,11 @@ async function fetchFpl({
         : null;
       await database.query(
         `insert into fixtures (
-           season, fpl_id, gw, locked_in_gw, home_team, away_team, kickoff_at,
+           season, fixture_id, gw, locked_in_gw, home_team, away_team, kickoff_at,
            result
          )
          values ($1, $2, $3, $4, $5, $6, $7, $9)
-         on conflict (season, fpl_id)
+         on conflict (competition, season, fixture_id)
          do update set
            gw = excluded.gw,
            result = coalesce(excluded.result, fixtures.result),

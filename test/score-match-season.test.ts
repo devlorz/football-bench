@@ -68,12 +68,12 @@ describe("scoring a whole Season in one daily run", () => {
   ): Promise<void> => {
     await client.query(
       `insert into fixtures (
-         season, fpl_id, gw, locked_in_gw, home_team, away_team, kickoff_at
+         season, fixture_id, gw, locked_in_gw, home_team, away_team, kickoff_at
        ) values ($1, $2, $3, $3, $4, $5, '2026-08-21T19:00:00Z')`,
       [SEASON, fplId, lockedInGw, `Home ${fplId}`, `Away ${fplId}`]
     );
     await client.query(
-      `insert into contexts (season, gw, track, fpl_id, hash, body)
+      `insert into contexts (season, gw, track, fixture_id, hash, body)
        values ($1, $2, 'match', $3, $4, 'context')`,
       [SEASON, lockedInGw, fplId, `hash-${fplId}`]
     );
@@ -85,7 +85,7 @@ describe("scoring a whole Season in one daily run", () => {
     away: number
   ): Promise<void> => {
     await client.query(
-      "update fixtures set result = $3 where season = $1 and fpl_id = $2",
+      "update fixtures set result = $3 where season = $1 and fixture_id = $2",
       [
         SEASON,
         fplId,
@@ -106,12 +106,12 @@ describe("scoring a whole Season in one daily run", () => {
   ): Promise<void> => {
     await client.query(
       `insert into predictions (
-         model_id, season, fpl_id, probs, pred_home, pred_away, context_id,
+         model_id, season, fixture_id, probs, pred_home, pred_away, context_id,
          attempts_used
        )
        select $1, $2, $3, '{"H":0.5,"D":0.3,"A":0.2}', $4, $5, c.id, 0
          from contexts c
-        where c.season = $2 and c.track = 'match' and c.fpl_id = $3`,
+        where c.season = $2 and c.track = 'match' and c.fixture_id = $3`,
       [entrantId, SEASON, fplId, home, away]
     );
   };
@@ -298,7 +298,7 @@ describe("scoring a whole Season in one daily run", () => {
   test("a Season whose Fixtures own no Lock scores nothing", async () => {
     await client.query(
       `insert into fixtures (
-         season, fpl_id, gw, home_team, away_team, kickoff_at
+         season, fixture_id, gw, home_team, away_team, kickoff_at
        ) values ($1, 1, 1, 'Home', 'Away', '2026-08-21T19:00:00Z')`,
       [SEASON]
     );

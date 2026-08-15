@@ -242,7 +242,7 @@ describe("the dashboard read API before the Season starts", () => {
     await reader.connect();
     await writer.query(
       `truncate scores, contexts, predictions, fixtures, models, gameweeks,
-       historical_matches restart identity cascade`
+       historical_matches, competitions restart identity cascade`
     );
     await seedSeason({ database: writer, season: SEASON, stopAt: "pre-season" });
     await reader.query("set role dashboard_read");
@@ -303,7 +303,7 @@ describe("the dashboard read API on a Locked Gameweek nothing has settled", () =
     await reader.connect();
     await writer.query(
       `truncate scores, contexts, predictions, fixtures, models, gameweeks,
-       historical_matches restart identity cascade`
+       historical_matches, competitions restart identity cascade`
     );
     await seedSeason({ database: writer, season: SEASON, stopAt: "pre-season" });
 
@@ -313,14 +313,14 @@ describe("the dashboard read API on a Locked Gameweek nothing has settled", () =
       "update fixtures set locked_in_gw = gw where season = $1", [SEASON]
     );
     const context = await writer.query<{ id: string }>(
-      `insert into contexts (season, gw, track, fpl_id, hash, body, built_at)
+      `insert into contexts (season, gw, track, fixture_id, hash, body, built_at)
        values ($1, 1, 'match', 1, 'seeded-hash', 'seeded body', $2)
        returning id`,
       [SEASON, "2026-08-14T11:30:00Z"]
     );
     await writer.query(
       `insert into predictions (
-         model_id, season, fpl_id, probs, pred_home, pred_away, context_id,
+         model_id, season, fixture_id, probs, pred_home, pred_away, context_id,
          attempts_used, predicted_at
        ) values ('claude/v1', $1, 1, '{"H": 0.5, "D": 0.3, "A": 0.2}', 2, 1,
                  $2, 0, $3)`,
@@ -382,13 +382,13 @@ describe("the dashboard read API on a Locked Gameweek nothing has settled", () =
       );
       await writer.query(
         `insert into predictions (
-           model_id, season, fpl_id, probs, pred_home, pred_away, context_id,
+           model_id, season, fixture_id, probs, pred_home, pred_away, context_id,
            attempts_used, predicted_at
          )
          select 'late-arrival/v1', $1, 1, '{"H":0.5,"D":0.3,"A":0.2}', 2, 1,
                 c.id, 0, $2
            from contexts c
-          where c.season = $1 and c.track = 'match' and c.fpl_id = 1`,
+          where c.season = $1 and c.track = 'match' and c.fixture_id = 1`,
         [SEASON, "2026-08-16T09:00:00Z"]
       );
 
@@ -455,7 +455,7 @@ describe("the dashboard read API when the whole roster Gapped a Gameweek", () =>
     await reader.connect();
     await writer.query(
       `truncate scores, contexts, predictions, fixtures, models, gameweeks,
-       historical_matches restart identity cascade`
+       historical_matches, competitions restart identity cascade`
     );
     await seedSeason({ database: writer, season: SEASON, stopAt: "pre-season" });
 
@@ -538,7 +538,7 @@ describe("the dashboard read API with a qualification missing from storage", () 
     await reader.connect();
     await writer.query(
       `truncate scores, contexts, predictions, fixtures, models, gameweeks,
-       historical_matches restart identity cascade`
+       historical_matches, competitions restart identity cascade`
     );
     await seedSeason({
       database: writer, season: SEASON, stopAt: "the design's"
@@ -584,7 +584,7 @@ describe("the dashboard read API with an Entrant that settled nothing", () => {
     await reader.connect();
     await writer.query(
       `truncate scores, contexts, predictions, fixtures, models, gameweeks,
-       historical_matches restart identity cascade`
+       historical_matches, competitions restart identity cascade`
     );
     await seedSeason({
       database: writer, season: SEASON, stopAt: "the design's"
@@ -705,7 +705,7 @@ describe("the dashboard read API with an Exhibition Run on the Season", () => {
     await reader.connect();
     await writer.query(
       `truncate scores, contexts, predictions, fixtures, models, gameweeks,
-       historical_matches restart identity cascade`
+       historical_matches, competitions restart identity cascade`
     );
     await seedSeason({
       database: writer, season: SEASON, stopAt: "the design's"
@@ -747,10 +747,10 @@ describe("the dashboard read API with an Exhibition Run on the Season", () => {
     // Exhibition Run's alone.
     await writer.query(
       `insert into predictions (
-         model_id, season, fpl_id, probs, pred_home, pred_away, context_id,
+         model_id, season, fixture_id, probs, pred_home, pred_away, context_id,
          attempts_used, predicted_at
        )
-       select $2, $1, f.fpl_id,
+       select $2, $1, f.fixture_id,
               case f.result ->> 'outcome'
                 when 'H' then '{"H":0.9,"D":0.05,"A":0.05}'::jsonb
                 when 'D' then '{"H":0.05,"D":0.9,"A":0.05}'::jsonb
@@ -761,9 +761,9 @@ describe("the dashboard read API with an Exhibition Run on the Season", () => {
               c.id, 0, $3
          from fixtures f
          join contexts c
-           on c.season = f.season and c.track = 'match' and c.fpl_id = f.fpl_id
+           on c.season = f.season and c.track = 'match' and c.fixture_id = f.fixture_id
         where f.season = $1 and f.locked_in_gw is not null
-          and f.result is not null and f.fpl_id <> $4`,
+          and f.result is not null and f.fixture_id <> $4`,
       [SEASON, EXHIBITION, REPLAYED_AT, EXHIBITION_GAP]
     );
 
@@ -778,12 +778,12 @@ describe("the dashboard read API with an Exhibition Run on the Season", () => {
     for (const [fplId, at] of [[2, REPLAYED_AT], [3, RESUMED_AT]] as const) {
       await writer.query(
         `insert into predictions (
-           model_id, season, fpl_id, probs, pred_home, pred_away, context_id,
+           model_id, season, fixture_id, probs, pred_home, pred_away, context_id,
            attempts_used, predicted_at
          )
          select $2, $1, $3, '{"H":0.5,"D":0.3,"A":0.2}', 1, 0, c.id, 0, $4
            from contexts c
-          where c.season = $1 and c.track = 'match' and c.fpl_id = $3`,
+          where c.season = $1 and c.track = 'match' and c.fixture_id = $3`,
         [SEASON, RESUMED, fplId, at]
       );
     }

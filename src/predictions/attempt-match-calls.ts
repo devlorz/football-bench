@@ -34,7 +34,7 @@ export interface MatchCall {
   provider: string;
   quantization: string | null;
   role: ModelRole;
-  fpl_id: number;
+  fixture_id: number;
   context: StoredContext;
 }
 
@@ -96,7 +96,7 @@ async function assignCanonicalLock(
   await database.query(
     `update fixtures
         set locked_in_gw = coalesce(locked_in_gw, $3)
-      where season = $1 and fpl_id = $2`,
+      where season = $1 and fixture_id = $2`,
     [season, fixtureId, gameweek]
   );
 }
@@ -135,7 +135,7 @@ async function recordProviderFailure(options: {
     );
     await database.query(
       `insert into attempts (
-         model_id, season, gw, track, fpl_id, attempt_no, ok,
+         model_id, season, gw, track, fixture_id, attempt_no, ok,
          error_kind, error_detail, resolved_provider, resolved_model,
          latency_ms, tokens_in, tokens_out, raw_response, trigger, attempted_at
        ) values (
@@ -201,7 +201,7 @@ async function recordPredictionResult(options: {
     validation,
     telemetry
   } = options;
-  const fixtureId = call.fpl_id;
+  const fixtureId = call.fixture_id;
   await database.query("begin");
   try {
     await assignCanonicalLock(database, season, fixtureId, gameweek);
@@ -211,7 +211,7 @@ async function recordPredictionResult(options: {
          join gameweeks g
            on g.season = f.season
           and g.gw = f.locked_in_gw
-        where f.season = $1 and f.fpl_id = $2`,
+        where f.season = $1 and f.fixture_id = $2`,
       [season, fixtureId]
     );
     const deadline = lockResult.rows[0]?.deadline_at;
@@ -233,7 +233,7 @@ async function recordPredictionResult(options: {
         : validation.message;
     await database.query(
       `insert into attempts (
-         model_id, season, gw, track, fpl_id, attempt_no, ok,
+         model_id, season, gw, track, fixture_id, attempt_no, ok,
          error_kind, error_detail, resolved_provider, resolved_model,
          latency_ms, tokens_in, tokens_out, raw_response, trigger,
          attempted_at
@@ -263,10 +263,10 @@ async function recordPredictionResult(options: {
     if (attemptOk) {
       await database.query(
         `insert into predictions (
-           model_id, season, fpl_id, probs, pred_home, pred_away,
+           model_id, season, fixture_id, probs, pred_home, pred_away,
            context_id, rationale, attempts_used, predicted_at
          ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         on conflict (model_id, season, fpl_id) do nothing`,
+         on conflict (model_id, competition, season, fixture_id) do nothing`,
         [
           call.model_id,
           season,
@@ -334,7 +334,7 @@ export async function attemptMatchCalls({
         modelId: call.model_id,
         season,
         gameweek,
-        fixtureId: call.fpl_id,
+        fixtureId: call.fixture_id,
         attemptNo,
         trigger,
         kind,
@@ -436,7 +436,7 @@ export async function attemptMatchCalls({
           break;
         }
         const responseContent = parsedResponse.content;
-        const validation = validatePrediction(responseContent, call.fpl_id);
+        const validation = validatePrediction(responseContent, call.fixture_id);
         let mayRepair = false;
         try {
           mayRepair = await persist(() => recordPredictionResult({
@@ -474,7 +474,7 @@ export async function attemptMatchCalls({
             role: "user",
             content: predictionRepairMessage(
               validation.message,
-              call.fpl_id
+              call.fixture_id
             )
           }
         );

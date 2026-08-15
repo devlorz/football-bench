@@ -519,10 +519,10 @@ async function fixtures(
   // that left the schedule before any run reached it is not in the Gameweek at
   // all, and would read as ten Gaps.
   const rows = await query(
-    `select fpl_id, home_team, away_team, kickoff_at from fixtures
+    `select fixture_id, home_team, away_team, kickoff_at from fixtures
       where season = $1 and coalesce(locked_in_gw, gw) = $2
         and (not deferred or locked_in_gw is not null)
-      order by kickoff_at, fpl_id`,
+      order by kickoff_at, fixture_id`,
     [season, gw]
   );
 
@@ -535,11 +535,11 @@ async function fixtures(
   );
 
   const predictions = await query(
-    `select p.fpl_id, p.model_id, p.probs, p.pred_home, p.pred_away,
+    `select p.fixture_id, p.model_id, p.probs, p.pred_home, p.pred_away,
             p.rationale, p.attempts_used as repairs, c.hash as context_hash
        from predictions p
        join contexts c on c.id = p.context_id
-       join fixtures f on f.season = p.season and f.fpl_id = p.fpl_id
+       join fixtures f on f.season = p.season and f.fixture_id = p.fixture_id
       where p.season = $1 and coalesce(f.locked_in_gw, f.gw) = $2`,
     [season, gw]
   );
@@ -547,7 +547,7 @@ async function fixtures(
   const byFixtureAndEntrant = new Map<string, SlotPrediction>();
   for (const row of predictions) {
     const probs = row.probs as Probs;
-    byFixtureAndEntrant.set(`${row.fpl_id}:${row.model_id}`, {
+    byFixtureAndEntrant.set(`${row.fixture_id}:${row.model_id}`, {
       probs,
       predHome: Number(row.pred_home),
       predAway: Number(row.pred_away),
@@ -571,7 +571,12 @@ async function fixtures(
     // from the committed view and never selects the Gameweek.
     lockPassed: deadline !== null && now >= deadline,
     fixtures: rows.map((row) => ({
-      fplId: Number(row.fpl_id),
+      // `fplId` where the column is now `fixture_id`: this is the published
+      // shape a deployed dashboard build reads, and renaming a field in a JSON
+      // body is a change to the contract between two things that ship
+      // separately, not a rename. ADR-0035 renamed the column and left the
+      // dashboard's Competition shape to its own ADR; the field goes with that.
+      fplId: Number(row.fixture_id),
       homeTeam: String(row.home_team),
       awayTeam: String(row.away_team),
       kickoffAt: new Date(row.kickoff_at as string | Date).toISOString(),
@@ -580,7 +585,7 @@ async function fixtures(
         // Null and not missing: an Entrant that did not answer must not be
         // indistinguishable from one that answered badly.
         prediction:
-          byFixtureAndEntrant.get(`${row.fpl_id}:${entrant.id}`) ?? null
+          byFixtureAndEntrant.get(`${row.fixture_id}:${entrant.id}`) ?? null
       }))
     }))
   };

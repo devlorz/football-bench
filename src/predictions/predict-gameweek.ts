@@ -65,13 +65,14 @@ async function storeContext(
   body: string
 ): Promise<StoredContext> {
   const inserted = await database.query<{ id: number }>(
-    `insert into contexts (season, gw, track, fpl_id, hash, body)
+    `insert into contexts (season, gw, track, fixture_id, hash, body)
      values ($1, $2, 'match', $3, $4, $5)
      on conflict (
-       season, gw, track, (coalesce(fpl_id, -1)), (coalesce(model_id, ''))
+       competition, season, gw, track,
+       (coalesce(fixture_id, -1)), (coalesce(model_id, ''))
      ) do nothing
      returning id`,
-    [season, gameweek, fixture.fpl_id, sha256(body), body]
+    [season, gameweek, fixture.fixture_id, sha256(body), body]
   );
   const id = inserted.rows[0]?.id;
   if (id !== undefined) {
@@ -84,12 +85,12 @@ async function storeContext(
       where season = $1
         and gw = $2
         and track = 'match'
-        and fpl_id = $3`,
-    [season, gameweek, fixture.fpl_id]
+        and fixture_id = $3`,
+    [season, gameweek, fixture.fixture_id]
   );
   const context = stored.rows[0];
   if (context === undefined) {
-    throw new Error(`Match context for Fixture ${fixture.fpl_id} was not stored`);
+    throw new Error(`Match context for Fixture ${fixture.fixture_id} was not stored`);
   }
   return context;
 }
@@ -107,7 +108,7 @@ async function loadStoredContext(
       where season = $1
         and gw = $2
         and track = 'match'
-        and fpl_id = $3`,
+        and fixture_id = $3`,
     [season, gameweek, fixtureId]
   );
   const context = stored.rows[0];
@@ -154,7 +155,7 @@ export async function predictGameweek({
 
   const work = await database.query<WorkItemRow>(
     `select
-       f.fpl_id, f.home_team, f.away_team, f.kickoff_at,
+       f.fixture_id, f.home_team, f.away_team, f.kickoff_at,
        m.id as entrant_id, m.base_model, m.provider, m.quantization, m.role
       from fixtures f
       cross join models m
@@ -167,9 +168,9 @@ export async function predictGameweek({
             from predictions p
            where p.model_id = m.id
              and p.season = f.season
-             and p.fpl_id = f.fpl_id
+             and p.fixture_id = f.fixture_id
         )
-      order by f.fpl_id, m.id`,
+      order by f.fixture_id, m.id`,
     [season, gameweek, MATCH_PROMPT_VERSION]
   );
 
@@ -179,9 +180,9 @@ export async function predictGameweek({
 
   const contexts = new Map<number, StoredContext>();
   for (const item of work.rows) {
-    if (!contexts.has(item.fpl_id)) {
+    if (!contexts.has(item.fixture_id)) {
       contexts.set(
-        item.fpl_id,
+        item.fixture_id,
         trigger === "main"
           ? await storeContext(
             database,
@@ -194,7 +195,7 @@ export async function predictGameweek({
             database,
             season,
             gameweek,
-            item.fpl_id,
+            item.fixture_id,
             trigger
           )
       );
@@ -202,10 +203,10 @@ export async function predictGameweek({
   }
 
   const calls: MatchCall[] = work.rows.map((item) => {
-    const context = contexts.get(item.fpl_id);
+    const context = contexts.get(item.fixture_id);
     if (context === undefined) {
       throw new Error(
-        `Match context for Fixture ${item.fpl_id} was not prepared`
+        `Match context for Fixture ${item.fixture_id} was not prepared`
       );
     }
     return {
@@ -216,7 +217,7 @@ export async function predictGameweek({
       // The stored role, not the literal this query filters on: what decides
       // whether the Lock refuses is the column, so the column is what travels.
       role: item.role,
-      fpl_id: item.fpl_id,
+      fixture_id: item.fixture_id,
       context
     };
   });

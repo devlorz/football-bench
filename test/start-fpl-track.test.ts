@@ -253,7 +253,7 @@ describe("starting the FPL track for all ten Entrants", () => {
     // empty table it announces — spec 0006's story 25, in the one case it names.
     await client.query(
       `insert into fixtures (
-         season, fpl_id, gw, home_team, away_team, kickoff_at
+         season, fixture_id, gw, home_team, away_team, kickoff_at
        ) values
          ('2026-27', 101, 1, 'Arsenal', 'Chelsea', '2026-08-22T14:00:00Z'),
          ('2026-27', 102, 2, 'Everton', 'Fulham', '2026-08-30T16:30:00Z')`
@@ -269,12 +269,12 @@ describe("starting the FPL track for all ten Entrants", () => {
     // Season beats a single Gameweek every reader has to know is different.
     const contexts = await client.query<{
       track: string;
-      fpl_id: number | null;
+      fixture_id: number | null;
       model_id: string;
       hash: string;
       body: string;
     }>(
-      `select track, fpl_id, model_id, hash, body
+      `select track, fixture_id, model_id, hash, body
          from contexts
         order by model_id`
     );
@@ -283,7 +283,7 @@ describe("starting the FPL track for all ten Entrants", () => {
       .toEqual([...BASE_MODELS.map(seatId)].sort());
     const [context] = contexts.rows;
     for (const row of contexts.rows) {
-      expect(row).toMatchObject({ track: "fpl", fpl_id: null });
+      expect(row).toMatchObject({ track: "fpl", fixture_id: null });
       expect(row.body).toBe(context!.body);
       expect(row.hash).toBe(
         createHash("sha256").update(row.body).digest("hex")

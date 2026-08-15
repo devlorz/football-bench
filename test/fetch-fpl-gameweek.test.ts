@@ -89,14 +89,14 @@ describe("fetching an FPL Gameweek", () => {
     }]);
 
     const fixtures = await client.query(
-      `select season, fpl_id, gw, home_team, away_team, kickoff_at
+      `select season, fixture_id, gw, home_team, away_team, kickoff_at
          from fixtures
-        order by fpl_id`
+        order by fixture_id`
     );
     expect(fixtures.rowCount).toBe(10);
     expect(fixtures.rows[0]).toEqual({
       season: "2026-27",
-      fpl_id: 1,
+      fixture_id: 1,
       gw: 1,
       home_team: "Arsenal",
       away_team: "Coventry City",
@@ -279,7 +279,7 @@ describe("fetching an FPL Gameweek", () => {
          (select price_tenths from fpl_players
            where season = '2026-27' and gw = 2 and fpl_id = 1) as gw2_price,
          (select kickoff_at from fixtures
-           where season = '2026-27' and fpl_id = 1) as kickoff_at`
+           where season = '2026-27' and fixture_id = 1) as kickoff_at`
     );
     expect(stored.rows).toEqual([{
       deadline_at: new Date("2026-08-21T17:30:00.000Z"),
@@ -309,22 +309,22 @@ describe("fetching an FPL Gameweek", () => {
          'match/2026-27-v1', 'entrant'
        );
        insert into contexts (
-         season, gw, track, fpl_id, hash, body
+         season, gw, track, fixture_id, hash, body
        ) values (
          '2026-27', 1, 'match', 1, 'context-hash', 'context'
        );
        update fixtures
           set locked_in_gw = 1
-        where season = '2026-27' and fpl_id = 1;
+        where season = '2026-27' and fixture_id = 1;
        insert into predictions (
-         model_id, season, fpl_id, probs, pred_home, pred_away,
+         model_id, season, fixture_id, probs, pred_home, pred_away,
          context_id, attempts_used, predicted_at
        )
        select
          'entrant/v1', '2026-27', 1, '{"H":0.6,"D":0.25,"A":0.15}',
          2, 1, id, 0, '2026-08-21T17:29:00Z'
        from contexts
-       where season = '2026-27' and gw = 1 and fpl_id = 1`
+       where season = '2026-27' and gw = 1 and fixture_id = 1`
     );
 
     const movedFixtures = JSON.parse(fixturesBody);
@@ -344,7 +344,7 @@ describe("fetching an FPL Gameweek", () => {
     const beforeLock = await client.query(
       `select deferred
          from fixtures
-        where season = '2026-27' and fpl_id = 1`
+        where season = '2026-27' and fixture_id = 1`
     );
     expect(beforeLock.rows).toEqual([{ deferred: false }]);
 
@@ -362,9 +362,9 @@ describe("fetching an FPL Gameweek", () => {
        from fixtures f
        left join predictions p
          on p.season = f.season
-        and p.fpl_id = f.fpl_id
-      where f.season = '2026-27' and f.fpl_id = 1
-      group by f.season, f.fpl_id`
+        and p.fixture_id = f.fixture_id
+      where f.season = '2026-27' and f.fixture_id = 1
+      group by f.competition, f.season, f.fixture_id`
     );
     expect(stored.rows).toEqual([{
       gw: 2,
@@ -390,7 +390,7 @@ describe("fetching an FPL Gameweek", () => {
     await client.query(
       `update fixtures
           set locked_in_gw = 1
-        where season = '2026-27' and fpl_id = 1`
+        where season = '2026-27' and fixture_id = 1`
     );
 
     const movedFixtures = JSON.parse(fixturesBody);
@@ -423,7 +423,7 @@ describe("fetching an FPL Gameweek", () => {
     const stored = await client.query(
       `select gw, locked_in_gw, deferred
          from fixtures
-        where season = '2026-27' and fpl_id = 1`
+        where season = '2026-27' and fixture_id = 1`
     );
     expect(stored.rows).toEqual([{
       gw: 1,
@@ -447,7 +447,7 @@ describe("fetching an FPL Gameweek", () => {
     await client.query(
       `update fixtures
           set locked_in_gw = 1
-        where season = '2026-27' and fpl_id = 1`
+        where season = '2026-27' and fixture_id = 1`
     );
 
     const unscheduledFixtures = JSON.parse(fixturesBody);
@@ -468,7 +468,7 @@ describe("fetching an FPL Gameweek", () => {
     const stored = await client.query(
       `select gw, locked_in_gw, kickoff_at, deferred
          from fixtures
-        where season = '2026-27' and fpl_id = 1`
+        where season = '2026-27' and fixture_id = 1`
     );
     expect(stored.rows).toEqual([{
       gw: 1,
@@ -498,22 +498,22 @@ describe("fetching an FPL Gameweek", () => {
          'match/2026-27-v1', 'entrant'
        ) on conflict (id) do nothing;
        insert into contexts (
-         season, gw, track, fpl_id, hash, body
+         season, gw, track, fixture_id, hash, body
        ) values (
          '2026-27', 1, 'match', 1, 'context-hash', 'context'
        );
        update fixtures
           set locked_in_gw = 1
-        where season = '2026-27' and fpl_id = 1;
+        where season = '2026-27' and fixture_id = 1;
        insert into predictions (
-         model_id, season, fpl_id, probs, pred_home, pred_away,
+         model_id, season, fixture_id, probs, pred_home, pred_away,
          context_id, attempts_used, predicted_at
        )
        select
          'entrant/v1', '2026-27', 1, '{"H":0.6,"D":0.25,"A":0.15}',
          2, 1, id, 0, '2026-08-21T17:29:00Z'
        from contexts
-       where season = '2026-27' and gw = 1 and fpl_id = 1`
+       where season = '2026-27' and gw = 1 and fixture_id = 1`
     );
 
     const withdrawnFixtures = JSON.parse(fixturesBody);
@@ -536,9 +536,9 @@ describe("fetching an FPL Gameweek", () => {
        from fixtures f
        left join predictions p
          on p.season = f.season
-        and p.fpl_id = f.fpl_id
-      where f.season = '2026-27' and f.fpl_id = 1
-      group by f.season, f.fpl_id`;
+        and p.fixture_id = f.fixture_id
+      where f.season = '2026-27' and f.fixture_id = 1
+      group by f.competition, f.season, f.fixture_id`;
     const withdrawn = await client.query(storedQuery);
     expect(withdrawn.rows).toEqual([{
       gw: 1,
@@ -602,7 +602,7 @@ describe("fetching an FPL Gameweek", () => {
     });
 
     const withdrawn = await client.query(
-      `select gw from fixtures where season = '2026-27' and fpl_id = 1`
+      `select gw from fixtures where season = '2026-27' and fixture_id = 1`
     );
     expect(withdrawn.rows).toEqual([]);
 
@@ -623,7 +623,7 @@ describe("fetching an FPL Gameweek", () => {
     const restored = await client.query(
       `select gw, kickoff_at
          from fixtures
-        where season = '2026-27' and fpl_id = 1`
+        where season = '2026-27' and fixture_id = 1`
     );
     expect(restored.rows).toEqual([{
       gw: 2,
@@ -646,7 +646,7 @@ describe("fetching an FPL Gameweek", () => {
     await client.query(
       `update fixtures
           set locked_in_gw = 1
-        where season = '2026-27' and fpl_id = 1`
+        where season = '2026-27' and fixture_id = 1`
     );
 
     const withdrawnFixtures = JSON.parse(fixturesBody);
@@ -666,10 +666,10 @@ describe("fetching an FPL Gameweek", () => {
       http
     });
     const firstObservation = await client.query(
-      `select fpl_id, gw, locked_in_gw, deferred, unscheduled, updated_at
+      `select fixture_id, gw, locked_in_gw, deferred, unscheduled, updated_at
          from fixtures
-        where season = '2026-27' and fpl_id = any($1::integer[])
-        order by fpl_id`,
+        where season = '2026-27' and fixture_id = any($1::integer[])
+        order by fixture_id`,
       [[locked.id, neverLocked.id]]
     );
 
@@ -681,15 +681,15 @@ describe("fetching an FPL Gameweek", () => {
     });
 
     const secondObservation = await client.query(
-      `select fpl_id, gw, locked_in_gw, deferred, unscheduled, updated_at
+      `select fixture_id, gw, locked_in_gw, deferred, unscheduled, updated_at
          from fixtures
-        where season = '2026-27' and fpl_id = any($1::integer[])
-        order by fpl_id`,
+        where season = '2026-27' and fixture_id = any($1::integer[])
+        order by fixture_id`,
       [[locked.id, neverLocked.id]]
     );
     expect(firstObservation.rows).toEqual([
       {
-        fpl_id: locked.id,
+        fixture_id: locked.id,
         gw: 1,
         locked_in_gw: 1,
         deferred: true,
@@ -735,7 +735,7 @@ describe("fetching an FPL Gameweek", () => {
     const stored = await client.query(
       `select gw, locked_in_gw, deferred
          from fixtures
-        where season = '2026-27' and fpl_id = 999`
+        where season = '2026-27' and fixture_id = 999`
     );
     expect(stored.rows).toEqual([{
       gw: 1,
@@ -773,7 +773,7 @@ describe("fetching an FPL Gameweek", () => {
     const stored = await client.query(
       `select
          (select array_agg(gw order by gw) from gameweeks) as gameweeks,
-         (select locked_in_gw from fixtures where fpl_id = 999)
+         (select locked_in_gw from fixtures where fixture_id = 999)
            as locked_in_gw`
     );
     expect(stored.rows).toEqual([{
@@ -1125,7 +1125,7 @@ describe("fetching an FPL Gameweek", () => {
            where season = '2026-27' and gw = 1 and fpl_id = 1) as price,
          (select kickoff_at
             from fixtures
-           where season = '2026-27' and fpl_id = 1) as kickoff_at,
+           where season = '2026-27' and fixture_id = 1) as kickoff_at,
          (select body
             from raw_snapshots
            where source = 'fpl_bootstrap'
@@ -1208,9 +1208,9 @@ describe("fetching an FPL Gameweek", () => {
     }));
 
     const stored = await client.query(
-      "select fpl_id, result from fixtures order by fpl_id"
+      "select fixture_id, result from fixtures order by fixture_id"
     );
-    expect(stored.rows.map(({ fpl_id: fplId, result }) => [fplId, result]))
+    expect(stored.rows.map(({ fixture_id: fplId, result }) => [fplId, result]))
       .toEqual([
         [1, { home_goals: 2, away_goals: 1, outcome: "H" }],
         [2, null],
@@ -1256,7 +1256,7 @@ describe("fetching an FPL Gameweek", () => {
     const stored = await client.query(
       `select result
          from fixtures
-        where season = '2026-27' and fpl_id = 1`
+        where season = '2026-27' and fixture_id = 1`
     );
     expect(stored.rows).toEqual([{
       result: { home_goals: 0, away_goals: 1, outcome: "A" }

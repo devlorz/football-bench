@@ -27,21 +27,26 @@ Lock.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] A `competitions` table lists the active Competitions per Season, with `PL` as its
+- [x] A `competitions` table lists the active Competitions per Season, with `PL` as its
       first row.
-- [ ] The seven keyed tables — gameweeks, fixtures, contexts, predictions, attempts,
+- [x] The seven keyed tables — gameweeks, fixtures, contexts, predictions, attempts,
       prediction runs, scores — key by `(competition, season, …)`, foreign keys included.
-- [ ] Existing rows are backfilled `PL` with no other value changed; the migration test
+- [x] Existing rows are backfilled `PL` with no other value changed; the migration test
       seeds a scored Premier League record, migrates it, and proves every Prediction,
       context and score readable and identical.
-- [ ] The Fixture id column carries its source-native name (`fixture_id`), everywhere it
+- [x] The Fixture id column carries its source-native name (`fixture_id`), everywhere it
       appears, including the contexts uniqueness expression.
-- [ ] Both Lock triggers — a Prediction requires a Locked Fixture, a Locked Gameweek is
+- [x] Both Lock triggers — a Prediction requires a Locked Fixture, a Locked Gameweek is
       immutable — are recreated against the new keys and proven still enforcing.
-- [ ] The full migration rehearses green on a temporary Postgres before it may touch the
+- [x] The full migration rehearses green on a temporary Postgres before it may touch the
       live database, and the ADR-0035 rollout windows are honoured when it does — after
       ADR-0034's roster refresh has finished, never straddling its pre-flights.
-- [ ] The Fixture id rename is carried through the whole suite, dashboard tests and the
+      _Rehearsed green 2026-08-15 over a `pg_dump` copy of the live record (38 Gameweeks,
+      380 Fixtures, nothing else written yet): `npm run db:rehearse`. The migration has
+      **not** been applied to the live database; the window checks in
+      [the runbook](../runbooks/the-competition-migration.md) were clear at the time of
+      the rehearsal and must be re-run immediately before it is._
+- [x] The Fixture id rename is carried through the whole suite, dashboard tests and the
       Season seed included; its blast radius grew with the FPL dashboard work.
 
 ## 2 — Two Competitions through one scheduler and scorer

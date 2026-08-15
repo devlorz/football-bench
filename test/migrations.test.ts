@@ -1,48 +1,16 @@
-import { readdir, readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { applyMigrations } from "../src/db/migrations.js";
+import {
+  KEYED_TABLES, snapshotKeyedRecord, verifyRelabelledAsPl
+} from "../src/db/rehearse-migration.js";
+import {
+  applyRealMigrationsThrough, seedPremierLeagueRecord
+} from "./pre-competition-record.js";
 
 const { Client } = pg;
 const pairUrl = new URL("./fixtures/migrations-pair/", import.meta.url);
 const brokenUrl = new URL("./fixtures/migrations-broken/", import.meta.url);
-const realMigrationsUrl = new URL("../migrations/", import.meta.url);
-
-/**
- * Rebuilds the schema as a deployment that stopped at `through` left it, and
- * records each file so `applyMigrations` picks up only what follows.
- *
- * Read from the directory rather than listed here: a test about what one later
- * migration does to rows that already exist should not also have to restate
- * every migration that came before it, and should not need editing when a new
- * one lands ahead of the file it is about.
- */
-async function applyRealMigrationsThrough(
-  database: Pick<pg.Client, "query">,
-  through: string
-): Promise<void> {
-  await database.query(
-    `create table schema_migrations (
-       filename   text primary key,
-       applied_at timestamptz not null default now()
-     )`
-  );
-  const deployed = (await readdir(fileURLToPath(realMigrationsUrl)))
-    .filter((entry) => entry.endsWith(".sql"))
-    .sort()
-    .filter((entry) => entry <= through);
-
-  for (const filename of deployed) {
-    await database.query(
-      await readFile(new URL(filename, realMigrationsUrl), "utf8")
-    );
-    await database.query(
-      "insert into schema_migrations (filename) values ($1)",
-      [filename]
-    );
-  }
-}
 
 async function tableNames(database: Pick<pg.Client, "query">) {
   const result = await database.query<{ table_name: string }>(
@@ -220,6 +188,54 @@ describe("applying migrations", () => {
     expect(untouched.rows).toEqual([{ count: 1 }]);
   });
 
+  test("relabels a scored Premier League record as PL", async () => {
+    await applyRealMigrationsThrough(
+      client,
+      "0021_dashboard_reads_the_squad_record.sql"
+    );
+
+    await seedPremierLeagueRecord(client);
+    await snapshotKeyedRecord(client);
+
+    const applied = await applyMigrations(client);
+    expect(applied).toEqual(["0022_the_competition_dimension.sql"]);
+
+    // Relabelled, not rewritten: every row of every rekeyed table comes back
+    // carrying `PL` and otherwise identical, with the Fixture id under its
+    // source-native name. The same check `npm run db:rehearse` runs over the
+    // live record, rather than a second one in another language saying the
+    // same thing -- what the rehearsal proves and what this test proves would
+    // otherwise be two claims to keep in step by hand.
+    await verifyRelabelledAsPl(client);
+
+    // It had rows to prove that over, which the check cannot say itself: it
+    // compares two records, and an empty record matches an empty one.
+    const counts: Record<string, number> = {};
+    for (const table of KEYED_TABLES) {
+      const counted = await client.query<{ count: number }>(
+        `select count(*)::int as count from ${table}`
+      );
+      counts[table] = counted.rows[0]!.count;
+    }
+    expect(counts).toEqual({
+      gameweeks: 1,
+      fixtures: 2,
+      contexts: 1,
+      predictions: 1,
+      attempts: 1,
+      prediction_runs: 1,
+      scores: 1
+    });
+
+    // And the Season's one active Competition is listed.
+    const competitions = await client.query(
+      "select competition, season from competitions"
+    );
+    expect(competitions.rows).toEqual([
+      { competition: "PL", season: "2026-27" }
+    ]);
+  });
+
   test("locks player snapshots over the deployed 0006 schema", async () => {
     await applyRealMigrationsThrough(
       client,
@@ -254,7 +270,8 @@ describe("applying migrations", () => {
       "0018_squad_changes.sql",
       "0019_exhibition_role.sql",
       "0020_dashboard_reads_the_fpl_tables.sql",
-      "0021_dashboard_reads_the_squad_record.sql"
+      "0021_dashboard_reads_the_squad_record.sql",
+      "0022_the_competition_dimension.sql"
     ]);
     const backfill = await client.query<{
       observed_at: Date;

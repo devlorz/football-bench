@@ -262,7 +262,7 @@ async function storeMetric(
   await database.query(
     `insert into scores (model_id, season, gw, track, metric, value, n, detail)
      values ($1, $2, $3, 'fpl', $4, $5, $6, $7)
-     on conflict (model_id, season, gw, track, metric)
+     on conflict (model_id, competition, season, gw, track, metric)
      do update set value = excluded.value, n = excluded.n,
                    detail = excluded.detail`,
     [entrantId, season, gameweek, metric, value, n, JSON.stringify(detail)]

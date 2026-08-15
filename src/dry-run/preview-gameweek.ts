@@ -87,7 +87,7 @@ export async function previewGameweek({
   const elapsedMs = Date.now() - startedAt;
 
   const forecasts = await target.query<PreviewForecast>(
-    `select f.fpl_id as "fixtureId",
+    `select f.fixture_id as "fixtureId",
             f.home_team || ' v ' || f.away_team as fixture,
             m.name as entrant,
             (p.probs->>'H')::float8 as home,
@@ -97,21 +97,21 @@ export async function previewGameweek({
             p.pred_away as "predictedAway",
             p.attempts_used as repairs
        from predictions p
-       join fixtures f on f.season = p.season and f.fpl_id = p.fpl_id
+       join fixtures f on f.season = p.season and f.fixture_id = p.fixture_id
        join models m on m.id = p.model_id
       where p.season = $1
-      order by f.fpl_id, m.name`,
+      order by f.fixture_id, m.name`,
     [season]
   );
 
   const contexts = await target.query<PreviewContext>(
-    `select c.fpl_id as "fixtureId",
+    `select c.fixture_id as "fixtureId",
             f.home_team || ' v ' || f.away_team as fixture,
             c.body
        from contexts c
-       join fixtures f on f.season = c.season and f.fpl_id = c.fpl_id
+       join fixtures f on f.season = c.season and f.fixture_id = c.fixture_id
       where c.season = $1 and c.gw = $2 and c.track = 'match'
-      order by c.fpl_id`,
+      order by c.fixture_id`,
     [season, gameweek]
   );
 

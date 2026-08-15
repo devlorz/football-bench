@@ -9,7 +9,7 @@ import { buildMatchContext } from "../src/predictions/build-match-context.js";
 describe("the Match Prompt Version", () => {
   test("pins the frozen template and context builder to a reviewed checksum", () => {
     const fixture = {
-      fpl_id: 1,
+      fixture_id: 1,
       home_team: "Arsenal",
       away_team: "Coventry City",
       kickoff_at: new Date("2026-08-21T19:00:00Z")

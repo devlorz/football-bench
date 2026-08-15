@@ -52,16 +52,24 @@ _Avoid_: backfill (a Gap is never back-filled, and an Exhibition Run fills none)
 
 ### Forecasting
 
+**Competition**:
+One league the match track runs, named by football-data.org's code — `PL`, `PD`, `SA`,
+`BL1`, `FL1`. Each is its own benchmark with its own leaderboard; no ranking spans two.
+_Avoid_: league (in identifiers), tournament
+
 **Fixture**:
-One scheduled Premier League match, unique within a Season.
+One scheduled match of a Competition, unique within a Competition and Season.
 
 **Gameweek**:
-The FPL-defined round of Fixtures. The unit of prediction batching and of leaderboard updates.
+One Competition's numbered batch of Fixtures — FPL-defined for the Premier League,
+source-defined elsewhere, and a Gameweek in both: "La Liga's Gameweek 5". The unit of
+prediction batching and of leaderboard updates.
 _Avoid_: matchday, round, GW week
 
 **Season**:
-One Premier League campaign, e.g. `2026-27`. The outer scope of every identifier — Fixture
-and player IDs are only unique within a Season.
+One campaign, e.g. `2026-27`, run to the same label by every Competition. With the
+Competition, the outer scope of every identifier — Fixture and player IDs are only unique
+within one.
 
 **Prediction**:
 What one Entrant submits for one Fixture: a probability distribution over Home / Draw / Away

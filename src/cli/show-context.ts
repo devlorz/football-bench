@@ -18,9 +18,9 @@ const database = new Client({ connectionString: config.databaseUrl });
 await database.connect();
 try {
   const fixtures = await database.query<MatchPromptFixture>(
-    `select fpl_id, home_team, away_team, kickoff_at from fixtures
+    `select fixture_id, home_team, away_team, kickoff_at from fixtures
       where season = $1 and coalesce(locked_in_gw, gw) = $2 and not deferred
-      order by kickoff_at, fpl_id`,
+      order by kickoff_at, fixture_id`,
     [config.season, config.gameweek]
   );
   const data = await loadMatchContextData(
@@ -29,7 +29,7 @@ try {
   for (const fixture of fixtures.rows) {
     console.log(`\n${"=".repeat(76)}`);
     console.log(
-      `Fixture ${fixture.fpl_id}: `
+      `Fixture ${fixture.fixture_id}: `
       + `${fixture.home_team} v ${fixture.away_team}`
     );
     console.log("=".repeat(76));

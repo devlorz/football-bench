@@ -190,7 +190,7 @@ describe("the Fixtures endpoint on the design's Season", () => {
       }>(
         `select p.attempts_used, p.rationale, c.hash
            from predictions p join contexts c on c.id = p.context_id
-          where p.season = $1 and p.fpl_id = $2 and p.model_id = $3`,
+          where p.season = $1 and p.fixture_id = $2 and p.model_id = $3`,
         [SEASON, 141, "claude/v1"]
       );
 
@@ -252,7 +252,7 @@ describe("the Fixtures endpoint before any Prediction run", () => {
     );
     await writer.query(
       `insert into fixtures (
-         season, fpl_id, gw, home_team, away_team, kickoff_at
+         season, fixture_id, gw, home_team, away_team, kickoff_at
        ) values ($1, 11, 2, 'Arsenal', 'Chelsea', $2)`,
       [SEASON, "2026-08-21T19:00:00Z"]
     );
@@ -300,14 +300,14 @@ describe("the Fixtures endpoint on a Gameweek Locked and not yet scored", () => 
       "update fixtures set locked_in_gw = gw where season = $1", [SEASON]
     );
     const context = await writer.query<{ id: string }>(
-      `insert into contexts (season, gw, track, fpl_id, hash, body, built_at)
+      `insert into contexts (season, gw, track, fixture_id, hash, body, built_at)
        values ($1, 1, 'match', 1, 'seeded-hash', 'seeded body', $2)
        returning id`,
       [SEASON, "2026-08-14T11:30:00Z"]
     );
     await writer.query(
       `insert into predictions (
-         model_id, season, fpl_id, probs, pred_home, pred_away, context_id,
+         model_id, season, fixture_id, probs, pred_home, pred_away, context_id,
          attempts_used, predicted_at
        ) values ('claude/v1', $1, 1, '{"H": 0.5, "D": 0.3, "A": 0.2}', 2, 1,
                  $2, 0, $3)`,
@@ -353,12 +353,12 @@ describe("the Fixtures endpoint with a deferred Fixture that never settles",
       // the rest of the Season.
       await writer.query(
         `update fixtures set deferred = true, result = null
-          where season = $1 and fpl_id = 5`,
+          where season = $1 and fixture_id = 5`,
         [SEASON]
       );
       // And one in the Gameweek on the page, which the Lock already owns.
       await writer.query(
-        "update fixtures set deferred = true where season = $1 and fpl_id = 141",
+        "update fixtures set deferred = true where season = $1 and fixture_id = 141",
         [SEASON]
       );
       return async () => {
@@ -396,7 +396,7 @@ describe("the Fixtures endpoint with a deferred Fixture no Lock owns", () => {
     // committed against it. It is not in the Gameweek in any sense a reader
     // would recognise, and listing it would read as nine Gaps.
     await writer.query(
-      "update fixtures set deferred = true where season = $1 and fpl_id = 2",
+      "update fixtures set deferred = true where season = $1 and fixture_id = 2",
       [SEASON]
     );
     return async () => {

@@ -87,6 +87,7 @@ describe("the benchmark database", () => {
 
     expect(result.rows.map(({ table_name }) => table_name)).toEqual([
       "attempts",
+      "competitions",
       "contexts",
       "fixtures",
       "fpl_player_points",
@@ -241,18 +242,18 @@ describe("the benchmark database", () => {
          ('2025-26', 1, '2025-08-15T17:30:00Z'),
          ('2026-27', 1, '2026-08-21T17:30:00Z');
        insert into fixtures (
-         season, fpl_id, gw, home_team, away_team, kickoff_at
+         season, fixture_id, gw, home_team, away_team, kickoff_at
        ) values
          ('2025-26', 1, 1, 'Liverpool', 'Bournemouth', '2025-08-15T19:00:00Z'),
          ('2026-27', 1, 1, 'Arsenal', 'Coventry City', '2026-08-21T19:00:00Z')`
     );
 
     const fixtures = await client.query(
-      "select season, fpl_id from fixtures order by season"
+      "select season, fixture_id from fixtures order by season"
     );
     expect(fixtures.rows).toEqual([
-      { season: "2025-26", fpl_id: 1 },
-      { season: "2026-27", fpl_id: 1 }
+      { season: "2025-26", fixture_id: 1 },
+      { season: "2026-27", fixture_id: 1 }
     ]);
   });
 
@@ -349,7 +350,7 @@ describe("the benchmark database", () => {
     const invalidRows = [
       () => client.query(
         `insert into fixtures (
-           season, fpl_id, gw, home_team, away_team, kickoff_at
+           season, fixture_id, gw, home_team, away_team, kickoff_at
          ) values (
            '2026-27', 1, 99, 'Arsenal', 'Coventry City',
            '2026-08-21T19:00:00Z'
@@ -357,14 +358,14 @@ describe("the benchmark database", () => {
       ),
       () => client.query(
         `insert into fixtures (
-           season, fpl_id, gw, locked_in_gw, home_team, away_team, kickoff_at
+           season, fixture_id, gw, locked_in_gw, home_team, away_team, kickoff_at
          ) values (
            '2026-27', 2, 1, 99, 'Leeds United', 'Everton',
            '2026-08-22T14:00:00Z'
          )`
       ),
       () => client.query(
-        `insert into contexts (season, gw, track, fpl_id, hash, body)
+        `insert into contexts (season, gw, track, fixture_id, hash, body)
          values ('2026-27', 99, 'match', 1, 'hash', 'context')`
       ),
       () => client.query(
@@ -385,6 +386,63 @@ describe("the benchmark database", () => {
       () => client.query(
         `insert into scores (model_id, season, gw, track, metric, value)
          values ('entrant/v1', '2026-27', 99, 'fpl', 'points', 0)`
+      ),
+      // The six below join the list with migration 0022, which drops both
+      // primary keys with `cascade` and writes every foreign key into them
+      // back out again. This test is the whole reason that is safe to do —
+      // a key the migration forgets to restore is a row this refuses today
+      // and would accept then — so it has to name all twelve, not the half
+      // of them it happened to cover before.
+      () => client.query(
+        `insert into prediction_runs (
+           season, gw, trigger, scheduled_for, started_at
+         ) values ('2026-27', 99, 'main', now(), now())`
+      ),
+      // Predictions point at a Fixture rather than a Gameweek, and the Lock
+      // trigger passes a Fixture that is not there at all: nothing is unlocked,
+      // so the key is what refuses it.
+      () => client.query(
+        `insert into contexts (season, gw, track, fixture_id, hash, body)
+         values ('2026-27', 1, 'match', 99, 'orphan', 'context');
+         insert into predictions (
+           model_id, season, fixture_id, probs, pred_home, pred_away,
+           context_id, attempts_used
+         ) values (
+           'entrant/v1', '2026-27', 99, '{"H":0.5,"D":0.3,"A":0.2}', 1, 0,
+           (select id from contexts where hash = 'orphan'), 0
+         )`
+      ),
+      // The four FPL-side tables. Their own pre-deadline triggers raise
+      // `23503` for a Gameweek that does not exist, which is the same answer
+      // the key gives and the same one asserted below.
+      () => client.query(
+        `insert into fpl_players (
+           season, gw, fpl_id, team_name, web_name, position, price_tenths,
+           status, chance_of_playing_next_round, news, news_added, observed_at
+         ) values (
+           '2026-27', 99, 1, 'Arsenal', 'Raya', 'GKP', 60,
+           'a', null, '', null, '2026-08-21T17:00:00Z'
+         )`
+      ),
+      () => client.query(
+        `insert into fpl_player_points (
+           season, gw, fpl_id, minutes, total_points, goals_scored, assists,
+           clean_sheets, bonus, yellow_cards, red_cards, saves,
+           expected_goals, expected_assists, expected_goals_conceded
+         ) values ('2026-27', 99, 1, 90, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)`
+      ),
+      () => client.query(
+        `insert into fpl_runs (season, gw, scheduled_for, started_at)
+         values ('2026-27', 99, now(), now())`
+      ),
+      () => client.query(
+        `insert into squad_changes (
+           season, gw, club, direction, player, counterpart_club,
+           fee, loan, dated_on, observed_at
+         ) values (
+           '2026-27', 99, 'Spurs', 'in', 'Sandro Tonali', 'Newcastle United',
+           '£92.5m', false, '2026-07-06', '2026-08-21T17:00:00Z'
+         )`
       )
     ];
 
@@ -411,7 +469,7 @@ describe("the benchmark database", () => {
     )).rejects.toMatchObject({ code: "23514" });
 
     await expect(client.query(
-      `insert into contexts (season, gw, track, fpl_id, hash, body)
+      `insert into contexts (season, gw, track, fixture_id, hash, body)
        values ('2026-27', 1, 'fpl', 1, 'fpl-hash', 'context')`
     )).rejects.toMatchObject({ code: "23514" });
 
@@ -419,7 +477,7 @@ describe("the benchmark database", () => {
     // an FPL context is one Entrant's, because it carries that Entrant's own
     // Squad. Naming the wrong one of the two is refused in both directions.
     await expect(client.query(
-      `insert into contexts (season, gw, track, fpl_id, model_id, hash, body)
+      `insert into contexts (season, gw, track, fixture_id, model_id, hash, body)
        values ('2026-27', 1, 'match', 1, 'entrant/v1', 'match-hash', 'context')`
     )).rejects.toMatchObject({ code: "23514" });
 
@@ -511,20 +569,20 @@ describe("the benchmark database", () => {
          ('2026-27', 1, '2026-08-21T17:30:00Z'),
          ('2026-27', 2, '2026-08-28T17:30:00Z');
        insert into fixtures (
-         season, fpl_id, gw, locked_in_gw, home_team, away_team, kickoff_at
+         season, fixture_id, gw, locked_in_gw, home_team, away_team, kickoff_at
        ) values (
          '2026-27', 1, 1, 1, 'Arsenal', 'Coventry City',
          '2026-08-21T19:00:00Z'
        );
        update fixtures
           set gw = 2
-        where season = '2026-27' and fpl_id = 1`
+        where season = '2026-27' and fixture_id = 1`
     );
 
     await expect(client.query(
       `update fixtures
           set locked_in_gw = 2
-        where season = '2026-27' and fpl_id = 1`
+        where season = '2026-27' and fixture_id = 1`
     )).rejects.toMatchObject({
       code: "55000",
       message: "a Fixture's locked Gameweek is immutable"
@@ -547,13 +605,13 @@ describe("the benchmark database", () => {
          'match/v1', 'entrant'
        );
        insert into fixtures (
-         season, fpl_id, gw, home_team, away_team, kickoff_at
+         season, fixture_id, gw, home_team, away_team, kickoff_at
        ) values (
          '2026-27', 1, 1, 'Arsenal', 'Coventry City',
          '2026-08-21T19:00:00Z'
        );
        insert into contexts (
-         season, gw, track, fpl_id, hash, body
+         season, gw, track, fixture_id, hash, body
        ) values (
          '2026-27', 1, 'match', 1, 'context-hash', 'context'
        )`
@@ -561,7 +619,7 @@ describe("the benchmark database", () => {
 
     await expect(client.query(
       `insert into predictions (
-         model_id, season, fpl_id, probs, pred_home, pred_away,
+         model_id, season, fixture_id, probs, pred_home, pred_away,
          context_id, attempts_used
        ) values (
          'entrant/v1', '2026-27', 1, '{"H":0.5,"D":0.3,"A":0.2}',
@@ -584,18 +642,18 @@ describe("the benchmark database", () => {
          'match/v1', 'entrant'
        );
        insert into fixtures (
-         season, fpl_id, gw, locked_in_gw, home_team, away_team, kickoff_at
+         season, fixture_id, gw, locked_in_gw, home_team, away_team, kickoff_at
        ) values (
          '2026-27', 2, 1, 1, 'Leeds United', 'Everton',
          '2026-08-22T14:00:00Z'
        );
        insert into contexts (
-         season, gw, track, fpl_id, hash, body
+         season, gw, track, fixture_id, hash, body
        ) values (
          '2026-27', 1, 'match', 2, 'context-hash', 'context'
        );
        insert into predictions (
-         model_id, season, fpl_id, probs, pred_home, pred_away,
+         model_id, season, fixture_id, probs, pred_home, pred_away,
          context_id, attempts_used
        ) values (
          'entrant/v1', '2026-27', 2, '{"H":0.5,"D":0.3,"A":0.2}',
@@ -608,7 +666,7 @@ describe("the benchmark database", () => {
           set pred_home = 9
         where model_id = 'entrant/v1'
           and season = '2026-27'
-          and fpl_id = 2`
+          and fixture_id = 2`
     )).rejects.toMatchObject({
       code: "55000",
       message: "predictions rows are immutable"

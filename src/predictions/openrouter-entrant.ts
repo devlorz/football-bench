@@ -6,7 +6,7 @@ export const MATCH_PROMPT_SHA256 =
   "cb518985c6232420cc0a2abf3f4d05a6e988779a1d0871eac05af368e2b6fbbf";
 
 export interface MatchPromptFixture {
-  fpl_id: number;
+  fixture_id: number;
   home_team: string;
   away_team: string;
   kickoff_at: Date;
@@ -19,7 +19,7 @@ export function matchContext(
   return [
     "Predict this Premier League Fixture.",
     "",
-    `Fixture ID: ${fixture.fpl_id}`,
+    `Fixture ID: ${fixture.fixture_id}`,
     `Home: ${fixture.home_team}`,
     `Away: ${fixture.away_team}`,
     `Kick-off: ${fixture.kickoff_at.toISOString()}`,

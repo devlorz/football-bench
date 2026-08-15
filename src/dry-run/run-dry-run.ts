@@ -66,14 +66,14 @@ async function readFixtureIds(
   season: string,
   gameweek: number
 ): Promise<number[]> {
-  const result = await database.query<{ fpl_id: number }>(
-    `select fpl_id
+  const result = await database.query<{ fixture_id: number }>(
+    `select fixture_id
        from fixtures
       where season = $1 and coalesce(locked_in_gw, gw) = $2
-      order by fpl_id`,
+      order by fixture_id`,
     [season, gameweek]
   );
-  return result.rows.map(({ fpl_id: fixtureId }) => fixtureId);
+  return result.rows.map(({ fixture_id: fixtureId }) => fixtureId);
 }
 
 async function countPredictions(
@@ -93,15 +93,15 @@ async function readContexts(
   gameweek: number
 ): Promise<DryRunContext[]> {
   const result = await database.query<DryRunContext>(
-    `select c.fpl_id as "fixtureId",
+    `select c.fixture_id as "fixtureId",
             f.home_team as "homeTeam",
             f.away_team as "awayTeam",
             c.body
        from contexts c
        join fixtures f
-         on f.season = c.season and f.fpl_id = c.fpl_id
+         on f.season = c.season and f.fixture_id = c.fixture_id
       where c.season = $1 and c.gw = $2 and c.track = 'match'
-      order by c.fpl_id`,
+      order by c.fixture_id`,
     [season, gameweek]
   );
   return result.rows;

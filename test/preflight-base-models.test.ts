@@ -50,7 +50,7 @@ describe("pre-flight for the Base Model roster", () => {
       `insert into gameweeks (season, gw, deadline_at)
        values ('2026-27', 1, '2026-08-21T17:30:00Z');
        insert into fixtures (
-         season, fpl_id, gw, home_team, away_team, kickoff_at
+         season, fixture_id, gw, home_team, away_team, kickoff_at
        ) values (
          '2026-27', 1, 1, 'Arsenal', 'Coventry City',
          '2026-08-21T19:00:00Z'

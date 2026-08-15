@@ -39,7 +39,7 @@ async function settleScriptedResults(
     // The same shape and derivation the fetch stores, so the rehearsal cannot
     // prove the scorer against a result no Season would ever hold.
     const result = await database.query(
-      "update fixtures set result = $3 where season = $1 and fpl_id = $2",
+      "update fixtures set result = $3 where season = $1 and fixture_id = $2",
       [
         season,
         fplId,

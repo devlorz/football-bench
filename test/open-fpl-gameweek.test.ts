@@ -303,16 +303,16 @@ describe("opening the FPL track for a Gameweek", () => {
     const prompt = firstMessageText(played!);
 
     const contexts = await client.query(
-      "select track, fpl_id, hash, body from contexts"
+      "select track, fixture_id, hash, body from contexts"
     );
     expect(contexts.rows).toHaveLength(1);
     const [context] = contexts.rows as Array<{
       track: string;
-      fpl_id: number | null;
+      fixture_id: number | null;
       hash: string;
       body: string;
     }>;
-    expect(context).toMatchObject({ track: "fpl", fpl_id: null });
+    expect(context).toMatchObject({ track: "fpl", fixture_id: null });
     // What the Entrant saw is what was stored, and the hash proves it.
     expect(prompt).toBe(context!.body);
     expect(context!.hash).toBe(
@@ -519,7 +519,7 @@ describe("opening the FPL track for a Gameweek", () => {
     });
 
     const attempts = await client.query(
-      `select model_id, season, gw, track, fpl_id, attempt_no, ok, error_kind,
+      `select model_id, season, gw, track, fixture_id, attempt_no, ok, error_kind,
               error_detail, resolved_provider, resolved_model, latency_ms,
               tokens_in, tokens_out, trigger, attempted_at
          from attempts
@@ -532,7 +532,7 @@ describe("opening the FPL track for a Gameweek", () => {
         gw: 2,
         track: "fpl",
         // An FPL action is one Gameweek's, not one Fixture's.
-        fpl_id: null,
+        fixture_id: null,
         attempt_no: 0,
         ok: false,
         // Not a rule of the game broken — no action was returned at all.
@@ -551,7 +551,7 @@ describe("opening the FPL track for a Gameweek", () => {
         season: "2026-27",
         gw: 2,
         track: "fpl",
-        fpl_id: null,
+        fixture_id: null,
         attempt_no: 1,
         ok: false,
         error_kind: "captain",
@@ -569,7 +569,7 @@ describe("opening the FPL track for a Gameweek", () => {
         season: "2026-27",
         gw: 2,
         track: "fpl",
-        fpl_id: null,
+        fixture_id: null,
         attempt_no: 2,
         ok: true,
         error_kind: null,
@@ -1126,7 +1126,7 @@ describe("opening the FPL track for a Gameweek", () => {
     for (const fixture of SCHEDULED_FIXTURES) {
       await client.query(
         `insert into fixtures (
-           season, fpl_id, gw, home_team, away_team, kickoff_at
+           season, fixture_id, gw, home_team, away_team, kickoff_at
          ) values ('2026-27', $1, $2, $3, $4, $5)`,
         [fixture.fplId, fixture.gw, fixture.home, fixture.away, fixture.at]
       );
@@ -1173,7 +1173,7 @@ describe("opening the FPL track for a Gameweek", () => {
     // other Fixture is in Gameweek 6, so Gameweek 2 is a Blank for it and the
     // section has one club fewer rather than one row of nothing.
     await client.query(
-      "update fixtures set unscheduled = true where fpl_id = 103"
+      "update fixtures set unscheduled = true where fixture_id = 103"
     );
     await seedStandingManagerState();
     await play({ responses: [STAND_PAT] });
@@ -1212,7 +1212,7 @@ describe("opening the FPL track for a Gameweek", () => {
     await client.query(
       `update fixtures
           set gw = 6, kickoff_at = '2026-10-11T14:00:00Z', unscheduled = false
-        where fpl_id = 103`
+        where fixture_id = 103`
     );
     await seedStandingManagerState();
     await play({ responses: [STAND_PAT] });
@@ -1305,7 +1305,7 @@ describe("opening the FPL track for a Gameweek", () => {
     // when it has been scheduled, so neither may reach it.
     await client.query(
       `insert into fixtures (
-         season, fpl_id, gw, home_team, away_team, kickoff_at
+         season, fixture_id, gw, home_team, away_team, kickoff_at
        ) values ('2026-27', 201, 3, 'Sunderland', 'Leeds', $1)`,
       ["2026-09-19T16:30:00Z"]
     );

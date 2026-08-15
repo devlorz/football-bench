@@ -32,7 +32,7 @@ export interface ReplayMatchExhibitionOptions {
 }
 
 interface ReplayedFixture {
-  fpl_id: number;
+  fixture_id: number;
   context_id: number;
   context_body: string;
 }
@@ -122,13 +122,13 @@ async function remainingFixtures(
   exhibitionModelId: string
 ): Promise<ReplayedFixture[]> {
   const remaining = await database.query<ReplayedFixture>(
-    `select f.fpl_id, c.id as context_id, c.body as context_body
+    `select f.fixture_id, c.id as context_id, c.body as context_body
        from fixtures f
        join contexts c
          on c.season = f.season
         and c.track = 'match'
         and c.gw = $2
-        and c.fpl_id = f.fpl_id
+        and c.fixture_id = f.fixture_id
       where f.season = $1
         and f.locked_in_gw = $2
         and f.result is not null
@@ -137,7 +137,7 @@ async function remainingFixtures(
             from predictions p
            where p.model_id = $3
              and p.season = f.season
-             and p.fpl_id = f.fpl_id
+             and p.fixture_id = f.fixture_id
         )
         and not exists (
           select 1
@@ -145,13 +145,13 @@ async function remainingFixtures(
            where a.model_id = $3
              and a.season = f.season
              and a.track = 'match'
-             and a.fpl_id = f.fpl_id
+             and a.fixture_id = f.fixture_id
              and (
                a.attempt_no = $4
                or not (a.error_kind = any($5))
              )
         )
-      order by f.fpl_id`,
+      order by f.fixture_id`,
     [
       season,
       gameweek,
@@ -206,7 +206,7 @@ async function replayCoveredGameweeks({
       provider: exhibition.provider,
       quantization: exhibition.quantization,
       role: exhibition.role,
-      fpl_id: fixture.fpl_id,
+      fixture_id: fixture.fixture_id,
       context: { id: fixture.context_id, body: fixture.context_body }
     }));
     await attemptMatchCalls({

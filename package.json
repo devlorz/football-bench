@@ -6,6 +6,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "db:migrate": "tsx src/cli/migrate.ts",
+    "db:rehearse": "tsx src/cli/migrate-rehearse.ts",
     "dry-run": "tsx src/cli/dry-run.ts",
     "fetch": "tsx src/cli/fetch.ts",
     "fetch:history": "tsx src/cli/fetch-history.ts",

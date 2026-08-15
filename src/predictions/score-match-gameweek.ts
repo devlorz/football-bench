@@ -490,7 +490,7 @@ const meanOf = (
 
 interface PredictedRow {
   gw: number;
-  fpl_id: number;
+  fixture_id: number;
   model_id: string;
   probs: Probs;
   pred_home: number;
@@ -515,12 +515,12 @@ async function predictedFixtures(
   season: string
 ): Promise<Map<string, PredictedFixture[]>> {
   const rows = await database.query<PredictedRow>(
-    `select f.locked_in_gw as gw, f.fpl_id, p.model_id, p.probs, p.pred_home,
+    `select f.locked_in_gw as gw, f.fixture_id, p.model_id, p.probs, p.pred_home,
             p.pred_away, p.attempts_used as repairs, f.result
        from fixtures f
-       join predictions p on p.season = f.season and p.fpl_id = f.fpl_id
+       join predictions p on p.season = f.season and p.fixture_id = f.fixture_id
       where f.season = $1 and f.locked_in_gw is not null
-      order by f.locked_in_gw, f.fpl_id, p.model_id`,
+      order by f.locked_in_gw, f.fixture_id, p.model_id`,
     [season]
   );
 
@@ -530,7 +530,7 @@ async function predictedFixtures(
     const result = row.result;
     const predicted: PredictedFixture = {
       gw: row.gw,
-      fplId: row.fpl_id,
+      fplId: row.fixture_id,
       predicted: [row.pred_home, row.pred_away],
       probs: row.probs,
       likeliest,
@@ -604,7 +604,7 @@ async function storeMetric(
     `insert into scores (
        model_id, season, gw, track, metric, value, n, detail, scored_at
      ) values ($1, $2, $3, 'match', $4, $5, $6, $7, $8)
-     on conflict (model_id, season, gw, track, metric)
+     on conflict (model_id, competition, season, gw, track, metric)
      do update set value = excluded.value, n = excluded.n,
                    detail = excluded.detail, scored_at = excluded.scored_at
               where scores.value is distinct from excluded.value
@@ -908,23 +908,23 @@ async function lockedFixtures(
 ): Promise<LockedFixture[]> {
   const rows = await database.query<{
     gw: number;
-    fpl_id: number;
+    fixture_id: number;
     home_team: string;
     away_team: string;
     kickoff_at: Date;
     result: FixtureResult | null;
   }>(
-    `select locked_in_gw as gw, fpl_id, home_team, away_team, kickoff_at,
+    `select locked_in_gw as gw, fixture_id, home_team, away_team, kickoff_at,
             result
        from fixtures
       where season = $1 and locked_in_gw is not null
-      order by locked_in_gw, fpl_id`,
+      order by locked_in_gw, fixture_id`,
     [season]
   );
   return rows.rows.map(
-    ({ gw, fpl_id, home_team, away_team, kickoff_at, result }) => ({
+    ({ gw, fixture_id, home_team, away_team, kickoff_at, result }) => ({
       gw,
-      fplId: fpl_id,
+      fplId: fixture_id,
       homeTeam: home_team,
       awayTeam: away_team,
       kickoffAt: kickoff_at,
@@ -1217,20 +1217,20 @@ async function attemptsByFixture(
 ): Promise<Map<string, AttemptSummary>> {
   const rows = await database.query<{
     model_id: string;
-    fpl_id: number;
+    fixture_id: number;
     attempts: number;
     cause: GapCause | null;
   }>(
-    `select model_id, fpl_id, count(*)::int as attempts,
+    `select model_id, fixture_id, count(*)::int as attempts,
             (array_agg(error_kind order by attempted_at desc, id desc)
                filter (where not ok))[1] as cause
        from attempts
-      where season = $1 and track = 'match' and fpl_id is not null
-      group by model_id, fpl_id`,
+      where season = $1 and track = 'match' and fixture_id is not null
+      group by model_id, fixture_id`,
     [season]
   );
   return new Map(rows.rows.map((row) => [
-    attemptKey(row.model_id, row.fpl_id),
+    attemptKey(row.model_id, row.fixture_id),
     { attempts: row.attempts, cause: row.cause }
   ]));
 }

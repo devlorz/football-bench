@@ -26,7 +26,7 @@ describe("the seeded FPL Season", () => {
   beforeEach(async () => {
     await client.query(
       `truncate scores, contexts, predictions, fixtures, models, gameweeks,
-       historical_matches
+       historical_matches, competitions
        restart identity cascade`
     );
   });

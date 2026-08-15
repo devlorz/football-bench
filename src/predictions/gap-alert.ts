@@ -109,7 +109,7 @@ export function formatGapAlertAnnotation(alert: GapAlert): string {
 interface GapRow {
   entrant_id: string;
   entrant_name: string;
-  fpl_id: number;
+  fixture_id: number;
   home_team: string;
   away_team: string;
   cause: GapCause | null;
@@ -126,7 +126,7 @@ export async function readGapAlert(
     `select
        m.id as entrant_id,
        m.name as entrant_name,
-       f.fpl_id,
+       f.fixture_id,
        f.home_team,
        f.away_team,
        latest_attempt.error_kind as cause,
@@ -143,7 +143,7 @@ export async function readGapAlert(
           and a.season = f.season
           and a.gw = g.gw
           and a.track = 'match'
-          and a.fpl_id = f.fpl_id
+          and a.fixture_id = f.fixture_id
           and not a.ok
         order by a.attempted_at desc, a.id desc
         limit 1
@@ -157,9 +157,9 @@ export async function readGapAlert(
            from predictions p
           where p.model_id = m.id
             and p.season = f.season
-            and p.fpl_id = f.fpl_id
+            and p.fixture_id = f.fixture_id
        )
-     order by m.id, f.fpl_id`,
+     order by m.id, f.fixture_id`,
     // A Gap is a Fixture a Match Entrant produced no Prediction for, and an
     // FPL seat is not a Match Entrant. Selecting on the role alone reported
     // every FPL seat as a Gap on every Fixture, and one with no recorded cause
@@ -175,7 +175,7 @@ export async function readGapAlert(
   if (unexplained !== undefined) {
     throw new Error(
       `Gap for Entrant ${unexplained.entrant_id} and Fixture `
-      + `${unexplained.fpl_id} has no recorded cause`
+      + `${unexplained.fixture_id} has no recorded cause`
     );
   }
   const observedAt = now();
@@ -196,7 +196,7 @@ export async function readGapAlert(
       return {
         entrantId: row.entrant_id,
         entrantName: row.entrant_name,
-        fixtureId: row.fpl_id,
+        fixtureId: row.fixture_id,
         fixture: `${row.home_team} v ${row.away_team}`,
         cause: row.cause
       };

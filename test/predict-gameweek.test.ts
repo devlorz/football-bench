@@ -45,7 +45,7 @@ describe("predicting a Gameweek", () => {
       `insert into gameweeks (season, gw, deadline_at)
        values ('2026-27', 1, '2026-08-21T17:30:00Z');
        insert into fixtures (
-         season, fpl_id, gw, home_team, away_team, kickoff_at
+         season, fixture_id, gw, home_team, away_team, kickoff_at
        ) values (
          '2026-27', 1, 1, 'Arsenal', 'Coventry City',
          '2026-08-21T19:00:00Z'
@@ -430,7 +430,7 @@ describe("predicting a Gameweek", () => {
 
     const stored = await client.query(
       `select
-         c.season, c.gw, c.track, c.fpl_id, c.body, c.hash,
+         c.season, c.gw, c.track, c.fixture_id, c.body, c.hash,
          p.model_id, p.probs, p.pred_home, p.pred_away, p.rationale,
          p.attempts_used, p.predicted_at,
          f.locked_in_gw
@@ -438,13 +438,13 @@ describe("predicting a Gameweek", () => {
        join contexts c on c.id = p.context_id
        join fixtures f
          on f.season = p.season
-        and f.fpl_id = p.fpl_id`
+        and f.fixture_id = p.fixture_id`
     );
     expect(stored.rows).toEqual([{
       season: "2026-27",
       gw: 1,
       track: "match",
-      fpl_id: 1,
+      fixture_id: 1,
       body: context,
       hash: "77fd6b71e7c1efa3d6026d001997729e6970581e0afb9d74e5afbcdc755ea479",
       model_id: "entrant/v1",
@@ -459,7 +459,7 @@ describe("predicting a Gameweek", () => {
 
     const attempts = await client.query(
       `select
-         model_id, season, gw, track, fpl_id, attempt_no, ok, error_kind,
+         model_id, season, gw, track, fixture_id, attempt_no, ok, error_kind,
          resolved_provider, resolved_model, latency_ms, tokens_in, tokens_out,
          raw_response, trigger, attempted_at
        from attempts`
@@ -469,7 +469,7 @@ describe("predicting a Gameweek", () => {
       season: "2026-27",
       gw: 1,
       track: "match",
-      fpl_id: 1,
+      fixture_id: 1,
       attempt_no: 0,
       ok: true,
       error_kind: null,
@@ -521,7 +521,7 @@ describe("predicting a Gameweek", () => {
        values ('2026-27', 2, '2026-08-28T17:30:00Z');
        update fixtures
           set locked_in_gw = 2
-        where season = '2026-27' and fpl_id = 1`
+        where season = '2026-27' and fixture_id = 1`
     );
     let calls = 0;
 
@@ -555,7 +555,7 @@ describe("predicting a Gameweek", () => {
 
     const stored = await client.query(
       `select
-         p.fpl_id,
+         p.fixture_id,
          c.gw as context_gw,
          a.gw as attempt_gw,
          f.gw as scheduled_gw,
@@ -565,15 +565,15 @@ describe("predicting a Gameweek", () => {
        join attempts a
          on a.model_id = p.model_id
         and a.season = p.season
-        and a.fpl_id = p.fpl_id
+        and a.fixture_id = p.fixture_id
        join fixtures f
          on f.season = p.season
-        and f.fpl_id = p.fpl_id`
+        and f.fixture_id = p.fixture_id`
     );
     expect({ calls, rows: stored.rows }).toEqual({
       calls: 1,
       rows: [{
-        fpl_id: 1,
+        fixture_id: 1,
         context_gw: 2,
         attempt_gw: 2,
         scheduled_gw: 1,
@@ -591,21 +591,21 @@ describe("predicting a Gameweek", () => {
               locked_in_gw = 1,
               deferred = true,
               kickoff_at = '2026-08-29T14:00:00Z'
-        where season = '2026-27' and fpl_id = 1;
+        where season = '2026-27' and fixture_id = 1;
        insert into contexts (
-         season, gw, track, fpl_id, hash, body
+         season, gw, track, fixture_id, hash, body
        ) values (
          '2026-27', 1, 'match', 1, 'context-hash', 'context'
        );
        insert into predictions (
-         model_id, season, fpl_id, probs, pred_home, pred_away,
+         model_id, season, fixture_id, probs, pred_home, pred_away,
          context_id, attempts_used, predicted_at
        )
        select
          'entrant/v1', '2026-27', 1, '{"H":0.6,"D":0.25,"A":0.15}',
          2, 1, id, 0, '2026-08-21T17:29:00Z'
        from contexts
-       where season = '2026-27' and gw = 1 and fpl_id = 1`
+       where season = '2026-27' and gw = 1 and fixture_id = 1`
     );
     let calls = 0;
 
@@ -623,7 +623,7 @@ describe("predicting a Gameweek", () => {
     });
 
     const predictions = await client.query(
-      "select count(*)::int as count from predictions where fpl_id = 1"
+      "select count(*)::int as count from predictions where fixture_id = 1"
     );
     expect({ calls, predictions: predictions.rows[0]?.count }).toEqual({
       calls: 0,
@@ -661,7 +661,7 @@ describe("predicting a Gameweek", () => {
 
   test("a Manual fill closes a Gap with the stored Match context", async () => {
     await client.query(
-      `insert into contexts (season, gw, track, fpl_id, hash, body)
+      `insert into contexts (season, gw, track, fixture_id, hash, body)
        values (
          '2026-27', 1, 'match', 1, 'stored-context-hash',
          'Stored main-run context.'
@@ -711,7 +711,7 @@ describe("predicting a Gameweek", () => {
          join attempts a
            on a.model_id = p.model_id
           and a.season = p.season
-          and a.fpl_id = p.fpl_id`
+          and a.fixture_id = p.fixture_id`
     );
     expect(stored.rows).toEqual([{
       rationale: "Manual Gap fill.",
@@ -744,7 +744,7 @@ describe("predicting a Gameweek", () => {
   test("runs every Entrant concurrently while isolating a failed Entrant", async () => {
     await client.query(
       `insert into fixtures (
-         season, fpl_id, gw, home_team, away_team, kickoff_at
+         season, fixture_id, gw, home_team, away_team, kickoff_at
        ) values (
          '2026-27', 2, 1, 'Leeds United', 'Everton',
          '2026-08-22T14:00:00Z'
@@ -855,15 +855,15 @@ describe("predicting a Gameweek", () => {
 
     const predictions = await client.query(
       `select
-         p.fpl_id, count(*)::int as prediction_count,
+         p.fixture_id, count(*)::int as prediction_count,
          count(distinct p.context_id)::int as context_count
          from predictions p
-        group by p.fpl_id
-        order by p.fpl_id`
+        group by p.fixture_id
+        order by p.fixture_id`
     );
     expect(predictions.rows).toEqual([
-      { fpl_id: 1, prediction_count: 8, context_count: 1 },
-      { fpl_id: 2, prediction_count: 8, context_count: 1 }
+      { fixture_id: 1, prediction_count: 8, context_count: 1 },
+      { fixture_id: 2, prediction_count: 8, context_count: 1 }
     ]);
 
     const attempts = await client.query(
@@ -917,10 +917,10 @@ describe("predicting a Gameweek", () => {
     });
 
     const prediction = await client.query(
-      "select fpl_id, rationale from predictions"
+      "select fixture_id, rationale from predictions"
     );
     expect(prediction.rows).toEqual([{
-      fpl_id: 1,
+      fixture_id: 1,
       rationale: "Valid without telemetry."
     }]);
 
@@ -987,7 +987,7 @@ describe("predicting a Gameweek", () => {
 
   test("a Manual fill at the exact deadline writes nothing and is logged", async () => {
     await client.query(
-      `insert into contexts (season, gw, track, fpl_id, hash, body)
+      `insert into contexts (season, gw, track, fixture_id, hash, body)
        values (
          '2026-27', 1, 'match', 1, 'stored-context-hash',
          'Stored before the Lock.'
@@ -1025,7 +1025,7 @@ describe("predicting a Gameweek", () => {
     const stored = await client.query(
       `select
          (select count(*)::int from predictions) as predictions,
-         (select locked_in_gw from fixtures where fpl_id = 1) as locked_in_gw`
+         (select locked_in_gw from fixtures where fixture_id = 1) as locked_in_gw`
     );
     expect(stored.rows).toEqual([{ predictions: 0, locked_in_gw: 1 }]);
 
@@ -1134,7 +1134,7 @@ describe("predicting a Gameweek", () => {
     const stored = await client.query(
       `select
          (select count(*)::int from predictions) as predictions,
-         (select locked_in_gw from fixtures where fpl_id = 1) as locked_in_gw`
+         (select locked_in_gw from fixtures where fixture_id = 1) as locked_in_gw`
     );
     expect(stored.rows).toEqual([{ predictions: 0, locked_in_gw: 1 }]);
 
@@ -1492,7 +1492,7 @@ describe("predicting a Gameweek", () => {
     const stored = await client.query(
       `select
          (select count(*)::int from predictions) as predictions,
-         (select locked_in_gw from fixtures where fpl_id = 1) as locked_in_gw`
+         (select locked_in_gw from fixtures where fixture_id = 1) as locked_in_gw`
     );
     expect(stored.rows).toEqual([{ predictions: 0, locked_in_gw: 1 }]);
 
@@ -1590,7 +1590,7 @@ describe("predicting a Gameweek", () => {
   test("logs a thrown HTTP failure and continues to every remaining Fixture", async () => {
     await client.query(
       `insert into fixtures (
-         season, fpl_id, gw, home_team, away_team, kickoff_at
+         season, fixture_id, gw, home_team, away_team, kickoff_at
        ) values (
          '2026-27', 2, 1, 'Leeds United', 'Everton',
          '2026-08-22T14:00:00Z'
@@ -1632,27 +1632,27 @@ describe("predicting a Gameweek", () => {
     });
 
     const predictions = await client.query(
-      "select fpl_id from predictions order by fpl_id"
+      "select fixture_id from predictions order by fixture_id"
     );
     expect({ calls, rows: predictions.rows }).toEqual({
       calls: 2,
-      rows: [{ fpl_id: 2 }]
+      rows: [{ fixture_id: 2 }]
     });
 
     const attempts = await client.query(
-      `select fpl_id, ok, error_kind, error_detail
+      `select fixture_id, ok, error_kind, error_detail
          from attempts
-        order by fpl_id`
+        order by fixture_id`
     );
     expect(attempts.rows).toEqual([
       {
-        fpl_id: 1,
+        fixture_id: 1,
         ok: false,
         error_kind: "provider",
         error_detail: "OpenRouter call failed: connection reset."
       },
       {
-        fpl_id: 2,
+        fixture_id: 2,
         ok: true,
         error_kind: null,
         error_detail: null
@@ -1660,11 +1660,11 @@ describe("predicting a Gameweek", () => {
     ]);
 
     const locks = await client.query(
-      "select fpl_id, locked_in_gw from fixtures order by fpl_id"
+      "select fixture_id, locked_in_gw from fixtures order by fixture_id"
     );
     expect(locks.rows).toEqual([
-      { fpl_id: 1, locked_in_gw: 1 },
-      { fpl_id: 2, locked_in_gw: 1 }
+      { fixture_id: 1, locked_in_gw: 1 },
+      { fixture_id: 2, locked_in_gw: 1 }
     ]);
   });
 
@@ -1737,7 +1737,7 @@ describe("predicting a Gameweek", () => {
   test("aborts before making more calls when the attempt ledger cannot persist", async () => {
     await client.query(
       `insert into fixtures (
-         season, fpl_id, gw, home_team, away_team, kickoff_at
+         season, fixture_id, gw, home_team, away_team, kickoff_at
        ) values (
          '2026-27', 2, 1, 'Leeds United', 'Everton',
          '2026-08-22T14:00:00Z'
@@ -1747,7 +1747,7 @@ describe("predicting a Gameweek", () => {
        language plpgsql
        as $$
        begin
-         if new.fpl_id = 1 then
+         if new.fixture_id = 1 then
            raise exception 'simulated attempt persistence failure';
          end if;
          return new;

@@ -59,7 +59,7 @@ describe("scheduled Prediction runs", () => {
     });
     await client.query(
       `delete from fixtures
-        where season = '2026-27' and fpl_id <> 1;
+        where season = '2026-27' and fixture_id <> 1;
        insert into models (
          id, name, base_model, provider, prompt_version, role
        ) values (

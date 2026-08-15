@@ -209,7 +209,7 @@ async function callBaseModel(options: {
   }
   const validation = validatePrediction(
     parsed.content,
-    fixture.fpl_id
+    fixture.fixture_id
   );
 
   if (!validation.ok) {
@@ -260,9 +260,9 @@ export async function preflightBaseModels({
   }
 
   const fixtureResult = await database.query<FixtureRow>(
-    `select fpl_id, gw, home_team, away_team, kickoff_at
+    `select fixture_id, gw, home_team, away_team, kickoff_at
        from fixtures
-      where season = $1 and fpl_id = $2`,
+      where season = $1 and fixture_id = $2`,
     [season, fixtureId]
   );
   const fixture = fixtureResult.rows[0];
@@ -325,7 +325,7 @@ export async function preflightBaseModels({
     ),
     fixture: {
       season,
-      fplId: fixture.fpl_id,
+      fplId: fixture.fixture_id,
       gameweek: fixture.gw,
       homeTeam: fixture.home_team,
       awayTeam: fixture.away_team,

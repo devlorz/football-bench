@@ -129,7 +129,7 @@ export function judgeGameweekResponse(
  * about the three responses that may have preceded it — so what is stored here
  * is what the Repair count and the violation profile are later read from.
  *
- * FPL rows carry no `fpl_id`: a Gameweek action is one Gameweek's, not one
+ * FPL rows carry no `fixture_id`: a Gameweek action is one Gameweek's, not one
  * Fixture's, which is the distinction the column exists to draw.
  *
  * `failure` is null only for an action that was legal and in time. Everything

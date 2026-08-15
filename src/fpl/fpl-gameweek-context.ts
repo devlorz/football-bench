@@ -194,7 +194,7 @@ async function schedule(
     `select gw, home_team, away_team, kickoff_at
        from fixtures
       where season = $1 and gw between $2 and $3 and not unscheduled
-      order by gw, kickoff_at, fpl_id`,
+      order by gw, kickoff_at, fixture_id`,
     [season, gameweek, gameweek + SCHEDULE_GAMEWEEKS - 1]
   );
   return ahead.rows.map((row) => ({
@@ -312,7 +312,8 @@ export async function storeFplContext(
     `insert into contexts (season, gw, track, model_id, hash, body)
      values ($1, $2, 'fpl', $3, $4, $5)
      on conflict (
-       season, gw, track, (coalesce(fpl_id, -1)), (coalesce(model_id, ''))
+       competition, season, gw, track,
+       (coalesce(fixture_id, -1)), (coalesce(model_id, ''))
      ) do nothing
      returning body`,
     [

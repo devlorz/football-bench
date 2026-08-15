@@ -32,7 +32,7 @@ describe("the seeded Season and its three stopping points", () => {
   beforeEach(async () => {
     await client.query(
       `truncate scores, contexts, predictions, fixtures, models, gameweeks,
-       historical_matches
+       historical_matches, competitions
        restart identity cascade`
     );
   });
@@ -71,6 +71,16 @@ describe("the seeded Season and its three stopping points", () => {
 
     expect(await countOf("select count(*) from predictions")).toBe(0);
     expect(await countOf("select count(*) from scores")).toBe(0);
+
+    // And the Competition those Fixtures belong to is active. The scheduler
+    // and the fetch walk this table (ADR-0035): a seeded Season missing from
+    // it is one where every job correctly finds nothing to do.
+    const competitions = await client.query(
+      "select competition, season from competitions"
+    );
+    expect(competitions.rows).toEqual([
+      { competition: "PL", season: SEASON }
+    ]);
   });
 
   test("the roster carries the Base Model Classes of ADR-0014", async () => {
@@ -118,7 +128,7 @@ describe("the seeded Season and its three stopping points", () => {
                 count(distinct p.model_id) as predictions
            from fixtures f
            left join predictions p
-             on p.season = f.season and p.fpl_id = f.fpl_id
+             on p.season = f.season and p.fixture_id = f.fixture_id
           where f.season = $1
           group by f.gw order by f.gw`,
         [SEASON]
@@ -154,7 +164,7 @@ describe("the seeded Season and its three stopping points", () => {
         `select (select count(*) from contexts
                   where season = $1 and gw = 15 and track = 'match') as contexts,
                 (select count(*) from predictions p join fixtures f
-                    on f.season = p.season and f.fpl_id = p.fpl_id
+                    on f.season = p.season and f.fixture_id = p.fixture_id
                   where p.season = $1 and f.locked_in_gw = 15) as predictions,
                 (select count(f.result) from fixtures f
                   where f.season = $1 and f.gw = 15) as settled`,
@@ -215,7 +225,7 @@ describe("the seeded Season and its three stopping points", () => {
         `select max(f.updated_at) < $2 and $2 < min(p.predicted_at) as ok
            from fixtures f, predictions p
           where f.season = $1 and f.result is not null
-            and p.season = $1 and p.fpl_id > 140`,
+            and p.season = $1 and p.fixture_id > 140`,
         [SEASON, SEED_SCORED_AT]
       );
       expect(stamps.rows[0]?.ok).toBe(true);
@@ -341,7 +351,7 @@ describe("the seeded Season and its three stopping points", () => {
     // writes has to come out the same on the next run.
     expect(await countOf(
       `select count(*) from predictions p
-         join fixtures f on f.season = p.season and f.fpl_id = p.fpl_id
+         join fixtures f on f.season = p.season and f.fixture_id = p.fixture_id
          join gameweeks g on g.season = f.season and g.gw = f.locked_in_gw
         where p.predicted_at <> g.deadline_at - interval '6 hours'`
     )).toBe(0);

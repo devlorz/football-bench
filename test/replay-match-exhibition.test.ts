@@ -26,7 +26,7 @@ async function storeContext(
   fixtureId: number
 ): Promise<void> {
   await database.query(
-    `insert into contexts (season, gw, track, fpl_id, hash, body)
+    `insert into contexts (season, gw, track, fixture_id, hash, body)
      values ('2026-27', $1, 'match', $2, $3, $4)`,
     [gameweek, fixtureId, sha256(storedBody(fixtureId)), storedBody(fixtureId)]
   );
@@ -91,7 +91,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
          ('2026-27', 1, '2026-08-21T17:30:00Z'),
          ('2026-27', 2, '2026-08-28T17:30:00Z');
        insert into fixtures (
-         season, fpl_id, gw, locked_in_gw, home_team, away_team, kickoff_at,
+         season, fixture_id, gw, locked_in_gw, home_team, away_team, kickoff_at,
          result
        ) values
          (
@@ -151,34 +151,34 @@ describe("replaying the Match track as an Exhibition Run", () => {
     expect(
       (await client.query(
         `select
-           (select count(*) from predictions where fpl_id = 3) as predictions,
-           (select count(*) from attempts where fpl_id = 3) as attempts`
+           (select count(*) from predictions where fixture_id = 3) as predictions,
+           (select count(*) from attempts where fixture_id = 3) as attempts`
       )).rows
     ).toEqual([{ predictions: "0", attempts: "0" }]);
     const hashes = await client.query(
-      `select c.fpl_id, c.hash
+      `select c.fixture_id, c.hash
          from contexts c
          join predictions p on p.context_id = c.id
         where p.model_id = 'exhibition/late'
-        order by c.fpl_id`
+        order by c.fixture_id`
     );
     expect(hashes.rows).toEqual([
-      { fpl_id: 1, hash: sha256(sent.get(1)!) },
-      { fpl_id: 2, hash: sha256(sent.get(2)!) }
+      { fixture_id: 1, hash: sha256(sent.get(1)!) },
+      { fixture_id: 2, hash: sha256(sent.get(2)!) }
     ]);
 
     const predictions = await client.query(
-      `select p.fpl_id, p.context_id, p.pred_home, p.pred_away,
+      `select p.fixture_id, p.context_id, p.pred_home, p.pred_away,
               p.attempts_used, p.predicted_at, c.id as stored_context_id
          from predictions p
          join contexts c
-           on c.season = p.season and c.track = 'match' and c.fpl_id = p.fpl_id
+           on c.season = p.season and c.track = 'match' and c.fixture_id = p.fixture_id
         where p.model_id = 'exhibition/late'
-        order by p.fpl_id`
+        order by p.fixture_id`
     );
     expect(predictions.rows).toEqual([
       {
-        fpl_id: 1,
+        fixture_id: 1,
         context_id: "1",
         stored_context_id: "1",
         pred_home: 2,
@@ -187,7 +187,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
         predicted_at: RAN_AT
       },
       {
-        fpl_id: 2,
+        fixture_id: 2,
         context_id: "2",
         stored_context_id: "2",
         pred_home: 2,
@@ -297,15 +297,15 @@ describe("replaying the Match track as an Exhibition Run", () => {
     });
 
     const attempts = await client.query(
-      `select fpl_id, gw, track, attempt_no, ok, error_kind, trigger,
+      `select fixture_id, gw, track, attempt_no, ok, error_kind, trigger,
               resolved_provider, resolved_model, latency_ms, tokens_in,
               tokens_out, raw_response is not null as archived, attempted_at
          from attempts
         where model_id = 'exhibition/late'
-        order by fpl_id`
+        order by fixture_id`
     );
     expect(attempts.rows).toEqual([1, 2].map((fplId) => ({
-      fpl_id: fplId,
+      fixture_id: fplId,
       gw: 1,
       track: "match",
       attempt_no: 0,
@@ -349,21 +349,21 @@ describe("replaying the Match track as an Exhibition Run", () => {
     });
 
     const attempts = await client.query(
-      `select fpl_id, attempt_no, ok, error_kind
+      `select fixture_id, attempt_no, ok, error_kind
          from attempts
         where model_id = 'exhibition/late'
-        order by fpl_id, attempt_no`
+        order by fixture_id, attempt_no`
     );
     // No attempt is refused for arriving after the deadline: an Exhibition Run
     // arrives after every deadline, which is the feature (ADR-0032).
     expect(attempts.rows).toEqual([
-      { fpl_id: 1, attempt_no: 0, ok: false, error_kind: "schema" },
-      { fpl_id: 1, attempt_no: 1, ok: true, error_kind: null },
-      { fpl_id: 2, attempt_no: 0, ok: true, error_kind: null }
+      { fixture_id: 1, attempt_no: 0, ok: false, error_kind: "schema" },
+      { fixture_id: 1, attempt_no: 1, ok: true, error_kind: null },
+      { fixture_id: 2, attempt_no: 0, ok: true, error_kind: null }
     ]);
     const repaired = await client.query(
       `select attempts_used from predictions
-        where model_id = 'exhibition/late' and fpl_id = 1`
+        where model_id = 'exhibition/late' and fixture_id = 1`
     );
     expect(repaired.rows).toEqual([{ attempts_used: 1 }]);
   });
@@ -388,20 +388,20 @@ describe("replaying the Match track as an Exhibition Run", () => {
 
     // The Fixture that failed is a Gap; the one beside it finished regardless.
     const afterFirstRun = await client.query(
-      `select fpl_id from predictions where model_id = 'exhibition/late'`
+      `select fixture_id from predictions where model_id = 'exhibition/late'`
     );
-    expect(afterFirstRun.rows).toEqual([{ fpl_id: 1 }]);
+    expect(afterFirstRun.rows).toEqual([{ fixture_id: 1 }]);
     const gap = await client.query(
       `select attempt_no, ok, error_kind
          from attempts
-        where model_id = 'exhibition/late' and fpl_id = 2`
+        where model_id = 'exhibition/late' and fixture_id = 2`
     );
     expect(gap.rows).toEqual([
       { attempt_no: 0, ok: false, error_kind: "provider" }
     ]);
 
     const ledger = await client.query(
-      `select id, model_id, fpl_id, attempt_no, attempted_at
+      `select id, model_id, fixture_id, attempt_no, attempted_at
          from attempts order by id`
     );
     let secondRunCalls = 0;
@@ -421,7 +421,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
     expect(secondRunCalls).toBe(0);
     expect(
       (await client.query(
-        `select id, model_id, fpl_id, attempt_no, attempted_at
+        `select id, model_id, fixture_id, attempt_no, attempted_at
            from attempts order by id`
       )).rows
     ).toEqual(ledger.rows);
@@ -439,7 +439,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
     // would leave the Exhibition short of a Fixture everyone else has.
     await client.query(
       `insert into fixtures (
-         season, fpl_id, gw, locked_in_gw, home_team, away_team, kickoff_at,
+         season, fixture_id, gw, locked_in_gw, home_team, away_team, kickoff_at,
          deferred, unscheduled, result
        ) values
          (
@@ -475,9 +475,9 @@ describe("replaying the Match track as an Exhibition Run", () => {
     expect(called.sort()).toEqual([1, 2, 5]);
     const unplayed = await client.query(
       `select f.locked_in_gw,
-              (select count(*) from attempts a where a.fpl_id = 4) as attempts
+              (select count(*) from attempts a where a.fixture_id = 4) as attempts
          from fixtures f
-        where f.season = '2026-27' and f.fpl_id = 4`
+        where f.season = '2026-27' and f.fixture_id = 4`
     );
     expect(unplayed.rows).toEqual([{ locked_in_gw: null, attempts: "0" }]);
   });
@@ -485,7 +485,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
   test("asks again where a crash left an ask unfinished", async () => {
     await client.query(
       `insert into attempts (
-         model_id, season, gw, track, fpl_id, attempt_no, ok, error_kind,
+         model_id, season, gw, track, fixture_id, attempt_no, ok, error_kind,
          trigger, attempted_at
        ) values
          (
@@ -520,9 +520,9 @@ describe("replaying the Match track as an Exhibition Run", () => {
     expect(called).toEqual([1]);
     expect(
       (await client.query(
-        `select fpl_id from predictions where model_id = 'exhibition/late'`
+        `select fixture_id from predictions where model_id = 'exhibition/late'`
       )).rows
-    ).toEqual([{ fpl_id: 1 }]);
+    ).toEqual([{ fixture_id: 1 }]);
     // A new ask from the top, with its own Repairs — not a fourth turn of the
     // conversation the crash interrupted, whose assistant turn and failure
     // reason no longer exist anywhere the run can reach. The ledger says so
@@ -531,7 +531,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
       (await client.query(
         `select attempt_no, ok, error_kind
            from attempts
-          where model_id = 'exhibition/late' and fpl_id = 1
+          where model_id = 'exhibition/late' and fixture_id = 1
           order by id`
       )).rows
     ).toEqual([
@@ -543,7 +543,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
   test("leaves a Fixture alone once its Repairs are spent", async () => {
     await client.query(
       `insert into attempts (
-         model_id, season, gw, track, fpl_id, attempt_no, ok, error_kind,
+         model_id, season, gw, track, fixture_id, attempt_no, ok, error_kind,
          trigger, attempted_at
        )
        select 'exhibition/late', '2026-27', 1, 'match', 1, attempt_no, false,
