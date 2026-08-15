@@ -1,7 +1,29 @@
 ---
-import Page from "../layouts/Page.astro";
+import Page from "../../layouts/Page.astro";
+import { NESTED_COMPETITION_ROUTES } from "../../competition-view.js";
+import { matchPromptOf } from "../../../../src/predictions/openrouter-entrant.js";
+
+/**
+ * One Fixtures page per Competition, from the list the read API serves. The
+ * same rest route as the leaderboard's, and for the same reason: `/fixtures` is
+ * the Premier League's until ticket 6 of spec 0017 redirects it, and an empty
+ * segment is the only way one route emits both.
+ */
+export const getStaticPaths = () => NESTED_COMPETITION_ROUTES;
+
+// The Competition's endpoint prefix and its own path, both the route's and
+// spelled once in `competition-view.ts`.
+const { competition, path, api } = Astro.props;
+
+// The league's name has one home, and this page holds no second copy of it.
+const { competitionName } = matchPromptOf(competition);
 ---
-<Page title="Fixtures — Football Bench, match track" current="fixtures">
+<Page
+  title={`${competitionName} fixtures — Football Bench, match track`}
+  current="fixtures"
+  competitionName={competitionName}
+  path={path}
+>
   {/*
     The chrome, the headings and the column headers are in the built HTML.
     Only the Gameweek, the Lock and the Predictions wait on the fetch.
@@ -57,7 +79,9 @@ import Page from "../layouts/Page.astro";
     ))}
   </div>
 
-  <script is:inline>
+  {/* `define:vars` carries this Competition's endpoint, decided at build time,
+      as the leaderboard's script carries its own. */}
+  <script is:inline define:vars={{ fixturesUrl: `${api}/fixtures` }}>
   (() => {
     const $ = (id) => document.getElementById(id);
 
@@ -265,7 +289,7 @@ import Page from "../layouts/Page.astro";
 
     // A relative path: the Worker route claims `/api/*` on this hostname, so
     // nothing is cross-origin and no origin was a build input.
-    fetch("/api/fixtures")
+    fetch(fixturesUrl)
       .then((response) => {
         if (!response.ok) throw new Error(String(response.status));
         return response.json();

@@ -21,10 +21,10 @@ import {
 
 /**
  * Every query below that filters by Season also filters by Competition. The
- * leaderboard takes it from the path (ADR-0039); the Fixtures and Entrant
- * record endpoints still carry the literal `competition = 'PL'` and take it
- * from the path in tickets 2 and 3 of spec 0017, and the two FPL endpoints keep
- * theirs for good — the FPL track is the Premier League by nature.
+ * leaderboard and the Fixtures page take it from the path (ADR-0039); the
+ * Entrant record endpoint still carries the literal `competition = 'PL'` and
+ * takes it from the path in ticket 3 of spec 0017, and the two FPL endpoints
+ * keep theirs for good — the FPL track is the Premier League by nature.
  *
  * A ranking spans one Competition and never two (ADR-0035), and once a second
  * league writes rows, a query that named only the Season would rank the two
@@ -487,9 +487,9 @@ export interface FixtureView {
 }
 
 /**
- * What `/api/fixtures` answers with. Exported because the tests assert on it,
- * and a body they describe for themselves is a body they can go on describing
- * after this one has changed.
+ * What `/api/{code}/fixtures` answers with, for one Competition and never two.
+ * Exported because the tests assert on it, and a body they describe for
+ * themselves is a body they can go on describing after this one has changed.
  */
 export interface FixturesBody {
   season: string;
@@ -512,6 +512,7 @@ export interface FixturesBody {
 async function fixtures(
   query: Query,
   season: string,
+  competition: string,
   now: Date
 ): Promise<Response> {
   // The rule, in one statement: the earliest Gameweek owning a Fixture that is
@@ -539,19 +540,19 @@ async function fixtures(
     `with current as (
        select coalesce(
          (select min(coalesce(locked_in_gw, gw)) from fixtures
-           where competition = 'PL' and season = $1
+           where competition = $2 and season = $1
              and not deferred and result is null),
          (select max(coalesce(locked_in_gw, gw)) from fixtures
-           where competition = 'PL' and season = $1
+           where competition = $2 and season = $1
              and (not deferred or locked_in_gw is not null))
        ) as gw
      )
      select current.gw, gameweeks.deadline_at
        from current
        left join gameweeks
-         on gameweeks.competition = 'PL' and gameweeks.season = $1
+         on gameweeks.competition = $2 and gameweeks.season = $1
         and gameweeks.gw = current.gw`,
-    [season]
+    [season, competition]
   );
   const gw = numberOrNull(current?.gw);
   const deadline = current?.deadline_at == null
@@ -564,19 +565,23 @@ async function fixtures(
   // all, and would read as ten Gaps.
   const rows = await query(
     `select fixture_id, home_team, away_team, kickoff_at from fixtures
-      where competition = 'PL' and season = $1
+      where competition = $3 and season = $1
         and coalesce(locked_in_gw, gw) = $2
         and (not deferred or locked_in_gw is not null)
       order by kickoff_at, fixture_id`,
-    [season, gw]
+    [season, gw, competition]
   );
 
   // The same ten in the same order on every Fixture, which is what makes a
   // Gap a slot rather than a shorter list.
+  // The Competition's own frozen Prompt Version, for the reason the
+  // leaderboard's roster join reads one: each Competition seats its own ten
+  // under one of its own (ADR-0038), so the constant would list every league's
+  // Fixtures against the Premier League's Entrants.
   const roster = await query(
     `select id, name from models
       where role = 'entrant' and prompt_version = $1 order by id`,
-    [MATCH_PROMPT_VERSION]
+    [matchPromptOf(competition).version]
   );
 
   const predictions = await query(
@@ -587,9 +592,9 @@ async function fixtures(
        join fixtures f
          on f.competition = p.competition and f.season = p.season
         and f.fixture_id = p.fixture_id
-      where p.competition = 'PL' and p.season = $1
+      where p.competition = $3 and p.season = $1
         and coalesce(f.locked_in_gw, f.gw) = $2`,
-    [season, gw]
+    [season, gw, competition]
   );
 
   const byFixtureAndEntrant = new Map<string, SlotPrediction>();
@@ -1512,16 +1517,18 @@ export async function handleDashboardRequest(
   season: string,
   /**
    * Unread by the leaderboard, which is answerable from stored rows alone. It
-   * is here because `/api/fixtures` separates the pre-lock banner from the
-   * committed view by it, and the seam is one function.
+   * is here because the Fixtures endpoint separates the pre-lock banner from
+   * the committed view by it, and the seam is one function.
    */
   now: Date
 ): Promise<Response> {
   const { pathname } = new URL(request.url);
 
-  // `/api/{code}/leaderboard` (ADR-0039), served for `MATCH_PROMPT_COMPETITIONS`
-  // and nothing else -- the same list the build generates its pages from, so a
-  // route and its endpoint cannot disagree about which leagues exist.
+  // `/api/{code}/leaderboard` and `/api/{code}/fixtures` (ADR-0039), served for
+  // the codes in `MATCH_PROMPT_COMPETITIONS` and nothing else -- the same list
+  // the build generates its pages from, so a route and its endpoint cannot
+  // disagree about which leagues exist. One segment answers both endpoints, so
+  // a Competition cannot be served by one of them and 404 on the other.
   //
   // The lower-case spelling and no other. Matching case-insensitively would
   // serve one resource at four URLs, and the edge caches by URL: `/api/PL/` and
@@ -1535,16 +1542,15 @@ export async function handleDashboardRequest(
   const [, api, segment, endpoint, ...rest] = pathname.split("/");
   const competition = MATCH_PROMPT_COMPETITIONS
     .find((code) => code.toLowerCase() === segment);
-  if (
-    api === "api" && competition !== undefined
-    && endpoint === "leaderboard" && rest.length === 0
-  ) {
-    return await leaderboard(query, season, competition);
+  if (api === "api" && competition !== undefined && rest.length === 0) {
+    if (endpoint === "leaderboard") {
+      return await leaderboard(query, season, competition);
+    }
+    if (endpoint === "fixtures") {
+      return await fixtures(query, season, competition, now);
+    }
   }
 
-  if (pathname === "/api/fixtures") {
-    return await fixtures(query, season, now);
-  }
   if (pathname === "/api/entrants") {
     return await entrants(query, season);
   }

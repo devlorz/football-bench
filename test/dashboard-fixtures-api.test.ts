@@ -7,6 +7,7 @@ import {
   handleDashboardRequest, type FixturesBody, type FixtureView, type Query
 } from "../src/dashboard/read-api.js";
 import { argmaxOutcome, outcomeOf } from "../src/fixture-result.js";
+import { matchPromptOf } from "../src/predictions/openrouter-entrant.js";
 
 const { Client } = pg;
 
@@ -29,6 +30,16 @@ const ROSTER = [
   "grok/v1", "kimi/v1", "minimax/v1", "qwen/v1"
 ];
 
+/**
+ * La Liga's one seat and its two Fixtures. The first is the earliest unsettled
+ * Fixture either league holds and is the one La Liga's own page is on; the
+ * second sits on the Gameweek the Premier League's page is on, which is what
+ * makes the listing's filter answerable in that league's direction.
+ */
+const SPANISH_SEAT = "match-pd/claude/v1";
+const SPANISH_FIXTURE = 9_998;
+const SPANISH_LATE_FIXTURE = 9_999;
+
 /** The seed's Gap in the Locked Gameweek, and its one incoherent Prediction. */
 const GAPPED = { entrant: "minimax/v1", fplId: 147 };
 const INCOHERENT = { entrant: "qwen/v1", fplId: 143 };
@@ -48,7 +59,7 @@ function connections() {
 
   const fixtures = async (now = BEFORE_LOCK): Promise<FixturesBody> => {
     const response = await handleDashboardRequest(
-      new Request("https://benchmark.example/api/fixtures"), query, SEASON, now
+      new Request("https://benchmark.example/api/pl/fixtures"), query, SEASON, now
     );
     expect(response.status).toBe(200);
     return await response.json() as FixturesBody;
@@ -75,6 +86,58 @@ describe("the Fixtures endpoint on the design's Season", () => {
 
   beforeAll(async () => {
     await seed(writer, reader, "the design's");
+
+    // A La Liga Gameweek, Fixture and seat beside the Premier League's, for the
+    // reason the leaderboard's suite carries their counterparts: a ranking, and
+    // a page of Fixtures, spans one Competition and never two (ADR-0035), and
+    // until a Season had a second league in it no query could be caught
+    // unioning them.
+    //
+    // Two Fixtures and not one, because the endpoint has two filters on
+    // `competition` and one Fixture cannot bite both. The Gameweek is selected
+    // as the earliest owning an unsettled Fixture, so a Gameweek *later* than
+    // the Premier League's is invisible to it and to the listing under it: a
+    // seed of one late Fixture proves the separation in La Liga's direction
+    // alone, and leaves the Premier League's answer identical with the filter
+    // dropped.
+    //
+    // So: one at Gameweek 5, earlier than every unsettled Premier League
+    // Fixture, which a Gameweek selection missing `competition` prefers -- it
+    // answers the Premier League with Gameweek 5. And one at Gameweek 15, the
+    // Gameweek the Premier League's own page is on, which a listing missing
+    // `competition` puts on that page beside its ten. Each bites one filter
+    // with the other intact.
+    //
+    // The seat carries the same `entrant` role as the nine, told apart by the
+    // Prompt Version each Competition freezes its own of (ADR-0038), so a
+    // roster read missing it seats ten.
+    await writer.query(
+      `insert into competitions (competition, season) values ('PD', $1)`,
+      [SEASON]
+    );
+    await writer.query(
+      `insert into gameweeks (competition, season, gw, deadline_at)
+       values ('PD', $1, 5, $2), ('PD', $1, 15, $3)`,
+      [SEASON, "2026-09-12T17:30:00Z", "2026-11-20T17:30:00Z"]
+    );
+    await writer.query(
+      `insert into fixtures (
+         competition, season, fixture_id, gw, home_team, away_team, kickoff_at
+       ) values ('PD', $1, $2, 5, 'Real Betis', 'Sevilla', $4),
+                ('PD', $1, $3, 15, 'Girona', 'Osasuna', $5)`,
+      [
+        SEASON, SPANISH_FIXTURE, SPANISH_LATE_FIXTURE,
+        "2026-09-13T20:00:00Z", "2026-11-21T20:00:00Z"
+      ]
+    );
+    await writer.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values ($2, 'Spanish Claude', 'anthropic/claude-opus-4.5',
+                 'anthropic', $1, 'entrant')`,
+      [matchPromptOf("PD").version, SPANISH_SEAT]
+    );
+
     return async () => {
       await writer.end();
       await reader.end();
@@ -117,12 +180,13 @@ describe("the Fixtures endpoint on the design's Season", () => {
   test("carries the same nine Entrants in the same order on every Fixture",
     async () => {
       // The precondition the assertion below would otherwise assume: the seed
-      // enters an FPL seat beside every Match one, carrying the same `entrant`
-      // role, so nine is the roster filter's answer and not the whole table's.
+      // enters an FPL seat beside every Match one, and this suite enters La
+      // Liga's, all carrying the same `entrant` role — so nine is the roster
+      // filter's answer and not the whole table's.
       const seats = await writer.query(
         "select 1 from models where role = 'entrant'"
       );
-      expect(seats.rowCount).toBe(ROSTER.length * 2);
+      expect(seats.rowCount).toBe(ROSTER.length * 2 + 1);
 
       const body = await fixtures();
 
@@ -208,7 +272,7 @@ describe("the Fixtures endpoint on the design's Season", () => {
 
   test("carries the cache lifetime the Fill run moves on", async () => {
     const response = await handleDashboardRequest(
-      new Request("https://benchmark.example/api/fixtures"),
+      new Request("https://benchmark.example/api/pl/fixtures"),
       query, SEASON, BEFORE_LOCK
     );
 
@@ -219,13 +283,65 @@ describe("the Fixtures endpoint on the design's Season", () => {
     expect(response.headers.get("cache-control")).toBe("no-cache");
   });
 
+  test("keeps each Competition's Fixtures out of the other's response",
+    async () => {
+      const premierLeague = await fixtures();
+      const response = await handleDashboardRequest(
+        new Request("https://benchmark.example/api/pd/fixtures"),
+        query, SEASON, BEFORE_LOCK
+      );
+      expect(response.status).toBe(200);
+      const laLiga = await response.json() as FixturesBody;
+
+      // Neither league's Gameweek, Fixtures or seats reach the other. Asserted
+      // in both directions, because a filter can be missing from one read and
+      // present in the other.
+      //
+      // The Premier League's Gameweek is 15 and not La Liga's earlier 5, and
+      // its list is its own ten and not eleven: La Liga's second Fixture is on
+      // Gameweek 15 too, so a listing that had dropped the filter would show it
+      // here with everything else about the response unchanged.
+      expect(premierLeague.gw).toBe(15);
+      expect(premierLeague.fixtures.map(({ fplId }) => fplId))
+        .toEqual(GW15_FIXTURES);
+      for (const fixture of premierLeague.fixtures) {
+        expect(fixture.slots.map(({ entrant }) => entrant.id))
+          .not.toContain(SPANISH_SEAT);
+      }
+
+      expect(laLiga.gw).toBe(5);
+      expect(laLiga.fixtures.map(({ fplId }) => fplId))
+        .toEqual([SPANISH_FIXTURE]);
+      // The Competition's own frozen Prompt Version seats its own roster: the
+      // Premier League's nine are seated under another and are not entered for
+      // this league at all.
+      expect(laLiga.fixtures[0]?.slots.map(({ entrant }) => entrant.id))
+        .toEqual([SPANISH_SEAT]);
+    });
+
+  test("answers a Competition it does not serve, and the bare path, with a 404",
+    async () => {
+      const get = async (path: string): Promise<number> =>
+        (await handleDashboardRequest(
+          new Request(`https://benchmark.example${path}`),
+          query, SEASON, BEFORE_LOCK
+        )).status;
+
+      // The same terms as the leaderboard's: no default, and one lower-case
+      // spelling, so the edge holds one entry per league rather than four.
+      expect(await get("/api/fixtures")).toBe(404);
+      expect(await get("/api/sa/fixtures")).toBe(404);
+      expect(await get("/api/PL/fixtures")).toBe(404);
+      expect(await get("/api/pl/fixtures/1")).toBe(404);
+    });
+
   test("answers the same body through the Worker's driver", async () => {
     // `probs` is `jsonb` and every timestamp is a `timestamptz`, so this body
     // is full of what the two drivers disagree about.
     const driver = await workerDriver();
     try {
       const response = await handleDashboardRequest(
-        new Request("https://benchmark.example/api/fixtures"),
+        new Request("https://benchmark.example/api/pl/fixtures"),
         driver.query, SEASON, BEFORE_LOCK
       );
 

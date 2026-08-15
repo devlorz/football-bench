@@ -1,37 +1,51 @@
 ---
+import { pageHref, type MatchPage } from "../competition-view.js";
+
 /**
  * The chrome every page of the dashboard wears: the sheets, the theme, the
- * header and the nav. A page supplies its title and which nav link it is.
+ * header and the nav. A page supplies its title, which nav link it is, and the
+ * Competition it belongs to.
  *
- * The three links are the design's three pages. Two of them land in later
- * slices and 404 until they do.
+ * The three links are the design's three pages. Two point at this
+ * Competition's copy of the page; the Entrant record is single-league until
+ * ticket 3 of spec 0017 gives it a page per Competition, so it points where it
+ * has always pointed and is the Premier League's from every league.
  */
 interface Props {
   title: string;
-  current: "leaderboard" | "fixtures" | "entrants";
+  current: MatchPage;
   /**
    * The league the page is reading, named as the packet an Entrant reads names
-   * it — "La Liga" and not the `PD` the record is keyed by. Absent on the two
-   * pages that are still single-league until tickets 2 and 3 of spec 0017.
+   * it — "La Liga" and not the `PD` the record is keyed by. Absent on the page
+   * that is still single-league until ticket 3 of spec 0017.
    */
   competitionName?: string;
   /**
-   * Where the Leaderboard link goes, which is the current Competition's own
-   * leaderboard. A page marked as the current page must be a link to itself,
-   * and `/` sends a reader on La Liga to the Premier League.
+   * The page's own Competition's path, which every link in the nav is built
+   * from. A page marked as the current page must be a link to itself, and a
+   * nav that sent a reader on La Liga to `/fixtures` would cross a league
+   * without saying so.
    */
-  leaderboardHref?: string;
+  path?: string;
 }
 
-const { title, current, competitionName, leaderboardHref = "/" } = Astro.props;
+const { title, current, competitionName, path = "/" } = Astro.props;
 
 const LINKS = [
-  { key: "leaderboard", href: leaderboardHref, label: "Leaderboard" },
-  { key: "fixtures", href: "/fixtures", label: "Fixtures" },
+  { key: "leaderboard", label: "Leaderboard" },
+  { key: "fixtures", label: "Fixtures" },
   // "Entrant record" and not the design's "Model stats": the glossary forbids
   // the second and spec 0011 renames the page.
-  { key: "entrants", href: "/entrants", label: "Entrant record" }
+  { key: "entrants", label: "Entrant record" }
 ] as const;
+
+// The Entrant record has one page for every league until ticket 3 builds it
+// per Competition, so its link is that page and not this Competition's copy of
+// it. Deriving it here would be a link to a page the build does not emit, and
+// spec 0017 puts the redirects last on purpose: no step before them breaks a
+// URL that works today.
+const hrefOf = (page: MatchPage): string =>
+  page === "entrants" ? "/entrants" : pageHref(path, page);
 ---
 <html lang="en">
   <head>
@@ -64,8 +78,11 @@ const LINKS = [
         </span>
       </div>
       <nav class="navlinks" id="navlinks">
-        {LINKS.map(({ key, href, label }) => (
-          <a href={href} aria-current={key === current ? "page" : undefined}>
+        {LINKS.map(({ key, label }) => (
+          <a
+            href={hrefOf(key)}
+            aria-current={key === current ? "page" : undefined}
+          >
             {label}
           </a>
         ))}

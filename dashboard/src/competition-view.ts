@@ -2,6 +2,27 @@ import {
   MATCH_PROMPT_COMPETITIONS
 } from "../../src/predictions/openrouter-entrant.js";
 
+/** The Match track's three pages, which are the three links in the chrome. */
+export type MatchPage = "leaderboard" | "fixtures" | "entrants";
+
+/**
+ * Where one Competition's copy of one page lives, built from that
+ * Competition's route path and nothing else.
+ *
+ * A pure function with a test because it renders perfectly while being wrong:
+ * a link that points at another league's Fixtures is a link, and nothing about
+ * the page it produces says the reader crossed a league. It is the one place a
+ * href is built, so the nav, and the switcher of ticket 4, cannot disagree
+ * about where a page of a Competition is.
+ *
+ * The leaderboard is the Competition's own path rather than a page under it,
+ * which is what makes `/` and `/pl` both work while ticket 6 is outstanding.
+ */
+export const pageHref = (path: string, page: MatchPage): string =>
+  page === "leaderboard"
+    ? path
+    : `${path === "/" ? "" : path}/${page}`;
+
 /** One built page: the path a reader types and everything the page reads by. */
 export interface CompetitionRoute {
   /** The rest route's segment. `undefined` is the empty one, which is `/`. */
@@ -51,3 +72,27 @@ export const COMPETITION_ROUTES: readonly CompetitionRoute[] = [
     };
   })
 ];
+
+/**
+ * The same routes, for a page that lives *under* the Competition's segment —
+ * `/pl/fixtures`, and `/fixtures` for the front door.
+ *
+ * The one difference is the empty segment's spelling, and it is here because
+ * the build says so and not because a document does. Handing this route list
+ * `undefined` for the empty segment — the spelling Astro's own examples use,
+ * and the one the leaderboard's top-level route needs — fails the build
+ * outright: `NoMatchingStaticPathFound` on `/fixtures`, the route pattern
+ * matched and no static path found. The empty string is what builds. Astro's
+ * routing documentation draws no distinction between a top-level rest route
+ * and a nested one, so nothing here is deduced from it; if a later version
+ * accepts `undefined` in both places, this list collapses into the one above
+ * and the build is what will say so.
+ *
+ * The props are the same props, so a nested page reads its Competition, its
+ * path and its endpoint exactly as the leaderboard does.
+ */
+export const NESTED_COMPETITION_ROUTES: readonly CompetitionRoute[] =
+  COMPETITION_ROUTES.map((route) => ({
+    ...route,
+    params: { competition: route.params.competition ?? "" }
+  }));

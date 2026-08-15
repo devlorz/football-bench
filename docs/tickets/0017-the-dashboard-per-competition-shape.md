@@ -51,12 +51,12 @@ committed one.
 
 **Blocked by:** Ticket 1.
 
-- [ ] The Fixtures endpoint takes the Competition from the path on the same terms as the
+- [x] The Fixtures endpoint takes the Competition from the path on the same terms as the
       leaderboard: no default, 404 outside the served list.
-- [ ] A Fixtures page is generated per Competition and names its league from the same single
+- [x] A Fixtures page is generated per Competition and names its league from the same single
       source.
-- [ ] A test proves one Competition's Fixtures cannot appear in another's response.
-- [ ] The endpoint's cache lifetime, which is shorter than the others' for the reason spec
+- [x] A test proves one Competition's Fixtures cannot appear in another's response.
+- [x] The endpoint's cache lifetime, which is shorter than the others' for the reason spec
       0011 records, is unchanged.
 
 ## 3 — The Entrant record is read per Competition, and a selection survives the crossing
