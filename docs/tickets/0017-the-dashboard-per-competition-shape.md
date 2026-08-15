@@ -25,23 +25,23 @@ URL — and `/` still serves what it serves today.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] The read API takes the Competition as the first path segment of the leaderboard
+- [x] The read API takes the Competition as the first path segment of the leaderboard
       endpoint, with no default and no endpoint that omits it. The bare path stops existing.
-- [ ] The Competitions served are the ones with a frozen Prompt Version, the same list the
+- [x] The Competitions served are the ones with a frozen Prompt Version, the same list the
       build reads; a segment outside it answers 404, whether it is a typo or a league nobody
       has frozen a Prompt Version for.
-- [ ] A test seeds a second Competition's scored rows alongside the Premier League's and
+- [x] A test seeds a second Competition's scored rows alongside the Premier League's and
       proves neither reaches the other's response. This is the failure ADR-0035 exists to
       prevent and the reason this ticket is first.
-- [ ] A Leaderboard page is generated per Competition, from the frozen-Prompt-Version list
+- [x] A Leaderboard page is generated per Competition, from the frozen-Prompt-Version list
       read at build time — no database on the build path.
-- [ ] Every place the page names the league — the opening sentence, the page title, the
+- [x] Every place the page names the league — the opening sentence, the page title, the
       header — reads the name from the Prompt's `competitionName` and holds no second copy
       of it.
-- [ ] A pure view module carries the route list, tested without a DOM or a database,
+- [x] A pure view module carries the route list, tested without a DOM or a database,
       following the FPL track's view-module precedent. The build's page set is asserted
       there: a wrong list is a missing page, not an error.
-- [ ] Cache headers on the endpoint are unchanged.
+- [x] Cache headers on the endpoint are unchanged.
 
 ## 2 — The Fixtures page is read per Competition
 

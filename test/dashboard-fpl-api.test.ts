@@ -214,7 +214,7 @@ describe("the FPL leaderboard endpoint", () => {
     async () => {
       const fpl = await leaderboard();
       const match =
-        await (await get("/api/leaderboard")).json() as LeaderboardBody;
+        await (await get("/api/pl/leaderboard")).json() as LeaderboardBody;
 
       // One seed, both rankings, and neither one's Gameweek or roster leaks
       // into the other: the Match track is scored through 14 over nine `/v1`

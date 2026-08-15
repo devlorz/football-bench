@@ -312,7 +312,7 @@ describe("two Competitions through one scheduler and scorer", () => {
     // League leaderboard must report the Premier League's figure with La Liga's
     // divergent rows sitting beside it in the same table.
     const response = await handleDashboardRequest(
-      new Request("https://benchmark.example/api/leaderboard"),
+      new Request("https://benchmark.example/api/pl/leaderboard"),
       async (sql, parameters = []) =>
         (await client.query(sql, [...parameters])).rows,
       SEASON,

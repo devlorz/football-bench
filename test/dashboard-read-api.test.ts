@@ -7,10 +7,14 @@ import {
   handleDashboardRequest, type LeaderboardBody, type Query
 } from "../src/dashboard/read-api.js";
 import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
-import { MATCH_PROMPT_VERSION } from "../src/predictions/openrouter-entrant.js";
+import {
+  MATCH_PROMPT_VERSION, matchPromptOf
+} from "../src/predictions/openrouter-entrant.js";
 import { EXHIBITION_CAVEAT } from "../src/exhibition/recall-caveat.js";
 import {
-  BET_POINTS_QUALIFICATION, MATCH_POINTS_QUALIFICATION, scoreMatchSeason
+  BET_POINTS_QUALIFICATION, BET_POINTS_SEASON_TO_DATE_METRIC,
+  MATCH_POINTS_QUALIFICATION, MATCH_POINTS_SEASON_TO_DATE_METRIC, RPS_METRIC,
+  scoreMatchSeason
 } from "../src/predictions/score-match-gameweek.js";
 
 const { Client } = pg;
@@ -36,6 +40,16 @@ const SETTLED_FIXTURES = 13 * 10 + 9;
 /** The seed's one Gapped Entrant, and the settled Fixture it never answered. */
 const GAPPED = "minimax/v1";
 
+/** La Liga's one seat, seated under La Liga's own frozen Prompt Version. */
+const SPANISH_SEAT = "match-pd/claude/v1";
+
+/**
+ * More Match Points than any Entrant of the seeded Premier League Season, so a
+ * ranking that admitted this row would be topped by it and no assertion about
+ * the order below could pass by accident.
+ */
+const SPANISH_POINTS = 9_999;
+
 describe("the dashboard read API", () => {
   /** Seeds and rebuilds. Nothing reads through this one. */
   const writer = new Client({ connectionString: process.env.DATABASE_URL });
@@ -56,7 +70,7 @@ describe("the dashboard read API", () => {
     );
 
   const leaderboard = async (): Promise<LeaderboardBody> => {
-    const response = await get("/api/leaderboard");
+    const response = await get("/api/pl/leaderboard");
     expect(response.status).toBe(200);
     return await response.json() as LeaderboardBody;
   };
@@ -86,6 +100,51 @@ describe("the dashboard read API", () => {
                812, 15)`,
       [SEASON]
     );
+
+    // A La Liga seat and La Liga rows, present for every test below. This is
+    // the Competition counterpart of the FPL row above and the failure ADR-0035
+    // exists to prevent: a ranking spans one Competition and never two, and
+    // until this Season had a second league in it no query could be caught
+    // unioning them.
+    //
+    // Every filter it tests is load-bearing on its own. The seat carries the
+    // same `entrant` role as the nine and is told apart by its Prompt Version,
+    // which each Competition freezes its own of (ADR-0038) -- so a roster read
+    // missing it seats ten. Its Gameweek is past the last the Premier League
+    // scored, so a read missing `competition` reports a Season six Gameweeks
+    // further on than it is. And its Match Points are the highest figure in
+    // either league, so a ranking that admitted it would be topped by it.
+    await writer.query(
+      `insert into competitions (competition, season) values ('PD', $1)`,
+      [SEASON]
+    );
+    await writer.query(
+      `insert into gameweeks (competition, season, gw, deadline_at)
+       values ('PD', $1, 20, $2)`,
+      [SEASON, "2026-12-19T17:30:00Z"]
+    );
+    await writer.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values ($2, 'Spanish Claude', 'anthropic/claude-opus-4.5',
+                 'anthropic', $1, 'entrant')`,
+      [matchPromptOf("PD").version, SPANISH_SEAT]
+    );
+    for (const [metric, value, n] of [
+      [RPS_METRIC, 0.18, 10],
+      [MATCH_POINTS_SEASON_TO_DATE_METRIC, SPANISH_POINTS, 10],
+      [BET_POINTS_SEASON_TO_DATE_METRIC, 44, 10]
+    ] as const) {
+      await writer.query(
+        `insert into scores (
+           model_id, competition, season, gw, track, metric, value, n, detail
+         ) values ($1, 'PD', $2, 20, 'match', $3, $4, $5, $6)`,
+        [
+          SPANISH_SEAT, SEASON, metric, value, n,
+          JSON.stringify({ qualification: "A La Liga qualification." })
+        ]
+      );
+    }
 
     await reader.query("set role dashboard_read");
 
@@ -157,7 +216,8 @@ describe("the dashboard read API", () => {
     const storedIn = async (metric: string): Promise<Array<unknown>> =>
       (await writer.query<{ qualification: string }>(
         `select distinct detail ->> 'qualification' as qualification
-           from scores where season = $1 and metric = $2`,
+           from scores
+          where competition = 'PL' and season = $1 and metric = $2`,
         [SEASON, metric]
       )).rows;
 
@@ -184,7 +244,7 @@ describe("the dashboard read API", () => {
   });
 
   test("carries the cache lifetime the scoring run moves on", async () => {
-    const response = await get("/api/leaderboard");
+    const response = await get("/api/pl/leaderboard");
 
     // The edge lifetime, and the stale window ADR-0028 asks for. `max-age` and
     // not `s-maxage`: Cloudflare disables stale-serving entirely on a response
@@ -214,7 +274,7 @@ describe("the dashboard read API", () => {
     const driver = await workerDriver();
     try {
       const response = await handleDashboardRequest(
-        new Request("https://benchmark.example/api/leaderboard"),
+        new Request("https://benchmark.example/api/pl/leaderboard"),
         driver.query, SEASON, NOW
       );
 
@@ -225,8 +285,64 @@ describe("the dashboard read API", () => {
   });
 
   test("answers an unknown path with a 404", async () => {
-    expect((await get("/api/leaderboards")).status).toBe(404);
+    expect((await get("/api/pl/leaderboards")).status).toBe(404);
     expect((await get("/")).status).toBe(404);
+  });
+
+  test("serves no leaderboard that names no Competition", async () => {
+    // The path the single-league site served. It stops existing rather than
+    // gaining a default: a default would restore the Premier League to the
+    // special place the paths just took away from it, and a request naming no
+    // Competition names nothing (ADR-0039).
+    expect((await get("/api/leaderboard")).status).toBe(404);
+  });
+
+  test("answers a Competition it does not serve with a 404", async () => {
+    // A typo and a league nobody has frozen a Prompt Version for get the same
+    // answer: a missing thing, and not an empty league. `SA` is in the schema's
+    // `competition_code` domain and has no frozen Prompt Version, which is the
+    // case one list for both the build and the API keeps from disagreeing.
+    expect((await get("/api/xx/leaderboard")).status).toBe(404);
+    expect((await get("/api/sa/leaderboard")).status).toBe(404);
+  });
+
+  test("lets no Competition's rows reach another's response", async () => {
+    // The claim ADR-0035 exists for, asserted in both directions through the
+    // seam a reader reads and under the select-only role the Worker holds.
+    const spain = await get("/api/pd/leaderboard");
+    expect(spain.status).toBe(200);
+    const spanish = await spain.json() as LeaderboardBody;
+
+    // La Liga sees its own seat and none of the Premier League's nine.
+    expect(spanish.entrants.map(({ id }) => id)).toEqual([SPANISH_SEAT]);
+    expect(spanish.throughGw).toBe(20);
+    expect(spanish.entrants[0]?.matchPoints).toBe(SPANISH_POINTS);
+
+    // And the Premier League sees nothing of La Liga's: not the seat, not the
+    // figure that would top its ranking, and not the Gameweek that would move
+    // its Season six weeks on. Every one of these is a filter that has to hold
+    // on its own -- the roster's Prompt Version, the ranking join, the scored
+    // Gameweek -- and a body that passed only the first would still be wrong.
+    const body = await leaderboard();
+
+    expect(body.entrants.map(({ id }) => id)).toEqual(ROSTER);
+    expect(body.throughGw).toBe(14);
+    expect(body.entrants.map(({ matchPoints }) => matchPoints))
+      .not.toContain(SPANISH_POINTS);
+    expect(body.settledFixtures).toBe(SETTLED_FIXTURES);
+    // The qualification is read out of the rows the ranking was read off, so a
+    // sentence from the other league is a ranking published on a row it was
+    // never read from.
+    expect(body.matchPointsQualification).toBe(MATCH_POINTS_QUALIFICATION);
+  });
+
+  test("serves each Competition at one spelling of its path", async () => {
+    // The edge caches by URL, and spec 0017 moves no cache lifetime: a
+    // Competition answered at four spellings is one resource holding four
+    // cache entries, each expiring on its own. The upper-case spelling is the
+    // same missing thing as any other typo.
+    expect((await get("/api/PL/leaderboard")).status).toBe(404);
+    expect((await get("/api/Pl/leaderboard")).status).toBe(404);
   });
 });
 
@@ -255,7 +371,7 @@ describe("the dashboard read API before the Season starts", () => {
 
   test("returns the entered Entrants with nothing scored", async () => {
     const response = await handleDashboardRequest(
-      new Request("https://benchmark.example/api/leaderboard"),
+      new Request("https://benchmark.example/api/pl/leaderboard"),
       query, SEASON, NOW
     );
     const body = await response.json() as LeaderboardBody;
@@ -280,7 +396,7 @@ describe("the dashboard read API before the Season starts", () => {
     expect(gameweeks.map(({ gw }) => gw)).toEqual([1]);
 
     const response = await handleDashboardRequest(
-      new Request("https://benchmark.example/api/leaderboard"),
+      new Request("https://benchmark.example/api/pl/leaderboard"),
       query, SEASON, NOW
     );
     const body = await response.json() as LeaderboardBody;
@@ -354,7 +470,7 @@ describe("the dashboard read API on a Locked Gameweek nothing has settled", () =
         .not.toContain("match_points_season_to_date");
 
       const response = await handleDashboardRequest(
-        new Request("https://benchmark.example/api/leaderboard"),
+        new Request("https://benchmark.example/api/pl/leaderboard"),
         query, SEASON, NOW
       );
       const body = await response.json() as LeaderboardBody;
@@ -394,7 +510,7 @@ describe("the dashboard read API on a Locked Gameweek nothing has settled", () =
       );
 
       const response = await handleDashboardRequest(
-        new Request("https://benchmark.example/api/leaderboard"),
+        new Request("https://benchmark.example/api/pl/leaderboard"),
         query, SEASON, NOW
       );
       const body = await response.json() as LeaderboardBody;
@@ -429,7 +545,7 @@ describe("the dashboard read API on a Locked Gameweek nothing has settled", () =
       );
 
       const response = await handleDashboardRequest(
-        new Request("https://benchmark.example/api/leaderboard"),
+        new Request("https://benchmark.example/api/pl/leaderboard"),
         query, SEASON, NOW
       );
       const body = await response.json() as LeaderboardBody;
@@ -495,7 +611,7 @@ describe("the dashboard read API when the whole roster Gapped a Gameweek", () =>
     expect(points.rowCount).toBe(0);
 
     const response = await handleDashboardRequest(
-      new Request("https://benchmark.example/api/leaderboard"),
+      new Request("https://benchmark.example/api/pl/leaderboard"),
       query, SEASON, NOW
     );
     const body = await response.json() as LeaderboardBody;
@@ -568,7 +684,7 @@ describe("the dashboard read API with a qualification missing from storage", () 
     // constant — indistinguishable from the exception, and a storage fault
     // nobody would ever see. A reader gets the page's error line instead.
     await expect(handleDashboardRequest(
-      new Request("https://benchmark.example/api/leaderboard"),
+      new Request("https://benchmark.example/api/pl/leaderboard"),
       query, SEASON, NOW
     )).rejects.toThrow(/bet_qualification/);
   });
@@ -613,7 +729,7 @@ describe("the dashboard read API with an Entrant that settled nothing", () => {
   test("keeps both qualifications on a ranking the first Entrant is absent from",
     async () => {
       const response = await handleDashboardRequest(
-        new Request("https://benchmark.example/api/leaderboard"),
+        new Request("https://benchmark.example/api/pl/leaderboard"),
         query, SEASON, NOW
       );
       const body = await response.json() as LeaderboardBody;
@@ -643,7 +759,7 @@ describe("the dashboard read API with an Exhibition Run on the Season", () => {
 
   const leaderboard = async (): Promise<LeaderboardBody> => {
     const response = await handleDashboardRequest(
-      new Request("https://benchmark.example/api/leaderboard"),
+      new Request("https://benchmark.example/api/pl/leaderboard"),
       query, SEASON, NOW
     );
     expect(response.status).toBe(200);

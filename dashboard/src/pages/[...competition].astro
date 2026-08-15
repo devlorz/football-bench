@@ -1,8 +1,31 @@
 ---
 import Page from "../layouts/Page.astro";
 import { SEASON_ROSTER_SIZE } from "../../../src/season-roster.js";
+import { COMPETITION_ROUTES } from "../competition-view.js";
+import { matchPromptOf } from "../../../src/predictions/openrouter-entrant.js";
+
+/**
+ * One leaderboard per Competition, from the list the read API serves. It is a
+ * rest route because `/` is still the Premier League's until ticket 6 of spec
+ * 0017 redirects it, and an empty segment is the only way one route emits both.
+ */
+export const getStaticPaths = () => COMPETITION_ROUTES;
+
+// `path` is this page's own, so the nav link marked as the current page is a
+// link to it, and `api` is the Competition's endpoint prefix. Both are the
+// route's, spelled once in `competition-view.ts`.
+const { competition, path, api } = Astro.props;
+
+// The league's name has one home, the packet an Entrant reads is written from
+// it, and this page holds no second copy of it (ADR-0039).
+const { competitionName } = matchPromptOf(competition);
 ---
-<Page title="Leaderboard — Football Bench, match track" current="leaderboard">
+<Page
+  title={`${competitionName} leaderboard — Football Bench, match track`}
+  current="leaderboard"
+  competitionName={competitionName}
+  leaderboardHref={path}
+>
   {/*
     Everything below that is not a number is in the built HTML: the headings,
     the labels, the column headers and both explanations of what the ranking
@@ -13,9 +36,9 @@ import { SEASON_ROSTER_SIZE } from "../../../src/season-roster.js";
     <div>
       <h1>One set of fixtures, one lock</h1>
       <p>
-        Every Entrant sees the same context for every Premier League Fixture and
-        commits a scoreline plus a probability distribution before the Gameweek
-        deadline. Nothing is written after the Lock.
+        Every Entrant sees the same context for every {competitionName} Fixture
+        and commits a scoreline plus a probability distribution before the
+        Gameweek deadline. Nothing is written after the Lock.
       </p>
     </div>
     <div class="soft stats">
@@ -137,8 +160,14 @@ import { SEASON_ROSTER_SIZE } from "../../../src/season-roster.js";
 
   {/* Inside the layout's document, not after it: a `<script>` written as a
       sibling of `<Page>` is emitted after `</html>`, which every browser
-      repairs and no static artifact should need repairing. */}
-  <script is:inline>
+      repairs and no static artifact should need repairing.
+
+      `define:vars` carries the endpoint this page reads, which is the
+      Competition's and decided at build time. It implies `is:inline` and emits
+      the same bytes without it -- the directive is written out because
+      `astro check` asks for it in as many words, and a hint that never goes
+      away is worse than an attribute that says something true. */}
+  <script is:inline define:vars={{ leaderboardUrl: `${api}/leaderboard` }}>
   (() => {
     const $ = (id) => document.getElementById(id);
     const text = (node, value) => { node.textContent = value; };
@@ -285,8 +314,9 @@ import { SEASON_ROSTER_SIZE } from "../../../src/season-roster.js";
     }
 
     // A relative path: the Worker route claims `/api/*` on this hostname, so
-    // nothing is cross-origin and no origin was a build input.
-    fetch("/api/leaderboard")
+    // nothing is cross-origin and no origin was a build input. The Competition
+    // is in the path and never defaulted, so `/pd` cannot read `/pl`'s rows.
+    fetch(leaderboardUrl)
       .then((response) => {
         if (!response.ok) throw new Error(String(response.status));
         return response.json();

@@ -9,7 +9,9 @@ import {
 import {
   FPL_POINTS_METRIC, FPL_POINTS_SEASON_TO_DATE_METRIC
 } from "../fpl/demonstration-record.js";
-import { MATCH_PROMPT_VERSION } from "../predictions/openrouter-entrant.js";
+import {
+  MATCH_PROMPT_COMPETITIONS, MATCH_PROMPT_VERSION, matchPromptOf
+} from "../predictions/openrouter-entrant.js";
 import {
   BET_POINTS_QUALIFICATION, BET_POINTS_SEASON_TO_DATE_METRIC,
   GAP_RATE_SEASON_TO_DATE_METRIC, MATCH_POINTS_QUALIFICATION,
@@ -18,9 +20,11 @@ import {
 } from "../predictions/score-match-gameweek.js";
 
 /**
- * Every query below that filters by Season also filters `competition = 'PL'`,
- * as a literal, and that is the whole of this API's Competition awareness for
- * now.
+ * Every query below that filters by Season also filters by Competition. The
+ * leaderboard takes it from the path (ADR-0039); the Fixtures and Entrant
+ * record endpoints still carry the literal `competition = 'PL'` and take it
+ * from the path in tickets 2 and 3 of spec 0017, and the two FPL endpoints keep
+ * theirs for good — the FPL track is the Premier League by nature.
  *
  * A ranking spans one Competition and never two (ADR-0035), and once a second
  * league writes rows, a query that named only the Season would rank the two
@@ -31,11 +35,11 @@ import {
  * named only the Season would be exactly as unionable as a Match one, whatever
  * currently writes them.
  *
- * What it deliberately is not is a parameter: which Competition a reader is
- * looking at, and how a reader says so, is a shape ADR-0035 defers to the
- * dashboard's own decision. A literal keeps every response exactly what it is
- * today, and `competition = 'PL'` is one greppable string -- twenty-seven
- * occurrences of it, not one place -- for that decision to replace.
+ * The literals were written to be replaced -- one greppable string rather than
+ * one place -- and ADR-0039 is the decision that replaces them, endpoint by
+ * endpoint. Where one still stands it is the Premier League by default, which
+ * is the state this module is being taken out of; where the path supplies it
+ * there is no default at all.
  */
 
 /**
@@ -127,9 +131,10 @@ export interface LeaderboardEntrant {
 }
 
 /**
- * What `/api/leaderboard` answers with. Exported for the same reason
- * `FixturesBody` and `EntrantsBody` are: a body the tests describe for
- * themselves is a body they can go on describing after this one has changed.
+ * What `/api/{code}/leaderboard` answers with, for one Competition and never
+ * two (ADR-0035). Exported for the same reason `FixturesBody` and
+ * `EntrantsBody` are: a body the tests describe for themselves is a body they
+ * can go on describing after this one has changed.
  */
 export interface LeaderboardBody {
   season: string;
@@ -211,13 +216,14 @@ const scoredOrNull = (
  */
 async function scoredThrough(
   query: Query,
-  season: string
+  season: string,
+  competition: string
 ): Promise<number | null> {
   const [scored] = await query(
     `select max(gw) as through_gw from scores
-      where competition = 'PL' and season = $1
+      where competition = $3 and season = $1
         and track = 'match' and metric = $2`,
-    [season, RPS_METRIC]
+    [season, RPS_METRIC, competition]
   );
   return numberOrNull(scored?.through_gw);
 }
@@ -234,8 +240,12 @@ async function scoredThrough(
  * scored Season with no ranking row anywhere, which has no stored string to
  * read and a visible ranking of noughts to caveat.
  */
-async function leaderboard(query: Query, season: string): Promise<Response> {
-  const throughGw = await scoredThrough(query, season);
+async function leaderboard(
+  query: Query,
+  season: string,
+  competition: string
+): Promise<Response> {
+  const throughGw = await scoredThrough(query, season, competition);
 
   // What the pre-season page is waiting on, and read only there: a Season with
   // a table to show has no use for a deadline, and the Fixtures page answers
@@ -249,8 +259,8 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
   const [lock] = throughGw === null
     ? await query(
       `select gw, deadline_at from gameweeks
-        where competition = 'PL' and season = $1 order by gw limit 1`,
-      [season]
+        where competition = $2 and season = $1 order by gw limit 1`,
+      [season, competition]
     )
     : [];
 
@@ -259,9 +269,9 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
   // to any Entrant, so one Entrant's Gap cannot move it.
   const [settled] = await query(
     `select count(*) as settled from fixtures
-      where competition = 'PL' and season = $1
+      where competition = $2 and season = $1
         and locked_in_gw is not null and result is not null`,
-    [season]
+    [season, competition]
   );
 
   // `role = 'entrant'` selects both tracks' seats, so the roster is the Season
@@ -310,20 +320,20 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
        from models m
        left join lateral (
          select max(predicted_at) as at from predictions
-          where model_id = m.id and competition = 'PL' and season = $1
+          where model_id = m.id and competition = $6 and season = $1
        ) last_prediction on true
        left join lateral (
          select max(gw) as gw from gameweeks
-          where competition = 'PL' and season = $1
+          where competition = $6 and season = $1
             and deadline_at < last_prediction.at
        ) ran_after on true
        left join scores points
-         on points.model_id = m.id and points.competition = 'PL'
+         on points.model_id = m.id and points.competition = $6
         and points.season = $1
         and points.track = 'match' and points.gw = $4
         and points.metric = $2
        left join scores bets
-         on bets.model_id = m.id and bets.competition = 'PL'
+         on bets.model_id = m.id and bets.competition = $6
         and bets.season = $1
         and bets.track = 'match' and bets.gw = $4
         and bets.metric = $3
@@ -337,7 +347,12 @@ async function leaderboard(query: Query, season: string): Promise<Response> {
       MATCH_POINTS_SEASON_TO_DATE_METRIC,
       BET_POINTS_SEASON_TO_DATE_METRIC,
       throughGw,
-      MATCH_PROMPT_VERSION
+      // The Competition's own frozen Prompt Version, and not the Premier
+      // League's: each Competition seats its own ten under one of its own
+      // (ADR-0038), so a constant here would answer every league with the
+      // Premier League's roster and none of its own.
+      matchPromptOf(competition).version,
+      competition
     ]
   );
 
@@ -735,7 +750,9 @@ interface GapGameweek {
  * Gameweek that makes it visible.
  */
 async function entrants(query: Query, season: string): Promise<Response> {
-  const throughGw = await scoredThrough(query, season);
+  // Still the literal, and still one of the twenty-seven: this endpoint takes
+  // its Competition from the path in ticket 3 of spec 0017.
+  const throughGw = await scoredThrough(query, season, "PL");
 
   // The cumulative rows at the scored Gameweek carry the whole Season each, so
   // the series is four rows per Entrant rather than four per Gameweek.
@@ -1501,9 +1518,30 @@ export async function handleDashboardRequest(
   now: Date
 ): Promise<Response> {
   const { pathname } = new URL(request.url);
-  if (pathname === "/api/leaderboard") {
-    return await leaderboard(query, season);
+
+  // `/api/{code}/leaderboard` (ADR-0039), served for `MATCH_PROMPT_COMPETITIONS`
+  // and nothing else -- the same list the build generates its pages from, so a
+  // route and its endpoint cannot disagree about which leagues exist.
+  //
+  // The lower-case spelling and no other. Matching case-insensitively would
+  // serve one resource at four URLs, and the edge caches by URL: `/api/PL/` and
+  // `/api/pl/` would hold separate entries of the lifetime spec 0017 states it
+  // moves none of. A reader gets one spelling, and the other three are the 404
+  // any other typo gets.
+  //
+  // Read before the FPL paths and unable to collide with them: `fpl` is not a
+  // Competition code and never will be, the FPL track being the Premier League
+  // by nature.
+  const [, api, segment, endpoint, ...rest] = pathname.split("/");
+  const competition = MATCH_PROMPT_COMPETITIONS
+    .find((code) => code.toLowerCase() === segment);
+  if (
+    api === "api" && competition !== undefined
+    && endpoint === "leaderboard" && rest.length === 0
+  ) {
+    return await leaderboard(query, season, competition);
   }
+
   if (pathname === "/api/fixtures") {
     return await fixtures(query, season, now);
   }

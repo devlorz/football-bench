@@ -9,12 +9,24 @@
 interface Props {
   title: string;
   current: "leaderboard" | "fixtures" | "entrants";
+  /**
+   * The league the page is reading, named as the packet an Entrant reads names
+   * it — "La Liga" and not the `PD` the record is keyed by. Absent on the two
+   * pages that are still single-league until tickets 2 and 3 of spec 0017.
+   */
+  competitionName?: string;
+  /**
+   * Where the Leaderboard link goes, which is the current Competition's own
+   * leaderboard. A page marked as the current page must be a link to itself,
+   * and `/` sends a reader on La Liga to the Premier League.
+   */
+  leaderboardHref?: string;
 }
 
-const { title, current } = Astro.props;
+const { title, current, competitionName, leaderboardHref = "/" } = Astro.props;
 
 const LINKS = [
-  { key: "leaderboard", href: "/", label: "Leaderboard" },
+  { key: "leaderboard", href: leaderboardHref, label: "Leaderboard" },
   { key: "fixtures", href: "/fixtures", label: "Fixtures" },
   // "Entrant record" and not the design's "Model stats": the glossary forbids
   // the second and spec 0011 renames the page.
@@ -42,7 +54,14 @@ const LINKS = [
     <header class="nav" id="nav">
       <div class="nav-brand">
         <span class="brand-name">FOOTBALL BENCH</span>
-        <span class="brand-track">Match track</span>
+        {/* The league in the header, so a tab among many tabs is identifiable
+            and two identically laid-out leagues are told apart. The switcher
+            that replaces reading it lands in ticket 4 of spec 0017. */}
+        <span class="brand-track">
+          {competitionName === undefined
+            ? "Match track"
+            : `Match track · ${competitionName}`}
+        </span>
       </div>
       <nav class="navlinks" id="navlinks">
         {LINKS.map(({ key, href, label }) => (

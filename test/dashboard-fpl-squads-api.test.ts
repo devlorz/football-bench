@@ -230,7 +230,7 @@ describe("the FPL squads endpoint", () => {
     async () => {
       const body = await squads();
       const match = await (await handleDashboardRequest(
-        new Request("https://benchmark.example/api/leaderboard"), query, SEASON,
+        new Request("https://benchmark.example/api/pl/leaderboard"), query, SEASON,
         NOW
       )).json() as LeaderboardBody;
 
