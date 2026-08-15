@@ -45,6 +45,7 @@ describe("fetching football-data.co.uk results", () => {
 
     await fetchFootballDataSeason({
       database: client,
+      competition: "PL",
       season: "2025-26",
       http: async (url) => {
         requested.push(url);
@@ -137,6 +138,7 @@ describe("fetching football-data.co.uk results", () => {
 
     await fetchFootballDataSeason({
       database: client,
+      competition: "PL",
       season: "2025-26",
       http: async (url) => ({ status: 200, body: responses.get(url) ?? "" })
     });
@@ -191,6 +193,7 @@ describe("fetching football-data.co.uk results", () => {
 
     await fetchFootballDataSeason({
       database: client,
+      competition: "PL",
       season: "2025-26",
       http: async (url) => ({ status: 200, body: responses.get(url) ?? "" })
     });
@@ -240,6 +243,7 @@ describe("fetching football-data.co.uk results", () => {
 
     await expect(fetchFootballDataSeason({
       database: client,
+      competition: "PL",
       season: "2025-26",
       http: async (url) => ({ status: 200, body: responses.get(url) ?? "" })
     })).rejects.toMatchObject({
@@ -278,6 +282,7 @@ describe("fetching football-data.co.uk results", () => {
 
     await expect(fetchFootballDataSeason({
       database: client,
+      competition: "PL",
       season: "2025-26",
       http: async (url) => ({ status: 200, body: responses.get(url) ?? "" })
     })).rejects.toMatchObject({
@@ -302,6 +307,7 @@ describe("fetching football-data.co.uk results", () => {
 
     await expect(fetchFootballDataSeason({
       database: client,
+      competition: "PL",
       season: "2025-26",
       http: async (url) => url.endsWith("/E0.csv")
         ? { status: 200, body: premierLeague }
@@ -347,6 +353,7 @@ describe("fetching football-data.co.uk results", () => {
     ]);
     const options = {
       database: client,
+      competition: "PL",
       season: "2025-26",
       http: async (url: string) => ({
         status: 200,
@@ -382,5 +389,100 @@ describe("fetching football-data.co.uk results", () => {
           and division = 'Premier League'`
     );
     expect(count.rows).toEqual([{ count: 380 }]);
+  });
+
+  // Ticket 6. Same reader, same Season path, a different Competition: the two
+  // Spanish files, the two Spanish division names, and `competition = 'PD'` on
+  // every row. Migration 0024 dropped the `PL` default on a column outside the
+  // primary key, so a reader that kept the Competition implicit would file
+  // these under the Premier League with nothing to collide and nothing to
+  // check — which is the whole reason the argument exists.
+  test("stores a Spanish Season under La Liga's own divisions", async () => {
+    const responses = new Map([
+      [
+        "https://www.football-data.co.uk/mmz4281/2526/SP1.csv",
+        "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG,HS,AS,HST,AST\n"
+        + "SP1,16/08/2025,20:00,Barcelona,Vallecano,3,0,21,4,9,1\n"
+      ],
+      [
+        "https://www.football-data.co.uk/mmz4281/2526/SP2.csv",
+        "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG,HS,AS,HST,AST\n"
+        + "SP2,17/08/2025,19:30,Almeria,Cadiz,1,1,12,9,4,3\n"
+      ]
+    ]);
+
+    await fetchFootballDataSeason({
+      database: client,
+      competition: "PD",
+      season: "2025-26",
+      http: async (url) => ({ status: 200, body: responses.get(url) ?? "" })
+    });
+
+    const stored = await client.query(
+      `select competition, division, home_team, away_team
+         from historical_matches
+        order by division`
+    );
+    expect(stored.rows).toEqual([
+      {
+        competition: "PD",
+        division: "La Liga",
+        home_team: "Barcelona",
+        away_team: "Vallecano"
+      },
+      {
+        competition: "PD",
+        division: "Segunda División",
+        home_team: "Almeria",
+        away_team: "Cadiz"
+      }
+    ]);
+  });
+
+  // The per-file division check, over the mistake that is actually available:
+  // football-data.co.uk answers a season it has no file for by redirecting to
+  // a near-miss filename — `2627/SP1.csv` currently lands on Portugal's
+  // `P1.csv` — and `fetch` follows it. Without this the Portuguese first
+  // division would be stored as La Liga, every row well-formed.
+  test("refuses a file whose rows belong to another division", async () => {
+    const responses = new Map([
+      [
+        "https://www.football-data.co.uk/mmz4281/2526/SP1.csv",
+        "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG\n"
+        + "P1,07/08/2026,20:15,Estoril,Famalicao,1,1\n"
+      ],
+      [
+        "https://www.football-data.co.uk/mmz4281/2526/SP2.csv",
+        "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG\n"
+        + "SP2,17/08/2025,19:30,Almeria,Cadiz,1,1\n"
+      ]
+    ]);
+
+    await expect(fetchFootballDataSeason({
+      database: client,
+      competition: "PD",
+      season: "2025-26",
+      http: async (url) => ({ status: 200, body: responses.get(url) ?? "" })
+    })).rejects.toMatchObject({
+      name: FootballDataSourceValidationError.name,
+      source: "football_data:2025-26:SP1",
+      issues: [{ field: "row.2.Div", detail: "expected SP1" }]
+    });
+
+    const matches = await client.query(
+      "select count(*)::int as count from historical_matches"
+    );
+    expect(matches.rows).toEqual([{ count: 0 }]);
+  });
+
+  test("refuses a Competition with no curated divisions", async () => {
+    await expect(fetchFootballDataSeason({
+      database: client,
+      competition: "SA",
+      season: "2025-26",
+      http: async () => {
+        throw new Error("no request should be made");
+      }
+    })).rejects.toThrow("Competition SA has no curated divisions");
   });
 });

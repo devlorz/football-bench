@@ -84,6 +84,7 @@ describe("fetching Understat per-match xG", () => {
 
     await fetchUnderstatSeasonXg({
       database: client,
+      competition: "PL",
       season: "2026-27",
       http: async (url) => url === LEAGUE_DATA_URL
         ? { status: 200, body }
@@ -144,6 +145,7 @@ describe("fetching Understat per-match xG", () => {
 
     await expect(fetchUnderstatSeasonXg({
       database: client,
+      competition: "PL",
       season: "2026-27",
       http: async () => ({ status: 200, body })
     })).rejects.toMatchObject({
@@ -172,6 +174,7 @@ describe("fetching Understat per-match xG", () => {
 
     await fetchUnderstatSeasonXg({
       database: client,
+      competition: "PL",
       season: "2026-27",
       http: async (url, options) => {
         requests.push({ url, ...(options?.headers && { headers: options.headers }) });
@@ -203,6 +206,7 @@ describe("fetching Understat per-match xG", () => {
     let body = leagueBody([match]);
     const options = {
       database: client,
+      competition: "PL",
       season: "2026-27",
       http: async () => ({ status: 200, body })
     };
@@ -222,6 +226,7 @@ describe("fetching Understat per-match xG", () => {
   test("archives an outage response and leaves stored xG as it was", async () => {
     await fetchUnderstatSeasonXg({
       database: client,
+      competition: "PL",
       season: "2026-27",
       http: async () => ({
         status: 200,
@@ -237,6 +242,7 @@ describe("fetching Understat per-match xG", () => {
 
     await expect(fetchUnderstatSeasonXg({
       database: client,
+      competition: "PL",
       season: "2026-27",
       http: async () => ({ status: 503, body: "<html>down for maintenance" })
     })).rejects.toMatchObject({
@@ -282,6 +288,7 @@ describe("fetching Understat per-match xG", () => {
 
     await expect(fetchUnderstatSeasonXg({
       database: client,
+      competition: "PL",
       season: "2026-27",
       http: async () => ({ status: 200, body })
     })).rejects.toMatchObject({
@@ -315,6 +322,7 @@ describe("fetching Understat per-match xG", () => {
 
     await expect(fetchUnderstatSeasonXg({
       database: client,
+      competition: "PL",
       season: "2026-27",
       http: async () => ({ status: 200, body })
     })).rejects.toMatchObject({
@@ -324,5 +332,106 @@ describe("fetching Understat per-match xG", () => {
         { field: "dates.0.a.title", detail: "unknown Understat team name" }
       ]
     });
+  });
+
+  // Ticket 6. The Understat league is Understat's own slug and not the
+  // Competition code, so this is the one place the two vocabularies meet: the
+  // URL, the Referer, the snapshot's source name and the stored `competition`
+  // all have to move together, and a test that only checked the stored rows
+  // would pass on a Spanish label over an English feed.
+  test("reads La Liga's own feed and stores it under its Competition", async () => {
+    const body = leagueBody([
+      {
+        id: "31001",
+        datetime: "2025-08-16 20:00:00",
+        home: "Barcelona",
+        away: "Rayo Vallecano",
+        xg: ["2.88", "0.41"]
+      }
+    ]);
+    const requested: string[] = [];
+
+    await fetchUnderstatSeasonXg({
+      database: client,
+      competition: "PD",
+      season: "2025-26",
+      http: async (url, options) => {
+        requested.push(url);
+        expect(options?.headers?.Referer)
+          .toBe("https://understat.com/league/La_liga/2025");
+        return { status: 200, body };
+      }
+    });
+
+    expect(requested)
+      .toEqual(["https://understat.com/getLeagueData/La_liga/2025"]);
+
+    const stored = await client.query(
+      `select x.competition, x.home_team, x.away_team, s.source
+         from understat_match_xg x, raw_snapshots s`
+    );
+    expect(stored.rows).toEqual([{
+      competition: "PD",
+      home_team: "Barcelona",
+      away_team: "Rayo Vallecano",
+      source: "understat:2025-26:La_liga"
+    }]);
+  });
+
+  // The failure the per-Competition alias map exists for, driven end to end.
+  // `UNDERSTAT_LEAGUES` is a slug this codebase picks, so one wrong character
+  // fetches the English feed under a Spanish label. Every club name would
+  // resolve against a shared map; the upsert keys on `(season,
+  // understat_match_id)` with `competition` deliberately outside it, so the
+  // rows would not be added but would *collide* with the Premier League's and
+  // relabel them `PD` — a Season of another league's xG taken, silently.
+  test("refuses another league's feed rather than relabelling its rows",
+    async () => {
+      const english = leagueBody([{
+        id: "29001",
+        datetime: "2025-08-16 11:30:00",
+        home: "Liverpool",
+        away: "Bournemouth",
+        xg: ["2.31", "0.78"]
+      }]);
+
+      await fetchUnderstatSeasonXg({
+        database: client,
+        competition: "PL",
+        season: "2025-26",
+        http: async () => ({ status: 200, body: english })
+      });
+
+      // The same bytes, now answered to a La Liga request.
+      await expect(fetchUnderstatSeasonXg({
+        database: client,
+        competition: "PD",
+        season: "2025-26",
+        http: async () => ({ status: 200, body: english })
+      })).rejects.toMatchObject({
+        name: UnderstatSourceValidationError.name,
+        issues: [
+          { field: "dates.0.h.title", detail: "unknown Understat team name" },
+          { field: "dates.0.a.title", detail: "unknown Understat team name" }
+        ]
+      });
+
+      const stored = await client.query(
+        `select competition, understat_match_id from understat_match_xg`
+      );
+      expect(stored.rows).toEqual([
+        { competition: "PL", understat_match_id: "29001" }
+      ]);
+    });
+
+  test("refuses a Competition with no Understat league", async () => {
+    await expect(fetchUnderstatSeasonXg({
+      database: client,
+      competition: "SA",
+      season: "2026-27",
+      http: async () => {
+        throw new Error("no request should be made");
+      }
+    })).rejects.toThrow("Competition SA has no Understat league");
   });
 });

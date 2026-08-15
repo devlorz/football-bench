@@ -63,6 +63,17 @@ One league the match track runs, named by football-data.org's code — `PL`, `PD
 `BL1`, `FL1`. Each is its own benchmark with its own leaderboard; no ranking spans two.
 _Avoid_: league (in identifiers), tournament
 
+**Division**:
+One tier of a Competition's league pyramid as football-data.co.uk names it, stored on
+every historical result and rendered as a heading in the packet — "Premier League" and
+"Championship", "La Liga" and "Segunda División". A Competition curates exactly two: its
+top flight, whose current Season is the league table and every record line, and the one
+below it, where a promoted club spent the prior Season (ADR-0037). A Division belongs to
+a Competition by convention only — nothing in the schema says so — which is why every
+read filters on the Competition and never on the Division alone.
+_Avoid_: tier, level; and note a Division is **not** a Track (`match` or `fpl`) and not a
+Competition.
+
 **Fixture**:
 One scheduled match of a Competition, unique within a Competition and Season.
 

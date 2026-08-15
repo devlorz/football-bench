@@ -426,25 +426,198 @@ reviewed identity maps.
 
 **Blocked by:** 5 — the contamination filters must exist before these rows land.
 
-- [ ] The football-data.co.uk reader takes the Spanish division codes, the division check
+- [x] The football-data.co.uk reader takes the Spanish division codes, the division check
       constraint grows in the same change, and the per-file division validation holds.
       _Both backfill writers — `football-data/fetch-season.ts` and
       `understat/fetch-season-xg.ts` — take their Competition explicitly here.
-      `migrations/0024` left `historical_matches.competition` and
-      `understat_match_xg.competition` defaulting to `'PL'` with the column outside both
-      primary keys, so a writer that omits it files Spanish rows under the Premier League
-      in silence: no collision, no check, and a contaminated packet that reads normally._
-- [ ] Two seasons of first- and second-division history are backfilled, with the second
-      division playing the Championship's role for promoted clubs.
+      `migrations/0024` put `historical_matches.competition` and
+      `understat_match_xg.competition` outside both primary keys and **dropped the `'PL'`
+      default it had used to relabel the existing rows**. So the database does catch a
+      writer that says nothing — not null, no default, a loud failure. What it cannot
+      catch is a writer that says the *wrong* Competition, because the column joins no key:
+      the row lands with no collision, no check, and a packet that reads normally. That is
+      what the explicit argument is for, and the `COMPETITION = "PL"` constant these
+      writers used to hold was exactly the wrong-and-stated form of it.
+      (This note read "left … defaulting to `'PL'` … so a writer that omits it files
+      Spanish rows silently", which describes 0024's first two statements and not its last
+      two, and names the wrong mechanism. The same wrong reasoning had been copied into
+      `src/cli/config.ts` and its test. **Found by review** — twice, the second time for
+      the correction to the first.)_
+
+      _`migrations/0026` grows the check to four names. Not a lookup table: nothing joins
+      to a division, so a table would buy a foreign key and cost a second place to edit
+      per league. `HISTORICAL_COMPETITION` is required with no default for both backfill
+      CLIs, for the same reason 0024 dropped the column default — the unsaid Competition
+      is the one mistake nothing downstream can catch._
+
+      _**The per-file `Div` check turns out to be load bearing right now, not in theory.**
+      football-data.co.uk has published no 2026-27 file yet — `spainm.php` and
+      `englandm.php` both list 2025-26 as their latest — and its Apache MultiViews answers
+      a request for a file it does not have by redirecting to a near-miss name: `2627/SP1.csv`
+      → `2627/P1.csv` (**the Portuguese first division**), `2627/E0.csv` → `2627/EC.csv`.
+      `nodeHttpFetcher` is `fetch`, which follows the redirect, so the response is a 200
+      carrying another country's league. Every row fails `row.N.Div: expected SP1` and the
+      fetch refuses. `test/fetch-football-data-season.test.ts` now drives exactly that shape.
+      Two consequences: `FOOTBALL_DATA_SEASON` must stay `2025-26` until the files appear,
+      which is what `StaleFootballDataSeasonError` already says; and `PD`'s 2026-27 history
+      arrives through the daily fetch when they do, not through a backfill._
+
+      _`daily-fetch.ts` keeps the `PL` literal on both history sources. Nothing predicts
+      under `PD` until ticket 8, so there is no stale Spanish table to leave behind yet —
+      **ticket 8 turns the two calls into a loop over the listed Competitions**, which is
+      also where the canned Spanish responses `test/daily-fetch.test.ts` would need belong._
+- [ ] The prior Season's first- and second-division history is backfilled, with the second
+      division playing the Championship's role for promoted clubs; the current Season
+      follows from the daily fetch, which closes this box in ticket 8.
+      _Acceptance text amended, and the box put back. It read "Two seasons … are
+      backfilled", which the notes below then contradicted by recording one. ADR-0037's
+      scope is "two seasons … **mirroring what the Premier League context reads today**",
+      and what the Premier League reads today is one backfilled Season plus a current one
+      the daily fetch keeps — so two Seasons was never two backfills. The amendment names
+      the two halves instead of counting them, and the second half is genuinely not
+      ticket 6's to do: football-data.co.uk has published no 2026-27 file for any league,
+      and the daily fetch holds the `PL` literal until ticket 8. **Found by review.**_
       _`build-historical-context.ts` reads its top and second division from the
       `DIVISIONS` map ticket 5 introduced, which has no `PD` entry. Add it here, with the
       same two names the reader stores, or `PD` renders "league table: unavailable" over
       a full backfill._
-- [ ] The Understat league is a parameter and two seasons of La Liga xG are backfilled.
+
+      _The `PD` entry is added: `SP1` → "La Liga", `SP2` → "Segunda División". "La Liga"
+      and not "LaLiga" or "Primera División" because `test/openrouter-entrant.test.ts`
+      requires it to equal `MATCH_PROMPTS.PD.competitionName`. **`MATCH_PROMPTS.PD.sha256`
+      is re-pinned** to `b11a86bc…` — the move ticket 4 wrote itself down expecting, now
+      that the table reads "no result has been played yet this Season" rather than stating
+      it is unavailable. The rendering was read before it was pinned. The remaining work
+      is operational: `HISTORICAL_COMPETITION=PD HISTORICAL_SEASON=2025-26 npm run
+      fetch:history` against a database that has taken `0022`–`0026`._
+
+      _**Run.** `0022`–`0026` applied to the deployed database on 2026-08-15, by the
+      runbook: all four preconditions read clean (ten seats at `match/2026-27-v2`, no
+      attempt ever recorded, no open run, no Lock window), `db:rehearse` green over a copy
+      of the real record — 38 Gameweeks and 380 Fixtures relabelled and otherwise
+      identical — then `db:migrate`. `competitions` still holds the single `PL` row, so
+      nothing about the schedule moved. The runbook's §4 schema diff comes back clean:
+      the only lines the deployed `public` schema holds beyond the repository's are
+      `schema_migrations` (the runner's own table, never a migration's) and Supabase's
+      platform grants and default privileges. No table, constraint, index, trigger or
+      domain differs. The backfill stored **380 La Liga and 462 Segunda
+      División rows** for 2025-26, beside the Premier League's 380 and 552._
+
+      _**One Season, not two, and that is the same two the Premier League has.** `PL`'s
+      stored history is 2025-26 alone; its 2026-27 arrives through the daily fetch. `PD`
+      now matches it exactly. Going deeper would have been worse than incomplete — a
+      Competition with 2024-25 history that the Premier League lacks is a benchmark whose
+      leagues are asked the same question over different amounts of past. `PD`'s 2026-27
+      is blocked twice over: football-data.co.uk has published no 2026-27 file at all yet,
+      and the daily fetch holds the `PL` literal until ticket 8._
+- [ ] The Understat league is a parameter and the prior Season's La Liga xG is backfilled;
+      the current Season follows from the daily fetch, which closes this box in ticket 8.
+      _Amended and put back for the same reason as the history box above, and caught by
+      applying that finding rather than by being told twice: this said "two seasons" and
+      was ticked over one. The parameter half is done and the 2025-26 half is stored;
+      2026-27 is not fetchable at all yet — `getLeagueData/La_liga/2026` returns an empty
+      `dates` — so the two boxes close together, in ticket 8, or neither honestly does._
+      _The parameter is in: `UNDERSTAT_LEAGUES` maps `PD` → `La_liga`, and the URL, the
+      Referer, the snapshot source name and the stored `competition` move together or the
+      fetch refuses. The 2025-26 backfill is the operational half. **2026-27 is not
+      fetchable yet** — `getLeagueData/La_liga/2026` answers with an empty `dates`._
+
+      _**Run.** 380 rows across all twenty clubs, every Understat name resolved — the map
+      was derived from these exact feeds, so a miss would have meant the derivation was
+      wrong. Checked further than "it stored": **379 of the 380 join a stored result**,
+      against the Premier League's 380 of 380. The one that does not is a source
+      disagreement rather than a mapping fault — football-data.co.uk dates Valencia vs
+      Oviedo 2025-09-30, Understat kicks it off 2025-09-29T19:00Z. Left alone. The join
+      is by date and resolved name with **deliberately no fallback** (`joinXg`), and a
+      day's tolerance to rescue one line in 380 would be exactly the fallback that
+      docblock refuses; the line reads "xG unavailable", which is what that state is for._
 - [ ] Both identity maps (source names to football-data names; Understat names to
       football-data names) are reviewed by a human before the backfill runs — a wrong
       mapping, unlike a missing one, fails nothing.
-- [ ] Every backfill response lands in raw snapshots and is replayable.
+      _**The Understat half is reviewed and approved (2026-08-15). The review happened
+      after its backfill ran, not before, which is the order the box asks for and not the
+      order it went in** — recorded rather than smoothed over, because the box's
+      requirement is about sequence and the sequence is what slipped. Nothing was riding on
+      it: the fetch is an idempotent upsert, so an amended map is a re-run, and the map had
+      already been checked two ways that a transcription could not have survived (see
+      below). The other half is reviewed before anything is written, in ticket 8._
+
+      _The **Understat → football-data** map gains La Liga's 2025-26 twenty, derived rather
+      than transcribed: every key is a `title` in `getLeagueData/La_liga/2025` and every
+      value a `HomeTeam` in `mmz4281/2526/SP1.csv`, and the two sets are each exactly
+      twenty with nothing left over on either side. The 2026-27 promoted three are
+      deliberately absent — Understat lists no 2026-27 match yet — and arrive as
+      `unknown Understat team name` at the pre-cron checklist's fetch, which is the
+      failure this map exists to make._
+
+      _What the human review was actually asked to decide, since "read twenty lines and
+      say yes" is not a control: twelve of the twenty are the same string on both sides
+      and cannot be wrong. Eight are not — `Athletic Club`→`Ath Bilbao`,
+      `Atletico Madrid`→`Ath Madrid`, `Celta Vigo`→`Celta`, `Espanyol`→`Espanol`,
+      `Rayo Vallecano`→`Vallecano`, `Real Betis`→`Betis`, `Real Oviedo`→`Oviedo`,
+      `Real Sociedad`→`Sociedad` — and of those the pair that could be swapped and still
+      read plausibly is the two `Ath`s. **The join rate is what rules a swap out**: the
+      join keys on `(date, home, away)`, so a swapped pair misaligns every fixture of both
+      clubs and would show as tens of missing joins, not one. 379 of 380 is not a number a
+      mis-mapped club can produce. So the review's real question was the one a machine
+      cannot answer — whether these twenty are La Liga's 2025-26 clubs at all — and the
+      answer was yes._
+
+      _**The map is keyed by Competition, after a first pass that made it one flat map and
+      argued for it.** The argument was backwards. Understat's club names are globally
+      unique, so a flat map resolves every club correctly — and resolves a club from the
+      wrong league just as correctly. `UNDERSTAT_LEAGUES` is a slug this codebase picks, so
+      one wrong character fetches another league's feed under this Competition's name;
+      every club would resolve, and the writer's `on conflict (season,
+      understat_match_id)` — a key `competition` sits outside by 0024's deliberate choice —
+      would not add rows but collide with the other league's and set
+      `competition = excluded.competition` across all of them. A Season of another
+      Competition's xG, relabelled away, silently. Scoped, the same mistake resolves
+      nothing and raises on the first match. This is the structural check the
+      football-data reader already had in its per-file `Div` test, and the first pass
+      built it on one source while removing the equivalent from the other in the same
+      commit. Net-neutral in lines. `test/fetch-understat-season-xg.test.ts` drives the
+      whole shape: the English feed stored as `PL`, then offered to a `PD` fetch, refused,
+      with the Premier League's row still `PL` afterwards. **Found by review.**_
+
+      _The **source → football-data** map is not drafted, and cannot honestly be. For `PD`
+      the source is football-data.org, whose club names are the long official ones
+      ("Club Atlético de Madrid") while `historical_matches` holds "Ath Madrid"; without
+      the map every La Liga club's history section reads "none in stored data" over a
+      complete backfill. The real names need the real response, and
+      `test/fixtures/football-data-org-2026-27-PD.json.gz` is still ticket 3's constructed
+      fixture — it carries twelve of twenty clubs, and mapping from it would be a guess
+      wearing a fixture's clothes. **This half is blocked on ticket 8's `FOOTBALL_DATA_ORG_TOKEN`
+      and its captured first real response**, which ticket 8 already owes; it must be
+      drafted and reviewed before `PD` predicts, not after._
+- [x] Every backfill response lands in raw snapshots and is replayable.
+      _Landed: `football_data:2025-26:SP1` and `:SP2`, and `understat:2025-26:La_liga`,
+      each the whole response and archived before anything was read from it._
+
+      _Replayable took a fix, and this box is what found it. Both places that translate a
+      football-data source matched `([A-Z]\d)` — **two characters, so `SP1` matched
+      neither**. `createArchiveReplayFetcher` answered "no archived snapshot source is
+      known" for bytes it was holding, and `rehearsalArchive` left a Spanish snapshot
+      filed under the Season it was archived from rather than the one being rehearsed.
+      Both now read `([A-Z]{1,2}\d)`. Worth noting the failure was silent in the direction
+      that matters: the snapshots were being stored correctly all along, and only a dry
+      run that tried to replay them would ever have said so._
+
+      _Understat had no mapping either, which the first pass at this note waved off as a
+      pre-existing Premier League gap. It is not a defence: the box says **every** backfill
+      response, and `PD`'s Understat response was not replayable whoever else's also was
+      not. `archiveSource` now maps `getLeagueData/<league>/<year>`, translating the
+      opening year Understat addresses a Season by into the `2025-26` form its snapshot is
+      archived under — the same translation the football-data URL already needed.
+      **Found by review.**_
+
+      _The miss was invisible by construction, which is the part worth keeping: an
+      unreachable Understat is a reported outcome and not a failure (ADR-0019), so every
+      dry run replayed every source but this one, degraded silently to "xG unavailable" on
+      every form line, and still described itself as exercising the whole write path
+      against archived snapshots. The rehearsed context and the production context differed
+      and nothing in the run said so. No existing test moved when the mapping landed — the
+      archives they replay hold no Understat snapshot — so two now cover it directly._
 
 ## 7 — La Liga's squad changes
 
@@ -472,6 +645,15 @@ for `PL` since the Season opened.
       published schedule.
 - [ ] The `PD` row is inserted and the scheduler picks the Competition up with no
       workflow edit.
+- [ ] The football-data.org club names are mapped to football-data.co.uk's and reviewed,
+      from the captured real response — ticket 6's second identity map, which could not
+      honestly be drafted without it. Until it exists every La Liga club's history section
+      reads "none in stored data" over a complete backfill, and nothing fails.
+- [ ] The daily fetch's two history sources become a loop over the listed Competitions,
+      which is also what closes **ticket 6's history and xG boxes**: their prior Season is
+      backfilled and their current Season arrives here. Both hold the `PL` literal today, which ticket 6
+      was right to leave — but from the moment `PD` is live its backfilled table would
+      otherwise never move again.
 - [ ] The pre-cron checklist runs for the new Competition and comes back clean.
 - [ ] The first derived deadline is observed, the Gameweek Locks, and every Entrant's
       Prediction with its stored context predates the Lock.

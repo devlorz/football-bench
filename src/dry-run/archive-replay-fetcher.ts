@@ -24,8 +24,13 @@ const FPL_SOURCE_BY_URL = new Map([
   ["https://fantasy.premierleague.com/api/fixtures/", "fpl_fixtures"]
 ]);
 
+// `[A-Z]{1,2}\d` and not `[A-Z]\d`: England's codes are two characters and
+// Spain's are three (`SP1`, `SP2`). Under the narrower form a Spanish URL
+// matched nothing, so the replay reported "no archived snapshot source is
+// known" for bytes it was holding — a dry run that could not replay half the
+// history it had archived.
 const FOOTBALL_DATA_URL =
-  /^https:\/\/www\.football-data\.co\.uk\/mmz4281\/(\d{2})(\d{2})\/([A-Z]\d)\.csv$/;
+  /^https:\/\/www\.football-data\.co\.uk\/mmz4281\/(\d{2})(\d{2})\/([A-Z]{1,2}\d)\.csv$/;
 
 /**
  * football-data addresses a Season as `2526` while its snapshot is archived
@@ -39,6 +44,28 @@ function footballDataSource(url: string): string | null {
   }
   const [, startYear, endYear, division] = match;
   return `football_data:20${startYear}-${endYear}:${division}`;
+}
+
+const UNDERSTAT_URL =
+  /^https:\/\/understat\.com\/getLeagueData\/([A-Za-z_]+)\/(\d{4})$/;
+
+/**
+ * Understat addresses a Season by its opening year while its snapshot is
+ * archived under the `2025-26` form, the same translation the football-data
+ * URL needs. Absent until ticket 6: a dry run therefore replayed every source
+ * but this one, and because an unreachable Understat is a *reported* outcome
+ * rather than a failure (ADR-0019), it degraded quietly to "xG unavailable" on
+ * every form line instead of saying so. The rehearsed context and the
+ * production context differed, and nothing in the run pointed at it.
+ */
+function understatSource(url: string): string | null {
+  const match = UNDERSTAT_URL.exec(url);
+  if (match === null) {
+    return null;
+  }
+  const [, league, startYear] = match;
+  const endYear = String((Number(startYear) + 1) % 100).padStart(2, "0");
+  return `understat:${startYear}-${endYear}:${league}`;
 }
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -71,6 +98,7 @@ function archiveSource(
 ): string | null {
   return FPL_SOURCE_BY_URL.get(url)
     ?? footballDataSource(url)
+    ?? understatSource(url)
     ?? openRouterSource(url, options);
 }
 

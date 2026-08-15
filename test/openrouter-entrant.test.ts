@@ -173,10 +173,12 @@ describe("the Match Prompt Version", () => {
     });
 
   // The same mechanism, over La Liga's rendering of the same facts: no
-  // availability section (ADR-0037) and, until ticket 6 names the Spanish
-  // divisions, a league table that states it is unavailable. That is what
-  // moves this hash next, legitimately -- `match-pd/2026-27-v1` is unused
-  // until ticket 8 and the freeze binds at first use (ADR-0038).
+  // availability section (ADR-0037), and now that ticket 6 has named the
+  // Spanish divisions, a league table that reads "no result has been played
+  // yet this Season" rather than one that states it is unavailable. That is
+  // the move this hash was written to expect -- `match-pd/2026-27-v1` is
+  // still unused and the freeze binds at first use (ADR-0038), so re-pinning
+  // here is the freeze taking its final shape, not a frozen prompt changing.
   test("pins La Liga's own rendering under its own Prompt Version", () => {
     expect(sha256(buildMatchContext(FIXTURE, contextData("PD"))))
       .toBe(matchPromptOf("PD").sha256);
@@ -216,9 +218,12 @@ describe("the Match Prompt Version", () => {
       }))
       .filter(({ division }) => division !== undefined);
 
-    // A Competition with no divisions yet is not a disagreement — it is
-    // ticket 6's work — but an empty list would make this test vacuous.
-    expect(named.length).toBeGreaterThan(0);
+    // Every Competition with a frozen Prompt Version now has divisions, so the
+    // count is exact rather than merely non-zero: `toBeGreaterThan(0)` stayed
+    // green if `DIVISIONS.PD` were deleted, which is the edit this test is
+    // here to refuse. A Competition legitimately awaiting curation moves this
+    // number and should have to say so. **Found by review.**
+    expect(named.length).toBe(MATCH_PROMPT_COMPETITIONS.length);
     for (const { competition, prompt, division } of named) {
       expect([competition, prompt]).toEqual([competition, division]);
     }

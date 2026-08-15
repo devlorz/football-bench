@@ -12,8 +12,17 @@
  * lets the context treat "no divisions" as "no history yet" rather than as
  * history it has lost.
  *
- * Opening a league is one entry, the same single edit migration 0022's
- * `competition_code` domain was shaped to keep at one place.
+ * Opening a league is one entry here **and one migration** widening
+ * `historical_matches`' division check to the two names that entry adds — the
+ * same shape migration 0022's `competition_code` domain has, where the
+ * vocabulary lives in one place per side of the boundary rather than once
+ * overall. The duplication is deliberate: the check is what stops this list
+ * from being edited out from under rows already stored by an older spelling,
+ * and a constraint cannot read a TypeScript module. Two edits, in one change,
+ * and a mismatch is refused at write time rather than discovered in a packet.
+ *
+ * Two of five, counting the whole change: `docs/runbooks/opening-a-competition.md`
+ * has the list.
  */
 export interface Division {
   code: string;
@@ -26,6 +35,14 @@ const BY_COMPETITION: Readonly<
   PL: [
     { code: "E0", name: "Premier League" },
     { code: "E1", name: "Championship" }
+  ],
+  // "La Liga" and not "LaLiga" or "Primera División": the top flight's name is
+  // rendered into the same packet as `MATCH_PROMPTS.PD.competitionName`, and
+  // `test/openrouter-entrant.test.ts` requires the two to agree rather than
+  // let one packet call one league two things.
+  PD: [
+    { code: "SP1", name: "La Liga" },
+    { code: "SP2", name: "Segunda División" }
   ]
 };
 

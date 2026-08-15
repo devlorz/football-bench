@@ -39,13 +39,14 @@ function utcDate(instant: Date): string {
  * is the same explicit gap a promoted side's Championship history produces.
  */
 function joinXg(
+  competition: string,
   matches: HistoricalMatch[],
   storedXg: StoredMatchXg[]
 ): HistoricalMatch[] {
   const byMatch = new Map<string, StoredMatchXg>();
   for (const row of storedXg) {
-    const home = resolveUnderstatTeamName(row.home_team);
-    const away = resolveUnderstatTeamName(row.away_team);
+    const home = resolveUnderstatTeamName(competition, row.home_team);
+    const away = resolveUnderstatTeamName(competition, row.away_team);
     if (home === undefined || away === undefined) {
       continue;
     }
@@ -131,7 +132,9 @@ export async function loadMatchContextData(
     competition,
     season,
     deadline,
-    historicalMatches: joinXg(historicalMatches.rows, storedXg.rows),
+    historicalMatches: joinXg(
+      competition, historicalMatches.rows, storedXg.rows
+    ),
     fplPlayers: fplPlayers.rows,
     squadChanges: squadChanges.rows
   };

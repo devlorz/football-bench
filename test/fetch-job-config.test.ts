@@ -53,18 +53,30 @@ describe("the fetch job configuration", () => {
     })).toThrow("GAMEWEEK must be an integer from 1 to 38");
   });
 
-  test("requires the historical Season explicitly", () => {
+  test("requires the historical Season and Competition explicitly", () => {
     expect(readHistoricalFetchJobConfig({
       DATABASE_URL: "postgresql://localhost/benchmark",
+      HISTORICAL_COMPETITION: "PD",
       HISTORICAL_SEASON: "2025-26"
     })).toEqual({
       databaseUrl: "postgresql://localhost/benchmark",
+      competition: "PD",
       season: "2025-26"
     });
 
     expect(() => readHistoricalFetchJobConfig({
       DATABASE_URL: "postgresql://localhost/benchmark",
+      HISTORICAL_COMPETITION: "PL",
       HISTORICAL_SEASON: "25-26"
     })).toThrow("HISTORICAL_SEASON must use YYYY-YY format");
+
+    // No default, because a default would be this config stating `PL` for an
+    // operator who meant Spain. The database catches an *unset* Competition
+    // (migration 0024 dropped the default and the column is not null); nothing
+    // catches a stated one that is wrong.
+    expect(() => readHistoricalFetchJobConfig({
+      DATABASE_URL: "postgresql://localhost/benchmark",
+      HISTORICAL_SEASON: "2025-26"
+    })).toThrow("HISTORICAL_COMPETITION is required");
   });
 });

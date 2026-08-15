@@ -117,10 +117,16 @@ addressed to a person.
       actually see:
 
       ```bash
-      set -a; . ./.env; set +a; npm run --silent fetch:xg-history
+      set -a; . ./.env; set +a; HISTORICAL_COMPETITION=PL npm run --silent fetch:xg-history
       ```
 
       One-off. Deeper history is deliberately not fetched.
+
+      `HISTORICAL_COMPETITION` is required and has no default, for both this and
+      `fetch:history`. Understat's league is a path segment and the Competition is a
+      stored column, and a run that left the Competition unsaid would write one
+      league's xG under another's name — no collision, no check, and a packet that
+      reads perfectly. Run it once per Competition; La Liga is `PD`.
 - [ ] **Do not hand-dispatch `predict.yml` as a smoke test.** Its manual job writes real
       Predictions for the Gameweek named in the input. Before that Gameweek's deadline those
       writes are valid and, because `predictions` is insert-only, permanent — the Gameweek is

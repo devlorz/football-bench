@@ -5,14 +5,6 @@ import { divisionsOf, type Division } from "./divisions.js";
 
 type Database = Pick<Client, "query">;
 
-// Premier League as a literal at this boundary, the convention for a caller
-// that is one Competition by nature rather than by argument: the Spanish
-// division codes and the Competition to read them for arrive together, in the
-// same change, or the reader stores rows the context cannot select.
-const COMPETITION = "PL";
-
-const DIVISIONS = divisionsOf(COMPETITION)!;
-
 const REQUIRED_COLUMNS = [
   "Div",
   "Date",
@@ -74,6 +66,7 @@ export class FootballDataSourceHttpError extends Error {
 
 export interface FetchFootballDataSeasonOptions {
   database: Database;
+  competition: string;
   season: string;
   http: HttpFetcher;
 }
@@ -290,10 +283,20 @@ function parseMatches(
 
 export async function fetchFootballDataSeason({
   database,
+  competition,
   season,
   http
 }: FetchFootballDataSeasonOptions): Promise<void> {
-  const outcomes = await Promise.allSettled(DIVISIONS.map(async (division) => {
+  // Refused rather than skipped. A Competition with no curated divisions has
+  // no history to fetch, but a caller that asked for one is asking under a
+  // name this reader cannot store, and storing nothing would read as a league
+  // whose season had not started.
+  const divisions = divisionsOf(competition);
+  if (divisions === undefined) {
+    throw new Error(`Competition ${competition} has no curated divisions`);
+  }
+
+  const outcomes = await Promise.allSettled(divisions.map(async (division) => {
     const source = sourceName(season, division);
     const url = sourceUrl(season, division);
     const response = await http(url);
@@ -335,7 +338,7 @@ export async function fetchFootballDataSeason({
       `delete from historical_matches
         where competition = $1 and season = $2
           and division = any($3::text[])`,
-      [COMPETITION, season, DIVISIONS.map(({ name }) => name)]
+      [competition, season, divisions.map(({ name }) => name)]
     );
     for (const match of matches) {
       await database.query(
@@ -345,7 +348,7 @@ export async function fetchFootballDataSeason({
            home_shots, away_shots, home_shots_on_target, away_shots_on_target
          ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
         [
-          COMPETITION,
+          competition,
           match.season,
           match.division,
           match.playedOn,

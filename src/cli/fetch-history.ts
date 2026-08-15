@@ -11,6 +11,7 @@ await database.connect();
 try {
   await fetchFootballDataSeason({
     database,
+    competition: config.competition,
     season: config.season,
     http: nodeHttpFetcher
   });

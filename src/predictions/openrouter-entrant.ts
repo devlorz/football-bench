@@ -23,14 +23,19 @@ export interface MatchPrompt {
  * unmovable: `match/2026-27-v2` has been used, and a used Prompt Version is
  * unamendable (ADR-0026). Every other Competition takes
  * `match-<code, lowercased>/2026-27-v1`, and opening a league is one entry
- * here — the same single edit `competitions` and `DIVISIONS` are shaped for.
+ * here. One of five, though: this file, `DIVISIONS`, the division check
+ * constraint, the Understat league and its club map, and the `competition_code`
+ * domain if the code is new — gathered in
+ * `docs/runbooks/opening-a-competition.md`, because each of these files used to
+ * describe its own edit as the single one and none of them was wrong.
  *
  * The sha is over a fully rendered context, not over the template, because
  * that is the mechanism that already exists and what it is worth pinning is
- * the whole prompt's format. `PD`'s therefore still moves once ticket 6 gives
- * La Liga its divisions and the league table stops reading "unavailable" —
- * legitimately, because the freeze binds at first use (ADR-0038) and nothing
- * predicts under this version until ticket 8.
+ * the whole prompt's format. `PD`'s moved once, in ticket 6, when La Liga got
+ * its divisions and the league table stopped reading "unavailable" — the move
+ * ticket 4 wrote it down expecting, legitimate because the freeze binds at
+ * first use (ADR-0038) and nothing predicts under this version until ticket 8.
+ * From here it is as unmovable as the Premier League's.
  */
 const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
   PL: {
@@ -41,7 +46,7 @@ const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
   PD: {
     version: "match-pd/2026-27-v1",
     sha256:
-      "426b23011257a8e1d68ed46d72203d9ad49dfaea92035189aa26c6fb5f9c3135",
+      "b11a86bc791d505367a8db0d14aa7254a3f710349f4be83f5080bca17c3be374",
     competitionName: "La Liga"
   }
 };

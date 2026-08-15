@@ -17,6 +17,7 @@ export interface FetchJobConfig {
 
 export interface HistoricalFetchJobConfig {
   databaseUrl: string;
+  competition: string;
   season: string;
 }
 
@@ -161,7 +162,15 @@ export function readHistoricalFetchJobConfig(
   if (!/^\d{4}-\d{2}$/.test(season)) {
     throw new Error("HISTORICAL_SEASON must use YYYY-YY format");
   }
-  return { databaseUrl, season };
+  // Required rather than defaulted to `PL`, and the hazard being avoided is
+  // this file's own rather than the database's. Migration 0024 dropped the
+  // `'PL'` default, so a column left unset is a loud not-null violation; what
+  // nothing downstream can catch is a Competition that is *stated* and wrong.
+  // A default here would state `PL` on the operator's behalf, and the run that
+  // meant to backfill Spain would file it under the Premier League with no
+  // collision, no check, and a packet that reads normally.
+  const competition = required(environment, "HISTORICAL_COMPETITION");
+  return { databaseUrl, competition, season };
 }
 
 export function readScoreJobConfig(

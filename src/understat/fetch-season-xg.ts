@@ -5,7 +5,19 @@ import { resolveUnderstatTeamName } from "./team-identity.js";
 
 type Database = Pick<Client, "query">;
 
-const LEAGUE = "EPL";
+/**
+ * Understat's own slug for a Competition's league, the one path segment its
+ * every URL is built from. Kept here rather than beside the football-data.co.uk
+ * divisions: the two sources agree on nothing -- not the league's name, not a
+ * club's -- and one list holding both would read as though they did.
+ *
+ * A Competition absent here has no xG to fetch, and asking for it is refused
+ * rather than answered with a Premier League feed under a Spanish label.
+ */
+const UNDERSTAT_LEAGUES: Readonly<Record<string, string>> = {
+  PL: "EPL",
+  PD: "La_liga"
+};
 
 interface MatchXg {
   season: string;
@@ -47,6 +59,7 @@ export class UnderstatSourceHttpError extends Error {
 
 export interface FetchUnderstatSeasonXgOptions {
   database: Database;
+  competition: string;
   season: string;
   http: HttpFetcher;
 }
@@ -59,19 +72,22 @@ function understatSeason(season: string): string {
   return match[1];
 }
 
-function sourceUrl(season: string): string {
-  return `https://understat.com/getLeagueData/${LEAGUE}/${understatSeason(season)}`;
+function sourceUrl(league: string, season: string): string {
+  return `https://understat.com/getLeagueData/${league}/${understatSeason(season)}`;
 }
 
 /**
  * Understat blocks a request with no User-Agent, and answers one without the
  * AJAX header with a full HTML page instead of the JSON its own frontend gets.
  */
-function requestHeaders(season: string): Record<string, string> {
+function requestHeaders(
+  league: string,
+  season: string
+): Record<string, string> {
   return {
     "User-Agent": "Mozilla/5.0",
     "X-Requested-With": "XMLHttpRequest",
-    Referer: `https://understat.com/league/${LEAGUE}/${understatSeason(season)}`,
+    Referer: `https://understat.com/league/${league}/${understatSeason(season)}`,
     Accept: "application/json"
   };
 }
@@ -96,6 +112,7 @@ function parseXg(value: unknown): number | undefined {
 
 function parseMatches(
   source: string,
+  competition: string,
   season: string,
   body: string
 ): MatchXg[] {
@@ -141,7 +158,7 @@ function parseMatches(
           field: `dates.${index}.${side}.title`,
           detail: "team name is missing"
         });
-      } else if (resolveUnderstatTeamName(team) === undefined) {
+      } else if (resolveUnderstatTeamName(competition, team) === undefined) {
         issues.push({
           field: `dates.${index}.${side}.title`,
           detail: "unknown Understat team name"
@@ -189,9 +206,9 @@ function parseMatches(
       && match.id.length > 0
       && kickedOffAt !== undefined
       && typeof homeTeam === "string"
-      && resolveUnderstatTeamName(homeTeam) !== undefined
+      && resolveUnderstatTeamName(competition, homeTeam) !== undefined
       && typeof awayTeam === "string"
-      && resolveUnderstatTeamName(awayTeam) !== undefined
+      && resolveUnderstatTeamName(competition, awayTeam) !== undefined
       && homeXg !== undefined
       && awayXg !== undefined
     ) {
@@ -215,14 +232,20 @@ function parseMatches(
 
 export async function fetchUnderstatSeasonXg({
   database,
+  competition,
   season,
   http
 }: FetchUnderstatSeasonXgOptions): Promise<void> {
-  const url = sourceUrl(season);
-  const source = `understat:${season}:${LEAGUE}`;
+  const league = UNDERSTAT_LEAGUES[competition];
+  if (league === undefined) {
+    throw new Error(`Competition ${competition} has no Understat league`);
+  }
+
+  const url = sourceUrl(league, season);
+  const source = `understat:${season}:${league}`;
   const response = await http(url, {
     method: "GET",
-    headers: requestHeaders(season)
+    headers: requestHeaders(league, season)
   });
 
   // Archived before anything is read from it, so an unusable response is
@@ -233,7 +256,7 @@ export async function fetchUnderstatSeasonXg({
     throw new UnderstatSourceHttpError(source, response.status, url);
   }
 
-  const matches = parseMatches(source, season, response.body);
+  const matches = parseMatches(source, competition, season, response.body);
 
   await database.query("begin");
   try {
@@ -251,10 +274,7 @@ export async function fetchUnderstatSeasonXg({
            home_xg       = excluded.home_xg,
            away_xg       = excluded.away_xg`,
         [
-          // Premier League as a literal at this boundary: Understat's league
-          // is a path segment this fetch hard-codes, so the Competition it
-          // writes and the league it reads move together or not at all.
-          "PL",
+          competition,
           match.season,
           match.understatMatchId,
           match.kickedOffAt,

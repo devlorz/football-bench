@@ -1,7 +1,11 @@
 import type { DryRunArchive } from "../dry-run/load-archive.js";
 import type { FplRehearsalArchive } from "./run-fpl-rehearsal.js";
 
-const FOOTBALL_DATA_SOURCE = /^football_data:\d{4}-\d{2}:([A-Z]\d)$/;
+// Two characters or three: `E0` and `E1`, `SP1` and `SP2`. The same widening
+// as the replay fetcher's URL pattern, and for the same reason — a Spanish
+// snapshot that did not match was re-filed under no Season at all, so the
+// rehearsal read it as history from a Season it was not rehearsing.
+const FOOTBALL_DATA_SOURCE = /^football_data:\d{4}-\d{2}:([A-Z]{1,2}\d)$/;
 
 /**
  * Reshapes an archive of real upstream bytes into the one a rehearsal replays.

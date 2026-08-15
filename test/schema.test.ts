@@ -5,6 +5,10 @@ import {
   storePlayerPoints,
   type PlayerPointsStat
 } from "./fpl-points-fixture.js";
+import { divisionsOf } from "../src/football-data/divisions.js";
+import {
+  MATCH_PROMPT_COMPETITIONS
+} from "../src/predictions/openrouter-entrant.js";
 
 const { Client } = pg;
 
@@ -167,6 +171,39 @@ describe("the benchmark database", () => {
          )`
       )).rejects.toMatchObject({ code: "23514" });
     }
+  });
+
+  // The curated list and the check constraint hold the same four names in two
+  // languages, and only one of them can be typechecked. "Segunda División"
+  // has to match migration 0026 accent for accent, and nothing said so until
+  // an insert failed — in production, mid-backfill. Every name, every
+  // Competition, driven through the constraint. **Found by review.**
+  test("accepts every division name the curated list holds", async () => {
+    for (const competition of MATCH_PROMPT_COMPETITIONS) {
+      const divisions = divisionsOf(competition);
+      expect(divisions).toBeDefined();
+      for (const { name } of divisions!) {
+        await expect(client.query(
+          `insert into historical_matches (
+             competition, season, division, played_on, home_team, away_team,
+             home_goals, away_goals
+           ) values ($1, '1999-00', $2, '2000-05-01T00:00:00Z', $3, $4, 1, 0)`,
+          [competition, name, `Home ${name}`, `Away ${name}`]
+        )).resolves.toBeDefined();
+      }
+    }
+  });
+
+  test("refuses a division name the curated list does not hold", async () => {
+    await expect(client.query(
+      `insert into historical_matches (
+         competition, season, division, played_on, home_team, away_team,
+         home_goals, away_goals
+       ) values (
+         'PD', '1999-00', 'Segunda Division', '2000-05-01T00:00:00Z',
+         'Home', 'Away', 1, 0
+       )`
+    )).rejects.toMatchObject({ code: "23514" });
   });
 
   test("refuses a negative stat on a player's Settled Gameweek", async () => {

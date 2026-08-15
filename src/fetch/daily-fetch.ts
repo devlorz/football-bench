@@ -200,9 +200,18 @@ export async function runDailyFetch({
       errors.push(error);
     }
   }
+  // Premier League as a literal on both history sources, the convention of
+  // every PL-only caller since ticket 2. Not an oversight and not permanent:
+  // La Liga's history is backfilled by `fetch:history` and `fetch:xg-history`
+  // in ticket 6, and nothing predicts under `PD` until ticket 8, so the daily
+  // refresh has no stale Spanish table to leave behind yet. **Ticket 8 turns
+  // these two into a loop over the listed Competitions**, on the same terms as
+  // the football-data.org loop above — that is where the canned Spanish
+  // responses this file's tests would need belong.
   try {
     await fetchFootballDataSeason({
       database,
+      competition: "PL",
       season: footballDataSeason,
       http
     });
@@ -224,7 +233,12 @@ export async function runDailyFetch({
   }
   let xg: DailyXgOutcome;
   try {
-    await fetchUnderstatSeasonXg({ database, season, http });
+    await fetchUnderstatSeasonXg({
+      database,
+      competition: "PL",
+      season,
+      http
+    });
     xg = { stored: true };
   } catch (error) {
     xg = { stored: false, failure: errorText(error) };

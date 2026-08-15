@@ -15,15 +15,18 @@ await database.connect();
 try {
   await fetchUnderstatSeasonXg({
     database,
+    competition: config.competition,
     season: config.season,
     http: nodeHttpFetcher
   });
   const stored = await database.query<{ count: number }>(
-    "select count(*)::int as count from understat_match_xg where season = $1",
-    [config.season]
+    `select count(*)::int as count from understat_match_xg
+      where competition = $1 and season = $2`,
+    [config.competition, config.season]
   );
   console.log(
-    `Stored xG for ${stored.rows[0]?.count ?? 0} ${config.season} matches`
+    `Stored xG for ${stored.rows[0]?.count ?? 0} ${config.competition} `
+      + `${config.season} matches`
   );
 } finally {
   await database.end();
