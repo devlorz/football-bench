@@ -111,19 +111,22 @@ async function requireCurrentSeasonMatchesAfterFirstDeadline(
 }
 
 /**
- * Every active Competition except the Premier League, which keeps the FPL API
- * for everything (ADR-0036). The dispatch keys on the Competition code — a
- * field already read — rather than on a mode flag, so opening a league is the
- * `competitions` insert and nothing here.
+ * Every Competition the Season lists, in code order.
+ *
+ * Read once and walked by each source, rather than each source deciding for
+ * itself which leagues it is for. The dispatch keys on the Competition code —
+ * a field already read — rather than on a mode flag, so opening a league is
+ * the `competitions` insert and nothing here. The one league this list is
+ * filtered for is the Premier League, which keeps the FPL API for its schedule
+ * (ADR-0036) and reads football-data.org for nothing.
  */
-async function competitionsReadingFootballDataOrg(
+async function listedCompetitions(
   database: Database,
   season: string
 ): Promise<string[]> {
   const active = await database.query<{ competition: string }>(
     `select competition from competitions
-      where season = $1 and competition <> 'PL'
-      order by competition`,
+      where season = $1 order by competition`,
     [season]
   );
   return active.rows.map(({ competition }) => competition);
@@ -180,13 +183,13 @@ export async function runDailyFetch({
       }
     }
   }
-  // Each Competition's failure is collected rather than thrown, on the same
-  // terms as every source above it: one league's dead token must not cost
-  // another league its schedule, and the run still fails loudly at the end.
-  for (const competition of await competitionsReadingFootballDataOrg(
-    database,
-    season
-  )) {
+  // Every source below walks the listed Competitions, and each Competition's
+  // failure is collected rather than thrown: one league's dead token must not
+  // cost another league its schedule, and the run still fails loudly at the
+  // end. Opening a league is the `competitions` insert and nothing here.
+  const listed = await listedCompetitions(database, season);
+  // The Premier League alone keeps the FPL API for its schedule (ADR-0036).
+  for (const competition of listed.filter((code) => code !== "PL")) {
     try {
       await fetchFootballDataOrgCompetition({
         database,
@@ -200,25 +203,31 @@ export async function runDailyFetch({
       errors.push(error);
     }
   }
-  // Premier League as a literal on both history sources, the convention of
-  // every PL-only caller since ticket 2. Not an oversight and not permanent:
-  // La Liga's history is backfilled by `fetch:history` and `fetch:xg-history`
-  // in ticket 6, and nothing predicts under `PD` until ticket 8, so the daily
-  // refresh has no stale Spanish table to leave behind yet. **Ticket 8 turns
-  // these two into a loop over the listed Competitions**, on the same terms as
-  // the football-data.org loop above — that is where the canned Spanish
-  // responses this file's tests would need belong.
-  try {
-    await fetchFootballDataSeason({
-      database,
-      competition: "PL",
-      season: footballDataSeason,
-      http
-    });
-    footballDataSucceeded = true;
-  } catch (error) {
-    errors.push(error);
+  // The three remaining sources took a `PL` literal until La Liga went live,
+  // which is exactly as long as that was honest: a Competition nobody predicts
+  // has no stale table to leave behind. From the moment one is listed, a
+  // literal here means its history, its xG and its Squad Changes are whatever
+  // the backfill left and never move again — and every one of those staleness
+  // failures renders as a section that reads calm rather than broken.
+  for (const competition of listed) {
+    try {
+      await fetchFootballDataSeason({
+        database,
+        competition,
+        season: footballDataSeason,
+        http
+      });
+      if (competition === "PL") {
+        footballDataSucceeded = true;
+      }
+    } catch (error) {
+      errors.push(error);
+    }
   }
+  // Premier League only, and stated rather than looped: the guard dates itself
+  // from Gameweek 1's deadline and asks whether *the English feed* is live
+  // (`h.competition = 'PL'` on both halves). Each Competition needs its own
+  // before its own first deadline, which is its own change.
   if (footballDataSucceeded) {
     try {
       await requireCurrentSeasonMatchesAfterFirstDeadline(
@@ -231,35 +240,48 @@ export async function runDailyFetch({
       errors.push(error);
     }
   }
-  let xg: DailyXgOutcome;
-  try {
-    await fetchUnderstatSeasonXg({
-      database,
-      competition: "PL",
-      season,
-      http
-    });
-    xg = { stored: true };
-  } catch (error) {
-    xg = { stored: false, failure: errorText(error) };
+  // The Premier League's outcome is the one this job has always reported, and
+  // that shape is a contract with the workflow that reads it. Every other
+  // Competition's failure joins `errors` and fails the run at the end.
+  let xg: DailyXgOutcome | undefined;
+  let squadChanges: DailySquadChangeOutcome | undefined;
+  for (const competition of listed) {
+    try {
+      await fetchUnderstatSeasonXg({ database, competition, season, http });
+      if (competition === "PL" || xg === undefined) {
+        xg = { stored: true };
+      }
+    } catch (error) {
+      if (competition === "PL") {
+        xg = { stored: false, failure: errorText(error) };
+      } else {
+        errors.push(error);
+      }
+    }
+    try {
+      const outcome = await fetchSquadChanges({
+        database,
+        competition,
+        season,
+        http,
+        now: () => observedAt
+      });
+      if (competition === "PL" || squadChanges === undefined) {
+        squadChanges = outcome;
+      }
+    } catch (error) {
+      if (competition === "PL") {
+        squadChanges = { stored: false, failure: errorText(error) };
+      } else {
+        errors.push(error);
+      }
+    }
   }
-  let squadChanges: DailySquadChangeOutcome;
-  try {
-    squadChanges = await fetchSquadChanges({
-      database,
-      // The `PL` literal the two history sources above still carry, for the
-      // same reason and closing at the same moment: nothing predicts under
-      // `PD` until ticket 8, so there is no Spanish partition to leave stale,
-      // and ticket 8's loop over the listed Competitions is where this becomes
-      // a third call inside it rather than a fourth literal.
-      competition: "PL",
-      season,
-      http,
-      now: () => observedAt
-    });
-  } catch (error) {
-    squadChanges = { stored: false, failure: errorText(error) };
-  }
+  // A Season with no Competition listed reaches no source at all, which the
+  // pre-cron checklist calls the quietest way for a deployment to do nothing.
+  const unlisted = "no Competition is listed for the Season";
+  xg ??= { stored: false, failure: unlisted };
+  squadChanges ??= { stored: false, failure: unlisted };
   if (errors.length === 1) {
     throw errors[0];
   }

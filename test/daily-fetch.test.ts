@@ -14,6 +14,22 @@ const { Client } = pg;
 
 const UNDERSTAT_LEAGUE_DATA_URL = "https://understat.com/getLeagueData/EPL/2026";
 
+// The three Spanish sources the fetch reaches once `PD` is listed. Each stands
+// for "this source answered", not for its parser — the parsers have their own
+// suites over recorded bytes. What these prove is that the loop reaches them
+// at all, which is what a `PL` literal used to stop it doing.
+const UNDERSTAT_LA_LIGA_DATA_URL =
+  "https://understat.com/getLeagueData/La_liga/2026";
+
+const SPANISH_DIVISION_URLS = [
+  "https://www.football-data.co.uk/mmz4281/2526/SP1.csv",
+  "https://www.football-data.co.uk/mmz4281/2526/SP2.csv"
+] as const;
+
+const spanishDivisionCsv = (division: string): string =>
+  "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG,FTR\n"
+  + `${division},15/08/2025,17:00,Barcelona,Getafe,2,0,H\n`;
+
 const LA_LIGA_MATCHES_URL =
   "https://api.football-data.org/v4/competitions/PD/matches?season=2026";
 
@@ -65,6 +81,9 @@ async function sourceResponses(
       await archivedBody("football-data-2526-E1.csv.gz")
     ],
     [UNDERSTAT_LEAGUE_DATA_URL, UNDERSTAT_LEAGUE_BODY],
+    [UNDERSTAT_LA_LIGA_DATA_URL, JSON.stringify({ dates: [] })],
+    [SPANISH_DIVISION_URLS[0], spanishDivisionCsv("SP1")],
+    [SPANISH_DIVISION_URLS[1], spanishDivisionCsv("SP2")],
     [
       SUMMER_TRANSFERS_URL,
       await archivedBody("wikipedia-transfers-summer-2026.txt.gz")
@@ -96,17 +115,32 @@ describe("the daily fetch", () => {
          understat_match_xg, squad_changes, competitions
        restart identity cascade`
     );
+    // Every source the fetch reaches, it reaches per listed Competition, so a
+    // Season listing none reaches none — the state the pre-cron checklist calls
+    // the quietest way for a deployment to do nothing at all, and the state
+    // migration 0022 leaves a database migrated from empty in. A test that ran
+    // without this row would be testing that state and calling it the Premier
+    // League. The two tests that want a second league add `PD` themselves.
+    await client.query(
+      "insert into competitions (competition, season) values ('PL', $1)",
+      ["2026-27"]
+    );
   });
 
   test("reads football-data.org for every listed Competition but the Premier League",
     async () => {
       await client.query(
-        "insert into competitions (competition, season) values ('PL', $1), ('PD', $1)",
+        "insert into competitions (competition, season) values ('PD', $1)",
         ["2026-27"]
       );
+      // The recorded response, not ticket 3's constructed one: that fixture
+      // carries `Girona FC` and `RCD Mallorca`, neither of which is in La Liga
+      // in 2026-27, so the Squad Change club map derived from the real twenty
+      // refuses them — correctly, and loudly, which is the failure that map
+      // exists to make.
       const responses = await sourceResponses([[
         LA_LIGA_MATCHES_URL,
-        await archivedBody("football-data-org-2026-27-PD.json.gz")
+        await archivedBody("football-data-org-2026-27-PD-recorded.json.gz")
       ]]);
       const requested: string[] = [];
 
@@ -135,7 +169,7 @@ describe("the daily fetch", () => {
         ["2026-27"]
       );
       expect(rows).toEqual([
-        { competition: "PD", fixtures: 8 },
+        { competition: "PD", fixtures: 380 },
         { competition: "PL", fixtures: 380 }
       ]);
     });
@@ -143,7 +177,7 @@ describe("the daily fetch", () => {
   test("a Competition whose source is unusable does not cost another its fetch",
     async () => {
       await client.query(
-        "insert into competitions (competition, season) values ('PL', $1), ('PD', $1)",
+        "insert into competitions (competition, season) values ('PD', $1)",
         ["2026-27"]
       );
       const responses = await sourceResponses([[
