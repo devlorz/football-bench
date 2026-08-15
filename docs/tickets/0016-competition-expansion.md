@@ -952,7 +952,10 @@ for `PL` since the Season opened.
       committed under it, so nothing was rewritten. What it costs — a thirty-minute
       cut-off where every other Gameweek has ninety, so this one is not strictly
       comparable — is written down rather than smoothed over._
-- [ ] **`FOOTBALL_DATA_SEASON` must advance to `2026-27`, and there is a date on it.**
+- [ ] **Blocked upstream — `FOOTBALL_DATA_SEASON` must advance to `2026-27`, and there is
+      a date on it.** Nothing in this repository can close this box: it waits on
+      football-data.co.uk publishing files that did not exist when it was written, and the
+      only work it holds is watching for them and then changing one variable.
       Checklist §4 says to advance it after the first matchday; both leagues have now had
       one and it still reads `2025-26`, so no current-Season history is stored for either.
       The guard that catches this fires once **Premier League Gameweek 1's deadline
@@ -990,9 +993,17 @@ for `PL` since the Season opened.
         curl -sI --max-time 20 \
           "https://www.football-data.co.uk/mmz4281/2627/$d.csv" | head -1; done
       ```
-- [ ] If curation slipped past Gameweek 2, the escape hatch was taken as decided —
-      launch at Gameweek 3 with the sections that are ready — and the stored contexts
-      record exactly what shipped.
+- [~] **n/a — the escape hatch was not needed.** If curation slipped past Gameweek 2, the
+      escape hatch was to be taken as decided — launch at Gameweek 3 with the sections
+      that are ready — and the stored contexts record exactly what shipped.
+      _La Liga opened at **Gameweek 1**, not 2 and not 3, with every v2 section its
+      sources support: history, the league table, prior-Season points per game, xG and
+      Squad Changes. The one thing missing from its packet is availability, which
+      ADR-0037 removed by decision rather than by slippage._
+
+      _Left as `n/a` rather than ticked: nothing was done here, and a tick would claim a
+      contingency was exercised when the case for it never arose. The contingency itself
+      stands for the next Competition._
 
 ## 9 — The five-league price read from Gameweek 1
 
