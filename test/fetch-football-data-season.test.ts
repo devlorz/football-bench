@@ -5,7 +5,9 @@ import {
   fetchFootballDataSeason,
   FootballDataSourceValidationError
 } from "../src/football-data/fetch-season.js";
-import { resolveFootballDataTeamName } from "../src/football-data/team-identity.js";
+import {
+  resolveFootballDataTeamName, teamNamesOf
+} from "../src/football-data/team-identity.js";
 import { archivedBody } from "./archived-fixture.js";
 
 const { Client } = pg;
@@ -102,7 +104,7 @@ describe("fetching football-data.co.uk results", () => {
       fplBootstrap.teams
         .map(({ name }) => name)
         .filter((name) => {
-          const resolved = resolveFootballDataTeamName(name);
+          const resolved = resolveFootballDataTeamName(teamNamesOf("PL"), name);
           return resolved === undefined || !availableHistory.has(resolved);
         })
     ).toEqual([]);

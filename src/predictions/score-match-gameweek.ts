@@ -8,7 +8,9 @@ import {
   type Outcome,
   type Probs
 } from "../fixture-result.js";
-import { footballDataTeamName } from "../football-data/team-identity.js";
+import {
+  footballDataTeamName, teamNamesOf, type TeamNames
+} from "../football-data/team-identity.js";
 import { emptyRepairDistribution } from "../repairs.js";
 import { GAP_CAUSES, type GapCause } from "./gap-alert.js";
 import {
@@ -1146,6 +1148,7 @@ async function priorSeasonResults(
  * pinned constant; nothing has asked for one.
  */
 const eloForecast = (
+  names: TeamNames | undefined,
   history: EloResult[],
   fixtures: LockedFixture[]
 ): ForecastFixture[] => {
@@ -1163,8 +1166,8 @@ const eloForecast = (
 
   const forecast = new Map<number, Probs>();
   for (const { fixtureId, homeTeam, awayTeam, result } of chronological(fixtures)) {
-    const home = footballDataTeamName(homeTeam);
-    const away = footballDataTeamName(awayTeam);
+    const home = footballDataTeamName(names, homeTeam);
+    const away = footballDataTeamName(names, awayTeam);
     forecast.set(fixtureId, eloProbabilities(rating(home), rating(away)));
     // After the forecast, never before it: a Fixture is answered on what stood
     // when it kicked off. An unsettled Fixture moves nothing and is passed
@@ -1649,7 +1652,9 @@ export async function scoreMatchGameweek({
     {
       id: REFERENCE_ELO,
       forecast: eloForecast(
-        await priorSeasonResults(database, competition, season), locked
+        teamNamesOf(competition),
+        await priorSeasonResults(database, competition, season),
+        locked
       )
     }
   ];

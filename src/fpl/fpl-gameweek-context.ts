@@ -12,6 +12,7 @@ import {
   leagueTable,
   type HistoricalMatch
 } from "../context/build-historical-context.js";
+import { teamNamesOf } from "../football-data/team-identity.js";
 import type { Position } from "./apply-gameweek-action.js";
 
 type Database = Pick<Client, "query">;
@@ -237,7 +238,10 @@ async function currentSeasonTable(
   const latest = results.rows.at(-1);
   return latest === undefined
     ? null
-    : { through: latest.played_on, rows: leagueTable(results.rows) };
+    : {
+        through: latest.played_on,
+        rows: leagueTable(teamNamesOf("PL"), results.rows)
+      };
 }
 
 /**

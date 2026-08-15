@@ -32,10 +32,17 @@ export interface MatchPrompt {
  *
  * The sha is over a fully rendered context, not over the template, because
  * that is the mechanism that already exists and what it is worth pinning is
- * the whole prompt's format. `PD`'s moved once, in ticket 6, when La Liga got
- * its divisions and the league table stopped reading "unavailable" — the move
- * ticket 4 wrote it down expecting, legitimate because the freeze binds at
- * first use (ADR-0038) and nothing predicts under this version until ticket 8.
+ * the whole prompt's format. `PD`'s has moved twice, both before first use and
+ * both legitimate for the reason ADR-0038 gives — the freeze binds at first
+ * use, and nothing predicts under this version until ticket 8. It moved in
+ * ticket 6, when La Liga got its divisions and the league table stopped
+ * reading "unavailable", and again when its clubs got the names their stored
+ * results are filed under: until then every La Liga club answered "team name
+ * did not resolve against stored results" and the whole history section was
+ * empty behind 842 rows that were sitting right there.
+ *
+ * Both moves were found the same way, by rendering the packet and reading it,
+ * which is what `context:show` is for and what ticket 8's first act should be.
  * From here it is as unmovable as the Premier League's.
  */
 const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
@@ -47,7 +54,7 @@ const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
   PD: {
     version: "match-pd/2026-27-v1",
     sha256:
-      "b11a86bc791d505367a8db0d14aa7254a3f710349f4be83f5080bca17c3be374",
+      "19a13fd473140cfd52fed770e3c98ec0db86b6f7441fc1bfc95776ca2c0f8112",
     competitionName: "La Liga"
   }
 };

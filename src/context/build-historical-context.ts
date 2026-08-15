@@ -1,6 +1,8 @@
 import { divisionsOf } from "../football-data/divisions.js";
 import {
   footballDataTeamName,
+  teamNamesOf,
+  type TeamNames,
   resolveFootballDataTeamName
 } from "../football-data/team-identity.js";
 
@@ -80,10 +82,14 @@ function previousSeason(season: string): string {
   return `${start}-${String(start + 1).slice(2)}`;
 }
 
-function includesTeam(match: HistoricalMatch, team: string): boolean {
-  const canonical = footballDataTeamName(team);
-  return footballDataTeamName(match.home_team) === canonical
-    || footballDataTeamName(match.away_team) === canonical;
+function includesTeam(
+  names: TeamNames | undefined,
+  match: HistoricalMatch,
+  team: string
+): boolean {
+  const canonical = footballDataTeamName(names, team);
+  return footballDataTeamName(names, match.home_team) === canonical
+    || footballDataTeamName(names, match.away_team) === canonical;
 }
 
 function playedBefore(match: HistoricalMatch, asOf: Date): boolean {
@@ -101,12 +107,16 @@ function emptyRecord(): TeamRecord {
   };
 }
 
-function teamRecord(matches: HistoricalMatch[], team: string): TeamRecord {
-  const canonical = footballDataTeamName(team);
+function teamRecord(
+  names: TeamNames | undefined,
+  matches: HistoricalMatch[],
+  team: string
+): TeamRecord {
+  const canonical = footballDataTeamName(names, team);
   const record = emptyRecord();
   for (const match of matches) {
-    const home = footballDataTeamName(match.home_team) === canonical;
-    const away = footballDataTeamName(match.away_team) === canonical;
+    const home = footballDataTeamName(names, match.home_team) === canonical;
+    const away = footballDataTeamName(names, match.away_team) === canonical;
     if (!home && !away) {
       continue;
     }
@@ -132,14 +142,17 @@ function teamRecord(matches: HistoricalMatch[], team: string): TeamRecord {
  * Club name breaks a tie all three leave, so the order is a function of the
  * results alone and the same results always render the same text.
  */
-export function leagueTable(matches: HistoricalMatch[]): LeagueTableRow[] {
+export function leagueTable(
+  names: TeamNames | undefined,
+  matches: HistoricalMatch[]
+): LeagueTableRow[] {
   const clubs = new Set<string>();
   for (const match of matches) {
-    clubs.add(footballDataTeamName(match.home_team));
-    clubs.add(footballDataTeamName(match.away_team));
+    clubs.add(footballDataTeamName(names, match.home_team));
+    clubs.add(footballDataTeamName(names, match.away_team));
   }
   return [...clubs].map((club) => {
-    const record = teamRecord(matches, club);
+    const record = teamRecord(names, matches, club);
     return {
       club,
       ...record,
@@ -171,9 +184,13 @@ function ordinal(position: number): string {
   }
 }
 
-function positionIn(matches: HistoricalMatch[], team: string): number | undefined {
-  const canonical = footballDataTeamName(team);
-  const index = leagueTable(matches).findIndex(({ club }) =>
+function positionIn(
+  names: TeamNames | undefined,
+  matches: HistoricalMatch[],
+  team: string
+): number | undefined {
+  const canonical = footballDataTeamName(names, team);
+  const index = leagueTable(names, matches).findIndex(({ club }) =>
     club === canonical
   );
   return index < 0 ? undefined : index + 1;
@@ -210,6 +227,7 @@ const STAT_SPECS: StatSpec[] = [
  * zero.
  */
 function statSegment(
+  names: TeamNames | undefined,
   matches: HistoricalMatch[],
   canonical: string,
   spec: StatSpec
@@ -218,7 +236,7 @@ function statSegment(
   let againstSum = 0;
   let covered = 0;
   for (const match of matches) {
-    const home = footballDataTeamName(match.home_team) === canonical;
+    const home = footballDataTeamName(names, match.home_team) === canonical;
     const teamValue = home ? spec.home(match) : spec.away(match);
     const oppValue = home ? spec.away(match) : spec.home(match);
     if (typeof teamValue === "number" && typeof oppValue === "number") {
@@ -238,25 +256,30 @@ function statSegment(
 }
 
 function formatRecord(
+  names: TeamNames | undefined,
   matches: HistoricalMatch[],
   canonical: string,
   emptyText: string
 ): string {
-  const record = teamRecord(matches, canonical);
+  const record = teamRecord(names, matches, canonical);
   if (record.played === 0) {
     return emptyText;
   }
   const aggregates = STAT_SPECS
-    .map((spec) => statSegment(matches, canonical, spec))
+    .map((spec) => statSegment(names, matches, canonical, spec))
     .join(", ");
   return `${record.played} played, ${record.wins}W ${record.draws}D `
     + `${record.losses}L, GF ${record.goalsFor}, GA ${record.goalsAgainst}, `
     + `${aggregates}.`;
 }
 
-function outcome(match: HistoricalMatch, team: string): "W" | "D" | "L" {
-  const home = footballDataTeamName(match.home_team)
-    === footballDataTeamName(team);
+function outcome(
+  names: TeamNames | undefined,
+  match: HistoricalMatch,
+  team: string
+): "W" | "D" | "L" {
+  const home = footballDataTeamName(names, match.home_team)
+    === footballDataTeamName(names, team);
   const goalsFor = home ? match.home_goals : match.away_goals;
   const goalsAgainst = home ? match.away_goals : match.home_goals;
   return goalsFor > goalsAgainst ? "W" : goalsFor === goalsAgainst ? "D" : "L";
@@ -293,12 +316,16 @@ function performanceSegments(match: HistoricalMatch): string[] {
   ];
 }
 
-function matchLine(match: HistoricalMatch, team?: string): string {
+function matchLine(
+  names: TeamNames | undefined,
+  match: HistoricalMatch,
+  team?: string
+): string {
   // The head-to-head section stays score-only: performance signals belong on
   // the form lines, where recent performance is what the section is for.
   const result = team === undefined
     ? ""
-    : ` | ${outcome(match, team)} | ${performanceSegments(match).join(", ")}`;
+    : ` | ${outcome(names, match, team)} | ${performanceSegments(match).join(", ")}`;
   return `- ${match.season} ${match.division} | `
     + `${match.played_on.toISOString().slice(0, 10)} | `
     + `${match.home_team} ${match.home_goals}-${match.away_goals} `
@@ -306,6 +333,7 @@ function matchLine(match: HistoricalMatch, team?: string): string {
 }
 
 function priorSeasonLine(
+  names: TeamNames | undefined,
   matches: HistoricalMatch[],
   divisions: Divisions | undefined,
   priorSeason: string,
@@ -319,7 +347,7 @@ function priorSeasonLine(
     return noData;
   }
   const teamMatches = matches.filter((match) =>
-    match.season === priorSeason && includesTeam(match, team)
+    match.season === priorSeason && includesTeam(names, match, team)
   );
   const division = [divisions.top, divisions.second]
     .find((candidate) =>
@@ -331,19 +359,19 @@ function priorSeasonLine(
   const divisionMatches = matches.filter((match) =>
     match.season === priorSeason && match.division === division
   );
-  const position = positionIn(divisionMatches, team);
+  const position = positionIn(names, divisionMatches, team);
   if (position === undefined) {
     return noData;
   }
   const promoted = division === divisions.second;
-  const canonical = footballDataTeamName(team);
+  const canonical = footballDataTeamName(names, team);
   // The club's rows inside the division the line above names, and only those:
   // a rate mixing two divisions would be the normalisation ADR-0030 refuses.
   const clubMatches = divisionMatches.filter((match) =>
-    includesTeam(match, canonical)
+    includesTeam(names, match, canonical)
   );
   const formatPointsPerGame = (of: HistoricalMatch[]): string => {
-    const record = teamRecord(of, canonical);
+    const record = teamRecord(names, of, canonical);
     return record.played === 0
       ? "unavailable"
       : ((record.wins * 3 + record.draws) / record.played).toFixed(2);
@@ -354,10 +382,10 @@ function priorSeasonLine(
       + `\nPrior-Season points per game: `
       + `${formatPointsPerGame(clubMatches)} overall, `
       + `${formatPointsPerGame(clubMatches.filter((match) =>
-        footballDataTeamName(match.home_team) === canonical
+        footballDataTeamName(names, match.home_team) === canonical
       ))} home, `
       + `${formatPointsPerGame(clubMatches.filter((match) =>
-        footballDataTeamName(match.away_team) === canonical
+        footballDataTeamName(names, match.away_team) === canonical
       ))} away.`,
     promoted
   };
@@ -365,6 +393,7 @@ function priorSeasonLine(
 
 function teamSection(
   options: BuildHistoricalContextOptions,
+  names: TeamNames | undefined,
   divisions: Divisions | undefined,
   team: string,
   eligibleMatches: HistoricalMatch[],
@@ -373,29 +402,30 @@ function teamSection(
   const exactStoredIdentity = eligibleMatches.some((match) =>
     match.home_team === team || match.away_team === team
   );
-  const resolvedTeam = resolveFootballDataTeamName(team)
+  const resolvedTeam = resolveFootballDataTeamName(names, team)
     ?? (exactStoredIdentity ? team : undefined);
   const canonical = resolvedTeam ?? team;
   const currentTeamMatches = currentMatches.filter((match) =>
-    includesTeam(match, canonical)
+    includesTeam(names, match, canonical)
   );
   const homeMatches = currentTeamMatches.filter((match) =>
-    footballDataTeamName(match.home_team) === canonical
+    footballDataTeamName(names, match.home_team) === canonical
   );
   const awayMatches = currentTeamMatches.filter((match) =>
-    footballDataTeamName(match.away_team) === canonical
+    footballDataTeamName(names, match.away_team) === canonical
   );
   const prior = priorSeasonLine(
+    names,
     eligibleMatches,
     divisions,
     previousSeason(options.season),
     canonical
   );
   const hasTopFlightHistory = eligibleMatches.some((match) =>
-    match.division === divisions?.top && includesTeam(match, canonical)
+    match.division === divisions?.top && includesTeam(names, match, canonical)
   );
   const form = eligibleMatches
-    .filter((match) => includesTeam(match, canonical))
+    .filter((match) => includesTeam(names, match, canonical))
     .sort((left, right) => right.played_on.getTime() - left.played_on.getTime())
     .slice(0, 5);
   // No current-Season position line: the table above the sections shows it,
@@ -420,16 +450,19 @@ function teamSection(
   }
   lines.push(
     `Current-Season overall: ${formatRecord(
+      names,
       currentTeamMatches,
       canonical,
       "no matches played."
     )}`,
     `Current-Season home split: ${formatRecord(
+      names,
       homeMatches,
       canonical,
       "no home matches played."
     )}`,
     `Current-Season away split: ${formatRecord(
+      names,
       awayMatches,
       canonical,
       "no away matches played."
@@ -440,7 +473,7 @@ function teamSection(
   } else {
     lines.push(
       "Last five matches played:",
-      ...form.map((match) => matchLine(match, canonical))
+      ...form.map((match) => matchLine(names, match, canonical))
     );
   }
   return lines;
@@ -454,6 +487,7 @@ function teamSection(
  * track makes (ADR-0021), and an empty table says so rather than vanishing.
  */
 function tableSection(
+  names: TeamNames | undefined,
   divisions: Divisions | undefined,
   currentMatches: HistoricalMatch[]
 ): string[] {
@@ -474,7 +508,7 @@ function tableSection(
   return [
     `${divisions.top} table (results through `
     + `${new Date(through).toISOString().slice(0, 10)}):`,
-    ...leagueTable(currentMatches).map((row, index) =>
+    ...leagueTable(names, currentMatches).map((row, index) =>
       `${index + 1}. ${row.club} — Pld ${row.played}, W ${row.wins}, `
       + `D ${row.draws}, L ${row.losses}, GF ${row.goalsFor}, `
       + `GA ${row.goalsAgainst}, Pts ${row.points}`
@@ -485,13 +519,14 @@ function tableSection(
 export function buildHistoricalContext(
   options: BuildHistoricalContextOptions
 ): string {
+  const names = teamNamesOf(options.competition);
   const eligibleMatches = options.matches.filter((match) =>
     playedBefore(match, options.asOf)
   );
   const headToHead = eligibleMatches
     .filter((match) =>
-      includesTeam(match, options.homeTeam)
-      && includesTeam(match, options.awayTeam)
+      includesTeam(names, match, options.homeTeam)
+      && includesTeam(names, match, options.awayTeam)
     )
     .sort((left, right) => right.played_on.getTime() - left.played_on.getTime())
     .slice(0, 5);
@@ -509,15 +544,15 @@ export function buildHistoricalContext(
   return [
     `Historical context as of ${options.asOf.toISOString()}`,
     "",
-    ...tableSection(divisions, currentMatches),
+    ...tableSection(names, divisions, currentMatches),
     "",
-    ...teamSection(options, divisions, options.homeTeam, eligibleMatches, currentMatches),
+    ...teamSection(options, names, divisions, options.homeTeam, eligibleMatches, currentMatches),
     "",
-    ...teamSection(options, divisions, options.awayTeam, eligibleMatches, currentMatches),
+    ...teamSection(options, names, divisions, options.awayTeam, eligibleMatches, currentMatches),
     "",
     "Head-to-head history:",
     ...(headToHead.length === 0
       ? ["No prior meeting in stored data."]
-      : headToHead.map((match) => matchLine(match)))
+      : headToHead.map((match) => matchLine(names, match)))
   ].join("\n");
 }
