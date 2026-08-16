@@ -15,7 +15,7 @@ shape). Vocabulary follows `CONTEXT.md`; the handoff's "Model stats" is rendered
 
 The FPL track has run, scored and stored its record since the Season opened, but none of it
 is visible: the read API has no FPL endpoint and the dashboard has no FPL page. A reader who
-wants to know how the nine Entrants' Squads are doing — who is top, what Team Sheet each
+wants to know how the ten Entrants' Squads are doing — who is top, what Team Sheet each
 locked, how an Entrant's decisions have played out — has nothing to open. And the one way
 the record *can* currently be read (querying the database) is exactly the path ADR-0003
 worries about: a bare ranking that looks like evidence of which Base Model manages a Squad
@@ -26,7 +26,7 @@ better, when one seat per Base Model means it demonstrates only that the track r
 Three pages under `/fpl`, in the existing Astro project, served by the existing Worker,
 each fetching its own new endpoint:
 
-- **`/fpl` — FPL points ranking.** Nine Entrants by cumulative FPL points through the
+- **`/fpl` — FPL points ranking.** Ten Entrants by cumulative FPL points through the
   latest Settled Gameweek, in three presentation variants (Table, Race, Cards), with the
   Demonstration qualification as a footnote under the ranking.
 - **`/fpl/squads` — Latest squads.** The Team Sheet each Entrant locked for the current
@@ -44,7 +44,7 @@ database; no new tables, no new metrics.
 
 ### Reading the FPL points ranking
 
-1. As a reader, I want the nine Entrants ranked by cumulative FPL points through the latest
+1. As a reader, I want the ten Entrants ranked by cumulative FPL points through the latest
    Settled Gameweek, so that I can see the state of the track at a glance.
 2. As a reader, I want each row to show the Entrant's name over its Base Model id, so that
    I know which seat I am looking at without a second lookup.
@@ -58,7 +58,7 @@ database; no new tables, no new metrics.
    ranking is ordered by.
 7. As a reader, I want the Race variant — cumulative points per Gameweek as one line per
    Entrant — so that I can see how the ranking came to be, not just where it stands.
-8. As a reader, I want the Cards variant, so that I can scan the field as nine summary
+8. As a reader, I want the Cards variant, so that I can scan the field as ten summary
    tiles.
 9. As a reader, I want my chosen variant reflected in the URL, so that I can link the view
    I am looking at.
@@ -193,21 +193,28 @@ establishes as the system of record).
 Per ADR-0033: `/api/fpl/leaderboard`, `/api/fpl/squads`, `/api/fpl/entrants`, three new
 branches in the Worker's existing routing chain, behind the same select-only role.
 
-- **Leaderboard** returns the nine ranked rows for the latest Settled Gameweek — Entrant,
+- **Leaderboard** returns the ten ranked rows for the latest Settled Gameweek — Entrant,
   Base Model id, Gameweek points, Season total, movement, Squad value, Chips remaining —
   plus the Race variant's full cumulative series per Entrant (the variants are one page;
   switching them must not fetch), the Gameweek span the ranking covers, and the
   Demonstration qualification read from the detail of the rows the ranking was read off.
-- **Squads** returns all nine Entrants' current-Gameweek state: the Team Sheet, the
+- **Squads** returns all ten Entrants' current-Gameweek state: the Team Sheet, the
   fifteen players with position, club, price, Selling Price and Gameweek points, the stat
-  strip's values, the Gameweek's Transfers with costs, and the validation record. All nine,
+  strip's values, the Gameweek's Transfers with costs, and the validation record. All ten,
   so the picker is a re-render.
-- **Entrants** returns all nine Entrants' full histories: per-Gameweek points, Squad value
+- **Entrants** returns all ten Entrants' full histories: per-Gameweek points, Squad value
   and bank series, Chips played and remaining, captain picks with returns, Transfer history
   with costs, and the operator footer's totals including Gaps and the Prompt Version.
 
 Every FPL read filters to the FPL track's rows, mirroring how the match endpoints filter to
 theirs, so the two rankings stay disjoint by construction.
+
+Since ADR-0035 those reads also carry `competition = 'PL'`. The Competition is part of the
+key on `scores` and the tables beside it, so a read that omits it is a read of every league
+at once; and Fantasy Premier League is the Premier League by nature rather than by argument,
+so the literal is stated at this boundary the way the other Premier-League-by-nature callers
+state theirs. Spec 0017 confirms it: the FPL endpoints keep their paths and their `PL`
+literal rather than being given a Competition they cannot have a second of.
 
 ### Only Settled, and absence is announced
 
@@ -327,7 +334,7 @@ first page that needs them.
 
 ### The seed
 
-One seed serves all three endpoints: nine Entrants with Manager States across at least
+One seed serves all three endpoints: ten Entrants with Manager States across at least
 three Settled Gameweeks, including at minimum one Transfer taken as a Hit, one banked Free
 Transfer, one played Chip, one Roll Over, one Repair spent, one Gap, and one price rise
 and fall (to exercise Selling Price both ways). Movement markers need at least two
@@ -341,4 +348,6 @@ cumulative snapshots; the GW19 expiry marker needs no seed — it is a fixed cal
 - That the demonstration sentence is present in the seeded rows the same way the scorer
   writes it in production, so the equality test is against the real shape.
 - The race chart's label de-overlap against the nine-line placeholder data in the handoff
-  prototype, where the collisions are known.
+  prototype, where the collisions are known. Nine is the prototype's own invented field and
+  not the roster's ten (ADR-0034); the de-overlap must hold at ten, which is where the
+  labels have less room, not less.

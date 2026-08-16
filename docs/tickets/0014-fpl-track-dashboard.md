@@ -20,14 +20,14 @@ rank movement, Selling Price, and history replayed from Manager States.
 ## A seeded FPL Season
 
 **What to build:** A developer with an empty local Postgres runs one command and gets the FPL
-Season the pages must render — nine Entrants with Manager States across at least three
+Season the pages must render — ten Entrants with Manager States across at least three
 Settled Gameweeks, with the real FPL scorer run over it. Every state a screen has to show
 exists in the seed rather than hypothetically. It is a development and test tool and never
 runs against a deployed database.
 
 **Blocked by:** None — can start immediately.
 
-- [x] One command against an empty database produces nine Entrants with Manager States and
+- [x] One command against an empty database produces ten Entrants with Manager States and
       Team Sheets across at least three Settled Gameweeks
 - [x] Every FPL `scores` row comes from running the real scorer; the seed writes none itself
 - [x] The seed contains at least one Transfer taken as a Hit, one banked Free Transfer, one
@@ -39,7 +39,7 @@ runs against a deployed database.
 
 ## The FPL leaderboard endpoint
 
-**What to build:** A `GET /api/fpl/leaderboard` over the seeded Season returns the nine
+**What to build:** A `GET /api/fpl/leaderboard` over the seeded Season returns the ten
 Entrants ranked by cumulative FPL points through the latest Settled Gameweek — with the
 Gameweek's own points, rank movement, Squad value, Chips remaining, the Race variant's full
 cumulative series, and the Demonstration qualification — served through the existing read
@@ -47,7 +47,7 @@ seam under the select-only role.
 
 **Blocked by:** "A seeded FPL Season".
 
-- [x] The response carries the documented body: nine ranked rows, the Gameweek span, the
+- [x] The response carries the documented body: ten ranked rows, the Gameweek span, the
       per-Entrant cumulative series, and the qualification
 - [x] Rank movement is computed against the cumulative snapshot at the previous Settled
       Gameweek, and the first Settled Gameweek shows no movement rather than inventing one
@@ -93,21 +93,21 @@ without fetching, and the chosen variant is linkable.
       weights, and its labels are positioned HTML de-overlapped to the minimum gap
 - [x] The de-overlap is a pure function with its own tests: labels forced apart to the
       minimum gap, order preserved
-- [x] The Cards variant renders the nine tiles with rank, movement, total and the three tags
+- [x] The Cards variant renders the ten tiles with rank, movement, total and the three tags
 - [x] The variant lives in the URL via `replaceState` and a shared link opens on the linked
       variant
 - [x] Switching variants issues no network request
 
 ## The latest-squads endpoint
 
-**What to build:** A `GET /api/fpl/squads` over the seeded Season returns all nine Entrants'
+**What to build:** A `GET /api/fpl/squads` over the seeded Season returns all ten Entrants'
 current-Gameweek state — the Team Sheet, all fifteen players with position, club, price,
 Selling Price and Gameweek points, the stat strip's values, the Gameweek's Transfers with
 costs, and the validation record — so the page's picker can switch without fetching.
 
 **Blocked by:** "A seeded FPL Season".
 
-- [x] The response carries all nine Entrants for the latest Settled Gameweek in one body
+- [x] The response carries all ten Entrants for the latest Settled Gameweek in one body
 - [x] Selling Price is purchase price plus half of any rise rounded down, and a fall passes
       through in full — both proven against the seed
 - [x] Transfers report out, in, and cost, including a −4 Hit where the seed took one
@@ -125,7 +125,7 @@ list — with the stat strip above and the Gameweek's Transfers and validation r
 
 **Blocked by:** "The FPL section and the ranking page", "The latest-squads endpoint".
 
-- [ ] The picker lists the nine Entrants in leaderboard order and switching is a re-render,
+- [ ] The picker lists the ten Entrants in leaderboard order and switching is a re-render,
       not a fetch
 - [ ] The pitch view renders four position rows and the bench strip per the design — jersey
       clip-path, captain in accent with the armband badge, opponent and points per plate
@@ -138,7 +138,7 @@ list — with the stat strip above and the Gameweek's Transfers and validation r
 
 ## The Entrant-record endpoint
 
-**What to build:** A `GET /api/fpl/entrants` over the seeded Season returns all nine
+**What to build:** A `GET /api/fpl/entrants` over the seeded Season returns all ten
 Entrants' full histories — per-Gameweek points, Squad value and bank series, Chips played
 and remaining, captain picks with returns, Transfer history with costs, and the operator
 footer's totals — with the captain and Transfer history read by replaying the stored
@@ -146,7 +146,7 @@ Manager States.
 
 **Blocked by:** "A seeded FPL Season".
 
-- [ ] The response carries all nine Entrants' full per-Gameweek histories in one body
+- [ ] The response carries all ten Entrants' full per-Gameweek histories in one body
 - [ ] Captain picks and Transfer history replayed from Manager States match the seed's
       known actions, including the Hit's cost
 - [ ] Chips played report their Gameweek; Chips remaining count both halves
@@ -154,6 +154,9 @@ Manager States.
       match the seed
 - [ ] A Gameweek missing inside the Settled span is announced in the body, not skipped
 - [ ] Responses carry the scored-data cache lifetime
+- [ ] Every read filters `track = 'fpl'` and `competition = 'PL'`, as the two shipped FPL
+      endpoints do: the Competition is part of the key on `scores` since ADR-0035, and the
+      FPL track is the Premier League by nature rather than by argument (spec 0017)
 
 ## The Entrant-record page
 
@@ -207,4 +210,6 @@ ADR-0029 records is that cache behaviour is walked, not read.
 - [ ] A deploy empties the cache for the new endpoints, keeping the runbook's revoke step
       true
 - [ ] The Demonstration qualification is visible under the live leaderboard
-- [ ] The Match track's three pages still render untouched
+- [ ] The Match track still renders untouched at the paths spec 0017 moved it to — `/pl`,
+      `/pl/fixtures`, `/pl/entrants` and the same three for `/pd` — and the three redirects
+      that replaced its old URLs (`/` → `/pl`, `/fixtures`, `/entrants`) still answer
