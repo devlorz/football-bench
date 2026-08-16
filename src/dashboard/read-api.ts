@@ -18,6 +18,7 @@ import {
   MATCH_POINTS_SEASON_TO_DATE_METRIC, RPS_METRIC,
   RPS_SEASON_TO_DATE_METRIC, type BetLeg
 } from "../predictions/score-match-gameweek.js";
+import { MAX_REPAIRS } from "../repairs.js";
 
 /**
  * Every query below that filters by Season also filters by Competition. The
@@ -1029,6 +1030,13 @@ async function fplScoredThrough(
 interface ListedPlayer {
   name: string;
   club: string;
+  /**
+   * The club's own three-letter code, or null for a listing taken before the
+   * Lock recorded one (migration 0029). Null and not the first three letters of
+   * the name: a code is read from the source that authors it or it is not
+   * reported, and a page shows the club's name where there is none.
+   */
+  clubCode: string | null;
   position: Position;
   priceTenths: number;
 }
@@ -1046,35 +1054,59 @@ interface ListedPlayer {
  * Squads page wants that and the name beside it — and an Entrant owning a
  * player the Season never listed is the same fault to both.
  */
+interface ListedPool {
+  /** The listing a player is rendered from, or a failure if he has none. */
+  player: (fplId: number) => ListedPlayer;
+  /**
+   * A club's own code, for a club no listed player is owned from — the
+   * opponent on a plate is a club like any other and the field may own nobody
+   * who plays for it. Null where the record holds no code (migration 0029).
+   */
+  clubCode: (club: string) => string | null;
+}
+
 async function listedPool(
   query: Query,
   season: string,
   gw: number | null
-): Promise<(fplId: number) => ListedPlayer> {
-  const listed = new Map(
-    (gw === null ? [] : await query(
-      `select distinct on (fpl_id)
-              fpl_id, web_name, team_name, position, price_tenths
-         from fpl_players
-        where competition = 'PL' and season = $1 and gw <= $2
-        order by fpl_id, gw desc`,
-      [season, gw]
-    )).map((row) => [Number(row.fpl_id), {
-      name: String(row.web_name),
-      club: String(row.team_name),
-      position: String(row.position) as Position,
-      priceTenths: Number(row.price_tenths)
-    }])
+): Promise<ListedPool> {
+  const rows = gw === null ? [] : await query(
+    `select distinct on (fpl_id)
+            fpl_id, web_name, team_name, short_name, position, price_tenths
+       from fpl_players
+      where competition = 'PL' and season = $1 and gw <= $2
+      order by fpl_id, gw desc`,
+    [season, gw]
   );
-  return (fplId: number): ListedPlayer => {
-    const player = listed.get(fplId);
-    if (player === undefined) {
-      throw new Error(
-        `The Season lists no player ${fplId}, so a Squad holding him cannot `
-        + "be read"
-      );
-    }
-    return player;
+
+  const listed = new Map(rows.map((row) => [Number(row.fpl_id), {
+    name: String(row.web_name),
+    club: String(row.team_name),
+    clubCode: row.short_name === null ? null : String(row.short_name),
+    position: String(row.position) as Position,
+    priceTenths: Number(row.price_tenths)
+  }]));
+
+  // Off the same rows and not a second read of the same table: the code is a
+  // fact about the club, every club with a listing has one on every row of it,
+  // and a second query would restate this one's filter and its "latest listing
+  // wins" rule in a second place for them to drift apart.
+  const codes = new Map(
+    [...listed.values()].map(({ club, clubCode }) => [club, clubCode])
+  );
+
+  return {
+    player: (fplId: number): ListedPlayer => {
+      const player = listed.get(fplId);
+      if (player === undefined) {
+        throw new Error(
+          `The Season lists no player ${fplId}, so a Squad holding him cannot `
+          + "be read"
+        );
+      }
+      return player;
+    },
+    clubCode: (club: string): string | null => codes.get(club) ?? null
   };
 }
 
@@ -1136,7 +1168,7 @@ async function fplLeaderboard(query: Query, season: string): Promise<Response> {
 
   // The other half of Selling Price: what each player was last listed at
   // through the scored Gameweek.
-  const lastListed = await listedPool(query, season, throughGw);
+  const pool = await listedPool(query, season, throughGw);
 
   // The Squad the Entrant is fielding, which during a Free Hit is the week's
   // borrowed fifteen and not the permanent Squad waiting in `free_hit_stash`.
@@ -1146,7 +1178,7 @@ async function fplLeaderboard(query: Query, season: string): Promise<Response> {
   const squadValueOf = (squad: SquadEnvelope): number =>
     squad.active.reduce(
       (total, { fplId, purchasePriceTenths }) =>
-        total + sellingPrice(purchasePriceTenths, lastListed(fplId).priceTenths),
+        total + sellingPrice(purchasePriceTenths, pool.player(fplId).priceTenths),
       0
     );
 
@@ -1258,6 +1290,17 @@ export interface FplSquadPlayer {
   fplId: number;
   name: string;
   club: string;
+  /** The club's own code, or null where the record holds none. */
+  clubCode: string | null;
+  /**
+   * Who his club played in the Gameweek, which the design prints on his plate.
+   *
+   * A list and not one Fixture, because the record answers with the Fixtures
+   * there were: a club with a blank Gameweek has none, and a club with a double
+   * has two. The design drew a single Fixture per plate, which is the ordinary
+   * week and not the rule.
+   */
+  opponents: FplOpponent[];
   position: Position;
   /** What the Gameweek's Lock listed him at, in tenths, as every price is. */
   priceTenths: number;
@@ -1276,6 +1319,28 @@ export interface FplSquadPlayer {
   points: number;
 }
 
+/**
+ * A Fixture as a name plate on the pitch reads it: who the club plays and which
+ * ground it is at.
+ */
+export interface FplOpponent {
+  club: string;
+  /**
+   * The opponent's three-letter code, which is what the plate prints, or null
+   * for a club the record holds no code for (migration 0029). Never derived
+   * from the name: `AVL` and `NFO` are not slices of "Aston Villa" and
+   * "Nottingham Forest", and a page showing the club's name says less than the
+   * design asked for rather than something the record never said.
+   *
+   * Spelled as `FplSquadPlayer` spells the same pair, so the one function that
+   * turns a club into three letters reads both: a player's club and the club he
+   * faced are one thing said twice, and two spellings of it are two places for
+   * the fallback to be written.
+   */
+  clubCode: string | null;
+  home: boolean;
+}
+
 /** A player moving in or out, named because a page cannot name an id. */
 export interface FplTransfer {
   fplId: number;
@@ -1287,6 +1352,15 @@ export interface FplSquadsEntrant {
   id: string;
   name: string;
   baseModel: string;
+  /**
+   * The OpenRouter provider the seat is pinned to (ADR-0009), which the design
+   * names beside the Base Model under a Team Sheet. A column of `models`, which
+   * is the table this endpoint already reads the seat from — the Season Roster
+   * records it because a served open-weight Base Model is a different Base
+   * Model at a different provider, and a reader looking at a Squad is entitled
+   * to the same identity the roster keeps.
+   */
+  provider: string;
   /** Every figure below is null before the first Settled Gameweek. */
   gwPoints: number | null;
   totalPoints: number | null;
@@ -1349,6 +1423,29 @@ export interface FplSquadsBody {
   season: string;
   /** The Settled Gameweek every Sheet below belongs to. */
   gw: number | null;
+  /**
+   * The deadline that Gameweek's Sheets answer, as an instant.
+   *
+   * The Lock is the deadline: a Team Sheet is what an Entrant was holding when
+   * it passed, and a page showing a Sheet without it cannot say which of 38
+   * deadlines it is a Sheet for (spec 0014, story 21). Null before the first
+   * Settled Gameweek, and null for a Gameweek the record holds no deadline for
+   * rather than the Season's first one standing in.
+   *
+   * An instant and not a formatted line: what a reader is shown is the page's
+   * to spell, and a Worker deciding the wording would put the sentence where
+   * nothing renders it.
+   */
+  deadlineAt: string | null;
+  /**
+   * How many Repairs an Entrant is allowed before the track stops asking
+   * (ADR-0010), which is what the Repairs each of them used is read against.
+   *
+   * Served rather than spelled in the page, because the allowance is a fact
+   * about the run: a page reading "1 of 3" against a track that now allows two
+   * is wrong in the half a reader cannot check.
+   */
+  maxRepairs: number;
   entrants: FplSquadsEntrant[];
 }
 
@@ -1367,7 +1464,7 @@ async function fplSquads(query: Query, season: string): Promise<Response> {
   const gw = await fplScoredThrough(query, season);
 
   const rows = await query(
-    `select m.id, m.name, m.base_model,
+    `select m.id, m.name, m.base_model, m.provider,
             points.value as gw_points,
             totals.value as total_points,
             state.squad, state.team_sheet, state.bank, state.free_transfers,
@@ -1423,7 +1520,40 @@ async function fplSquads(query: Query, season: string): Promise<Response> {
   );
 
   // Every name, club, position and price the fifteen are rendered with.
-  const lastListed = await listedPool(query, season, gw);
+  const pool = await listedPool(query, season, gw);
+
+  // Who each club played, by club.
+  //
+  // The join is the club's name and needs no alias table between the two
+  // tables: a Lock writes both the player rows and the Fixture rows out of one
+  // bootstrap's `teams[].name`, so the two spellings are one string by
+  // construction.
+  //
+  // The Fixtures this Gameweek's Lock owns, which is the same set the Fixtures
+  // endpoint publishes and the set the Team Sheet was chosen against. A Fixture
+  // that left the schedule before any Lock reached it was never in the Gameweek;
+  // one that moved carries the Lock that committed it.
+  const opponents = new Map<string, FplOpponent[]>();
+  const seatOpponent = (club: string, opponent: FplOpponent): void => {
+    opponents.set(club, [...opponents.get(club) ?? [], opponent]);
+  };
+  for (const row of gw === null ? [] : await query(
+    `select home_team, away_team from fixtures
+      where competition = 'PL' and season = $1
+        and coalesce(locked_in_gw, gw) = $2
+        and (not deferred or locked_in_gw is not null)
+      order by kickoff_at, fixture_id`,
+    [season, gw]
+  )) {
+    const home = String(row.home_team);
+    const away = String(row.away_team);
+    seatOpponent(home, {
+      club: away, clubCode: pool.clubCode(away), home: true
+    });
+    seatOpponent(away, {
+      club: home, clubCode: pool.clubCode(home), home: false
+    });
+  }
 
   const scored = new Map(
     (gw === null ? [] : await query(
@@ -1435,14 +1565,14 @@ async function fplSquads(query: Query, season: string): Promise<Response> {
 
   /** A player as a Transfer names him: the id the record moved and his name. */
   const asTransfer = (fplId: number): FplTransfer =>
-    ({ fplId, name: lastListed(fplId).name });
+    ({ fplId, name: pool.player(fplId).name });
 
   // The Squad being fielded, which during a Free Hit is the borrowed fifteen
   // and not the permanent Squad waiting in `free_hit_stash` — the Sheet beside
   // it belongs to the players it names.
   const playersOf = (squad: SquadEnvelope): FplSquadPlayer[] =>
     squad.active.map(({ fplId, purchasePriceTenths }) => {
-      const { priceTenths, ...player } = lastListed(fplId);
+      const { priceTenths, ...player } = pool.player(fplId);
       const points = scored.get(fplId);
       // A Gameweek settles for the whole Team Sheet or not at all: the scorer
       // refuses a Gameweek in which any player named on a Sheet has no settled
@@ -1459,6 +1589,7 @@ async function fplSquads(query: Query, season: string): Promise<Response> {
       return {
         fplId,
         ...player,
+        opponents: opponents.get(player.club) ?? [],
         priceTenths,
         sellingPriceTenths: sellingPrice(purchasePriceTenths, priceTenths),
         points
@@ -1499,6 +1630,7 @@ async function fplSquads(query: Query, season: string): Promise<Response> {
       id: String(row.id),
       name: String(row.name),
       baseModel: String(row.base_model),
+      provider: String(row.provider),
       gwPoints: numberOrNull(row.gw_points),
       totalPoints: numberOrNull(row.total_points),
       squadValueTenths: squad === null ? null : players.reduce(
@@ -1523,9 +1655,22 @@ async function fplSquads(query: Query, season: string): Promise<Response> {
     };
   });
 
+  // The deadline the Gameweek's Sheets answer. Read from `gameweeks`, which is
+  // where a Lock's instant is recorded and what the Fixtures endpoint already
+  // publishes for the Match track -- the same row, read by the same key.
+  const [deadline] = gw === null ? [] : await query(
+    `select deadline_at from gameweeks
+      where competition = 'PL' and season = $1 and gw = $2`,
+    [season, gw]
+  );
+
   const body: FplSquadsBody = {
     season,
     gw,
+    deadlineAt: deadline === undefined
+      ? null
+      : new Date(deadline.deadline_at as string | Date).toISOString(),
+    maxRepairs: MAX_REPAIRS,
     // The order the picker lists them in, which is the ranking's. Ties keep the
     // entered order rather than sharing a place: a picker is a list of ten
     // buttons, and the shared rank a tie deserves is the leaderboard's answer

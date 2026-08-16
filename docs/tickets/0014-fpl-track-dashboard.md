@@ -125,16 +125,16 @@ list — with the stat strip above and the Gameweek's Transfers and validation r
 
 **Blocked by:** "The FPL section and the ranking page", "The latest-squads endpoint".
 
-- [ ] The picker lists the ten Entrants in leaderboard order and switching is a re-render,
+- [x] The picker lists the ten Entrants in leaderboard order and switching is a re-render,
       not a fetch
-- [ ] The pitch view renders four position rows and the bench strip per the design — jersey
+- [x] The pitch view renders four position rows and the bench strip per the design — jersey
       clip-path, captain in accent with the armband badge, opponent and points per plate
-- [ ] The list view renders all fifteen with price, Selling Price, Gameweek points and role
+- [x] The list view renders all fifteen with price, Selling Price, Gameweek points and role
       tags, bench rows dimmed
-- [ ] The stat strip shows Gameweek points, Season total, Squad value, bank, Free Transfers
+- [x] The stat strip shows Gameweek points, Season total, Squad value, bank, Free Transfers
       and the active Chip, with the Chip cell dimmed when none is active
-- [ ] The selected Entrant and the pitch/list choice live in the URL via `replaceState`
-- [ ] The tab link to the Entrant record page carries the current selection
+- [x] The selected Entrant and the pitch/list choice live in the URL via `replaceState`
+- [x] The tab link to the Entrant record page carries the current selection
 
 ## The Entrant-record endpoint
 

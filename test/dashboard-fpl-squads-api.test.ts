@@ -14,6 +14,7 @@ import {
   loadManagerState, storeManagerState
 } from "../src/fpl/manager-state-store.js";
 import { scoreFplGameweek } from "../src/fpl/score-fpl-gameweek.js";
+import { MAX_REPAIRS } from "../src/repairs.js";
 
 const { Client } = pg;
 
@@ -183,6 +184,122 @@ describe("the FPL squads endpoint", () => {
       expect(entrant!.players.some(({ points }) => (points ?? 0) > 0)).toBe(true);
     });
 
+  test("names each player's club by the code the club itself carries",
+    async () => {
+      // Read from the Lock's own record and never derived from the name: the
+      // seed spells the club "Nottingham Forest" and FPL's code for it is
+      // `NFO`, which no slice of that name produces.
+      const [entrant] = (await squads()).entrants;
+      const stored = new Map((await query(
+        `select distinct on (fpl_id) fpl_id, team_name, short_name
+           from fpl_players where season = $1 and gw <= 5
+          order by fpl_id, gw desc`,
+        [SEASON]
+      )).map((row) => [Number(row.fpl_id), row]));
+
+      for (const player of entrant!.players) {
+        const listed = stored.get(player.fplId)!;
+        expect(player.club).toBe(listed.team_name);
+        expect(player.clubCode).toBe(listed.short_name);
+      }
+      expect(entrant!.players.every(({ clubCode }) => clubCode?.length === 3))
+        .toBe(true);
+    });
+
+  test("names who each player's club played, and at which ground", async () => {
+    const body = await squads();
+    // The Fixtures this Gameweek's Lock owns, which is the set the endpoint
+    // reads and the set the Team Sheet was chosen against.
+    const played = await query(
+      `select home_team, away_team from fixtures
+        where season = $1 and coalesce(locked_in_gw, gw) = 5
+          and (not deferred or locked_in_gw is not null)`,
+      [SEASON]
+    );
+    expect(played.length).toBeGreaterThan(0);
+
+    // A club's code is read off the players the Lock listed for it, so a club
+    // the seed's pool holds nobody from has none — Brentford plays in the round
+    // and fields nobody ownable. Null there and never three letters of the
+    // name; the plate prints the name instead.
+    const codes = new Map((await query(
+      `select distinct on (team_name) team_name, short_name
+         from fpl_players where season = $1 and gw <= 5
+        order by team_name, gw desc`,
+      [SEASON]
+    )).map((row) => [String(row.team_name), row.short_name]));
+
+    const [entrant] = body.entrants;
+    for (const player of entrant!.players) {
+      const fixture = played.find(({ home_team: home, away_team: away }) =>
+        home === player.club || away === player.club);
+      // A guard and not an assumption. The Blank has no test at this seam (see
+      // the Double describe below for why the record will not let one be made),
+      // so this is the half of that gap that can be covered: every club in the
+      // pool is fielded in this round, so a player the record holds no Fixture
+      // for is a read that lost one. Without it, an endpoint that answered
+      // every player with an empty list would satisfy the loop below by
+      // comparing nothing against nothing, and a Season in which nobody played
+      // would read as a Season rendered correctly.
+      expect(fixture).toBeDefined();
+      const home = fixture!.home_team === player.club;
+      const opponent = String(home ? fixture!.away_team : fixture!.home_team);
+      expect(player.opponents).toEqual([{
+        club: opponent,
+        clubCode: codes.get(opponent) ?? null,
+        home
+      }]);
+    }
+    // And at least one opponent arrived with its own code, so the equality
+    // above is not fifteen nulls agreeing with fifteen nulls.
+    expect(entrant!.players.some(({ opponents }) =>
+      opponents.some(({ clubCode }) => clubCode !== null))).toBe(true);
+    // Both sides of a Fixture are on somebody's Team Sheet, and they must not
+    // agree about which of them was at home.
+    const grounds = new Set(
+      entrant!.players.flatMap(({ opponents }) =>
+        opponents.map(({ home }) => home))
+    );
+    expect(grounds).toEqual(new Set([true, false]));
+  });
+
+  test("names the provider the seat is pinned to", async () => {
+    // A column of `models`, which is the table the seat itself is read from —
+    // ADR-0009 pins it, and the design names it under a Team Sheet beside the
+    // Base Model.
+    const body = await squads();
+    const stored = new Map((await query(
+      "select id, provider from models where role = 'entrant'"
+    )).map((row) => [String(row.id), String(row.provider)]));
+
+    for (const entrant of body.entrants) {
+      expect(entrant.provider).toBe(stored.get(entrant.id));
+    }
+    expect(body.entrants.every(({ provider }) => provider.length > 0))
+      .toBe(true);
+  });
+
+  test("names the deadline the Gameweek's Sheets answer", async () => {
+    // Spec 0014, story 21: a Sheet has to say which of 38 deadlines it is a
+    // Sheet for. Read from `gameweeks`, which is the same row the Match track's
+    // Fixtures endpoint publishes its deadline from.
+    const body = await squads();
+    const [stored] = await query(
+      "select deadline_at from gameweeks where season = $1 and gw = 5",
+      [SEASON]
+    );
+    expect(body.deadlineAt)
+      .toBe(new Date(stored!.deadline_at as string).toISOString());
+  });
+
+  test("serves the Repair allowance the Repairs used are read against",
+    async () => {
+      // The page prints "1 of 3" and holds neither number: the allowance is a
+      // fact about the run (ADR-0010), and a page spelling it would be wrong in
+      // the half a reader cannot check.
+      expect((await squads()).maxRepairs).toBe(MAX_REPAIRS);
+    });
+
   test("carries the stat strip's figures off the Manager State", async () => {
     const body = await squads();
     const stored = new Map((await query(
@@ -273,6 +390,99 @@ describe("the FPL squads endpoint", () => {
     } finally {
       await driver.end();
     }
+  });
+});
+
+/**
+ * A Gameweek in which one club plays twice, which the seed's own round does not
+ * have: its rotation gives every club exactly one Fixture at every Gameweek but
+ * `SHORT_GAMEWEEK`, and that one is the fourteenth — past the fifth, which is
+ * the last the FPL Season settles. A Double is ordinary Fantasy Premier League
+ * and is a shape the endpoint's `opponents` list has to answer with rather than
+ * the single Fixture the design happened to draw.
+ *
+ * Inserted here rather than into the seed, because reshaping the round would
+ * move every Fixture count the rest of the suite reads off it — and what is
+ * under test is one endpoint's reading of `fixtures`, not the rotation.
+ *
+ * The Blank has no test at this seam, and the record is the reason. A Blank
+ * inside the FPL window cannot be made after the fact: migration 0025 makes a
+ * locked Gameweek immutable, so a Fixture a Lock committed played and cannot be
+ * deferred back out; `predictions` rows are immutable, so the Fixture cannot be
+ * deleted out from under them either. Both refusals are the record defending
+ * itself and neither is worth weakening for a test. Making one honestly means
+ * moving `SHORT_GAMEWEEK` into the first five Gameweeks, which relocates the
+ * Match track's Gap and the Fixture ids it is written against — the seed's own
+ * decision, not this endpoint's. `opponentLabel([])` is tested where it is
+ * decided; the endpoint's `?? []` beside it is one default and is not.
+ */
+describe("the FPL squads endpoint at a Double Gameweek", () => {
+  const { writer, reader, query, squads } = squadsEndpoint();
+
+  /** A club with players in the pool, so a Team Sheet can hold one of them. */
+  const DOUBLED = "Liverpool";
+
+  beforeAll(async () => {
+    await writer.connect();
+    await reader.connect();
+    await resetSchema(writer);
+    await seedSeason({
+      database: writer, season: SEASON, stopAt: "the design's"
+    });
+
+    // A second Fixture for a club that already has one, taking a `fixture_id`
+    // no round of the seed reaches and kicking off after the first.
+    await writer.query(
+      `insert into fixtures (
+         season, fixture_id, gw, home_team, away_team, kickoff_at, updated_at
+       ) values ($1, 9001, 5, $2, 'Burnley', '2026-09-14T19:00:00Z', now())`,
+      [SEASON, DOUBLED]
+    );
+    await reader.query("set role dashboard_read");
+
+    return async () => {
+      await writer.end();
+      await reader.end();
+    };
+  });
+
+  test("gives a club with two Fixtures both of them, in kick-off order",
+    async () => {
+      const body = await squads();
+      expect(body.gw).toBe(5);
+
+      const [doubled] = body.entrants
+        .flatMap(({ players }) => players)
+        .filter(({ club }) => club === DOUBLED);
+      expect(doubled).toBeDefined();
+
+      const kickoffs = await query(
+        `select home_team, away_team from fixtures
+          where season = $1 and gw = 5 and (home_team = $2 or away_team = $2)
+          order by kickoff_at, fixture_id`,
+        [SEASON, DOUBLED]
+      );
+      expect(kickoffs).toHaveLength(2);
+      expect(doubled!.opponents).toHaveLength(2);
+      // The order the Fixtures kick off in, which is the order the endpoint
+      // reads them and the order a plate prints them.
+      expect(doubled!.opponents.map(({ club }) => club)).toEqual(
+        kickoffs.map(({ home_team: home, away_team: away }) =>
+          home === DOUBLED ? away : home)
+      );
+      // Both sides of the second Fixture, so the added row is read as a real
+      // Fixture and not as a repeat of the first.
+      expect(new Set(doubled!.opponents.map(({ club }) => club)).size).toBe(2);
+    });
+
+  test("leaves every other club on its own single Fixture", async () => {
+    // One club gained a Fixture; a read that answered that by giving the round
+    // to everybody would pass the test above.
+    const others = (await squads()).entrants
+      .flatMap(({ players }) => players)
+      .filter(({ club }) => club !== DOUBLED);
+    expect(others.length).toBeGreaterThan(0);
+    expect(others.every(({ opponents }) => opponents.length === 1)).toBe(true);
   });
 });
 
@@ -609,6 +819,10 @@ describe("the FPL squads endpoint before the Season starts", () => {
     // The field the empty state switches on, and nine seats behind it: the
     // picker is the page's chrome and renders before there is a Squad to pick.
     expect(body.gw).toBeNull();
+    // And no deadline with it: the Season's Gameweeks have deadlines before it
+    // opens, and publishing Gameweek 1's here would stamp a Sheet nobody has
+    // locked with a Lock nobody has reached.
+    expect(body.deadlineAt).toBeNull();
     expect(body.entrants).toHaveLength(9);
     expect(body.entrants.every((entrant) =>
       entrant.players.length === 0 && entrant.teamSheet === null

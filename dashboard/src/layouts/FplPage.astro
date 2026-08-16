@@ -10,7 +10,7 @@
  * because sharing it means editing that layout -- and the pre-paint half of it
  * has to be inline in the head of every document that wants no flash.
  *
- * The two later tabs land in later slices and 404 until they do.
+ * The Entrant record tab lands in a later slice and 404s until it does.
  */
 interface Props {
   title: string;
@@ -64,8 +64,15 @@ const TABS = [
         <span class="brand-track">FPL track</span>
       </div>
       <nav class="navlinks" id="navlinks">
+        {/* Named, so a page that has an Entrant selected can carry it onto the
+            tab that shows the same Entrant's record. The chrome does not know
+            what a selection is; the page it wraps does, and hands it over. */}
         {TABS.map(({ key, href, label }) => (
-          <a href={href} aria-current={key === current ? "page" : undefined}>
+          <a
+            href={href}
+            data-tab={key}
+            aria-current={key === current ? "page" : undefined}
+          >
             {label}
           </a>
         ))}

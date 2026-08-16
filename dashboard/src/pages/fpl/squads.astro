@@ -1,0 +1,443 @@
+---
+import FplPage from "../../layouts/FplPage.astro";
+import { SEASON_ROSTER_SIZE } from "../../../../src/season-roster.js";
+---
+<FplPage
+  title="Latest squads — Football Bench, FPL track"
+  current="squads"
+>
+  {/*
+    Everything that is not a figure is in the built HTML: the picker's heading,
+    the segmented control, the pitch's markings, the list's column headers and
+    the two headings below the Squad. One response fills every Entrant, so the
+    picker switches without fetching and there is one wait for the page.
+  */}
+  <p class="error" id="error" hidden>
+    The Team Sheets could not be read. Nothing is being retried.
+  </p>
+
+  {/* The Season nothing has been scored in. `gw` being null is the whole of the
+      test, as it is on the ranking: an empty list of Entrants cannot tell a
+      Season that has not been scored from a read that returned nothing. */}
+  <section class="preseason" id="preseason" hidden>
+    <div>
+      <div class="kicker">No Gameweek settled</div>
+      <h2>Team Sheets appear once a Gameweek has been scored</h2>
+      <p>
+        Every Entrant locks a Team Sheet before each Gameweek's deadline. None
+        is shown here until the Gameweek it was locked for has settled, and a
+        Gameweek settles for the whole field or for none of it.
+      </p>
+    </div>
+  </section>
+
+  {/* The roster's own size, read at build time from the one number that
+      declares it: the picker is that many rows, and a loading block that
+      guesses a different height moves the page when the data lands. */}
+  <div class="fplskeleton" id="loading" aria-hidden="true">
+    {Array.from({ length: SEASON_ROSTER_SIZE }).map(() => <div class="skeleton"></div>)}
+  </div>
+
+  <section class="fplsquads" id="squads" hidden>
+    <aside class="fplpicker">
+      <div class="kicker">Entrant</div>
+      <div id="picker" role="group" aria-label="Entrant"></div>
+    </aside>
+
+    <div class="fplsheet">
+      {/* Nothing under here is filled until an Entrant is selected. A link
+          naming a seat this Season has none of selects nothing, and says so
+          rather than showing a different Entrant's Squad under that link. */}
+      <p class="fplnote" id="unselected" hidden>
+        No Entrant by that name entered the FPL track this Season. Pick one from
+        the list.
+      </p>
+
+      <div id="selected" hidden>
+        <section class="fplhero fplhero-sheet">
+          <div>
+            {/* `.kicker` is the accent by default, which is where the design
+                puts this one. */}
+            <div class="kicker" id="sheet-kicker">&nbsp;</div>
+            <h1 id="entrant-name">&nbsp;</h1>
+            {/* Never "model", in the id as well as in the class: CONTEXT.md
+                marks the word Avoid under both Entrant and Base Model, and a
+                rule kept in the copy and broken in the markup is a rule the
+                next reader greps for and does not find. */}
+            <div class="fpl-id" id="entrant-base"></div>
+          </div>
+          {/* Radios and not buttons, as the ranking's variants are: two views
+              of one Team Sheet, of which exactly one holds. */}
+          <div class="seg" id="variants" role="group" aria-label="Squad view">
+            <label class="seg-opt">
+              <input type="radio" name="view" value="pitch" checked />
+              <span>Pitch</span>
+            </label>
+            <label class="seg-opt">
+              <input type="radio" name="view" value="list" />
+              <span>List</span>
+            </label>
+          </div>
+        </section>
+
+        <div class="fplstrip" id="strip"></div>
+
+        <div id="view-pitch">
+          <div class="fplfield">
+            {/* The markings, drawn once here because they are the same on every
+                Team Sheet: a Squad changes and a pitch does not. Stretched
+                rather than kept square -- the field is a layout and not a
+                scale drawing, and nothing is measured off it. */}
+            <svg
+              class="fplmarks"
+              viewBox="0 0 100 62"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <rect x="1" y="1" width="98" height="60"></rect>
+              <rect x="27" y="1" width="46" height="16"></rect>
+              <rect x="39" y="1" width="22" height="6"></rect>
+              <path d="M 40 17 A 12 8 0 0 0 60 17"></path>
+              <line x1="1" y1="61" x2="99" y2="61"></line>
+              <path d="M 38 61 A 13 9 0 0 1 62 61"></path>
+            </svg>
+            <div class="fplrows" id="rows"></div>
+          </div>
+          <div class="fplbench">
+            <div class="fplbench-label">Bench</div>
+            <div class="fplbench-cards" id="bench"></div>
+          </div>
+        </div>
+
+        <div id="view-list" hidden>
+          <div class="fplscroll">
+            <table class="table fpllist">
+              <thead>
+                <tr>
+                  <th scope="col">Pos</th>
+                  <th scope="col">Player</th>
+                  <th scope="col">Club</th>
+                  <th scope="col" class="num">Price</th>
+                  <th scope="col" class="num">Selling price</th>
+                  <th scope="col" class="num" id="list-gw">GW</th>
+                  <th scope="col">Role</th>
+                </tr>
+              </thead>
+              <tbody id="list-rows"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="fplbelow">
+          <div>
+            <div class="kicker" id="transfers-head">&nbsp;</div>
+            <div id="transfers"></div>
+            {/* One line for the Gameweek and not one per row: a Manager State
+                stores what the paid Transfers cost and never which of them was
+                paid, so the design's per-row cost is not a fact the record
+                holds. */}
+            <p class="fplnote" id="transfer-cost"></p>
+          </div>
+          <div>
+            <div class="kicker">Validation</div>
+            <div id="validation"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {/* Bundled rather than `is:inline`: every seat on the pitch, every tag beside
+      a name and every sentence below the Squad lives in `fpl-view.ts` and is
+      tested there, and an inline script can import nothing. */}
+  <script>
+  import {
+    clubTag, figure, gwTag, opponentLabel, pounds, seatTeamSheet, sheetKicker,
+    sheetSubLine, statStrip, statusLine, transferCost, transfersHeading,
+    validationRows, type Seated
+  } from "../../fpl-view.js";
+  import { entrantOf, entrantSlug } from "../../entrant-link.js";
+  import { byId as $, el, text } from "../../dom.js";
+  import type {
+    FplSquadPlayer, FplSquadsBody, FplSquadsEntrant
+  } from "../../../../src/dashboard/read-api.js";
+
+  (() => {
+    /* ── what the URL is holding ────────────────────────────────────────── */
+
+    const VIEWS = ["pitch", "list"] as const;
+    type View = (typeof VIEWS)[number];
+
+    const asked = new URL(location.href).searchParams.get("view");
+    const known = (VIEWS as readonly string[]).includes(asked ?? "");
+    let view: View = known ? asked as View : "pitch";
+
+    // The seat's slug and not its id, which is what `?entrant=` carries
+    // everywhere on this dashboard.
+    let selected = new URL(location.href).searchParams.get("entrant");
+
+    /**
+     * The URL is the state on screen (ADR-0028). Both keys are written with
+     * `replaceState` for the reason the ranking's variant is: picking an
+     * Entrant or a view of its Team Sheet is not navigation, and Back is
+     * expected to leave rather than walk back through twenty choices.
+     *
+     * A `?view=` naming a view that does not exist is corrected, because it is
+     * a URL claiming something the page is not showing. An absent one claims
+     * nothing and is left alone until a reader picks, so a bare `/fpl/squads`
+     * stays one.
+     */
+    const remember = (): void => {
+      const url = new URL(location.href);
+      const was = url.href;
+      if (selected !== null) url.searchParams.set("entrant", selected);
+      if (url.searchParams.get("view") !== null || view !== "pitch") {
+        url.searchParams.set("view", view);
+      }
+      if (url.href !== was) history.replaceState(null, "", url);
+
+      // The Entrant record shows the same Entrant's Season, and a reader who
+      // has picked one here has picked it for both pages. The chrome renders
+      // the tab and knows nothing about a selection; this hands it over.
+      const tab = document.querySelector<HTMLAnchorElement>('[data-tab="entrants"]');
+      if (tab !== null && selected !== null) {
+        tab.search = new URLSearchParams({ entrant: selected }).toString();
+      }
+    };
+
+    const show = (next: View): void => {
+      view = next;
+      for (const each of VIEWS) $("view-" + each).hidden = each !== next;
+      document.querySelector<HTMLInputElement>(
+        `#variants input[value="${next}"]`
+      )!.checked = true;
+    };
+
+    for (const input of
+      document.querySelectorAll<HTMLInputElement>("#variants input")) {
+      input.addEventListener("change", () => {
+        show(input.value as View);
+        remember();
+      });
+    }
+
+    // Before the response, so a reader who followed a link to the list is not
+    // shown the pitch for as long as the fetch takes.
+    show(view);
+    if (asked !== null && !known) remember();
+
+    /* ── the picker ─────────────────────────────────────────────────────── */
+
+    // In the order the body arrived in, which is the leaderboard's: the
+    // endpoint ranks them, and re-sorting here would be a second ranking that
+    // could disagree with the one on the other page.
+    function renderPicker(body: FplSquadsBody, chosen: string | null): void {
+      const rows = document.createDocumentFragment();
+      body.entrants.forEach((entrant, index) => {
+        const button = el("button", "fplpick");
+        button.type = "button";
+        const current = entrant.id === chosen;
+        button.classList.toggle("fplpick-on", current);
+        button.setAttribute("aria-pressed", String(current));
+        button.append(
+          // The row's place in the order the endpoint returned, which is what
+          // the design's rank column is. Not read off a `rank` field: this body
+          // carries none, and inventing one from the totals here would be a
+          // second ranking beside the leaderboard's.
+          el("span", "fplpick-rank", String(index + 1)),
+          el("span", "fplpick-name", entrant.name),
+          el("span", "fplpick-total", figure(entrant.totalPoints))
+        );
+        button.addEventListener("click", () => {
+          selected = entrantSlug(entrant.id);
+          render();
+        });
+        rows.append(button);
+      });
+      $("picker").replaceChildren(rows);
+    }
+
+    /* ── the Team Sheet ─────────────────────────────────────────────────── */
+
+    /** One card on the field: the shirt, the armband and the name plate. */
+    function card(
+      seated: Seated<FplSquadPlayer>, bench: boolean
+    ): HTMLElement {
+      const { player, seat } = seated;
+      const captain = seat.badge === "C";
+      const shirt = el(
+        "div",
+        "fplshirt"
+        + (captain ? " fplshirt-cap" : player.position === "GKP" ? " fplshirt-gk" : "")
+        + (bench ? " fplshirt-sub" : "")
+      );
+      shirt.append(el("span", "fplshirt-club", clubTag(player)));
+
+      const foot = el("div", "fplplate-foot");
+      foot.append(
+        // The bench strip's left slot is the order they come on, where the
+        // field's is the opponent. Both are the seat's own answer.
+        el("span", "fplplate-vs", bench ? seat.slot ?? "" : opponentLabel(player.opponents)),
+        el("span", "fplplate-pts", String(player.points))
+      );
+      if (captain) foot.classList.add("fplplate-foot-cap");
+
+      const plate = el("div", "fplplate");
+      plate.append(el("div", "fplplate-name", player.name), foot);
+
+      const node = el("div", "fplcardp" + (bench ? " fplcardp-sub" : ""));
+      node.append(shirt, plate);
+      if (seat.badge !== null) {
+        node.append(el("span", "fplbadge", seat.badge));
+      }
+      return node;
+    }
+
+    function renderPitch(entrant: FplSquadsEntrant): void {
+      const { rows, bench } = seatTeamSheet(entrant.players, entrant.teamSheet);
+      const field = document.createDocumentFragment();
+      for (const row of rows) {
+        const line = el("div", "fplrow");
+        line.append(...row.map((seated) => card(seated, false)));
+        field.append(line);
+      }
+      $("rows").replaceChildren(field);
+      $("bench").replaceChildren(
+        ...bench.map((seated) => card(seated, true))
+      );
+    }
+
+    function renderList(entrant: FplSquadsEntrant): void {
+      const { all } = seatTeamSheet(entrant.players, entrant.teamSheet);
+      const rows = document.createDocumentFragment();
+      for (const { player, seat } of all) {
+        const row = el("tr", seat.bench ? "fpllist-sub" : "");
+        row.append(
+          el("td", "fpllist-pos", player.position),
+          el("td", "fplname", player.name),
+          el("td", "fpllist-club", clubTag(player)),
+          el("td", "num", pounds(player.priceTenths)),
+          el("td", "num", pounds(player.sellingPriceTenths)),
+          el("td", "num fpltotal", String(player.points))
+        );
+        const tag = el("td", "");
+        tag.append(el("span", `tag tag-${seat.tone}`, seat.label));
+        row.append(tag);
+        rows.append(row);
+      }
+      $("list-rows").replaceChildren(rows);
+    }
+
+    /* ── everything around it ───────────────────────────────────────────── */
+
+    function renderStrip(body: FplSquadsBody, entrant: FplSquadsEntrant): void {
+      $("strip").replaceChildren(
+        ...statStrip(entrant, body.gw).map(({ label, value, tone }) => {
+          const cell = el(
+            "div", tone === null ? "fplcell" : `fplcell fplcell-${tone}`
+          );
+          cell.append(
+            el("div", "fplcell-label", label),
+            el("div", "fplcell-value", value)
+          );
+          return cell;
+        })
+      );
+    }
+
+    function renderBelow(body: FplSquadsBody, entrant: FplSquadsEntrant): void {
+      text($("transfers-head"),
+        transfersHeading(body.gw, entrant.transfersSinceGw));
+
+      // Out beside in, paired by position in the two lists. Neither list is a
+      // reason for the other: the record stores the Squad an action arrived at
+      // and not which departure paid for which arrival, so the pairing is a
+      // layout and never a claim about a swap. A list longer than the other
+      // leaves the missing side blank rather than dropping a player.
+      const moves = Math.max(
+        entrant.transfersOut.length, entrant.transfersIn.length
+      );
+      const rows = document.createDocumentFragment();
+      for (let index = 0; index < moves; index += 1) {
+        const row = el("div", "fplmove-row");
+        row.append(
+          el("span", "fplout", entrant.transfersOut[index]?.name ?? ""),
+          el("span", "fplarrow", "→"),
+          el("span", "fplin", entrant.transfersIn[index]?.name ?? "")
+        );
+        rows.append(row);
+      }
+      $("transfers").replaceChildren(rows);
+      // One line, whether it is reporting a cost or reporting that there was
+      // nothing to cost anything.
+      text($("transfer-cost"), transferCost(moves, entrant.hitPoints));
+
+      $("validation").replaceChildren(
+        ...validationRows(entrant, body.maxRepairs).map(({ label, value }) => {
+          const row = el("div", "fplvrow");
+          row.append(
+            el("span", "fplvlabel", label), el("span", "fplvvalue", value)
+          );
+          return row;
+        })
+      );
+    }
+
+    /* ── the page ───────────────────────────────────────────────────────── */
+
+    let body: FplSquadsBody | null = null;
+
+    function render(): void {
+      const data = body;
+      if (data === null) return;
+
+      text($("status"),
+        statusLine(data.season, data.gw, data.entrants.length));
+
+      const pre = data.gw === null;
+      $("loading").hidden = true;
+      $("preseason").hidden = !pre;
+      $("squads").hidden = pre;
+      if (pre) return;
+
+      // Which seat the link names, decided in the view module and tested there.
+      const chosen = entrantOf(selected, data.entrants.map(({ id }) => id));
+      renderPicker(data, chosen);
+      $("unselected").hidden = chosen !== null;
+      $("selected").hidden = chosen === null;
+      if (chosen === null) return;
+
+      const entrant = data.entrants.find((each) => each.id === chosen)!;
+      // The link is corrected to the Entrant actually on screen, which is what
+      // writes the slug on a first visit that named none.
+      selected = entrantSlug(entrant.id);
+      remember();
+
+      text($("sheet-kicker"), sheetKicker(data.gw));
+      text($("entrant-name"), entrant.name);
+      text($("entrant-base"), sheetSubLine(entrant, data.deadlineAt));
+      text($("list-gw"), gwTag(data.gw));
+      renderStrip(data, entrant);
+      renderPitch(entrant);
+      renderList(entrant);
+      renderBelow(data, entrant);
+    }
+
+    // A relative path: the Worker claims `/api/*` on this hostname, so nothing
+    // is cross-origin and no origin was a build input.
+    fetch("/api/fpl/squads")
+      .then((response) => {
+        if (!response.ok) throw new Error(String(response.status));
+        return response.json() as Promise<FplSquadsBody>;
+      })
+      .then((json) => { body = json; render(); })
+      .catch(() => {
+        // One line, and nothing retries.
+        $("error").hidden = false;
+        $("loading").hidden = true;
+        $("squads").hidden = true;
+        $("preseason").hidden = true;
+      });
+  })();
+  </script>
+</FplPage>

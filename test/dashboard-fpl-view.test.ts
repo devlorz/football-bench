@@ -1,17 +1,20 @@
 import { describe, expect, test } from "vitest";
 import {
-  chipsTag, deltaNote, gameweekSpan, movement, rankBand, seasonLabel,
-  settledGws, spreadLabels, squadValue, statusLine
+  chipLabel, chipsTag, clubTag, deltaNote, gameweekSpan, gwTag, money,
+  movement, opponentLabel, pounds, rankBand, seasonLabel, seatTeamSheet,
+  settledGws, sheetKicker, sheetSubLine, spreadLabels, statStrip, statusLine,
+  transferCost, transfersHeading, validationRows
 } from "../dashboard/src/fpl-view.js";
 
 /**
- * Every step the FPL ranking takes between a response and what a reader sees:
- * the movement marker, the Squad value, the span the ranking is cumulative
- * over, the Gameweeks inside it the record holds, the Gameweek the movement was
- * measured against, the header's status line, the Cards variant's Chips tag,
- * the weight a place in the field is drawn at, and where the Race chart's
- * labels sit. No database. They are here because each of them renders perfectly
- * while being wrong, and nothing the page does on its own has that property.
+ * Every step the FPL section takes between a response and what a reader sees:
+ * the movement marker, money, the span the ranking is cumulative over, the
+ * Gameweeks inside it the record holds, the Gameweek the movement was measured
+ * against, the header's status line, the Cards variant's Chips tag, the weight
+ * a place in the field is drawn at, where the Race chart's labels sit, and
+ * every seat, tag and sentence a Team Sheet is drawn with. No database. They
+ * are here because each of them renders perfectly while being wrong, and
+ * nothing the pages do on their own has that property.
  */
 describe("the ranking's movement marker", () => {
   test("reads a rise and a fall as opposite things", () => {
@@ -33,15 +36,15 @@ describe("the ranking's movement marker", () => {
 
 describe("the Squad value column", () => {
   test("prints tenths of a million to one decimal", () => {
-    expect(squadValue(1012)).toBe("101.2");
-    expect(squadValue(1000)).toBe("100.0");
-    expect(squadValue(998)).toBe("99.8");
+    expect(money(1012)).toBe("101.2");
+    expect(money(1000)).toBe("100.0");
+    expect(money(998)).toBe("99.8");
   });
 
   test("says nothing rather than nought for a Squad it has not read", () => {
     // Nought would be a Squad worth nothing, which is not a state the track
     // has: an Entrant with no Manager State has no Squad value at all.
-    expect(squadValue(null)).toBe("—");
+    expect(money(null)).toBe("—");
   });
 });
 
@@ -225,5 +228,332 @@ describe("the header's status line", () => {
     // print one Season two ways on one page.
     expect(seasonLabel("2026-27")).toBe("2026/27");
     expect(statusLine("2026-27", 4, 9)).toContain(seasonLabel("2026-27"));
+  });
+});
+
+/**
+ * A legal Team Sheet over a legal Squad: two goalkeepers, five defenders, five
+ * midfielders and three forwards, starting 4-4-2 with one of each on the bench.
+ * The bench is deliberately not keeper-first — the rules only require the four
+ * who do not start, named in order — so the numbering has something to get
+ * wrong.
+ */
+const SQUAD = [
+  { fplId: 1, position: "GKP" as const },
+  { fplId: 2, position: "GKP" as const },
+  { fplId: 3, position: "DEF" as const },
+  { fplId: 4, position: "DEF" as const },
+  { fplId: 5, position: "DEF" as const },
+  { fplId: 6, position: "DEF" as const },
+  { fplId: 7, position: "DEF" as const },
+  { fplId: 8, position: "MID" as const },
+  { fplId: 9, position: "MID" as const },
+  { fplId: 10, position: "MID" as const },
+  { fplId: 11, position: "MID" as const },
+  { fplId: 12, position: "MID" as const },
+  { fplId: 13, position: "FWD" as const },
+  { fplId: 14, position: "FWD" as const },
+  { fplId: 15, position: "FWD" as const }
+];
+
+const SHEET = {
+  starters: [1, 3, 4, 5, 6, 8, 9, 10, 11, 13, 14],
+  bench: [12, 2, 7, 15],
+  captain: 13,
+  viceCaptain: 8
+};
+
+describe("seating a Team Sheet", () => {
+  test("draws the eleven in the design's four rows, from the goal outwards", () => {
+    const { rows } = seatTeamSheet(SQUAD, SHEET);
+    expect(rows.map((row) => row.map(({ player }) => player.fplId))).toEqual([
+      [1], [3, 4, 5, 6], [8, 9, 10, 11], [13, 14]
+    ]);
+  });
+
+  test("keeps the bench in the order it would come on", () => {
+    // The Sheet's own order and not the Squad's: the Sheet names the four who
+    // do not start "in order", and re-sorting them by id would tell a reader
+    // the wrong player comes on first.
+    const { bench } = seatTeamSheet(SQUAD, SHEET);
+    expect(bench.map(({ player }) => player.fplId)).toEqual([12, 2, 7, 15]);
+  });
+
+  test("numbers the bench among the outfielders and names the keeper", () => {
+    // The goalkeeper is the substitution the rules make for you, so he is
+    // labelled by his position and the other three are 1, 2, 3 among
+    // themselves. Counting him would make the first outfielder to come on the
+    // second.
+    const { bench } = seatTeamSheet(SQUAD, SHEET);
+    expect(bench.map(({ seat }) => seat.label))
+      .toEqual(["Bench 1", "Bench GK", "Bench 2", "Bench 3"]);
+    // The strip prints the slot alone, and it is the same answer read off the
+    // same seat rather than the label with a word sliced off it.
+    expect(bench.map(({ seat }) => seat.slot)).toEqual(["1", "GK", "2", "3"]);
+    expect(bench.every(({ seat }) => seat.bench)).toBe(true);
+    expect(bench.every(({ seat }) => seat.tone === "neutral")).toBe(true);
+  });
+
+  test("puts the armband on the captain and the vice and on nobody else", () => {
+    const { all } = seatTeamSheet(SQUAD, SHEET);
+    const badges = all
+      .filter(({ seat }) => seat.badge !== null)
+      .map(({ player, seat }) => [player.fplId, seat.badge]);
+    expect(badges).toEqual([[8, "V"], [13, "C"]]);
+  });
+
+  test("tags the captain in the accent and the rest of the eleven outline", () => {
+    const { all } = seatTeamSheet(SQUAD, SHEET);
+    const byId = new Map(all.map((seated) => [seated.player.fplId, seated.seat]));
+    expect(byId.get(13)).toEqual(
+      { label: "Captain", tone: "accent", bench: false, slot: null, badge: "C" }
+    );
+    expect(byId.get(8)).toEqual(
+      { label: "Vice", tone: "outline", bench: false, slot: null, badge: "V" }
+    );
+    expect(byId.get(9)).toEqual(
+      { label: "Starter", tone: "outline", bench: false, slot: null, badge: null }
+    );
+  });
+
+  test("lists all fifteen once, the eleven before the four", () => {
+    const { all } = seatTeamSheet(SQUAD, SHEET);
+    expect(all).toHaveLength(15);
+    expect(new Set(all.map(({ player }) => player.fplId)).size).toBe(15);
+    expect(all.slice(11).map(({ player }) => player.fplId))
+      .toEqual([12, 2, 7, 15]);
+  });
+
+  test("stops on a player the Sheet seats nowhere", () => {
+    // A Squad's fifteen are exactly the eleven and the four, so a player in
+    // neither list is a broken record -- and drawing the other fourteen would
+    // be a Team Sheet that looks complete and is missing a player.
+    expect(() => seatTeamSheet(
+      [...SQUAD, { fplId: 16, position: "FWD" as const }], SHEET
+    )).toThrow("16");
+  });
+
+  test("seats nobody at all when there is no Sheet", () => {
+    // The pre-Season state, which every page has to render: an Entrant with no
+    // Manager State has no Team Sheet, and that is not a broken record.
+    expect(seatTeamSheet(SQUAD, null))
+      .toEqual({ rows: [[], [], [], []], bench: [], all: [] });
+  });
+});
+
+describe("naming a club in three letters", () => {
+  test("prints the code the club carries", () => {
+    expect(clubTag({ club: "Nottingham Forest", clubCode: "NFO" })).toBe("NFO");
+  });
+
+  test("falls back to the name and never to three letters of it", () => {
+    // `MAN` would name both Manchester clubs, and the record never said it.
+    expect(clubTag({ club: "Man Utd", clubCode: null })).toBe("Man Utd");
+  });
+});
+
+describe("the opponent on a name plate", () => {
+  test("prints the code and the ground", () => {
+    expect(opponentLabel([{ club: "Brentford", clubCode: "BRE", home: true }]))
+      .toBe("BRE (H)");
+    expect(opponentLabel([{ club: "Arsenal", clubCode: "ARS", home: false }]))
+      .toBe("ARS (A)");
+  });
+
+  test("falls back to the club's name and never to three letters of it", () => {
+    // A listing taken before the Lock recorded a code has none, and `MAN` for
+    // both Manchester clubs would be a code the record never held.
+    expect(opponentLabel([{ club: "Man Utd", clubCode: null, home: true }]))
+      .toBe("Man Utd (H)");
+  });
+
+  test("says a blank Gameweek is blank rather than leaving the slot empty", () => {
+    expect(opponentLabel([])).toBe("Blank");
+  });
+
+  test("names both Fixtures of a double Gameweek", () => {
+    expect(opponentLabel([
+      { club: "Brentford", clubCode: "BRE", home: true },
+      { club: "Everton", clubCode: "EVE", home: false }
+    ])).toBe("BRE (H) EVE (A)");
+  });
+});
+
+describe("the stat strip's Chip cell", () => {
+  test("spells a Chip the way the rules do", () => {
+    expect(chipLabel("triple_captain")).toBe("Triple Captain");
+    expect(chipLabel("bench_boost")).toBe("Bench Boost");
+    expect(chipLabel("free_hit")).toBe("Free Hit");
+    expect(chipLabel("wildcard")).toBe("Wildcard");
+  });
+
+  test("says None rather than nothing when no Chip is active", () => {
+    expect(chipLabel(null)).toBe("None");
+  });
+});
+
+describe("the validation block", () => {
+  test("reads Repairs against the allowance the body served", () => {
+    const [repairs] = validationRows(
+      { repairs: 1, rolledOver: false, lastViolation: null }, 3
+    );
+    expect(repairs).toEqual({ label: "Repairs used", value: "1 of 3" });
+  });
+
+  test("distinguishes a clean Gameweek from a Gameweek with no record", () => {
+    // `None` is a Gameweek that broke no rule of the game; the dash is a
+    // Gameweek the record holds nothing for, and an Entrant that did not play
+    // must not read as one that played cleanly.
+    expect(validationRows(
+      { repairs: null, rolledOver: null, lastViolation: null }, 3
+    ).map(({ value }) => value)).toEqual(["—", "—", "None"]);
+    expect(validationRows(
+      { repairs: 0, rolledOver: false, lastViolation: null }, 3
+    ).map(({ value }) => value)).toEqual(["0 of 3", "No", "None"]);
+  });
+
+  test("names the rule that was broken in the rules' own words", () => {
+    expect(validationRows(
+      { repairs: 3, rolledOver: true, lastViolation: "club_limit" }, 3
+    )).toEqual([
+      { label: "Repairs used", value: "3 of 3" },
+      { label: "Rolled over", value: "Yes" },
+      { label: "Last violation", value: "Club limit" }
+    ]);
+  });
+});
+
+describe("the Transfers below the Squad", () => {
+  test("names the Gameweek they went into", () => {
+    expect(transfersHeading(5, 4)).toBe("Transfers into GW5");
+  });
+
+  test("names the Gameweek behind when it is not the one before", () => {
+    // A Gameweek an Entrant Gapped stores no Manager State, so the Squad is
+    // diffed against the last one that stood -- and a heading that did not say
+    // so would read a hole as a quiet week.
+    expect(transfersHeading(5, 3)).toBe("Transfers into GW5, against GW3");
+  });
+
+  test("calls the opening Gameweek what it is", () => {
+    // Fifteen players arriving is a Squad being bought, not fifteen Transfers.
+    expect(transfersHeading(1, null)).toBe("Opening Squad, Gameweek 1");
+  });
+
+  test("states the Gameweek's cost once, because the record knows it once", () => {
+    // A Manager State stores what the Gameweek's paid Transfers cost and never
+    // which Transfer was the paid one, so the cost cannot go on a row.
+    expect(transferCost(2, 4)).toBe("−4 Hit");
+    expect(transferCost(1, 0)).toBe("No Hit taken");
+    expect(transferCost(1, null)).toBe("No Hit taken");
+  });
+
+  test("a Gameweek nobody changed anything in has no cost to report", () => {
+    // "No Hit taken" under an empty list answers a question the Gameweek did
+    // not raise.
+    expect(transferCost(0, 0)).toBe("No Transfers");
+    expect(transferCost(0, null)).toBe("No Transfers");
+  });
+});
+
+describe("money with the sign on it", () => {
+  test("carries the unit where a single figure has nowhere else to", () => {
+    expect(pounds(1012)).toBe("£101.2");
+    expect(pounds(8)).toBe("£0.8");
+  });
+
+  test("prints the dash alone for a figure it has not read", () => {
+    // `£—` is a price tag on a Squad the record holds nothing about.
+    expect(pounds(null)).toBe("—");
+  });
+});
+
+const SEAT = { baseModel: "x-ai/grok-4", provider: "xai" };
+
+describe("the line under an Entrant's name", () => {
+  test("names the Base Model, the provider and the deadline", () => {
+    // All three are the design's, and all three are in the record: the first
+    // two are columns of the seat the endpoint already reads, and the third is
+    // the Gameweek's own deadline (spec 0014, story 21).
+    expect(sheetSubLine(SEAT, "2026-09-18T17:30:00Z"))
+      .toBe("x-ai/grok-4 · xai · locked Fri 18 Sept, 17:30 UTC");
+  });
+
+  test("stamps the Lock in UTC and says which zone it is", () => {
+    // UTC and not the reader's zone: a Lock is one instant for the whole field,
+    // and a reader in Bangkok reading a Friday deadline as Saturday morning
+    // would have a different answer to which deadline this Sheet is for. The
+    // Fixtures page states its next Lock locally, because that page answers
+    // when the reader must look.
+    expect(sheetSubLine(SEAT, "2026-09-18T17:30:00Z")).toContain("17:30 UTC");
+  });
+
+  test("carries the date, because a Season has 38 deadlines", () => {
+    // The design's line is the weekday and the time. Four Gameweeks apart that
+    // is unambiguous; 38 of them name the same weekday five times by the end of
+    // the first month.
+    expect(sheetSubLine(SEAT, "2026-08-21T17:30:00Z")).toContain("Fri 21 Aug");
+    expect(sheetSubLine(SEAT, "2026-09-18T17:30:00Z")).toContain("Fri 18 Sept");
+  });
+
+  test("drops the clause where the record holds no deadline", () => {
+    // Rather than a line that reads "locked" and then stops.
+    expect(sheetSubLine(SEAT, null)).toBe("x-ai/grok-4 · xai");
+  });
+});
+
+describe("the Gameweek a header or a kicker names", () => {
+  test("spells a Gameweek one way wherever it is short", () => {
+    expect(gwTag(5)).toBe("GW5");
+    expect(sheetKicker(5)).toBe("Team Sheet · Gameweek 5");
+  });
+
+  test("names no Gameweek rather than Gameweek null", () => {
+    expect(gwTag(null)).toBe("GW");
+    expect(sheetKicker(null)).toBe("Team Sheet");
+  });
+});
+
+describe("the stat strip over a Team Sheet", () => {
+  const ENTRANT = {
+    gwPoints: 57,
+    totalPoints: 294,
+    squadValueTenths: 985,
+    bankTenths: 15,
+    freeTransfers: 5,
+    chipActive: null
+  };
+
+  test("labels the six cells and gives two of them the unit", () => {
+    expect(statStrip(ENTRANT, 5)).toEqual([
+      { label: "GW5 points", value: "57", tone: "accent" },
+      { label: "Season total", value: "294", tone: null },
+      { label: "Squad value", value: "£98.5", tone: null },
+      { label: "In the bank", value: "£1.5", tone: null },
+      { label: "Free transfers", value: "5", tone: null },
+      { label: "Chip", value: "None", tone: "off" }
+    ]);
+  });
+
+  test("brings the Chip cell up out of the dim when one is active", () => {
+    const [, , , , , chip] =
+      statStrip({ ...ENTRANT, chipActive: "bench_boost" }, 5);
+    expect(chip).toEqual({
+      label: "Chip", value: "Bench Boost", tone: "accent"
+    });
+  });
+
+  test("says the record holds nothing rather than nought", () => {
+    // Nought Free Transfers is a state an Entrant can be in; no Manager State
+    // at all is not the same state and must not read as it.
+    const strip = statStrip(
+      {
+        gwPoints: null, totalPoints: null, squadValueTenths: null,
+        bankTenths: null, freeTransfers: null, chipActive: null
+      },
+      5
+    );
+    expect(strip.map(({ value }) => value))
+      .toEqual(["—", "—", "—", "—", "—", "None"]);
   });
 });

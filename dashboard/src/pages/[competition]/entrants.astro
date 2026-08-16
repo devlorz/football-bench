@@ -158,16 +158,13 @@ const { competition, competitionName, path, api } = Astro.props;
   // `entrant-link.js` and not `competition-view.js`, which reaches the frozen
   // Prompt Versions and through them the whole of `zod`: this script is
   // bundled, so every import here is bytes every reader downloads.
-  import { svg } from "../../dom.js";
+  import { byId as $, svg } from "../../dom.js";
   import { entrantOf, entrantSlug } from "../../entrant-link.js";
   import type {
     EntrantRecord, EntrantsBody
   } from "../../../../src/dashboard/read-api.js";
 
   (() => {
-    // Every id below is in the built HTML above, so the element is there.
-    const $ = (id: string): HTMLElement => document.getElementById(id)!;
-
     const div = (className: string, value?: string): HTMLDivElement => {
       const node = document.createElement("div");
       node.className = className;

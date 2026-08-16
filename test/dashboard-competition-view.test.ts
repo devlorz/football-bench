@@ -239,6 +239,10 @@ describe("the Entrant a link names", () => {
       readFileSync(new URL(path, import.meta.url), "utf8");
 
     expect(read("../dashboard/src/entrant-link.ts")).not.toMatch(/^\s*import\b/m);
+    // The same of the DOM helpers, for the same reason: they are what every
+    // page of both sections builds its markup with, so anything they gained an
+    // import of would be bytes on every page at once.
+    expect(read("../dashboard/src/dom.ts")).not.toMatch(/^\s*import\b/m);
 
     const script = read(
       "../dashboard/src/pages/[competition]/entrants.astro"
@@ -249,7 +253,9 @@ describe("the Entrant a link names", () => {
       ...script.matchAll(/^\s*import\s+(?!type\b)[^;]*?from\s+"([^"]+)"/gm)
     ].map(([, from]) => from);
 
-    expect(followed).toEqual(["../../chart-domain.js", "../../entrant-link.js"]);
+    expect(followed).toEqual([
+      "../../chart-domain.js", "../../dom.js", "../../entrant-link.js"
+    ]);
   });
 
   test("tells the Season Roster's seats apart by slug alone", () => {

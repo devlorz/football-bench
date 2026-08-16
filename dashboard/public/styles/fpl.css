@@ -360,6 +360,276 @@ circle.fplline { fill: var(--fplline); stroke: none; }
 }
 .fplcard-tags { margin-top: auto; display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* ── latest squads ───────────────────────────────────────────────────────── */
+
+.fplsquads {
+  display: grid;
+  grid-template-columns: 236px 1fr;
+  gap: 36px;
+  align-items: start;
+}
+
+/* The picker, which both Entrant-scoped pages wear. Buttons and not links: the
+   selection is a view of one response already in the document, and a link would
+   promise a page load that never happens. */
+.fplpick {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--color-divider);
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.fplpick:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
+.fplpick-on, .fplpick-on:hover {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+.fplpick-rank { width: 16px; opacity: 0.5; font-size: 12px; }
+.fplpick-name {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 13px;
+}
+.fplpick-total {
+  margin-left: auto;
+  font-size: 12px;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+/* The selected row is a solid accent fill, and an opacity that reads on the
+   page ground disappears on it. */
+.fplpick-on .fplpick-rank, .fplpick-on .fplpick-total { opacity: 0.75; }
+
+/* The Entrant's name is the page's title here, at the size the design gives a
+   title that sits beside a Gameweek rather than over a whole ranking. */
+.fplhero-sheet { align-items: start; }
+.fplhero-sheet h1 { font-size: 40px; }
+/* In the accent, which is where the design puts this one and what `.kicker` is
+   everywhere else. The ranking's hero greys its own because that one qualifies
+   a 46px title beside it; this one names the Gameweek above a title, which is
+   the ordinary use. */
+.fplhero-sheet .kicker {
+  margin-bottom: 6px;
+  color: var(--color-accent);
+}
+.fplhero-sheet .seg { margin-left: auto; }
+
+/* Six cells whose 2px gaps read as the rules between them, as the Cards grid's
+   do: the grid's own background shows through. */
+.fplstrip {
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 2px;
+  background: var(--color-divider);
+}
+.fplcell { background: var(--color-bg); padding: 12px 14px; }
+.fplcell-label {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.fplcell-value {
+  margin-top: 4px;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+.fplcell-accent .fplcell-value { color: var(--color-accent); }
+/* No Chip active. Dimmed rather than blank: the cell is answering, and the
+   answer is None. */
+.fplcell-off .fplcell-value { opacity: 0.45; }
+
+/* ── the pitch ───────────────────────────────────────────────────────────── */
+
+.fplfield {
+  position: relative;
+  margin-top: 24px;
+  padding: 30px 24px 34px;
+  background: var(--pitch);
+}
+/* Stretched over the field rather than kept square: it is a backdrop, and
+   nothing on the page is measured off it. */
+.fplmarks {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.28;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 0.25;
+}
+.fplrows { position: relative; display: grid; gap: 22px; }
+.fplrow { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; }
+
+.fplcardp { position: relative; width: 104px; }
+.fplshirt {
+  width: 58px;
+  height: 50px;
+  margin: 0 auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: var(--color-neutral-200);
+  /* The design's jersey: shoulders, sleeves and a body, cut out of a block. */
+  clip-path: polygon(
+    0% 20%, 22% 0%, 36% 9%, 64% 9%, 78% 0%, 100% 20%,
+    87% 36%, 81% 27%, 81% 100%, 19% 100%, 19% 27%, 13% 36%
+  );
+}
+.fplshirt-gk { background: var(--color-neutral-400); }
+.fplshirt-cap { background: var(--color-accent); }
+.fplshirt-sub { width: 46px; height: 40px; }
+.fplshirt-club {
+  padding-bottom: 3px;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 10px;
+  color: var(--color-neutral-800);
+  /* A club the record holds no code for is its whole name, which is longer
+     than the shirt was drawn for. It is clipped rather than allowed to push
+     the row sideways -- the list view beside it prints the name in full. */
+  max-width: 46px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.fplshirt-cap .fplshirt-club { color: var(--color-bg); }
+
+.fplplate {
+  background: var(--color-bg);
+  border: 1px solid var(--pitch);
+}
+.fplplate-name {
+  padding: 4px 6px;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fplplate-foot {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 6px;
+  border-top: 1px solid var(--color-neutral-300);
+  font-size: 10px;
+}
+.fplplate-vs {
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fplplate-pts {
+  margin-left: auto;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.fplplate-foot-cap {
+  background: var(--color-accent);
+  color: var(--color-bg);
+  border-top-color: var(--color-accent);
+}
+
+.fplbadge {
+  position: absolute;
+  top: -2px;
+  right: 8px;
+  width: 17px;
+  height: 17px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-accent);
+  border: 1px solid var(--color-bg);
+  color: var(--color-bg);
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 10px;
+}
+
+/* The label sits beside the four rather than over them, which is where the
+   design puts it: the strip is one row of the field's furniture and not a
+   second section under it. */
+.fplbench {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  background: var(--color-surface);
+  border-top: 2px solid var(--pitch);
+  padding: 16px 24px;
+}
+.fplbench-label {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.fplbench-cards { display: flex; gap: 16px; flex-wrap: wrap; }
+
+/* ── the list ────────────────────────────────────────────────────────────── */
+
+.fpllist { margin-top: 24px; }
+.fpllist th, .fpllist td { padding: 10px 8px; }
+.fpllist th:nth-child(1) { width: 60px; }
+.fpllist th:nth-child(3) { width: 70px; }
+.fpllist th:nth-child(4) { width: 90px; }
+.fpllist th:nth-child(5) { width: 110px; }
+.fpllist th:nth-child(6) { width: 80px; }
+.fpllist th:nth-child(7) { width: 120px; }
+.fpllist .num { text-align: right; font-variant-numeric: tabular-nums; }
+.fpllist-pos {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  opacity: 0.6;
+}
+.fpllist-club { opacity: 0.75; }
+/* The four who did not start, dimmed as a row: they are in the Squad and were
+   not on the field, and the tag beside each says which seat. */
+.fpllist-sub { opacity: 0.62; }
+
+/* ── below the Squad ─────────────────────────────────────────────────────── */
+
+.fplbelow {
+  margin-top: 32px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  align-items: start;
+}
+.fplmove-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--color-divider);
+}
+.fplout { opacity: 0.5; text-decoration: line-through; }
+.fplarrow { color: var(--color-accent); }
+.fplin { font-family: var(--font-heading); font-weight: 800; }
+#transfer-cost { margin-top: 10px; }
+
+.fplvrow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--color-divider);
+}
+.fplvlabel { color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+.fplvvalue { margin-left: auto; font-weight: 600; }
+
 /* ── 760px ───────────────────────────────────────────────────────────────── */
 
 @media (max-width: 760px) {
@@ -388,6 +658,15 @@ circle.fplline { fill: var(--fplline); stroke: none; }
      is only the two grids this slice added not pushing the document past the
      viewport in the meantime. */
   .fplrace, .fplcards { grid-template-columns: 1fr; }
+  /* Same reason for the same slice's worth of it: the picker column, the stat
+     strip's six across and the two columns below the Squad do not fit a phone,
+     and the page itself must never scroll sideways. The mobile slice owns the
+     stacked full-width picker and the strip's own 2×3, and is what checks
+     them; this keeps the grids this slice added inside the viewport until it
+     lands. */
+  .fplsquads, .fplbelow { grid-template-columns: 1fr; }
+  .fplstrip { grid-template-columns: repeat(2, 1fr); }
+  .fplscroll .fpllist { min-width: 700px; }
   /* The hero's flex row is `display: block` above, so the control is no longer
      pushed right by `margin-left: auto` and sits under the kicker. */
   .fplhero .seg { margin-top: 12px; }

@@ -69,12 +69,16 @@ of the `scores` rows where the scorer froze it.
 - Only Settled Gameweeks appear, and a missing Gameweek is announced rather than silently
   absent — the same two rules the rest of the record already obeys, restated in the handoff
   and binding on all three endpoints.
-- The implementation deviates from the design files in exactly five places: "Model stats"
+- The implementation deviates from the design files in exactly eight places: "Model stats"
   is rendered "Entrant record", `.dark` is `data-theme`, the container query is a media
-  query, the Race chart's panel has a 10px foot rather than the handoff's 20px, and its
+  query, the Race chart's panel has a 10px foot rather than the handoff's 20px, its
   Gameweek axis is an absolutely positioned label at every Gameweek up to eight of them,
-  rather than a flex row of all of them. Everything else is per the handoff, including the
-  deliberately dark pitch in both themes.
+  rather than a flex row of all of them, the Transfers list under a Team Sheet states its
+  cost once for the Gameweek rather than once per row, that list's heading names the
+  Gameweek it was read against whenever that is not the Gameweek before, and a name plate
+  carries as many opponents as the club has Fixtures — none, one, or two — where the
+  handoff draws exactly one. Everything else is per the handoff, including the deliberately
+  dark pitch in both themes.
 
   The last two are the Race variant's, and both follow from facts the prototype's four
   Gameweeks did not have. The axis is positioned because a Gameweek the record holds
@@ -85,3 +89,45 @@ of the `scores` rows where the scorer froze it.
   the last Gameweek always among them. The foot is 10px because the labels are centred on
   their line's end and the lowest can be clamped to the foot of the plot, where half of it
   hangs below the viewBox — the padding is the room it hangs in.
+
+  The last three are the Team Sheet's, and all three are the record having more or less to
+  say than the prototype's invented data did.
+
+  A Manager State stores the Squad an action arrived at and the points that Gameweek's paid
+  Transfers cost, and never which of the Transfers was the paid one — so `Free transfer`
+  beside one row and `−4 Hit` beside another would be a guess, and the cost is stated once,
+  where it is known. The same list's heading names the Gameweek behind it whenever the
+  record holds a hole there: a Gameweek an Entrant Gapped stores no Manager State
+  (ADR-0011), so its Squad is diffed against the last one that stood, and "Transfers into
+  GW5" over changes made since GW3 reads a hole as a quiet week.
+
+  A name plate carries the Fixtures the club actually had. The prototype had four
+  Gameweeks and no Blank or Double in them; a Season has both, and a plate that printed one
+  Fixture would either invent a Gameweek for a club that did not play or drop half of a
+  Double. The plate says `Blank` where there is none, which is the word the game uses.
+
+  The sub-line is the design's in full — Base Model, provider, Lock — and this ADR
+  previously recorded it as a deviation on the grounds that neither the provider nor the
+  Lock was in the record. Both claims were wrong and the deviation should never have been
+  written: `models.provider` has been `not null` since migration 0001 and is a field of the
+  Season Roster, on the very row this endpoint already selects the seat from; the Lock is
+  `gameweeks.deadline_at`, also `not null` since 0001 and immutable since 0025, one row
+  away and already published by the Match track's Fixtures endpoint. Story 21 asks for the
+  lock time against the Sheet and now has it. What the line does change is spelling: it
+  carries the date as well as the weekday, because "Fri 18:30" names five deadlines by the
+  end of August, and it states UTC where the Fixtures page states its next Lock in the
+  reader's own zone — that page answers "when must I look", which is a question about the
+  reader, and this one stamps an instant that was the same for the whole field.
+
+  The lesson is worth more than the correction. An ADR that closes a story with a reason
+  that is not true is worse than no ADR: it stops the next reader one line short of the
+  column that was there all along.
+
+- A club is named by the three-letter code FPL authors for it, stored on the player rows a
+  Lock writes (migration 0029), because the design prints a code and never a name in the
+  two places a club appears on a Team Sheet — the shirt and the plate's opponent slot.
+  Deriving it from the name was rejected outright: `Man City` and `Man Utd` share their
+  first three letters, and FPL's own codes for Aston Villa and Nottingham Forest are `AVL`
+  and `NFO`. A club the record holds no listing for has no code and is printed by name; in
+  production every club has listed players, and in the seed only the clubs its
+  thirty-four-player pool draws from do.

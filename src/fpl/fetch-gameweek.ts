@@ -18,7 +18,14 @@ const eventSchema = z.looseObject({
 
 const teamSchema = z.looseObject({
   id: z.number().int().positive(),
-  name: z.string().min(1)
+  name: z.string().min(1),
+  /**
+   * The club's three-letter code, which the FPL screens print wherever a name
+   * does not fit. Required rather than optional: it is on every club of every
+   * bootstrap, and a code that arrives sometimes would leave the Team Sheet
+   * printing names for half the field and codes for the other half.
+   */
+  short_name: z.string().min(1)
 });
 
 const elementTypeSchema = z.looseObject({
@@ -251,7 +258,14 @@ async function fetchFpl({
     }]);
   }
 
-  const teamNames = new Map(bootstrap.teams.map(({ id, name }) => [id, name]));
+  // Both identities a club has, resolved from one map: a Fixture names the two
+  // clubs playing and a player names the one he plays for, and reading the name
+  // off one map and the code off another is two chances to disagree about which
+  // club an id is.
+  const teams = new Map(
+    bootstrap.teams.map(({ id, name, short_name: code }) =>
+      [id, { name, code }] as const)
+  );
   const eventIds = new Set(bootstrap.events.map(({ id }) => id));
   const positions = new Map(
     bootstrap.element_types.map(({ id, singular_name_short: position }) => [
@@ -260,8 +274,8 @@ async function fetchFpl({
     ])
   );
   const players = bootstrap.elements.map((player, index) => {
-    const teamName = teamNames.get(player.team);
-    if (teamName === undefined) {
+    const team = teams.get(player.team);
+    if (team === undefined) {
       throw new FplSourceValidationError("fpl_bootstrap", [{
         field: `elements.${index}.team`,
         detail: `unknown team id ${player.team}`
@@ -274,7 +288,7 @@ async function fetchFpl({
         detail: `unknown element type id ${player.element_type}`
       }]);
     }
-    return { ...player, teamName, position };
+    return { ...player, teamName: team.name, teamCode: team.code, position };
   });
   const unscheduledFixtureIds = fixtures.flatMap(({ id, event }) =>
     event === null ? [id] : []
@@ -295,8 +309,8 @@ async function fetchFpl({
         detail: `Fixture ${fixture.id} has no kick-off`
       }]);
     }
-    const homeTeam = teamNames.get(fixture.team_h);
-    const awayTeam = teamNames.get(fixture.team_a);
+    const homeTeam = teams.get(fixture.team_h)?.name;
+    const awayTeam = teams.get(fixture.team_a)?.name;
     if (homeTeam === undefined) {
       throw new FplSourceValidationError("fpl_fixtures", [{
         field: `${index}.team_h`,
@@ -390,17 +404,19 @@ async function fetchFpl({
       for (const player of players) {
         await database.query(
           `insert into fpl_players (
-             season, gw, fpl_id, team_name, web_name, position, price_tenths,
-             status, chance_of_playing_next_round, news, news_added, observed_at
+             season, gw, fpl_id, team_name, short_name, web_name, position,
+             price_tenths, status, chance_of_playing_next_round, news,
+             news_added, observed_at
            )
            values (
-             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
            )`,
           [
             season,
             gameweek,
             player.id,
             player.teamName,
+            player.teamCode,
             player.web_name,
             player.position,
             player.now_cost,

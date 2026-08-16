@@ -52,7 +52,8 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0025_a_committed_gameweek_deadline_is_immutable.sql",
       "0026_the_spanish_divisions.sql",
       "0027_a_squad_change_may_state_no_date.sql",
-      "0028_dashboard_reads_the_competition_list.sql"
+      "0028_dashboard_reads_the_competition_list.sql",
+      "0029_a_club_carries_its_own_code.sql"
     ]);
     // The record the copy carried, not a shape asserted about the schema: an
     // operator reading a rehearsal needs to see that it ran over rows.
@@ -111,7 +112,8 @@ describe("rehearsing a migration against a copy of the record", () => {
     // Only the pending migrations ran, and the row they are about came back.
     expect(rehearsal.applied).toEqual([
       "0027_a_squad_change_may_state_no_date.sql",
-      "0028_dashboard_reads_the_competition_list.sql"
+      "0028_dashboard_reads_the_competition_list.sql",
+      "0029_a_club_carries_its_own_code.sql"
     ]);
     expect(rehearsal.rows).toMatchObject({ gameweeks: 1, squad_changes: 1 });
   });

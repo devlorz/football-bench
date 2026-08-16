@@ -1,0 +1,19 @@
+-- The three-letter code FPL itself gives a club, stored beside the name the
+-- Lock already recorded.
+--
+-- The design of record prints a code and never a name in the two places a club
+-- appears on a Team Sheet: the shirt is 58px wide and the plate's footer holds
+-- an opponent beside the Gameweek's points. A name does not fit either, and a
+-- code derived from one would be invented rather than read -- `Man City` and
+-- `Man Utd` share their first three letters, and FPL's own codes for Aston
+-- Villa and Nottingham Forest are `AVL` and `NFO` and not the `AST` and `NOT`
+-- any slice of the name produces. So the code comes from the source that
+-- authors it, which already sends it in `teams[].short_name` on every
+-- bootstrap.
+--
+-- Nullable, and deliberately not backfilled: every row written before this
+-- migration was written by a Lock that did not read the field, and there is no
+-- second record to recover it from. Inventing twenty codes here to fill them
+-- would be the derivation this column exists to avoid. A row without one is
+-- read as the club's name, which is what the record actually holds.
+alter table fpl_players add column short_name text;

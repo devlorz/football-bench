@@ -160,29 +160,14 @@ import { SEASON_ROSTER_SIZE } from "../../../src/season-roster.js";
       import nothing. */}
   <script>
   import {
-    chipsTag, deltaNote, gameweekSpan, movement, rankBand, seasonLabel,
-    settledGws, spreadLabels, squadValue, statusLine
+    chipsTag, deltaNote, gameweekSpan, money, movement, pounds, rankBand,
+    seasonLabel, settledGws, spreadLabels, statusLine
   } from "../fpl-view.js";
   import { across } from "../chart-domain.js";
-  import { svg } from "../dom.js";
+  import { byId as $, el, svg, text } from "../dom.js";
   import type { FplLeaderboardBody } from "../../../src/dashboard/read-api.js";
 
   (() => {
-    // Every id below is in the built HTML above, so the element is there.
-    const $ = (id: string): HTMLElement => document.getElementById(id)!;
-    const text = (node: HTMLElement, value: string): void => {
-      node.textContent = value;
-    };
-
-    const el = <K extends keyof HTMLElementTagNameMap>(
-      tag: K, className: string, value?: string
-    ): HTMLElementTagNameMap[K] => {
-      const node = document.createElement(tag);
-      node.className = className;
-      if (value !== undefined) node.textContent = value;
-      return node;
-    };
-
     const figure = (value: number | null): string =>
       value === null ? "—" : String(value);
 
@@ -265,7 +250,7 @@ import { SEASON_ROSTER_SIZE } from "../../../src/season-roster.js";
           name,
           el("td", "num", figure(entrant.gwPoints)),
           el("td", "num fpltotal", figure(entrant.totalPoints)),
-          el("td", "num fplvalue", squadValue(entrant.squadValueTenths)),
+          el("td", "num fplvalue", money(entrant.squadValueTenths)),
           chips
         );
         rows.append(row);
@@ -418,10 +403,7 @@ import { SEASON_ROSTER_SIZE } from "../../../src/season-roster.js";
             "span", "tag tag-accent",
             `GW${body.throughGw} ${figure(entrant.gwPoints)}`
           ),
-          el(
-            "span", "tag tag-neutral",
-            `£${squadValue(entrant.squadValueTenths)}`
-          ),
+          el("span", "tag tag-neutral", pounds(entrant.squadValueTenths)),
           el("span", "tag tag-neutral", chipsTag(entrant.chipsRemaining))
         );
 

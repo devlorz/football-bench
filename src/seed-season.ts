@@ -101,13 +101,51 @@ const ROSTER: ReadonlyArray<{
 const fplSeatOf = (matchSeatId: string): string =>
   `fpl/${matchSeatId.split("/")[0]}`;
 
-const TEAMS = [
-  "Arsenal", "Aston Villa", "Bournemouth", "Brentford", "Brighton",
-  "Burnley", "Chelsea", "Crystal Palace", "Everton", "Fulham",
-  "Leeds", "Liverpool", "Manchester City", "Manchester United",
-  "Newcastle", "Nottingham Forest", "Sheffield United", "Sunderland",
-  "Tottenham", "West Ham"
-];
+/**
+ * The twenty, and the three-letter code each plays under — the identity the FPL
+ * screens print wherever a club's name does not fit, which is the shirt and the
+ * opponent slot on a Team Sheet.
+ *
+ * Real codes against the seed's own spellings: FPL writes three of these clubs
+ * `Man City`, `Nott'm Forest` and `Spurs`, and this file has always spelled them
+ * out. The point of storing a code at all is that it cannot be worked out from
+ * the name — `AVL` and `NFO` are not slices of "Aston Villa" and "Nottingham
+ * Forest" — so the seed carries one per club rather than deriving it, exactly as
+ * the Lock does.
+ */
+const CLUB_CODES: Readonly<Record<string, string>> = {
+  Arsenal: "ARS",
+  "Aston Villa": "AVL",
+  Bournemouth: "BOU",
+  Brentford: "BRE",
+  Brighton: "BHA",
+  Burnley: "BUR",
+  Chelsea: "CHE",
+  "Crystal Palace": "CRY",
+  Everton: "EVE",
+  Fulham: "FUL",
+  Leeds: "LEE",
+  Liverpool: "LIV",
+  "Manchester City": "MCI",
+  "Manchester United": "MUN",
+  Newcastle: "NEW",
+  "Nottingham Forest": "NFO",
+  "Sheffield United": "SHU",
+  Sunderland: "SUN",
+  Tottenham: "TOT",
+  "West Ham": "WHU"
+};
+
+/** Read off the codes above, so a club cannot be fielded without one. */
+const TEAMS = Object.keys(CLUB_CODES);
+
+const codeOf = (club: string): string => {
+  const code = CLUB_CODES[club];
+  if (code === undefined) {
+    throw new Error(`The seed fields ${club} and gives it no three-letter code`);
+  }
+  return code;
+};
 
 /** The Gameweeks the seed covers: fourteen to settle and a fifteenth to lock. */
 const GAMEWEEKS = 15;
@@ -705,12 +743,14 @@ async function writeFplSeason(
     for (const player of pool) {
       await database.query(
         `insert into fpl_players (
-           season, gw, fpl_id, team_name, web_name, position, price_tenths,
-           status, chance_of_playing_next_round, news, news_added, observed_at
-         ) values ($1, $2, $3, $4, $5, $6, $7, 'a', null, '', null, $8)`,
+           season, gw, fpl_id, team_name, short_name, web_name, position,
+           price_tenths, status, chance_of_playing_next_round, news, news_added,
+           observed_at
+         ) values ($1, $2, $3, $4, $5, $6, $7, $8, 'a', null, '', null, $9)`,
         [
-          season, gameweek, player.fplId, player.club, player.webName,
-          player.position, player.priceTenths, mainRunOf(gameweek)
+          season, gameweek, player.fplId, player.club, codeOf(player.club),
+          player.webName, player.position, player.priceTenths,
+          mainRunOf(gameweek)
         ]
       );
       // Every Gameweek the seed plays is Settled — absence of these rows is
