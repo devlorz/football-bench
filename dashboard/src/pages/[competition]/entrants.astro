@@ -1,22 +1,17 @@
 ---
 import Page from "../../layouts/Page.astro";
-import {
-  NESTED_COMPETITION_SEGMENT_ROUTES
-} from "../../competition-view.js";
-import { matchPromptOf } from "../../../../src/predictions/openrouter-entrant.js";
+import { competitionRoutes } from "../../competition-view.js";
 
 /**
- * One Entrant record page per Competition, from the list the read API serves,
- * on the same paths the Fixtures page's route generates and under a rest
- * parameter of another name, which is Astro's requirement and is argued where
- * the second list is.
+ * One Entrant record page per Competition, from the list the read API serves
+ * — the same function as the Fixtures page beside it, which is what the front
+ * door's redirect bought and why it is a function.
  */
-export const getStaticPaths = () => NESTED_COMPETITION_SEGMENT_ROUTES;
+export const getStaticPaths = competitionRoutes;
 
-const { competition, path, api } = Astro.props;
-
-// The league's name has one home, and this page holds no second copy of it.
-const { competitionName } = matchPromptOf(competition);
+// The Competition's endpoint prefix, its own path and its name, all three the
+// route's and spelled once in `competition-view.ts`.
+const { competition, competitionName, path, api } = Astro.props;
 ---
 <Page
   title={`${competitionName} entrant record — Football Bench, match track`}

@@ -237,6 +237,16 @@ Not covered by a test, deliberately: the `_redirects` file, whose three lines ar
 configuration proved at deploy rather than in a unit test, and the CSS, of which there is
 none.
 
+**Both clauses were deviated from while building, and both deviations are stated in the
+tickets rather than left to be discovered.** Ticket 4's switcher adds a rule to
+`overrides.css`, because a segmented control built from links holds no radio and the
+vendored sheet says "chosen" with `:has(input:checked)`. Ticket 6's `_redirects` gained one
+assertion in the view-module suite as well as the deploy check this asks for: nothing
+type-checks that file and a build with a wrong rule in it succeeds, so proving it only at
+deploy proves it after it has shipped. The deploy check exists —
+`docs/runbooks/dashboard-deploy.md` — and is what proves the platform applies them; the test
+proves only what the file says.
+
 ## Out of Scope
 
 - The FPL track, entirely — paths, chrome, endpoints and the unbuilt `/api/fpl/entrants`.

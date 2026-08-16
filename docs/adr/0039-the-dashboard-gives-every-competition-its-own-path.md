@@ -5,8 +5,11 @@ spec 0016 listed it Out of Scope. This is that decision.
 
 Every Competition is a path prefix — `/pl`, `/pd`, `/pl/fixtures`, `/pd/entrants` — and no
 Competition owns `/`. The three Match track pages are the same three pages they were, read
-one Competition at a time. `/` redirects to `/pl`, and so do the two bare page paths the
-single-league site served: `/fixtures` and `/entrants`. The redirects are three lines of a
+one Competition at a time. `/` redirects to `/pl`, and the two bare page paths the
+single-league site served redirect to the Premier League's copy of the page asked for:
+`/fixtures` to `/pl/fixtures` and `/entrants` to `/pl/entrants`. Each keeps the page and
+changes only the league; sending all three to `/pl` would answer a Fixtures link with a
+leaderboard. The redirects are three lines of a
 `_redirects` file in the asset directory, which Workers static assets parses and applies at
 the edge, and each is a **302**. Not a 301: ADR-0033's rejected track switcher was left open
 to revisit and so is a hub page at `/`, and a 301 is cached by browsers past the point where

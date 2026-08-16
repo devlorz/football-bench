@@ -191,10 +191,59 @@ what they asked for.
 
 **Blocked by:** Tickets 1, 2 and 3.
 
-- [ ] Three redirects, declared in the static asset directory's redirects file and applied by
+- [x] Three redirects, declared in the static asset directory's redirects file and applied by
       the platform at the edge. Not served by the Worker, which opens a database connection
       on every request it handles and would open one to emit a redirect that reads nothing.
-- [ ] Each is a 302 and not a 301. A hub page at `/` is a decision ADR-0039 left open, and a
+- [x] Each is a 302 and not a 301. A hub page at `/` is a decision ADR-0039 left open, and a
       301 is cached past the point where it could be taken.
-- [ ] `/pl` remains the target of all three; no Competition is served at a bare page path.
-- [ ] The FPL section's paths are untouched.
+- [x] The Premier League remains the target of all three — `/` to `/pl`, and each bare page
+      path to that page's copy under `/pl`, so a Fixtures link answers with Fixtures. No
+      Competition is served at a bare page path. *(Written "`/pl` remains the target of all
+      three", which reads as the URL `/pl` and would answer a Fixtures link with a
+      leaderboard. The intent was the league; the words are now the league. ADR-0039 said it
+      the same short way and has been corrected too.)*
+- [x] The FPL section's paths are untouched.
+
+**What the three route lists were actually about.** Tickets 1 to 3 built three lists — two
+spellings of the empty segment, two names for the rest parameter — and argued all of it as
+Astro's handling of the front door's empty segment, which is what
+`NoMatchingStaticPathFound` looked like from where it was found. It was never the empty
+segment. Astro claims the `params` objects a `getStaticPaths` returns, so two pages returning
+the *same* objects build one page and fail the other on a path the surviving page has just
+emitted; handing the second page a copy moves the failure to the first. Removing the front
+door made both pages return one list and the build failed again with the segment gone, the
+rest parameters gone and the directories merged — which is what said so. The list is now the
+function `competitionRoutes()`, every call builds its own `params`, and the three pages are
+plain `[competition]` segments in one directory. A test asserts two calls share no object,
+because the build only fails while two pages hold one list.
+
+**Deviation: the `_redirects` file carries a test, which spec 0017 says it deliberately would
+not.** The spec's ground is that three lines of configuration are proved at deploy; the
+deploy check it assumes did not exist, and has been added to
+`docs/runbooks/dashboard-deploy.md` — it is the only thing that proves the platform applies
+them. The test is one assertion over the parsed file, and it is there because nothing
+type-checks that file and a build with a wrong rule in it succeeds: proving it only at deploy
+proves it after a reader could already have hit it. Spec 0017 now carries both this and
+ticket 4's CSS as stated deviations rather than as clauses that quietly stopped being true.
+
+**The league's name now comes off the route with the path and the endpoint.** Every page
+carried the comment "the league's name has one home" while calling `matchPromptOf` for it
+itself — three callers, and a fourth in the switcher's own parallel list. `competitionName`
+is a prop of the route, `SWITCHER_COMPETITIONS` and its type are gone (the chrome maps the
+routes), and the three pages import nothing to name their league. Found by review; it is the
+comment made true, and it is twelve lines shorter.
+
+`.gitignore` gains `.wrangler/`, which is the local state `wrangler dev` writes and which the
+redirect walk below produced.
+
+The redirects were walked under `wrangler dev`, which runs the same asset router as the edge:
+`/`, `/fixtures` and `/entrants` each answered `302` with the Location above, `/pl`,
+`/pl/fixtures` and `/fpl` answered `200`, and `/_redirects` itself answered `404` — it is
+parsed by the platform and not served.
+
+`docs/runbooks/dashboard-deploy.md` named `/api/leaderboard`, `/api/entrants` and
+`/api/fixtures` in its rotation and revocation steps, which have answered 404 since ticket 1.
+They are the served paths now, with the cache window restated: the edge caches by URL, so
+every Competition holds its own entry and clearing one clears nothing else. The one place the
+old path is a statement about the past — the unexplained 500 that turned observability on —
+is left as it was said.

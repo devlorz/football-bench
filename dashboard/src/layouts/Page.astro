@@ -1,6 +1,6 @@
 ---
 import {
-  pageHref, SWITCHER_COMPETITIONS, type MatchPage
+  competitionRoutes, pageHref, type MatchPage
 } from "../competition-view.js";
 
 /**
@@ -38,6 +38,11 @@ interface Props {
 }
 
 const { title, current, competition, competitionName, competitionPath } = Astro.props;
+
+// Every served Competition, once each and under its own name, from the list
+// the routes are built from: no league can be reachable by URL and missing
+// from the header, or offered here and served by nothing.
+const SWITCHER = competitionRoutes().map(({ props }) => props);
 
 const LINKS = [
   { key: "leaderboard", label: "Leaderboard" },
@@ -94,25 +99,26 @@ const LINKS = [
           a tab of it. Built here rather than fetched, so it is in the HTML of
           every page the build emits and works before any script runs.
 
-          It wears the Leaderboard's segmented control and adds no CSS: `.seg`
-          and `.seg-opt` draw the box and the dividers, and the header's own
-          `.nav a[aria-current="page"]` — a rule of the vendored sheet and not
-          of this site, which ADR-0033 makes safe to lean on and forbids editing
-          — colours the league being read. The same attribute the nav links
-          above are marked with, so it is announced and not only coloured.
+          It wears the Leaderboard's segmented control: `.seg` and `.seg-opt`
+          draw the box and the dividers. Which segment is the chosen one is the
+          rule `overrides.css` adds for it and argues there — the vendored
+          sheet says it with `:has(input:checked)`, and a link holds no radio.
+          It is `aria-current`, the same attribute the nav links above are
+          marked with, so the league being read is announced and not only
+          coloured.
 
-          The league being read links to the page the reader is on and not to
-          that league's own path. They are the same page and not always the same
-          URL: `/` and `/pl` are both the Premier League's leaderboard until
-          ticket 6, and marking a link as the current page while it points at
-          the other one announces "current page" on a link that leaves. The rule
-          is the nav's, sixty lines up, and it holds for every link in this
-          header. */}
+          The league being read links to the page the reader is standing on,
+          which is now that league's own path and nothing else: ticket 6 left
+          every Competition exactly one URL per page, so `competitionPath` and
+          this entry's `path` are the same string, and the substitution that
+          stood here has nothing left to substitute. A link marked as the
+          current page must point at the current page — the rule stated on
+          `competitionPath` above — and it now holds by construction. */}
       <nav class="seg" aria-label="Competition">
-        {SWITCHER_COMPETITIONS.map(({ competition: code, path, competitionName }) => (
+        {SWITCHER.map(({ competition: code, path, competitionName }) => (
           <a
             class="seg-opt"
-            href={pageHref(code === competition ? competitionPath : path, current)}
+            href={pageHref(path, current)}
             aria-current={code === competition ? "page" : undefined}
           >
             {competitionName}

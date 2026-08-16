@@ -1,24 +1,21 @@
 ---
 import Page from "../layouts/Page.astro";
 import { SEASON_ROSTER_SIZE } from "../../../src/season-roster.js";
-import { COMPETITION_ROUTES } from "../competition-view.js";
-import { matchPromptOf } from "../../../src/predictions/openrouter-entrant.js";
+import { competitionRoutes } from "../competition-view.js";
 
 /**
- * One leaderboard per Competition, from the list the read API serves. It is a
- * rest route because `/` is still the Premier League's until ticket 6 of spec
- * 0017 redirects it, and an empty segment is the only way one route emits both.
+ * One leaderboard per Competition, from the list the read API serves. A plain
+ * segment and no longer a rest route: `/` is a redirect since ticket 6 of spec
+ * 0017, so no route spells an empty segment and nothing needs one.
  */
-export const getStaticPaths = () => COMPETITION_ROUTES;
+export const getStaticPaths = competitionRoutes;
 
 // `path` is this page's own, so the nav link marked as the current page is a
-// link to it, and `api` is the Competition's endpoint prefix. Both are the
-// route's, spelled once in `competition-view.ts`.
-const { competition, path, api } = Astro.props;
-
-// The league's name has one home, the packet an Entrant reads is written from
-// it, and this page holds no second copy of it (ADR-0039).
-const { competitionName } = matchPromptOf(competition);
+// link to it, `api` is the Competition's endpoint prefix, and
+// `competitionName` is the league under the name the packet an Entrant reads
+// names it. All three are the route's, spelled once in `competition-view.ts`,
+// and this page holds no second copy of any of them (ADR-0039).
+const { competition, competitionName, path, api } = Astro.props;
 ---
 <Page
   title={`${competitionName} leaderboard — Football Bench, match track`}

@@ -1,0 +1,15 @@
+# The single-league site's three URLs, which were the Premier League's and are
+# now nobody's. Applied by the platform at the edge against the asset response:
+# the Worker never runs, which matters because it opens a database connection on
+# every request it handles and these three read nothing.
+#
+# 302 and not 301. A hub page at `/` is a decision ADR-0039 leaves open, and a
+# 301 is cached in browsers past the point where taking it is still possible.
+# Nothing here is a permanent statement about `/`; it is where `/` goes today.
+#
+# Astro copies this directory into `dist/`, which is the asset directory
+# `wrangler.toml` points at, so the file lands at the root the platform parses
+# it from. It is parsed rather than served: there is no `/_redirects` to fetch.
+/           /pl           302
+/fixtures   /pl/fixtures  302
+/entrants   /pl/entrants  302

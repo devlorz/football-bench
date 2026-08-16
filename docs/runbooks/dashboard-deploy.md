@@ -72,6 +72,27 @@ Worker version preview holds the same secrets as production and would answer a
 public URL with production data. Look at changes locally against the seeded
 Postgres before deploying; see "What this deploy does not do" below.
 
+**Then check the three redirects, because nothing else does.**
+`dashboard/public/_redirects` is configuration: no type-checks it, and a build
+carrying a wrong rule succeeds. It is also the only part of the site that fails
+by sending a reader somewhere rather than by erroring, so the failure looks
+like a working page.
+
+```sh
+SITE=https://football-bench.leelorz6.workers.dev
+for p in / /fixtures /entrants; do
+  curl -sS -o /dev/null -w "$p -> %{http_code} %{redirect_url}\n" "$SITE$p"
+done
+# require: 302 each, to $SITE/pl, $SITE/pl/fixtures, $SITE/pl/entrants
+```
+
+Each keeps the page and changes only the league (ADR-0039), so a `/fixtures`
+that lands on the leaderboard is a wrong rule and not a detail. A `200` on any
+of the three means an asset is being served in front of the rule — a page the
+build should no longer emit — and a `301` is the one failure that outlives the
+fix, because browsers cache it past the point where `/` could become a hub
+page.
+
 ## The credential
 
 Two roles, and the split is the point:
@@ -265,7 +286,7 @@ PGPASSWORD="$PW" psql "postgresql://$NEXT.<ref>@<host>:5432/postgres" \
 
 # 3b. and the Worker is using it -- a unique key, so this cannot be a HIT
 curl -sS -D- -o /dev/null \
-  "https://football-bench.leelorz6.workers.dev/api/leaderboard?rot=$(date +%s)" \
+  "https://football-bench.leelorz6.workers.dev/api/pl/leaderboard?rot=$(date +%s)" \
   | grep -iE '^(HTTP|cf-cache-status)'
 # require: HTTP 200 *and* cf-cache-status: MISS
 ```
@@ -316,20 +337,29 @@ stranded by a half-finished rotation, because in an emergency the one you miss
 is the one that matters.
 
 **The revoke does not empty the cache, and the URLs a reader actually visits
-are cached.** `/api/leaderboard` keeps returning its cached 200 after the
+are cached.** `/api/pl/leaderboard` keeps returning its cached 200 after the
 database has stopped answering — five minutes of it fresh, and then up to
 another hour that `stale-while-revalidate=3600` allows. **Assume the full hour
-and five minutes on `/api/leaderboard` and `/api/entrants`.**
+and five minutes on `/api/pl/leaderboard` and `/api/pl/entrants`.**
 
 `stale-if-error=0` was walked and does stop stale-on-error — but on
-`/api/fixtures`, which carries *no* `stale-while-revalidate`, so its expiry
+`/api/pl/fixtures`, which carries *no* `stale-while-revalidate`, so its expiry
 forces a revalidation the reader waits on and the error reaches them. The other
 two carry an hour of it, and Cloudflare returns the stale response
 *immediately* on the first request after expiry and refreshes in the
 background. Whether `stale-if-error=0` then cuts that window short is not
 documented and has not been walked here, so the Fixtures result does not carry
-over. Plan for the hour on those two; `/api/fixtures` is proven at sixty
+over. Plan for the hour on those two; `/api/pl/fixtures` is proven at sixty
 seconds.
+
+The lifetimes were walked before spec 0017 put the Competition in the path, on
+the same handlers under `/api/leaderboard`, `/api/entrants` and `/api/fixtures`
+— which now answer 404. The headers did not move, and neither did any of the
+above; what moved is that the edge caches by URL and there is one URL per
+league. Every Competition holds its own entry and expires on its own, so the
+window is per league and clearing one clears nothing else. The `pl` above is an
+example and not the whole of it: the served list is
+`MATCH_PROMPT_COMPETITIONS`.
 
 Any of it is too long if hiding the data is why you revoked. Empty the cache.
 
@@ -574,7 +604,7 @@ a unique key the cache cannot answer. The first says readers are dark; the
 second says the Worker is:
 
 ```sh
-BASE=https://football-bench.leelorz6.workers.dev/api/leaderboard
+BASE=https://football-bench.leelorz6.workers.dev/api/pl/leaderboard
 curl -sS -o /dev/null -w 'canonical %{http_code}\n' "$BASE"
 curl -sS -o /dev/null -w 'unique    %{http_code}\n' "$BASE?rev=$(date +%s)"
 # require: 500 from both
@@ -621,4 +651,5 @@ query key twice and compare — a hit is roughly 0.04s against 0.25s cold.
 `[observability]` is on in `wrangler.toml`. Logs are in the Cloudflare
 dashboard under the Worker, and `npx wrangler tail` follows them live. It was
 turned on because a single unexplained 500 from `/api/entrants` on the first
-deploy left no log behind to explain it.
+deploy left no log behind to explain it — the path that endpoint had then, and
+left as it was said rather than rewritten into today's.

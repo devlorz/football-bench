@@ -1,8 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import {
-  COMPETITION_ROUTES, NESTED_COMPETITION_ROUTES,
-  NESTED_COMPETITION_SEGMENT_ROUTES, pageHref, SWITCHER_COMPETITIONS
+  competitionRoutes, pageHref
 } from "../dashboard/src/competition-view.js";
 import { entrantOf, entrantSlug } from "../dashboard/src/entrant-link.js";
 import { SEASON_ROSTER } from "../src/season-roster.js";
@@ -23,36 +22,22 @@ describe("the Match track's Competition routes", () => {
     // are in the schema's `competition_code` domain and are deliberately
     // absent — the site advertises a league once its Prompt Version is frozen
     // and not before (ADR-0039).
-    expect(COMPETITION_ROUTES).toEqual([
-      {
-        params: { competition: undefined },
-        props: { competition: "PL", path: "/", api: "/api/pl" }
-      },
+    expect(competitionRoutes()).toEqual([
       {
         params: { competition: "pl" },
-        props: { competition: "PL", path: "/pl", api: "/api/pl" }
+        props: {
+          competition: "PL", competitionName: "Premier League",
+          path: "/pl", api: "/api/pl"
+        }
       },
       {
         params: { competition: "pd" },
-        props: { competition: "PD", path: "/pd", api: "/api/pd" }
+        props: {
+          competition: "PD", competitionName: "La Liga",
+          path: "/pd", api: "/api/pd"
+        }
       }
     ]);
-  });
-
-  test("keeps the single-league front door on the Premier League", () => {
-    // `/` until ticket 6 of spec 0017 turns it into a 302, which is the only
-    // step that breaks a URL working today. Until then it serves what it
-    // serves: the Premier League, which is the Competition `/` lands on and
-    // not a claim that the Premier League is the site (ADR-0039).
-    //
-    // The one route whose path is not its Competition's, and the reason `path`
-    // is stated rather than derived from the segment.
-    const [root] = COMPETITION_ROUTES;
-
-    expect(root?.params).toEqual({ competition: undefined });
-    expect(root?.props).toEqual({
-      competition: "PL", path: "/", api: "/api/pl"
-    });
   });
 
   test("writes every URL in the one lower-case spelling the API serves", () => {
@@ -60,16 +45,64 @@ describe("the Match track's Competition routes", () => {
     // page that asked for `/api/PD/leaderboard` would be served a 404, and a
     // second spelling that was served would split the edge cache spec 0017
     // states it moves no lifetime of.
-    for (const { params, props } of COMPETITION_ROUTES) {
+    for (const { params, props } of competitionRoutes()) {
       const segment = props.competition.toLowerCase();
 
       expect(props.api).toBe(`/api/${segment}`);
-      // The front door's is `undefined` and every other route's is the
-      // Competition's own spelling; the list above pins which is which.
-      expect([{ competition: undefined }, { competition: segment }])
-        .toContainEqual(params);
-      expect(props.path).toMatch(/^\/[a-z]*$/);
+      expect(params).toEqual({ competition: segment });
+      expect(props.path).toBe(`/${segment}`);
     }
+  });
+
+  test("hands every caller its own params", () => {
+    // Not a style point. Astro claims the `params` objects a `getStaticPaths`
+    // returns, and two pages returning the same objects build one page and fail
+    // the other with `NoMatchingStaticPathFound` on a path the surviving page
+    // had just emitted — which is why this is a function and not the constant
+    // it was through tickets 1 to 5. The build says so and so does this: three
+    // pages and the chrome call it, and the copy each gets is its own.
+    const [first] = competitionRoutes();
+    const [again] = competitionRoutes();
+
+    expect(first?.params).toEqual(again?.params);
+    expect(first?.params).not.toBe(again?.params);
+  });
+});
+
+/**
+ * What is at the three URLs the single-league site served, now that no page is.
+ *
+ * The file is configuration the build copies and nothing type-checks, and a
+ * rule that is wrong is a reader landing on nothing at the URL every link made
+ * before this expansion points at. The targets are derived from the same
+ * function the pages' own links are built from, so a path that moves moves
+ * here too.
+ */
+describe("the single-league URLs", () => {
+  const redirects = readFileSync(
+    new URL("../dashboard/public/_redirects", import.meta.url), "utf8"
+  );
+  const rules = redirects.split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !line.startsWith("#"))
+    .map((line) => line.split(/\s+/));
+
+  test("send each of them to the Premier League's copy of the same page", () => {
+    // The page a reader asked for, in the league `/` was: crossing to the
+    // Premier League's Fixtures from a link to `/fixtures` is the page they
+    // named, and a redirect that landed all three on `/pl` would answer a
+    // Fixtures link with a leaderboard.
+    //
+    // These three lines and no fourth, which is the rest of what the ticket
+    // claims in one assertion: each is a `302` and not the `301` that would be
+    // cached past the point where a hub page at `/` could still be introduced
+    // (ADR-0039), and the FPL track is untouched because nothing here names it.
+    // That `/fpl` still answers is the build's to say, not this file's.
+    expect(rules).toEqual([
+      ["/", pageHref("/pl", "leaderboard"), "302"],
+      ["/fixtures", pageHref("/pl", "fixtures"), "302"],
+      ["/entrants", pageHref("/pl", "entrants"), "302"]
+    ]);
   });
 });
 
@@ -86,59 +119,19 @@ describe("the link to a page of a Competition", () => {
   });
 
   test("is the Competition's own path for the leaderboard", () => {
-    // The leaderboard is the Competition, not a page under it, which is what
-    // lets `/` and `/pl` both serve one while ticket 6 is outstanding.
+    // The leaderboard is the Competition and not a page under it.
     expect(pageHref("/pd", "leaderboard")).toBe("/pd");
-    expect(pageHref("/", "leaderboard")).toBe("/");
-  });
-
-  test("writes the single-league front door's pages without a double slash",
-    () => {
-      // `/` is the one route whose path is not its Competition's, and
-      // `//fixtures` is a URL the build does not emit and the platform does not
-      // serve.
-      expect(pageHref("/", "fixtures")).toBe("/fixtures");
-      expect(pageHref("/", "entrants")).toBe("/entrants");
-    });
-
-  test("spells the front door's segment as a page beneath it needs it", () => {
-    // The empty string, because `undefined` fails the build here with
-    // `NoMatchingStaticPathFound` on `/fixtures` while the leaderboard's
-    // top-level route needs exactly that `undefined`. The build fails outright
-    // on the wrong one, so this test says which is which rather than proving
-    // anything the build would let past; the props are the same props either
-    // way.
-    expect(NESTED_COMPETITION_ROUTES.map(({ params }) => params)).toEqual([
-      { competition: "" }, { competition: "pl" }, { competition: "pd" }
-    ]);
-    expect(NESTED_COMPETITION_ROUTES.map(({ props }) => props))
-      .toEqual(COMPETITION_ROUTES.map(({ props }) => props));
-  });
-
-  test("names the second page's segment for the same Competition", () => {
-    // A second rest parameter because Astro serves the empty segment to one
-    // page per parameter: two pages under `[...competition]/` build one front
-    // door and fail the other. The name is the difference and the only one —
-    // the segments and the props are the first list's.
-    expect(NESTED_COMPETITION_SEGMENT_ROUTES.map(({ params }) => params))
-      .toEqual([
-        { competitionSegment: "" },
-        { competitionSegment: "pl" },
-        { competitionSegment: "pd" }
-      ]);
-    expect(NESTED_COMPETITION_SEGMENT_ROUTES.map(({ props }) => props))
-      .toEqual(NESTED_COMPETITION_ROUTES.map(({ props }) => props));
   });
 
   test("gives every built route its own copy of both pages under it", () => {
     // Written out rather than derived: a list that recomputed the href the way
     // the function does could not disagree with it, and disagreeing is the job.
-    // Every one of these six is a file the build emits, which is what the two
-    // route lists above are for.
-    expect(COMPETITION_ROUTES.map(({ props }) => pageHref(props.path, "fixtures")))
-      .toEqual(["/fixtures", "/pl/fixtures", "/pd/fixtures"]);
-    expect(COMPETITION_ROUTES.map(({ props }) => pageHref(props.path, "entrants")))
-      .toEqual(["/entrants", "/pl/entrants", "/pd/entrants"]);
+    // Every one of these four is a file the build emits, from the one function
+    // both pages under the segment now call.
+    expect(competitionRoutes().map(({ props }) => pageHref(props.path, "fixtures")))
+      .toEqual(["/pl/fixtures", "/pd/fixtures"]);
+    expect(competitionRoutes().map(({ props }) => pageHref(props.path, "entrants")))
+      .toEqual(["/pl/entrants", "/pd/entrants"]);
   });
 });
 
@@ -152,23 +145,18 @@ describe("the link to a page of a Competition", () => {
  * and said nothing about either.
  */
 describe("the Competition switcher", () => {
-  test("offers every served Competition once, under its own name", () => {
-    // Written out and not derived: a list that recomputed the names the way the
-    // module does could not disagree with it. The Premier League appears once
-    // although two routes serve it — `/` is where it can be reached, not a
-    // second league to be offered.
-    expect(SWITCHER_COMPETITIONS).toEqual([
-      { competition: "PL", path: "/pl", competitionName: "Premier League" },
-      { competition: "PD", path: "/pd", competitionName: "La Liga" }
-    ]);
-  });
+  // The chrome's list, derived the way `Page.astro` derives it: every served
+  // Competition, under the name and at the path the route already carries. The
+  // names and paths themselves are pinned by the route list above — what is
+  // left to get wrong is where an entry sends a reader.
+  const SWITCHER = competitionRoutes().map(({ props }) => props);
 
   test("holds the reader's page across every crossing", () => {
     // Every combination of the page a reader is on and the league they cross
-    // to, written out. Six files, all of them emitted by the route lists above.
+    // to, written out. Six files, all of them emitted by the route list above.
     const crossings = Object.fromEntries(
       (["leaderboard", "fixtures", "entrants"] as const).map((page) => [
-        page, SWITCHER_COMPETITIONS.map(({ path }) => pageHref(path, page))
+        page, SWITCHER.map(({ path }) => pageHref(path, page))
       ])
     );
 
@@ -177,20 +165,6 @@ describe("the Competition switcher", () => {
       fixtures: ["/pl/fixtures", "/pd/fixtures"],
       entrants: ["/pl/entrants", "/pd/entrants"]
     });
-  });
-
-  test("names a league by its own path and not by the front door", () => {
-    // A reader crossing *to* the Premier League is sent to `/pl`, which is the
-    // league, and not to `/`, which ticket 6 of spec 0017 turns into a 302 to
-    // it.
-    //
-    // This is the path a reader crosses to. It is not what the header links the
-    // league the reader is already on to: at `/` that entry is marked as the
-    // current page, and the chrome links it to `/` — the page the reader is
-    // standing on — rather than to the `/pl` recorded here. That substitution
-    // is one ternary in `Page.astro` and is asserted by the built HTML, not
-    // here; this list is what it substitutes into.
-    expect(SWITCHER_COMPETITIONS.map(({ path }) => path)).not.toContain("/");
   });
 });
 
@@ -267,7 +241,7 @@ describe("the Entrant a link names", () => {
     expect(read("../dashboard/src/entrant-link.ts")).not.toMatch(/^\s*import\b/m);
 
     const script = read(
-      "../dashboard/src/pages/[...competitionSegment]/entrants.astro"
+      "../dashboard/src/pages/[competition]/entrants.astro"
     ).split("<script>")[1] ?? "";
     // Every import the bundler follows, which is every one that is not a type:
     // the whole list, so a module added later is as visible as a module swapped.

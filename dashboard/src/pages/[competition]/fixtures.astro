@@ -1,22 +1,15 @@
 ---
 import Page from "../../layouts/Page.astro";
-import { NESTED_COMPETITION_ROUTES } from "../../competition-view.js";
-import { matchPromptOf } from "../../../../src/predictions/openrouter-entrant.js";
+import { competitionRoutes } from "../../competition-view.js";
 
 /**
- * One Fixtures page per Competition, from the list the read API serves. The
- * same rest route as the leaderboard's, and for the same reason: `/fixtures` is
- * the Premier League's until ticket 6 of spec 0017 redirects it, and an empty
- * segment is the only way one route emits both.
+ * One Fixtures page per Competition, from the list the read API serves.
  */
-export const getStaticPaths = () => NESTED_COMPETITION_ROUTES;
+export const getStaticPaths = competitionRoutes;
 
-// The Competition's endpoint prefix and its own path, both the route's and
-// spelled once in `competition-view.ts`.
-const { competition, path, api } = Astro.props;
-
-// The league's name has one home, and this page holds no second copy of it.
-const { competitionName } = matchPromptOf(competition);
+// The Competition's endpoint prefix, its own path and its name, all three the
+// route's and spelled once in `competition-view.ts`.
+const { competition, competitionName, path, api } = Astro.props;
 ---
 <Page
   title={`${competitionName} fixtures — Football Bench, match track`}
