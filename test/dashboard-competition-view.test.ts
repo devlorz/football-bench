@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import {
   COMPETITION_ROUTES, NESTED_COMPETITION_ROUTES,
-  NESTED_COMPETITION_SEGMENT_ROUTES, pageHref
+  NESTED_COMPETITION_SEGMENT_ROUTES, pageHref, SWITCHER_COMPETITIONS
 } from "../dashboard/src/competition-view.js";
 import { entrantOf, entrantSlug } from "../dashboard/src/entrant-link.js";
 import { SEASON_ROSTER } from "../src/season-roster.js";
@@ -139,6 +139,58 @@ describe("the link to a page of a Competition", () => {
       .toEqual(["/fixtures", "/pl/fixtures", "/pd/fixtures"]);
     expect(COMPETITION_ROUTES.map(({ props }) => pageHref(props.path, "entrants")))
       .toEqual(["/entrants", "/pl/entrants", "/pd/entrants"]);
+  });
+});
+
+/**
+ * The header's crossing from one Competition to another, which is the same
+ * function as the nav's applied to another league's path.
+ *
+ * Tested here for the reason every other href in this file is: it renders
+ * perfectly while being wrong. A switcher that sends a reader from La Liga's
+ * Fixtures to the Premier League's leaderboard has crossed two things at once
+ * and said nothing about either.
+ */
+describe("the Competition switcher", () => {
+  test("offers every served Competition once, under its own name", () => {
+    // Written out and not derived: a list that recomputed the names the way the
+    // module does could not disagree with it. The Premier League appears once
+    // although two routes serve it — `/` is where it can be reached, not a
+    // second league to be offered.
+    expect(SWITCHER_COMPETITIONS).toEqual([
+      { competition: "PL", path: "/pl", competitionName: "Premier League" },
+      { competition: "PD", path: "/pd", competitionName: "La Liga" }
+    ]);
+  });
+
+  test("holds the reader's page across every crossing", () => {
+    // Every combination of the page a reader is on and the league they cross
+    // to, written out. Six files, all of them emitted by the route lists above.
+    const crossings = Object.fromEntries(
+      (["leaderboard", "fixtures", "entrants"] as const).map((page) => [
+        page, SWITCHER_COMPETITIONS.map(({ path }) => pageHref(path, page))
+      ])
+    );
+
+    expect(crossings).toEqual({
+      leaderboard: ["/pl", "/pd"],
+      fixtures: ["/pl/fixtures", "/pd/fixtures"],
+      entrants: ["/pl/entrants", "/pd/entrants"]
+    });
+  });
+
+  test("names a league by its own path and not by the front door", () => {
+    // A reader crossing *to* the Premier League is sent to `/pl`, which is the
+    // league, and not to `/`, which ticket 6 of spec 0017 turns into a 302 to
+    // it.
+    //
+    // This is the path a reader crosses to. It is not what the header links the
+    // league the reader is already on to: at `/` that entry is marked as the
+    // current page, and the chrome links it to `/` — the page the reader is
+    // standing on — rather than to the `/pl` recorded here. That substitution
+    // is one ternary in `Page.astro` and is asserted by the built HTML, not
+    // here; this list is what it substitutes into.
+    expect(SWITCHER_COMPETITIONS.map(({ path }) => path)).not.toContain("/");
   });
 });
 

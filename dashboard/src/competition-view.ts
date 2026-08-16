@@ -1,5 +1,5 @@
 import {
-  MATCH_PROMPT_COMPETITIONS
+  MATCH_PROMPT_COMPETITIONS, matchPromptOf
 } from "../../src/predictions/openrouter-entrant.js";
 
 /** The Match track's three pages, which are the three links in the chrome. */
@@ -96,6 +96,29 @@ export const COMPETITION_ROUTES: readonly CompetitionRoute[] =
   SEGMENTS.map(({ segment, props }) => ({
     params: { competition: segment === "" ? undefined : segment },
     props
+  }));
+
+/**
+ * Every Competition the chrome offers, once each and under the name the packet
+ * an Entrant reads uses. The switcher is built from this and the routes from
+ * `SEGMENTS`, so no league can be reachable by URL and missing from the header,
+ * or offered in the header and served by nothing.
+ *
+ * The front door is not one of them. `/` is where the Premier League can be
+ * reached and not a fourth league, and an entry for it would offer the Premier
+ * League twice — once under its own name and once under the same name again. It
+ * leaves this list the day it leaves `SEGMENTS`, which is ticket 6.
+ */
+export const SWITCHER_COMPETITIONS: readonly {
+  competition: string;
+  path: string;
+  competitionName: string;
+}[] = SEGMENTS
+  .filter(({ segment }) => segment !== "")
+  .map(({ props: { competition, path } }) => ({
+    competition,
+    path,
+    competitionName: matchPromptOf(competition).competitionName
   }));
 
 /**

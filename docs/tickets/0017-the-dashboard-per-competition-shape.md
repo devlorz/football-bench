@@ -89,21 +89,44 @@ now, and the leaderboard says in words that the leagues are separate benchmarks.
 
 **Blocked by:** Tickets 1, 2 and 3.
 
-- [ ] The Match track's chrome carries one entry per served Competition, built from the same
+- [x] The Match track's chrome carries one entry per served Competition, built from the same
       list the routes are, and present in the built HTML rather than waiting on a fetch.
-- [ ] Each entry is a real link: middle-clickable, copyable, openable in a new tab. Not a
+- [x] Each entry is a real link: middle-clickable, copyable, openable in a new tab. Not a
       `<select>` and not a control written with `replaceState` — choosing a Competition is
       navigation.
-- [ ] Each entry points at the same page of its Competition, so crossing from Fixtures lands
+- [x] Each entry points at the same page of its Competition, so crossing from Fixtures lands
       on Fixtures.
-- [ ] The current Competition is marked as the current page, the way the nav links already
+- [x] The current Competition is marked as the current page, the way the nav links already
       are, so it is announced and not merely coloured.
 - [ ] It wears the styling of the Leaderboard's existing segmented control and adds no CSS.
-- [ ] The href-building is a pure function in the view module and is tested there for every
+      **Deviation: it wears the styling and adds four lines of CSS to `overrides.css`.** A
+      segmented control says which segment is chosen with
+      `.seg-opt:has(input:checked)`, and a link holds no radio, so built from links the
+      control never showed a chosen segment at all: the league being read was told apart
+      only by the accent text `.nav a:hover` also sets, and Modernist's hover rule painted
+      it as unchosen under the pointer — the one question the control answers, answered
+      wrongly in the state every click passes through. The rule draws it from
+      `aria-current` in the colours `:has(input:checked)` was already handed off with, so
+      it adds no look; it needs `.nav` in front and its own `:hover` to outrank two
+      Modernist selectors, measured in the browser and not counted off the sheet.
+- [x] The href-building is a pure function in the view module and is tested there for every
       combination of current page and target Competition.
-- [ ] The Leaderboard's existing "What this is not" footnote gains the sentence saying each
+- [x] The Leaderboard's existing "What this is not" footnote gains the sentence saying each
       Competition is its own benchmark and no ranking spans two. It goes there and not in the
       chrome, which also shows on pages with no ranking to qualify.
+
+**Left standing:**
+
+- **The switcher does not collapse on a phone.** `overrides.css` hides `.navlinks` below
+  760px behind the burger, and the switcher is a different element, so it stays. Two
+  leagues wrap and nothing breaks; five will not fit, and spec 0017 says `SA`, `BL1` and
+  `FL1` arrive "with no further work in this area" — which this makes false at the third
+  league, not at this one. Its own ticket, and it is CSS either way.
+
+Crossing a Competition drops `?entrant=` on purpose, and ADR-0039 now says so rather than
+claiming the switcher carries it: ADR-0035 permits comparing an Entrant across leagues by
+hand and declines to publish the affordance, and the href could not read the current URL
+anyway. Not carried debt — a decision, recorded where it was made.
 
 ## 5 — A Competition that has not opened says so
 

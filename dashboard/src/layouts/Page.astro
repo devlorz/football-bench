@@ -1,21 +1,31 @@
 ---
-import { pageHref, type MatchPage } from "../competition-view.js";
+import {
+  pageHref, SWITCHER_COMPETITIONS, type MatchPage
+} from "../competition-view.js";
 
 /**
  * The chrome every page of the dashboard wears: the sheets, the theme, the
- * header and the nav. A page supplies its title, which nav link it is, and the
- * Competition it belongs to.
+ * header, the nav and the switcher. A page supplies its title, which nav link
+ * it is, and the Competition it belongs to.
  *
- * The three links are the design's three pages, and all three now point at
- * this Competition's copy of the page: a reader on La Liga stays on La Liga
- * whichever of them they click.
+ * The three nav links are the design's three pages, and all three point at this
+ * Competition's copy of the page: a reader on La Liga stays on La Liga
+ * whichever of them they click. The switcher is the other axis — same page,
+ * other league.
  */
 interface Props {
   title: string;
   current: MatchPage;
   /**
-   * The league the page is reading, named as the packet an Entrant reads names
-   * it — "La Liga" and not the `PD` the record is keyed by.
+   * The league the page is reading, as the code the record is keyed by. It says
+   * which switcher entry is the reader's own; the entries' names are the
+   * switcher list's, so the chrome writes no league's name of its own.
+   */
+  competition: string;
+  /**
+   * The same league, named as the packet an Entrant reads names it — "La Liga"
+   * and not the `PD` the record is keyed by. The page has it already and the
+   * header states it.
    */
   competitionName: string;
   /**
@@ -24,10 +34,10 @@ interface Props {
    * nav that sent a reader on La Liga to `/fixtures` would cross a league
    * without saying so.
    */
-  path: string;
+  competitionPath: string;
 }
 
-const { title, current, competitionName, path } = Astro.props;
+const { title, current, competition, competitionName, competitionPath } = Astro.props;
 
 const LINKS = [
   { key: "leaderboard", label: "Leaderboard" },
@@ -61,16 +71,51 @@ const LINKS = [
         <span class="brand-name">FOOTBALL BENCH</span>
         {/* The league in the header, so a tab among many tabs is identifiable
             and two identically laid-out leagues are told apart. The switcher
-            that replaces reading it lands in ticket 4 of spec 0017. */}
+            below names it a second time, which reads as a repetition and is
+            one: taking it out of here is a decision of ticket 1's, story 32's
+            and ADR-0039's — the last of which refuses a colour per league on
+            the ground that the header already names it — and not a side effect
+            of adding a control. */}
         <span class="brand-track">{`Match track · ${competitionName}`}</span>
       </div>
       <nav class="navlinks" id="navlinks">
         {LINKS.map(({ key, label }) => (
           <a
-            href={pageHref(path, key)}
+            href={pageHref(competitionPath, key)}
             aria-current={key === current ? "page" : undefined}
           >
             {label}
+          </a>
+        ))}
+      </nav>
+      {/* Same page, other league. Every entry is a real link and not a
+          `<select>` or a `replaceState` control: crossing a Competition is
+          navigation, and a reader who middle-clicks La Liga's Fixtures expects
+          a tab of it. Built here rather than fetched, so it is in the HTML of
+          every page the build emits and works before any script runs.
+
+          It wears the Leaderboard's segmented control and adds no CSS: `.seg`
+          and `.seg-opt` draw the box and the dividers, and the header's own
+          `.nav a[aria-current="page"]` — a rule of the vendored sheet and not
+          of this site, which ADR-0033 makes safe to lean on and forbids editing
+          — colours the league being read. The same attribute the nav links
+          above are marked with, so it is announced and not only coloured.
+
+          The league being read links to the page the reader is on and not to
+          that league's own path. They are the same page and not always the same
+          URL: `/` and `/pl` are both the Premier League's leaderboard until
+          ticket 6, and marking a link as the current page while it points at
+          the other one announces "current page" on a link that leaves. The rule
+          is the nav's, sixty lines up, and it holds for every link in this
+          header. */}
+      <nav class="seg" aria-label="Competition">
+        {SWITCHER_COMPETITIONS.map(({ competition: code, path, competitionName }) => (
+          <a
+            class="seg-opt"
+            href={pageHref(code === competition ? competitionPath : path, current)}
+            aria-current={code === competition ? "page" : undefined}
+          >
+            {competitionName}
           </a>
         ))}
       </nav>

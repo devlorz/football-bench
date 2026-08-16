@@ -23,8 +23,9 @@ const { competitionName } = matchPromptOf(competition);
 <Page
   title={`${competitionName} leaderboard — Football Bench, match track`}
   current="leaderboard"
+  competition={competition}
   competitionName={competitionName}
-  path={path}
+  competitionPath={path}
 >
   {/*
     Everything below that is not a number is in the built HTML: the headings,
@@ -153,7 +154,9 @@ const { competitionName } = matchPromptOf(competition);
       <p>
         <strong>What this is not.</strong> Both columns rank; neither separates
         Base Models on its own. The evidential layer is the ranked probability
-        score.
+        score. Each Competition is its own benchmark: no ranking spans two, and
+        a Base Model's place here says nothing about its place in another
+        league.
       </p>
     </div>
   </section>

@@ -86,6 +86,35 @@ a:hover { color: var(--color-accent-700); }
 .seg { overflow: visible; }
 .seg-opt:has(input:focus-visible) { outline-offset: 2px; }
 
+/* The Competition switcher is that control built from links, and a link holds
+   no radio: `.seg-opt:has(input:checked)`, which is the whole of how a
+   segmented control says which segment is chosen, can never match it. Left at
+   that, the league being read is told apart only by `.nav a[aria-current]`'s
+   accent text -- the same declaration `.nav a:hover` sets, so a reader hovering
+   La Liga while reading the Premier League sees two identical entries, the
+   hovered one carrying the background `.seg-opt:not(:has(input:checked)):hover`
+   gives everything it never considers chosen. The one question the control
+   exists to answer, answered wrongly in the state every click passes through.
+
+   So it is drawn here instead, from `aria-current` -- the attribute that
+   already says it, and the one the nav is marked with. ADR-0039 asks the
+   switcher to add no CSS, and that is a deviation stated in the ticket: the
+   clause is there to keep the switcher off a design handoff, and these are the
+   colours `.seg-opt:has(input:checked)` was handed off with, not a new look.
+
+   Both selectors are needed and neither is ceremony. `.nav` is in front to beat
+   `.nav a[aria-current='page']` on the `color`, which otherwise paints accent
+   on accent and takes the text with it. `:hover` is written out because
+   `:not()` takes the specificity of its heaviest argument, so Modernist's hover
+   rule outweighs a plain attribute selector and repaints the chosen segment as
+   unchosen under the pointer. Measured in the browser on the built page, not
+   counted off the sheet. */
+.nav .seg-opt[aria-current="page"],
+.nav .seg-opt[aria-current="page"]:hover {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
 html {
   min-height: 100vh;
   background: var(--color-bg);

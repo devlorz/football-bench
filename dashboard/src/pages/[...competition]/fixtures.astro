@@ -21,8 +21,9 @@ const { competitionName } = matchPromptOf(competition);
 <Page
   title={`${competitionName} fixtures — Football Bench, match track`}
   current="fixtures"
+  competition={competition}
   competitionName={competitionName}
-  path={path}
+  competitionPath={path}
 >
   {/*
     The chrome, the headings and the column headers are in the built HTML.

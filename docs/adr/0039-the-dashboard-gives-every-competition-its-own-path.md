@@ -60,12 +60,22 @@ not-opened state meaning one narrow true thing: frozen, not yet Active.
 nature, not by accident.
 
 `?entrant=` carries the seat's slug (`claude-opus-5`) rather than its full id
-(`match-pd/claude-opus-5`), so a reader who switches Competition keeps the Entrant they were
-reading. Every Competition seats the roster that stood at the Season's first Lock (ADR-0034,
+(`match-pd/claude-opus-5`), so a link naming an Entrant stays valid when its Competition is
+edited. Every Competition seats the roster that stood at the Season's first Lock (ADR-0034,
 ADR-0038), which is what makes the slug the stable identity across leagues while the prefix
 is a storage key. A slug that resolves against no seat in the Competition — an Exhibition
 Run that only ever ran in one, or a hand-typed URL — leaves the page with nothing selected,
 which is not an error.
+
+The switcher does not carry the selection across a crossing, and deliberately. Building that
+affordance would make comparing one Entrant across two leagues a single click, which is a
+thing ADR-0035 permits a reader to do by hand — "a read-path exercise a future reader can
+run precisely because every row is labelled" — and declines to publish; the leaderboard's
+own footnote says in the same breath that no ranking spans two Competitions. Permitting an
+edit of a URL is not the same as building the button, and the button would pull against
+both. It also could not be built the way the rest of the chrome is: the href would have to
+be read from the reader's current URL, which the built-HTML rule above forbids and spec
+0017 forbids in as many words.
 
 ## Considered Options
 

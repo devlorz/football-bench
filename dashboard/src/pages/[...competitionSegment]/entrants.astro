@@ -21,8 +21,9 @@ const { competitionName } = matchPromptOf(competition);
 <Page
   title={`${competitionName} entrant record — Football Bench, match track`}
   current="entrants"
+  competition={competition}
   competitionName={competitionName}
-  path={path}
+  competitionPath={path}
 >
   {/*
     Everything that is not a number is in the built HTML: the headings, the
