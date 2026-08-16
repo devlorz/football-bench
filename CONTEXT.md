@@ -110,13 +110,21 @@ difference, 2 for the right outcome, 0 otherwise. Tiers are exclusive. Ranks the
 leaderboard but supports no claim on its own.
 
 **Bet Slip**:
-The five markets implied by one Predicted Score — the match result, over/under 2.5, 3.5
-and 4.5 goals, and both teams to score. Entrants are never asked these markets; the slip is
-read off the scoreline they committed.
+The six markets implied by one Predicted Score — the match result, over/under 2.5, 3.5 and
+4.5 goals, both teams to score, and the Handicap. Entrants are never asked these markets;
+the slip is read off the scoreline they committed.
+
+**Handicap**:
+The Bet Slip market asking which side, if either, wins by more than 1.5 goals. A Predicted
+Score backs a side by naming it a two-goal win; one that names neither backs nothing and
+cannot win the market, whatever the result does. Alone among the markets, it can be lost
+without being wrong (ADR-0040).
+_Avoid_: spread (a spread stake varies with the margin, and every stake here is flat),
+line (a line is the number, not the market)
 
 **Bet Points**:
 The readable betting score for one Fixture — one point per Bet Slip market that settles in
-the Entrant's favour, zero to five. Ranks a second leaderboard by season-to-date total but,
+the Entrant's favour, zero to six. Ranks a second leaderboard by season-to-date total but,
 like Match Points, supports no claim on its own.
 _Avoid_: prediction ranking (overloads Prediction and does not say how it differs from the
 Match Points ranking)

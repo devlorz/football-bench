@@ -1,5 +1,12 @@
 # A second readable ranking reads a Bet Slip off the Predicted Score
 
+> Amended 2026-08-16 by ADR-0040: the slip is **six** markets, not five. A Handicap leg at
+> 1.5 goals joins it, paying only when the Predicted Score backs a side to win by two and
+> the result covers the same way. Everything below stands as written and as decided —
+> derived legs, flat stakes, no odds, readable-only — and the caveat this ADR records in
+> its own Considered Options, that the slip "reward[s] playing the percentages, not
+> boldness", is the flaw ADR-0040 was written to answer rather than a claim it overturns.
+
 The match track gains a second readable ranking framed as a bettor: each Prediction's
 Predicted Score is read as a five-market Bet Slip — match result, over/under 2.5, 3.5 and
 4.5 goals, and both teams to score — and Bet Points award one point per market the result
