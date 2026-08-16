@@ -8,7 +8,7 @@ import {
 } from "../src/dashboard/read-api.js";
 import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
 import {
-  MATCH_PROMPT_VERSION, matchPromptOf
+  MATCH_PROMPT_COMPETITIONS, MATCH_PROMPT_VERSION, matchPromptOf
 } from "../src/predictions/openrouter-entrant.js";
 import { EXHIBITION_CAVEAT } from "../src/exhibition/recall-caveat.js";
 import {
@@ -171,6 +171,9 @@ describe("the dashboard read API", () => {
 
     expect(body.entrants.map(({ id }) => id)).toEqual(ROSTER);
     expect(body.season).toBe(SEASON);
+    // The Season lists this Competition, and a scored ranking is the third of
+    // the three states the page draws.
+    expect(body.active).toBe(true);
   });
 
   test("carries each Entrant's Base Model Class", async () => {
@@ -376,6 +379,10 @@ describe("the dashboard read API before the Season starts", () => {
     );
     const body = await response.json() as LeaderboardBody;
 
+    // Open, and waiting. Both halves matter: this state and the unopened one
+    // below agree on every other field in the body, so the page can only tell
+    // a table that will fill from a league nobody has entered by this flag.
+    expect(body.active).toBe(true);
     // The field the pre-season state switches on. An empty array cannot tell a
     // Season that has not started from a request that returned nothing.
     expect(body.throughGw).toBeNull();
@@ -405,6 +412,47 @@ describe("the dashboard read API before the Season starts", () => {
       gw: 1, deadlineAt: "2026-08-14T17:30:00.000Z"
     });
   });
+
+  test("says a served Competition the Season has not opened is not Active",
+    async () => {
+      // The precondition, stated rather than assumed: La Liga has a frozen
+      // Prompt Version, so it is served and routed, and the Season lists the
+      // Premier League alone. That gap is the state -- and it is the one a
+      // fresh Season is in for every league between freezing its Prompt
+      // Version and opening it.
+      expect(MATCH_PROMPT_COMPETITIONS).toContain("PD");
+      const listed = await query(
+        "select competition from competitions where season = $1", [SEASON]
+      );
+      expect(listed.map(({ competition }) => competition)).toEqual(["PL"]);
+
+      const response = await handleDashboardRequest(
+        new Request("https://benchmark.example/api/pd/leaderboard"),
+        query, SEASON, NOW
+      );
+
+      // Not a 404, which is what an unserved Competition answers and would say
+      // the league does not exist; and not a failure status, which is the only
+      // thing the page turns into its error line. A league that has not opened
+      // is a fact, and a fact is answered with a body.
+      expect(response.status).toBe(200);
+      const body = await response.json() as LeaderboardBody;
+
+      expect(body.active).toBe(false);
+      expect(body.season).toBe(SEASON);
+
+      // Empty everywhere a reader could otherwise be promised something: no
+      // Entrant was entered, no Lock is coming, and no ranking is being
+      // qualified. `throughGw` is null here as it is pre-season, which is
+      // exactly why `active` and not this field is what the page switches on.
+      expect(body.entrants).toEqual([]);
+      expect(body.throughGw).toBeNull();
+      expect(body.nextLock).toBeNull();
+      expect(body.settledFixtures).toBe(0);
+      expect(body.matchPointsQualification).toBeNull();
+      expect(body.betPointsQualification).toBeNull();
+      expect(body.exhibitionCaveat).toBeNull();
+    });
 });
 
 describe("the dashboard read API on a Locked Gameweek nothing has settled", () => {

@@ -589,6 +589,19 @@ above before dropping anything.
 
 ## What this deploy does not do
 
+- **It applies no migration.** The script uploads the Worker and nothing else,
+  so a deploy whose read API names a table or column the deployed database has
+  not granted `dashboard_read` fails *at read time*, on every request, and
+  reaches a reader as the page's error line rather than as a failed deploy.
+  Migrations go first, and the order is not symmetric: a migration ahead of the
+  Worker only grants a select nobody is making yet.
+  [Migration 0023](../../migrations/0023_dashboard_reads_the_competition_column.sql)
+  exists because a deployed read API named `attempts.competition` before the
+  grant covered it, and
+  [migration 0028](../../migrations/0028_dashboard_reads_the_competition_list.sql)
+  is the same shape again — the leaderboard reads `competitions` to say a
+  league has not opened. Twice is a pattern, which is why this is written down
+  here rather than remembered.
 - **There is no hosted preview.** A Worker version preview holds the *same
   secrets as production* and answers with production data on a public URL, so
   it is not the data-free preview ADR-0028 assumed. `preview_urls = false` is

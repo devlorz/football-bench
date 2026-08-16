@@ -136,6 +136,14 @@ export interface LeaderboardEntrant {
  */
 export interface LeaderboardBody {
   season: string;
+  /**
+   * Whether the Season lists this Competition at all. False is a league whose
+   * Prompt Version is frozen — so it is served, and a 404 would be a lie — and
+   * which nobody has opened, so no seat was entered for it and no Gameweek
+   * will be scored. It is a state of its own and not a thin pre-season: every
+   * other field below is empty in both, and only this one tells them apart.
+   */
+  active: boolean;
   throughGw: number | null;
   nextLock: { gw: number; deadlineAt: string } | null;
   settledFixtures: number;
@@ -243,6 +251,38 @@ async function leaderboard(
   season: string,
   competition: string
 ): Promise<Response> {
+  // Served and not open. The routes are the frozen Prompt Versions and the
+  // Season's leagues are `competitions` rows, so the two lists differ for as
+  // long as it takes to open a league someone has frozen a Prompt Version
+  // for — and in that window this path answers.
+  //
+  // A successful response and not a status: every status the page can read is
+  // its failure line, which tells a reader something is broken and that
+  // nothing is being retried. Nothing is broken here.
+  //
+  // Returned before the reads below rather than beside them. They would all
+  // answer with nothing, and nothing is exactly what pre-season looks like — a
+  // body carrying `throughGw: null` and an empty roster is one the page draws
+  // as a table about to fill, promising a reader a Season nobody has opened.
+  const [open] = await query(
+    "select 1 from competitions where competition = $2 and season = $1",
+    [season, competition]
+  );
+  if (!open) {
+    const unopened: LeaderboardBody = {
+      season,
+      active: false,
+      throughGw: null,
+      nextLock: null,
+      settledFixtures: 0,
+      matchPointsQualification: null,
+      betPointsQualification: null,
+      exhibitionCaveat: null,
+      entrants: []
+    };
+    return json(unopened, SCORED_CACHE);
+  }
+
   const throughGw = await scoredThrough(query, season, competition);
 
   // What the pre-season page is waiting on, and read only there: a Season with
@@ -432,6 +472,7 @@ async function leaderboard(
 
   const body: LeaderboardBody = {
     season,
+    active: true,
     throughGw,
     nextLock: lock
       ? {

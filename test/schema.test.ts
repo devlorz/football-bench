@@ -899,8 +899,9 @@ describe("the benchmark database", () => {
     // makes that failure loud, and a later migration adding a table the
     // dashboard reads has to carry both halves to keep it that way.
     expect(granted).toEqual([
-      "contexts", "fixtures", "fpl_player_points", "fpl_players", "gameweeks",
-      "manager_states", "models", "predictions", "scores"
+      "competitions", "contexts", "fixtures", "fpl_player_points",
+      "fpl_players", "gameweeks", "manager_states", "models", "predictions",
+      "scores"
     ]);
 
     // `attempts` is the one table granted column by column rather than whole

@@ -62,6 +62,26 @@ const { competitionName } = matchPromptOf(competition);
     The leaderboard could not be read. Nothing is being retried.
   </p>
 
+  {/* The Competition the Season has not opened. Its own sentence, and not the
+      panel below: that one promises a table that fills after the first
+      Gameweek, which is a promise nobody has made about this league. The name
+      is in the built HTML because it is the build's, like every other place
+      this page says it.
+
+      It wears `.preseason` and adds no CSS. The panel is a two-column grid and
+      this state has one column of it to fill: there is no roster to list
+      beside the sentence, because nothing has been entered. */}
+  <section class="preseason" id="unopened" hidden>
+    <div>
+      <div class="kicker">Not open</div>
+      <h2>{competitionName} has not opened</h2>
+      <p>
+        Nothing has been entered for it and no Gameweek of it is being scored.
+        There is no date to wait for yet.
+      </p>
+    </div>
+  </section>
+
   {/* The Season that has not been scored yet. Hidden until the response says
       so, which is `throughGw` being null and not an empty list of Entrants. */}
   <section class="preseason" id="preseason" hidden>
@@ -176,6 +196,11 @@ const { competitionName } = matchPromptOf(competition);
     const text = (node, value) => { node.textContent = value; };
 
     const SORTS = { match: "matchPoints", bet: "betPoints" };
+
+    // The three states this page has, which are three sections and exactly one
+    // of them at a time. The ids are the section ids, so the switch below and
+    // the failure path both walk the same list.
+    const STATES = ["unopened", "preseason", "ranking"];
 
     // The choice is in the URL so the link is copyable and a reload holds it,
     // and it is written with `replaceState` rather than `pushState`: sorting is
@@ -302,18 +327,39 @@ const { competitionName } = matchPromptOf(competition);
     }
 
     function render() {
+      // Three states, named once. Which one it is decides what is shown, what
+      // is drawn and what the hero says, and each of those reads the name
+      // rather than asking the body again -- a second derivation is a fourth
+      // state waiting to disagree with the first three.
+      //
+      // A Competition the Season has not opened reads as pre-season on every
+      // other field in the body -- no scored Gameweek, no Entrant, no Lock --
+      // so it is asked first, and asked of the one field that tells the two
+      // apart.
+      //
+      // `=== false` and not `!body.active`. The edge holds a leaderboard for
+      // five minutes and these pages deploy with the Worker, so the first five
+      // minutes after this ships are bodies written before `active` existed --
+      // and `!undefined` would draw "has not opened" over a scored Premier
+      // League. A body without the field falls through to the `throughGw` test
+      // below, which is the question it was answering when it was written.
+      //
       // Null `throughGw` is the whole of the pre-season test. An empty list of
       // Entrants cannot tell a Season that has not started from a read that
       // returned nothing.
-      const pre = body.throughGw === null;
-      $("preseason").hidden = !pre;
-      $("ranking").hidden = pre;
+      const state = body.active === false ? "unopened"
+        : body.throughGw === null ? "preseason"
+        : "ranking";
+
+      for (const id of STATES) $(id).hidden = id !== state;
 
       text($("stat-season"), seasonLabel(body.season));
       text($("stat-settled"), String(body.settledFixtures));
-      text($("stat-through"), pre ? "—" : "GW " + body.throughGw);
+      text($("stat-through"),
+        state === "ranking" ? "GW " + body.throughGw : "—");
 
-      if (pre) renderPreSeason(); else renderRanking();
+      if (state === "preseason") renderPreSeason();
+      if (state === "ranking") renderRanking();
     }
 
     // A relative path: the Worker route claims `/api/*` on this hostname, so
@@ -326,10 +372,12 @@ const { competitionName } = matchPromptOf(competition);
       })
       .then((json) => { body = json; render(); })
       .catch(() => {
-        // One line, and nothing retries.
+        // One line, and nothing retries. Every state goes, from the same list
+        // `render` switches over: a section added there and forgotten here
+        // would sit under the error line saying something about a body that
+        // never arrived.
         $("error").hidden = false;
-        $("ranking").hidden = true;
-        $("preseason").hidden = true;
+        for (const id of STATES) $(id).hidden = true;
       });
   })();
   </script>

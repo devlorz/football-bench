@@ -204,7 +204,8 @@ describe("applying migrations", () => {
       "0024_history_and_xg_know_their_competition.sql",
       "0025_a_committed_gameweek_deadline_is_immutable.sql",
       "0026_the_spanish_divisions.sql",
-      "0027_a_squad_change_may_state_no_date.sql"
+      "0027_a_squad_change_may_state_no_date.sql",
+      "0028_dashboard_reads_the_competition_list.sql"
     ]);
 
     // Relabelled, not rewritten: every row of every rekeyed table comes back
@@ -283,7 +284,8 @@ describe("applying migrations", () => {
       "0024_history_and_xg_know_their_competition.sql",
       "0025_a_committed_gameweek_deadline_is_immutable.sql",
       "0026_the_spanish_divisions.sql",
-      "0027_a_squad_change_may_state_no_date.sql"
+      "0027_a_squad_change_may_state_no_date.sql",
+      "0028_dashboard_reads_the_competition_list.sql"
     ]);
     const backfill = await client.query<{
       observed_at: Date;

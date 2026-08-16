@@ -11,8 +11,11 @@ Work the **frontier**: after ticket 1, three tickets open at once (2, 3, 5). Tic
 on all three pages existing per Competition, and ticket 6 goes last on purpose — it is the
 only step that breaks a URL that works today, so every state before it is deployable.
 
-Nothing here writes. No schema change, no migration, no scorer or scheduler change, and the
-FPL track is untouched throughout — paths, chrome and both endpoints.
+Nothing here writes, and nothing here changes the shape of the schema — no table, no column,
+no key. No scorer or scheduler change either, and the FPL track is untouched throughout —
+paths, chrome and both endpoints. The one migration in the set is ticket 5's, and it is a
+`select` grant with the policy that has to come with it, for a table these reads reach and
+`dashboard_read` was never granted.
 
 ---
 
@@ -136,19 +139,49 @@ promised a table that is still gated.
 
 **Blocked by:** Ticket 1.
 
-- [ ] The leaderboard response can say the Competition is not Active — no row in
+- [x] The leaderboard response can say the Competition is not Active — no row in
       `competitions` for the Season — and says it with a successful response, not a status
-      the page reads as failure.
-- [ ] The page renders a sentence of its own for it, distinct from the pre-season panel,
+      the page reads as failure. It is a field, `active`, and not the shape of the body:
+      every other field is empty in this state and empty pre-season too, so a page reading
+      the shape could not tell them apart. Answered before the four reads below it, which
+      would each return nothing and compose into exactly the pre-season body.
+- [x] The page renders a sentence of its own for it, distinct from the pre-season panel,
       which promises the table will fill, and distinct from the failure line, which says
       nothing could be read.
-- [ ] Reaching this state never routes through the page's error path. A reader is not told to
+- [x] Reaching this state never routes through the page's error path. A reader is not told to
       wait for something that is not coming.
-- [ ] The two existing states are unchanged: an Active Competition with nothing scored is
+- [x] The two existing states are unchanged: an Active Competition with nothing scored is
       still the pre-season panel with its entered Entrants and its next Lock, and a scored
       one is still the ranking.
-- [ ] Tests cover all three states through the read API seam, asserted by what the response
+- [x] Tests cover all three states through the read API seam, asserted by what the response
       says and not by its status alone.
+
+**The grant this needed, which the ticket did not foresee.** `competitions` was not one of
+the six tables migration 0017 granted `dashboard_read`, and under the Row Level Security
+migration 0022 enabled on it at creation a grant without a policy selects zero rows and
+reports no error — so without both halves this endpoint would have answered "has not opened"
+for *every* league, including the one being scored daily.
+[Migration 0028](../../migrations/0028_dashboard_reads_the_competition_list.sql) carries the
+grant and the policy together, in the form migration 0017 required and 0020 and 0021 have
+each used since. It changes no table, column or key, which is the line spec 0017's Out of
+Scope now draws — it drew a wider one when this ticket was written.
+
+It also makes this the first deploy whose Worker depends on a migration having run: the
+grant has to reach the database before the Worker that reads it, or every page shows its
+error line. `docs/runbooks/dashboard-deploy.md` said nothing about migrations at all and now
+says this, under "What this deploy does not do".
+
+**Left standing:**
+
+- **The hero paragraph still speaks in the present tense on an unopened league** — "Every
+  Entrant sees the same context for every La Liga Fixture and commits a scoreline …", above
+  a panel saying nothing has been entered. It is the page's standing description of what the
+  benchmark is and it is true of the benchmark; it reads as a claim about this league. Not
+  fixed here because the fix is a decision about what that paragraph is for, and this ticket
+  is about the state below it.
+- The Fixtures and Entrant record pages answer this Competition with their own empty states
+  and say nothing about it not having opened. Ticket 5 is the leaderboard's, and spec 0017
+  asks for it there; whether the other two owe a reader the same sentence is unasked.
 
 ## 6 — The single-league URLs redirect
 

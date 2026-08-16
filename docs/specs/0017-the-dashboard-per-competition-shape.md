@@ -248,7 +248,12 @@ none.
   with no further work in this area, which is the point of reading the list rather than
   writing it.
 - A design handoff for the switcher. It is assembled from controls that already have one.
-- Changes to the write path, the scorer, the scheduler or the schema. This spec reads.
+- Changes to the write path, the scorer, the scheduler, or the schema's **shape** — tables,
+  columns, keys, constraints. This spec reads. A `select` grant and the policy that has to
+  come with it, where a read this spec makes reaches a table `dashboard_read` was never
+  granted, is this spec's own work and not an exception to this line: migration 0017 wrote
+  that form in advance and every migration since that widened the dashboard's reach has used
+  it. Ticket 5 is the first place in this spec to need one, for `competitions`.
 
 ## Further Notes
 
