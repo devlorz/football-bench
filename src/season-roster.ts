@@ -248,7 +248,16 @@ function identityOfSeat(seat: StoredSeat): Record<string, string | null> {
   };
 }
 
-/** Everything after the Competition prefix: `match-pd/kimi-k3` is `kimi-k3`. */
+/**
+ * Everything after the Competition prefix: `match-pd/kimi-k3` is `kimi-k3`.
+ *
+ * `entrantSlug` in `dashboard/src/entrant-link.ts` is this function again, for
+ * the `?entrant=` a reader copies. The two stand apart because merging them
+ * would run a dependency backwards: every import in this repository points
+ * from `dashboard/` into `src/`, and this file importing out of `dashboard/`
+ * would be the first the other way. Merging is a move of that module into
+ * `src/`, which is a decision of its own and not one spec 0017 makes.
+ */
 function seatSlug(id: string): string {
   return id.slice(id.indexOf("/") + 1);
 }

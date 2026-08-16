@@ -6,30 +6,28 @@ import { pageHref, type MatchPage } from "../competition-view.js";
  * header and the nav. A page supplies its title, which nav link it is, and the
  * Competition it belongs to.
  *
- * The three links are the design's three pages. Two point at this
- * Competition's copy of the page; the Entrant record is single-league until
- * ticket 3 of spec 0017 gives it a page per Competition, so it points where it
- * has always pointed and is the Premier League's from every league.
+ * The three links are the design's three pages, and all three now point at
+ * this Competition's copy of the page: a reader on La Liga stays on La Liga
+ * whichever of them they click.
  */
 interface Props {
   title: string;
   current: MatchPage;
   /**
    * The league the page is reading, named as the packet an Entrant reads names
-   * it — "La Liga" and not the `PD` the record is keyed by. Absent on the page
-   * that is still single-league until ticket 3 of spec 0017.
+   * it — "La Liga" and not the `PD` the record is keyed by.
    */
-  competitionName?: string;
+  competitionName: string;
   /**
    * The page's own Competition's path, which every link in the nav is built
    * from. A page marked as the current page must be a link to itself, and a
    * nav that sent a reader on La Liga to `/fixtures` would cross a league
    * without saying so.
    */
-  path?: string;
+  path: string;
 }
 
-const { title, current, competitionName, path = "/" } = Astro.props;
+const { title, current, competitionName, path } = Astro.props;
 
 const LINKS = [
   { key: "leaderboard", label: "Leaderboard" },
@@ -39,13 +37,6 @@ const LINKS = [
   { key: "entrants", label: "Entrant record" }
 ] as const;
 
-// The Entrant record has one page for every league until ticket 3 builds it
-// per Competition, so its link is that page and not this Competition's copy of
-// it. Deriving it here would be a link to a page the build does not emit, and
-// spec 0017 puts the redirects last on purpose: no step before them breaks a
-// URL that works today.
-const hrefOf = (page: MatchPage): string =>
-  page === "entrants" ? "/entrants" : pageHref(path, page);
 ---
 <html lang="en">
   <head>
@@ -71,16 +62,12 @@ const hrefOf = (page: MatchPage): string =>
         {/* The league in the header, so a tab among many tabs is identifiable
             and two identically laid-out leagues are told apart. The switcher
             that replaces reading it lands in ticket 4 of spec 0017. */}
-        <span class="brand-track">
-          {competitionName === undefined
-            ? "Match track"
-            : `Match track · ${competitionName}`}
-        </span>
+        <span class="brand-track">{`Match track · ${competitionName}`}</span>
       </div>
       <nav class="navlinks" id="navlinks">
         {LINKS.map(({ key, label }) => (
           <a
-            href={hrefOf(key)}
+            href={pageHref(path, key)}
             aria-current={key === current ? "page" : undefined}
           >
             {label}

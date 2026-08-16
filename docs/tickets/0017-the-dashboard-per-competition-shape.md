@@ -68,18 +68,18 @@ full id, which carries the Competition in it.
 
 **Blocked by:** Ticket 1.
 
-- [ ] The Entrant record endpoint takes the Competition from the path on the same terms as
+- [x] The Entrant record endpoint takes the Competition from the path on the same terms as
       the other two.
-- [ ] An Entrant record page is generated per Competition.
-- [ ] `?entrant=` carries the part of the seat id after the Competition prefix, and the page
+- [x] An Entrant record page is generated per Competition.
+- [x] `?entrant=` carries the part of the seat id after the Competition prefix, and the page
       resolves it against the seats that Competition returned.
-- [ ] A slug that resolves against no seat — an Exhibition Run that ran in one league only,
+- [x] A slug that resolves against no seat — an Exhibition Run that ran in one league only,
       or a hand-typed URL — leaves nothing selected. Not an error, and never a silent
       fallback to the first Entrant, which would show a reader a different Base Model than
       their link named.
-- [ ] The resolution is a pure function in the view module and is tested there, because it
+- [x] The resolution is a pure function in the view module and is tested there, because it
       renders perfectly while being wrong.
-- [ ] A test proves one Competition's Entrant records cannot appear in another's response.
+- [x] A test proves one Competition's Entrant records cannot appear in another's response.
 
 ## 4 — The switcher crosses Competitions from the header
 

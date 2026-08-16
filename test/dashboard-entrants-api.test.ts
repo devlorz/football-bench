@@ -6,9 +6,14 @@ import { seedSeason, type SeedStop } from "../src/seed-season.js";
 import {
   handleDashboardRequest, type EntrantsBody, type Query
 } from "../src/dashboard/read-api.js";
-import { MATCH_PROMPT_VERSION } from "../src/predictions/openrouter-entrant.js";
 import {
-  BET_POINTS_METRIC, MATCH_POINTS_METRIC, scoreMatchSeason
+  MATCH_PROMPT_VERSION, matchPromptOf
+} from "../src/predictions/openrouter-entrant.js";
+import {
+  BET_POINTS_METRIC, BET_POINTS_SEASON_TO_DATE_METRIC,
+  GAP_RATE_SEASON_TO_DATE_METRIC, MATCH_POINTS_METRIC,
+  MATCH_POINTS_SEASON_TO_DATE_METRIC, RPS_METRIC,
+  RPS_SEASON_TO_DATE_METRIC, scoreMatchSeason
 } from "../src/predictions/score-match-gameweek.js";
 
 const { Client } = pg;
@@ -33,6 +38,14 @@ const GAPPED = "minimax/v1";
 /** The tenth seat one case below enters, which answers nothing all Season. */
 const ABSENT = "absent/v1";
 
+/**
+ * La Liga's one seat, and the Gameweek its Season is scored through — later
+ * than the Premier League's, which is what makes the Gameweek this endpoint
+ * reads at answerable in the Premier League's direction.
+ */
+const SPANISH_SEAT = "match-pd/claude/v1";
+const SPANISH_GW = 20;
+
 /** The five legs of a Bet Slip, in the order a slip states them. */
 const MARKETS = [
   "result", "over_under_2.5", "over_under_3.5", "over_under_4.5", "btts"
@@ -50,8 +63,10 @@ function connections() {
       new Request(`https://benchmark.example${path}`), query, SEASON, NOW
     );
 
-  const entrants = async (): Promise<EntrantsBody> => {
-    const response = await get("/api/entrants");
+  const entrants = async (
+    path = "/api/pl/entrants"
+  ): Promise<EntrantsBody> => {
+    const response = await get(path);
     expect(response.status).toBe(200);
     return await response.json() as EntrantsBody;
   };
@@ -120,6 +135,60 @@ describe("the Entrant record endpoint on the design's Season", () => {
 
   beforeAll(async () => {
     await seed(writer, reader, "the design's");
+
+    // A La Liga seat with a scored Season of its own beside the Premier
+    // League's, for the reason the other two suites carry their counterparts: a
+    // record spans one Competition and never two (ADR-0035), and until a Season
+    // had a second league in it no query could be caught unioning them.
+    //
+    // Scored *through a later Gameweek* than the Premier League's 14, because
+    // this endpoint reads the Gameweek before it reads anything else and takes
+    // the maximum: a La Liga row on an earlier Gameweek would leave the Premier
+    // League's answer identical with the filter dropped, and prove nothing.
+    //
+    // The seat carries the same `entrant` role as the nine and is told apart by
+    // the Prompt Version each Competition freezes its own of (ADR-0038), so a
+    // roster read missing that filter seats ten here and one over there.
+    await writer.query(
+      `insert into competitions (competition, season) values ('PD', $1)`,
+      [SEASON]
+    );
+    await writer.query(
+      `insert into gameweeks (competition, season, gw, deadline_at)
+       values ('PD', $1, $2, $3)`,
+      [SEASON, SPANISH_GW, "2027-01-15T17:30:00Z"]
+    );
+    await writer.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values ($2, 'Spanish Claude', 'anthropic/claude-opus-4.5',
+                 'anthropic', $1, 'entrant')`,
+      [matchPromptOf("PD").version, SPANISH_SEAT]
+    );
+
+    // Written by hand rather than scored: what is being asserted is which rows
+    // a read reaches, and the shortest way to a La Liga row on Gameweek 20 is
+    // to write one. The per-Gameweek RPS row is what says the Season is scored
+    // through that Gameweek; the four cumulative rows are what the record is
+    // built from.
+    const week = (detail: object) => ({ gameweeks: [{ gw: SPANISH_GW, ...detail }] });
+    for (const [metric, value, n, detail] of [
+      [RPS_METRIC, 0.2, 2, null],
+      [MATCH_POINTS_SEASON_TO_DATE_METRIC, 8, 2,
+        week({ points: 8, fixtures: [{ points: 5 }, { points: 3 }] })],
+      [BET_POINTS_SEASON_TO_DATE_METRIC, 1, 2,
+        week({ points: 1, fixtures: [{ slip: [{ market: "result", won: true }] }] })],
+      [RPS_SEASON_TO_DATE_METRIC, 0.2, 2, week({ mean: 0.2 })],
+      [GAP_RATE_SEASON_TO_DATE_METRIC, 0, 2, week({ n: 2, gaps: [] })]
+    ] as const) {
+      await writer.query(
+        `insert into scores (
+           model_id, competition, season, gw, track, metric, value, n, detail
+         ) values ($1, 'PD', $2, $3, 'match', $4, $5, $6, $7)`,
+        [SPANISH_SEAT, SEASON, SPANISH_GW, metric, value, n, detail]
+      );
+    }
+
     return async () => {
       await writer.end();
       await reader.end();
@@ -230,6 +299,51 @@ describe("the Entrant record endpoint on the design's Season", () => {
     expect(gap!.settled).toBe(gap!.fixtures - gap!.gaps);
   });
 
+  test("keeps each Competition's Entrant records out of the other's response",
+    async () => {
+      const premierLeague = await entrants();
+      const laLiga = await entrants("/api/pd/entrants");
+
+      // Asserted in both directions, because a filter can be missing from one
+      // read and present in the other.
+      //
+      // The Premier League is scored through 14 and not La Liga's later 20 —
+      // the Gameweek this whole body is read at, so dropping that filter empties
+      // every figure below it — and its roster is its own nine and not ten.
+      expect(premierLeague.throughGw).toBe(THROUGH_GW);
+      expect(premierLeague.entrants.map(({ id }) => id)).toEqual(ROSTER);
+
+      // La Liga's own Gameweek, its own seat, and its own written rows reaching
+      // the record: a Competition's frozen Prompt Version seats its own roster,
+      // and the Premier League's nine are not entered for this league at all.
+      expect(laLiga.throughGw).toBe(SPANISH_GW);
+      expect(laLiga.entrants.map(({ id }) => id)).toEqual([SPANISH_SEAT]);
+      expect(laLiga.entrants[0]).toMatchObject({
+        matchPoints: 8, betPoints: 1, rps: 0.2, gaps: 0, n: 2
+      });
+      expect(laLiga.entrants[0]?.gameweeks.map(({ gw }) => gw))
+        .toEqual([SPANISH_GW]);
+
+      // The figures are asserted and not merely the ids because that is what
+      // holds the four joins onto `scores` to their own Competition. A seat
+      // belongs to one league through its Prompt Version, so no join can drag
+      // the *other* league's rows in — its `model_id` matches nothing here —
+      // but a join naming the wrong Competition reaches none of this seat's
+      // own rows either, and La Liga's record comes back all nulls under all
+      // the right ids.
+    });
+
+  test("answers a Competition it does not serve, and the bare path, with a 404",
+    async () => {
+      // The same terms as the other two endpoints', which is now the whole of
+      // the Match track: no default, and one lower-case spelling, so the edge
+      // holds one entry per league rather than four.
+      expect((await get("/api/entrants")).status).toBe(404);
+      expect((await get("/api/sa/entrants")).status).toBe(404);
+      expect((await get("/api/PL/entrants")).status).toBe(404);
+      expect((await get("/api/pl/entrants/1")).status).toBe(404);
+    });
+
   test("answers the same body through the Worker's driver", async () => {
     // The body this endpoint builds is read out of four `jsonb` columns carried
     // whole across the seam, which no earlier endpoint does: the leaderboard
@@ -241,7 +355,7 @@ describe("the Entrant record endpoint on the design's Season", () => {
     const driver = await workerDriver();
     try {
       const response = await handleDashboardRequest(
-        new Request("https://benchmark.example/api/entrants"),
+        new Request("https://benchmark.example/api/pl/entrants"),
         driver.query, SEASON, NOW
       );
 
@@ -252,7 +366,7 @@ describe("the Entrant record endpoint on the design's Season", () => {
   });
 
   test("carries the cache lifetime the scoring run moves on", async () => {
-    const response = await get("/api/entrants");
+    const response = await get("/api/pl/entrants");
 
     expect(response.headers.get("cloudflare-cdn-cache-control")).toBe(
       "max-age=300, stale-while-revalidate=3600, stale-if-error=0"

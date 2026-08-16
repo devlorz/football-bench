@@ -1,7 +1,29 @@
 ---
-import Page from "../layouts/Page.astro";
+import Page from "../../layouts/Page.astro";
+import {
+  NESTED_COMPETITION_SEGMENT_ROUTES
+} from "../../competition-view.js";
+import { matchPromptOf } from "../../../../src/predictions/openrouter-entrant.js";
+
+/**
+ * One Entrant record page per Competition, from the list the read API serves,
+ * on the same paths the Fixtures page's route generates and under a rest
+ * parameter of another name, which is Astro's requirement and is argued where
+ * the second list is.
+ */
+export const getStaticPaths = () => NESTED_COMPETITION_SEGMENT_ROUTES;
+
+const { competition, path, api } = Astro.props;
+
+// The league's name has one home, and this page holds no second copy of it.
+const { competitionName } = matchPromptOf(competition);
 ---
-<Page title="Entrant record — Football Bench, match track" current="entrants">
+<Page
+  title={`${competitionName} entrant record — Football Bench, match track`}
+  current="entrants"
+  competitionName={competitionName}
+  path={path}
+>
   {/*
     Everything that is not a number is in the built HTML: the headings, the
     four headline labels, the chart's frame and the table's column headers.
@@ -32,100 +54,118 @@ import Page from "../layouts/Page.astro";
     </div>
   </section>
 
-  <section id="record">
+  {/* The Competition's endpoint, decided at build time. A data attribute and
+      not `define:vars`, which the other two pages use: this page's script is
+      bundled rather than inline, because it is the one with a part worth a
+      test, and `define:vars` is inline-only. */}
+  <section id="record" data-endpoint={`${api}/entrants`}>
     {/* One button per Entrant, built from the response: switching is a
         re-render of everything below and costs no second request. */}
     <div class="sttabs" id="tabs" role="group" aria-label="Entrant"></div>
 
-    <div class="stkpi">
-      <div class="soft">
-        <div class="stat-label">Match points</div>
-        <div class="stat-value" id="kpi-match">&nbsp;</div>
-        <div class="muted stnote" id="kpi-match-note"></div>
-      </div>
-      <div class="soft">
-        <div class="stat-label">Bet points</div>
-        <div class="stat-value" id="kpi-bet">&nbsp;</div>
-        <div class="muted stnote">One point per market won</div>
-      </div>
-      <div class="soft">
-        <div class="stat-label">RPS</div>
-        <div class="stat-value" id="kpi-rps">&nbsp;</div>
-        <div class="muted stnote">Ranked probability score · lower is better</div>
-      </div>
-      <div class="soft">
-        <div class="stat-label">Gaps</div>
-        <div class="stat-value" id="kpi-gaps">&nbsp;</div>
-        <div class="muted stnote">Fixtures with no prediction stored</div>
-      </div>
-    </div>
+    {/* A link naming a seat this league has none of. Said in a line rather
+        than left as a page of another Entrant's figures under that link. */}
+    <p class="muted" id="unselected" hidden>
+      No Entrant of this Competition matches the link you followed. Pick one
+      above.
+    </p>
 
-    <div class="stcharts">
-      <div>
-        <h4 class="sth4">Cumulative match points</h4>
-        {/* The domains follow the data and are computed below, so nothing is
-            clipped at Gameweek 14 or at Gameweek 30. The figures themselves are
-            in the table underneath, which is what a screen reader reads. */}
-        <svg
-          class="stchart"
-          id="chart"
-          viewBox="0 0 880 260"
-          role="img"
-          aria-label="Cumulative match points per gameweek"
-        ></svg>
-        <div class="muted stchart-note">
-          Selected entrant in accent; the other eight in grey.
+    <div id="selected">
+      <div class="stkpi">
+        <div class="soft">
+          <div class="stat-label">Match points</div>
+          <div class="stat-value" id="kpi-match">&nbsp;</div>
+          <div class="muted stnote" id="kpi-match-note"></div>
+        </div>
+        <div class="soft">
+          <div class="stat-label">Bet points</div>
+          <div class="stat-value" id="kpi-bet">&nbsp;</div>
+          <div class="muted stnote">One point per market won</div>
+        </div>
+        <div class="soft">
+          <div class="stat-label">RPS</div>
+          <div class="stat-value" id="kpi-rps">&nbsp;</div>
+          <div class="muted stnote">Ranked probability score · lower is better</div>
+        </div>
+        <div class="soft">
+          <div class="stat-label">Gaps</div>
+          <div class="stat-value" id="kpi-gaps">&nbsp;</div>
+          <div class="muted stnote">Fixtures with no prediction stored</div>
         </div>
       </div>
 
-      <div>
-        <h4 class="sth4">Score-tier breakdown</h4>
-        <div class="stbar" id="tier-bar"></div>
-        <div id="tier-rows"></div>
+      <div class="stcharts">
+        <div>
+          <h4 class="sth4">Cumulative match points</h4>
+          {/* The domains follow the data and are computed below, so nothing is
+              clipped at Gameweek 14 or at Gameweek 30. The figures themselves are
+              in the table underneath, which is what a screen reader reads. */}
+          <svg
+            class="stchart"
+            id="chart"
+            viewBox="0 0 880 260"
+            role="img"
+            aria-label="Cumulative match points per gameweek"
+          ></svg>
+          <div class="muted stchart-note">
+            Selected entrant in accent; the other eight in grey.
+          </div>
+        </div>
 
-        <h4 class="sth4-spaced">Bet slip market hit rate</h4>
-        <div id="market-rows"></div>
+        <div>
+          <h4 class="sth4">Score-tier breakdown</h4>
+          <div class="stbar" id="tier-bar"></div>
+          <div id="tier-rows"></div>
+
+          <h4 class="sth4-spaced">Bet slip market hit rate</h4>
+          <div id="market-rows"></div>
+        </div>
       </div>
-    </div>
 
-    <h4 class="sth4">Per-gameweek record</h4>
-    {/* Its own scroll container, so the table can be wider than a phone without
-        the page ever scrolling sideways. */}
-    <div class="sttable">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>GW</th>
-            <th>Fixtures</th>
-            <th class="num">Match pts</th>
-            <th class="num">Bet pts</th>
-            <th class="num">Exact</th>
-            <th class="num">Outcome</th>
-            <th class="num">RPS</th>
-            <th class="num">Gaps</th>
-          </tr>
-        </thead>
-        <tbody id="gw-rows">
-          {/* Still blocks over the same grid the real rows use. */}
-          {Array.from({ length: 8 }).map(() => (
-            <tr class="strow-skeleton" aria-hidden="true">
-              <td colspan="8"><div class="skeleton"></div></td>
+      <h4 class="sth4">Per-gameweek record</h4>
+      {/* Its own scroll container, so the table can be wider than a phone without
+          the page ever scrolling sideways. */}
+      <div class="sttable">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>GW</th>
+              <th>Fixtures</th>
+              <th class="num">Match pts</th>
+              <th class="num">Bet pts</th>
+              <th class="num">Exact</th>
+              <th class="num">Outcome</th>
+              <th class="num">RPS</th>
+              <th class="num">Gaps</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody id="gw-rows">
+            {/* Still blocks over the same grid the real rows use. */}
+            {Array.from({ length: 8 }).map(() => (
+              <tr class="strow-skeleton" aria-hidden="true">
+                <td colspan="8"><div class="skeleton"></div></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   </section>
 
   {/* Bundled rather than `is:inline`, unlike the other two pages: it is the
       one page whose script has a part worth a test, and an inline script can
-      import nothing. The chart's two domains live in `chart-domain.ts` and are
-      tested there; everything else here is DOM. */}
+      import nothing. The chart's two domains live in `chart-domain.ts` and the
+      seat a link names in `entrant-link.ts`, both tested there; everything
+      else here is DOM. */}
   <script>
-  import { across, ceiling } from "../chart-domain.js";
+  import { across, ceiling } from "../../chart-domain.js";
+  // `entrant-link.js` and not `competition-view.js`, which reaches the frozen
+  // Prompt Versions and through them the whole of `zod`: this script is
+  // bundled, so every import here is bytes every reader downloads.
+  import { entrantOf, entrantSlug } from "../../entrant-link.js";
   import type {
     EntrantRecord, EntrantsBody
-  } from "../../../src/dashboard/read-api.js";
+  } from "../../../../src/dashboard/read-api.js";
 
   (() => {
     // Every id below is in the built HTML above, so the element is there.
@@ -159,14 +199,19 @@ import Page from "../layouts/Page.astro";
     // holds it, and it is written with `replaceState` for the reason the sort
     // choice is: picking an Entrant is a view of one page, not navigation, and
     // Back is expected to leave rather than walk back through nine choices.
+    //
+    // The seat's slug and not its id, so editing a link's `/pd/` to `/pl/`
+    // lands on the same Base Model's Premier League record rather than on a
+    // page selecting nothing.
     let body: EntrantsBody | null = null;
     let selected = new URL(location.href).searchParams.get("entrant");
 
     const remember = (id: string): void => {
-      selected = id;
+      const slug = entrantSlug(id);
+      selected = slug;
       const url = new URL(location.href);
-      if (url.searchParams.get("entrant") === id) return;
-      url.searchParams.set("entrant", id);
+      if (url.searchParams.get("entrant") === slug) return;
+      url.searchParams.set("entrant", slug);
       history.replaceState(null, "", url);
     };
 
@@ -360,7 +405,7 @@ import Page from "../layouts/Page.astro";
       $("gw-rows").replaceChildren(rows);
     }
 
-    function renderTabs(field: EntrantRecord[], selectedId: string) {
+    function renderTabs(field: EntrantRecord[], selectedId: string | null) {
       const tabs = document.createDocumentFragment();
       for (const entrant of field) {
         const button = document.createElement("button");
@@ -388,16 +433,20 @@ import Page from "../layouts/Page.astro";
       $("record").hidden = pre;
       if (pre) return;
 
-      // An id that is not on the roster — a stale link, or a seat that left —
-      // falls back to the first Entrant rather than rendering nothing.
-      const entrant = data.entrants.find((each) => each.id === selected)
-        ?? data.entrants[0];
-      if (!entrant) return;
-      // The link is corrected to the Entrant actually on screen, so a stale id
-      // is not copied on to the next reader still saying it.
-      remember(entrant.id);
+      // Which seat the link names, decided in the view module and tested
+      // there. A slug this league has no seat for selects nothing: the tabs
+      // are still there to pick from, and the record below them is not another
+      // Entrant's figures under that reader's link.
+      const chosen = entrantOf(selected, data.entrants.map(({ id }) => id));
+      renderTabs(data.entrants, chosen);
+      $("unselected").hidden = chosen !== null;
+      $("selected").hidden = chosen === null;
+      if (chosen === null) return;
 
-      renderTabs(data.entrants, entrant.id);
+      const entrant = data.entrants.find((each) => each.id === chosen)!;
+      // The link is corrected to the Entrant actually on screen, which is what
+      // writes the slug on a first visit that named none.
+      remember(entrant.id);
       $("kpi-match").textContent = String(entrant.matchPoints);
       $("kpi-match-note").textContent =
         entrant.n + " settled fixtures · through GW " + data.throughGw;
@@ -415,7 +464,7 @@ import Page from "../layouts/Page.astro";
 
     // A relative path: the Worker route claims `/api/*` on this hostname, so
     // nothing is cross-origin and no origin was a build input.
-    fetch("/api/entrants")
+    fetch($("record").dataset.endpoint!)
       .then((response) => {
         if (!response.ok) throw new Error(String(response.status));
         return response.json();
