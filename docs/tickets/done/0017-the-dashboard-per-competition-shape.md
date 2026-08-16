@@ -3,9 +3,9 @@
 Six tracer-bullet slices that take the Match track dashboard from one league to many — a
 path per Competition, a switcher that holds the reader's page, a league that has not opened
 saying so, and the read API's twenty-seven `PL` literals replaced by the path. Source:
-[spec 0017](../specs/0017-the-dashboard-per-competition-shape.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md). Decisions:
-[ADR-0039](../adr/0039-the-dashboard-gives-every-competition-its-own-path.md).
+[spec 0017](../../specs/0017-the-dashboard-per-competition-shape.md). Vocabulary:
+[CONTEXT.md](../../../CONTEXT.md). Decisions:
+[ADR-0039](../../adr/0039-the-dashboard-gives-every-competition-its-own-path.md).
 
 Work the **frontier**: after ticket 1, three tickets open at once (2, 3, 5). Ticket 4 waits
 on all three pages existing per Competition, and ticket 6 goes last on purpose — it is the
@@ -161,7 +161,7 @@ the six tables migration 0017 granted `dashboard_read`, and under the Row Level 
 migration 0022 enabled on it at creation a grant without a policy selects zero rows and
 reports no error — so without both halves this endpoint would have answered "has not opened"
 for *every* league, including the one being scored daily.
-[Migration 0028](../../migrations/0028_dashboard_reads_the_competition_list.sql) carries the
+[Migration 0028](../../../migrations/0028_dashboard_reads_the_competition_list.sql) carries the
 grant and the policy together, in the form migration 0017 required and 0020 and 0021 have
 each used since. It changes no table, column or key, which is the line spec 0017's Out of
 Scope now draws — it drew a wider one when this ticket was written.
