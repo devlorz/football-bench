@@ -5,12 +5,11 @@
  * `document.createElement` makes an HTML element whatever name it is handed, so
  * a `<polyline>` built that way is in the wrong namespace and never paints.
  *
- * The Match track's Entrant record page holds a copy of this, character for
- * character, and is not importing from here: spec 0014 puts "any change to the
- * Match track's pages" out of scope for the whole of this section's work, and a
- * one-line import is still a change to one. The next ticket that touches that
- * page collapses the copy into this; until then the copy is deliberate and this
- * is where the shared one lives.
+ * Both sections' chart pages import it. The Match track's Entrant record page
+ * held a copy of this for one ticket, while spec 0014 put "any change to the
+ * Match track's pages" out of scope for the FPL section's work; spec 0017
+ * rewrote that page wholesale, which is the ticket that condition was waiting
+ * for, and the copy went with it.
  *
  * The layouts' own scripts are `is:inline` and can import nothing, which is why
  * the theme and burger handlers are duplicated between the two of them for a

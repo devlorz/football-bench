@@ -158,6 +158,7 @@ const { competition, competitionName, path, api } = Astro.props;
   // `entrant-link.js` and not `competition-view.js`, which reaches the frozen
   // Prompt Versions and through them the whole of `zod`: this script is
   // bundled, so every import here is bytes every reader downloads.
+  import { svg } from "../../dom.js";
   import { entrantOf, entrantSlug } from "../../entrant-link.js";
   import type {
     EntrantRecord, EntrantsBody
@@ -227,18 +228,6 @@ const { competition, competitionName, path, api } = Astro.props;
         gw: week.gw,
         total: (running += week.matchPoints)
       }));
-    };
-
-    const svg = (
-      name: string,
-      attributes: Record<string, string | number>
-    ): SVGElement => {
-      const node =
-        document.createElementNS("http://www.w3.org/2000/svg", name);
-      for (const [key, value] of Object.entries(attributes)) {
-        node.setAttribute(key, String(value));
-      }
-      return node;
     };
 
     function renderChart(entrant: EntrantRecord, field: EntrantRecord[]) {
