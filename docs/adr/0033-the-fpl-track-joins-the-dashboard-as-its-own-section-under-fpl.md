@@ -69,18 +69,20 @@ of the `scores` rows where the scorer froze it.
 - Only Settled Gameweeks appear, and a missing Gameweek is announced rather than silently
   absent — the same two rules the rest of the record already obeys, restated in the handoff
   and binding on all three endpoints.
-- The implementation deviates from the design files in exactly eight places: "Model stats"
+- The implementation deviates from the design files in exactly nine places: "Model stats"
   is rendered "Entrant record", `.dark` is `data-theme`, the container query is a media
   query, the Race chart's panel has a 10px foot rather than the handoff's 20px, its
   Gameweek axis is an absolutely positioned label at every Gameweek up to eight of them,
-  rather than a flex row of all of them, the Transfers list under a Team Sheet states its
-  cost once for the Gameweek rather than once per row, that list's heading names the
-  Gameweek it was read against whenever that is not the Gameweek before, and a name plate
-  carries as many opponents as the club has Fixtures — none, one, or two — where the
-  handoff draws exactly one. Everything else is per the handoff, including the deliberately
-  dark pitch in both themes.
+  rather than a flex row of all of them, every Transfers list — the one under a Team Sheet
+  and the Season-long history on the Entrant record — states its cost once for the Gameweek
+  rather than once per row, each of those lists names the Gameweek it was read against
+  whenever that is not the Gameweek before, a name plate carries as many opponents as the
+  club has Fixtures — none, one, or two — where the handoff draws exactly one, and the
+  captain picks name who wore the armband beside who was nominated for it. Everything else
+  is per the handoff, including the deliberately dark pitch in both themes.
 
-  The last two are the Race variant's, and both follow from facts the prototype's four
+  The panel's foot and its axis are the Race variant's, and both follow from facts the
+  prototype's four
   Gameweeks did not have. The axis is positioned because a Gameweek the record holds
   nothing for is a longer segment in every line: a row spaced evenly would hang GW5's label
   under GW4's points, which is the quietest kind of wrong a chart can be. It thins to eight
@@ -90,16 +92,33 @@ of the `scores` rows where the scorer froze it.
   their line's end and the lowest can be clamped to the foot of the plot, where half of it
   hangs below the viewBox — the padding is the room it hangs in.
 
-  The last three are the Team Sheet's, and all three are the record having more or less to
-  say than the prototype's invented data did.
+  The last four are the record having more or less to say than the prototype's invented
+  data did.
 
   A Manager State stores the Squad an action arrived at and the points that Gameweek's paid
   Transfers cost, and never which of the Transfers was the paid one — so `Free transfer`
   beside one row and `−4 Hit` beside another would be a guess, and the cost is stated once,
-  where it is known. The same list's heading names the Gameweek behind it whenever the
-  record holds a hole there: a Gameweek an Entrant Gapped stores no Manager State
-  (ADR-0011), so its Squad is diffed against the last one that stood, and "Transfers into
-  GW5" over changes made since GW3 reads a hole as a quiet week.
+  where it is known. This binds both lists, not the Team Sheet's alone: the Entrant record's
+  Transfer history is that same Gameweek repeated across a Season, read by the same
+  function off the same rows, and the handoff draws a `Cost` column per row on it. One
+  record, one limit, and a per-row cost on Screen 3 would be the same guess made 38 times.
+
+  Each list names the Gameweek behind it whenever the record holds a hole there: a Gameweek
+  an Entrant Gapped stores no Manager State (ADR-0011), so its Squad is diffed against the
+  last one that stood, and "Transfers into GW5" over changes made since GW3 reads a hole as
+  a quiet week. On the Entrant record this is a column of its own rather than a heading,
+  because the history states every Gameweek at once and only some of them are read across a
+  hole.
+
+  The captain picks name who wore the armband as well as who was nominated. The handoff
+  draws `GW · Captain · Vice · Returned`, which is right in the ordinary week and silent
+  about the one the game has a rule for: the armband passes to the vice when the captain
+  does not play at all, and passes to nobody when neither does. A `Returned` column filled
+  from whoever wore it, under a `Captain` column naming whoever was nominated, prints the
+  vice's doubled score under the captain's name — a misattribution a reader has no way to
+  catch. The record knows which of the two it was (`ScoreDetail.captain`) and says so, and
+  the return is null rather than nought where nobody wore it: a captain who played and
+  scored nothing doubled nothing, and that is a nought.
 
   A name plate carries the Fixtures the club actually had. The prototype had four
   Gameweeks and no Blank or Double in them; a Season has both, and a plate that printed one

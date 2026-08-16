@@ -3,12 +3,13 @@ import { EXHIBITION_CAVEAT } from "../exhibition/recall-caveat.js";
 import { argmaxOutcome, outcomeOf, type Probs } from "../fixture-result.js";
 import {
   chipsRemaining, sellingPrice, VIOLATION_KINDS, type Chip, type ChipsUsed,
-  type OwnedPlayer, type Position, type SquadEnvelope, type TeamSheet,
+  type Position, type SquadEnvelope, type TeamSheet,
   type ViolationKind
 } from "../fpl/apply-gameweek-action.js";
 import {
   FPL_POINTS_METRIC, FPL_POINTS_SEASON_TO_DATE_METRIC
 } from "../fpl/demonstration-record.js";
+import type { ScoreDetail } from "../fpl/score-team-sheet.js";
 import {
   MATCH_PROMPT_COMPETITIONS, matchPromptOf
 } from "../predictions/openrouter-entrant.js";
@@ -1026,6 +1027,73 @@ async function fplScoredThrough(
   return numberOrNull(scored?.through_gw);
 }
 
+/**
+ * The Gameweeks of a span that `present` holds nothing for, announced rather
+ * than skipped: a Gameweek any Entrant stored no Manager State in is removed
+ * from every Season path (ADR-0011), so it is absent from every series and
+ * every total. A reader given a series that jumps from 3 to 5 with nothing said
+ * would read the jump as a Gameweek nobody scored in.
+ *
+ * The span is passed rather than taken from `present`, because the two
+ * questions asked of this differ in exactly that: the record's own holes are
+ * the span's Gameweeks missing from the record, and one Entrant's Gaps are the
+ * *same* span's Gameweeks missing from that Entrant's Manager States — a span
+ * it may itself begin after. Reading the span off the list would answer the
+ * second by starting at the Entrant's first Gameweek and calling every Gap
+ * before it nothing.
+ *
+ * Empty span, empty answer: before the first Settled Gameweek there is no
+ * record to hold a hole.
+ */
+function holesIn(
+  from: number | undefined,
+  throughGw: number | null,
+  present: number[]
+): number[] {
+  return from === undefined || throughGw === null ? [] : Array.from(
+    { length: throughGw - from + 1 },
+    (_, offset) => from + offset
+  ).filter((gw) => !present.includes(gw));
+}
+
+/**
+ * The Demonstration qualification stored in the cumulative rows a total was
+ * read off, which is the rows at the scored Gameweek and no earlier one. A
+ * ranking a reader can see without it is the failure ADR-0003 asks for it
+ * against, and on this track there is no row it could be missing from that is
+ * not a fault: the scorer writes it into every cumulative row it writes, so a
+ * Gameweek's rows carry it ten times or the record is broken.
+ *
+ * One distinct value across those rows rather than the first one found. Reading
+ * the first would answer a Gameweek whose own rows lost the sentence with a
+ * copy from an earlier Gameweek — publishing a ranking on the strength of a row
+ * it was not read from, which is the one thing failing closed here exists to
+ * prevent — and would let two rows disagreeing about a sentence frozen for the
+ * Season pass unnoticed.
+ *
+ * Both FPL endpoints that serve a Season total read it through here. The
+ * Entrant record's ten totals are a ranking a reader can order for themselves,
+ * so spec 0014's story 33 binds it exactly as it binds the leaderboard.
+ */
+function qualificationAt(
+  totals: Array<Record<string, unknown>>,
+  throughGw: number | null
+): string | null {
+  const stored = new Set(
+    totals
+      .filter((row) => Number(row.gw) === throughGw)
+      .map((row) => textOrNull(row.qualification))
+  );
+  const [qualification = null] = stored;
+  if (throughGw !== null && (stored.size !== 1 || qualification === null)) {
+    throw new Error(
+      `The Season's FPL ranking rows at Gameweek ${throughGw} carry no one `
+      + "qualification, and a ranking cannot be published without it"
+    );
+  }
+  return qualification;
+}
+
 /** A player as the Season last listed him, which is how a page renders one. */
 interface ListedPlayer {
   name: string;
@@ -1058,6 +1126,17 @@ interface ListedPool {
   /** The listing a player is rendered from, or a failure if he has none. */
   player: (fplId: number) => ListedPlayer;
   /**
+   * What he was listed at in an earlier Gameweek of the same Season, which is
+   * the other half of the Selling Price a Squad had *then*. Pricing a Gameweek
+   * 1 Squad at Gameweek 5's list would draw a value series that moves because
+   * the prices moved rather than because the Squad did.
+   *
+   * Only the price and not the whole listing: a name, a club and a position are
+   * facts about the player that a page prints the current spelling of, and the
+   * price is the one column a series is drawn from.
+   */
+  priceAt: (fplId: number, gw: number) => number;
+  /**
    * A club's own code, for a club no listed player is owned from — the
    * opponent on a plate is a club like any other and the field may own nobody
    * who plays for it. Null where the record holds no code (migration 0029).
@@ -1065,50 +1144,123 @@ interface ListedPool {
   clubCode: (club: string) => string | null;
 }
 
+/**
+ * Every listing through the Gameweek rather than the standing one alone,
+ * because the Entrant record draws a Squad value per Gameweek and needs the
+ * list each of them was priced against. The rule that picks one — the latest
+ * listing at or before a Gameweek — is applied here for both questions rather
+ * than by `distinct on` for one and in JavaScript for the other, which would be
+ * two spellings of it to drift apart.
+ *
+ * ponytail: the whole Season's listings in one read, which at Gameweek 38 of a
+ * production bootstrap is around 26,000 narrow rows for the three endpoints
+ * that share it. Narrow the read to the Gameweeks a caller asks for if it ever
+ * measures.
+ */
 async function listedPool(
   query: Query,
   season: string,
   gw: number | null
 ): Promise<ListedPool> {
   const rows = gw === null ? [] : await query(
-    `select distinct on (fpl_id)
-            fpl_id, web_name, team_name, short_name, position, price_tenths
+    `select fpl_id, gw, web_name, team_name, short_name, position, price_tenths
        from fpl_players
       where competition = 'PL' and season = $1 and gw <= $2
-      order by fpl_id, gw desc`,
+      order by fpl_id, gw`,
     [season, gw]
   );
 
-  const listed = new Map(rows.map((row) => [Number(row.fpl_id), {
-    name: String(row.web_name),
-    club: String(row.team_name),
-    clubCode: row.short_name === null ? null : String(row.short_name),
-    position: String(row.position) as Position,
-    priceTenths: Number(row.price_tenths)
-  }]));
+  const listings = new Map<number, Array<ListedPlayer & { gw: number }>>();
+  for (const row of rows) {
+    const fplId = Number(row.fpl_id);
+    listings.set(fplId, [...listings.get(fplId) ?? [], {
+      gw: Number(row.gw),
+      name: String(row.web_name),
+      club: String(row.team_name),
+      clubCode: row.short_name === null ? null : String(row.short_name),
+      position: String(row.position) as Position,
+      priceTenths: Number(row.price_tenths)
+    }]);
+  }
+
+  // The listing that stood at a Gameweek, which is the last one written at or
+  // before it. At or before rather than at: a Gameweek whose pre-Lock snapshot
+  // was missed must not blank every Squad on the page, and a listing holds
+  // until the next snapshot moves it.
+  const standingAt = (
+    fplId: number,
+    at: number
+  ): (ListedPlayer & { gw: number }) | undefined =>
+    (listings.get(fplId) ?? []).filter((each) => each.gw <= at).at(-1);
+
+  const refuse = (fplId: number, at: number): never => {
+    throw new Error(
+      `The Season lists no player ${fplId} at or before Gameweek ${at}, so a `
+      + "Squad holding him cannot be read"
+    );
+  };
 
   // Off the same rows and not a second read of the same table: the code is a
   // fact about the club, every club with a listing has one on every row of it,
   // and a second query would restate this one's filter and its "latest listing
   // wins" rule in a second place for them to drift apart.
   const codes = new Map(
-    [...listed.values()].map(({ club, clubCode }) => [club, clubCode])
+    [...listings.values()].flatMap((each) => each.at(-1) ?? [])
+      .map(({ club, clubCode }) => [club, clubCode])
   );
 
   return {
-    player: (fplId: number): ListedPlayer => {
-      const player = listed.get(fplId);
-      if (player === undefined) {
-        throw new Error(
-          `The Season lists no player ${fplId}, so a Squad holding him cannot `
-          + "be read"
-        );
-      }
-      return player;
-    },
+    player: (fplId: number): ListedPlayer =>
+      standingAt(fplId, gw ?? 0) ?? refuse(fplId, gw ?? 0),
+    priceAt: (fplId: number, at: number): number =>
+      (standingAt(fplId, at) ?? refuse(fplId, at)).priceTenths,
     clubCode: (club: string): string | null => codes.get(club) ?? null
   };
 }
+
+/**
+ * What the Squad is worth to the Entrant at one Gameweek: every owned player at
+ * his Selling Price, which is the price paid plus half of any rise and the whole
+ * of any fall (CONTEXT.md). In tenths, as every price in the track is.
+ *
+ * The Squad it is fielding, which during a Free Hit is the week's borrowed
+ * fifteen and not the permanent Squad waiting in `free_hit_stash`. That is the
+ * value the Gameweek was played at and the one the Team Sheet beside it belongs
+ * to; the permanent Squad returns as `active` next Gameweek, and reading the
+ * stash instead would price a Squad nobody played.
+ *
+ * The Gameweek is passed because the ranking asks it of one and the Entrant
+ * record asks it of every Gameweek of a Season — the same sum against a
+ * different list. The squads endpoint does not call this: it has already priced
+ * the fifteen one by one for the page to print, and adding them up from a second
+ * reading of the same Squad would be a second answer to what it is showing.
+ */
+function squadValueAt(
+  squad: SquadEnvelope,
+  pool: ListedPool,
+  gw: number
+): number {
+  return squad.active.reduce(
+    (total, { fplId, purchasePriceTenths }) =>
+      total + sellingPrice(purchasePriceTenths, pool.priceAt(fplId, gw)),
+    0
+  );
+}
+
+/**
+ * The order both Entrant-scoped pages list the field in, which is the ranking's.
+ *
+ * Ties keep the entered order rather than sharing a place: a picker is a list of
+ * buttons, and the shared rank a tie deserves is the leaderboard's answer to a
+ * question neither page asks. One comparator and not two, because the squads
+ * page and the Entrant record carry one selection between them (spec 0014,
+ * story 22) — and an invariant about two pages agreeing cannot be held by two
+ * copies of an expression three hundred lines apart.
+ */
+const byTotalPoints = (
+  a: { totalPoints: number | null },
+  b: { totalPoints: number | null }
+): number => (b.totalPoints ?? 0) - (a.totalPoints ?? 0);
 
 /**
  * The ten Entrants ranked by cumulative FPL points through the latest Settled
@@ -1170,18 +1322,6 @@ async function fplLeaderboard(query: Query, season: string): Promise<Response> {
   // through the scored Gameweek.
   const pool = await listedPool(query, season, throughGw);
 
-  // The Squad the Entrant is fielding, which during a Free Hit is the week's
-  // borrowed fifteen and not the permanent Squad waiting in `free_hit_stash`.
-  // That is the value the Gameweek was played at and the one the Team Sheet
-  // beside it belongs to; the permanent Squad returns as `active` next
-  // Gameweek, and reading the stash instead would price a Squad nobody played.
-  const squadValueOf = (squad: SquadEnvelope): number =>
-    squad.active.reduce(
-      (total, { fplId, purchasePriceTenths }) =>
-        total + sellingPrice(purchasePriceTenths, pool.player(fplId).priceTenths),
-      0
-    );
-
   // One rank per Entrant at one Gameweek, ties sharing a place. Used twice —
   // once for the ranking and once for the snapshot the movement is measured
   // against — so the two cannot disagree about what a tie means.
@@ -1222,7 +1362,9 @@ async function fplLeaderboard(query: Query, season: string): Promise<Response> {
         : previousRank - rank,
       gwPoints: numberOrNull(row.gw_points),
       totalPoints: cumulative.at(-1)?.points ?? null,
-      squadValueTenths: squad === null ? null : squadValueOf(squad),
+      squadValueTenths: squad === null || throughGw === null
+        ? null
+        : squadValueAt(squad, pool, throughGw),
       // Counted for the Gameweek after the one being read, which is the next
       // one the Entrant can play a Chip in. The Gameweek on the page has
       // settled, so its deadline is behind the Entrant — and reading a Settled
@@ -1235,48 +1377,12 @@ async function fplLeaderboard(query: Query, season: string): Promise<Response> {
     };
   });
 
-  // The sentence stored in the rows the ranking was read off, which is the
-  // rows at the scored Gameweek and no earlier one. A ranking a reader can see
-  // without the qualification is the failure ADR-0003 asks for it against, and
-  // on this track there is no row it could be missing from that is not a fault:
-  // the scorer writes it into every cumulative row it writes, so a Gameweek's
-  // rows carry it ten times or the record is broken.
-  //
-  // One distinct value across those rows rather than the first one found.
-  // Reading the first would answer a Gameweek whose own rows lost the sentence
-  // with a copy from an earlier Gameweek — publishing a ranking on the strength
-  // of a row it was not read from, which is the one thing failing closed here
-  // exists to prevent — and would let two rows disagreeing about a sentence
-  // frozen for the Season pass unnoticed.
-  const stored = new Set(
-    totals
-      .filter((row) => Number(row.gw) === throughGw)
-      .map((row) => textOrNull(row.qualification))
-  );
-  const [qualification = null] = stored;
-  if (throughGw !== null && (stored.size !== 1 || qualification === null)) {
-    throw new Error(
-      `The Season's FPL ranking rows at Gameweek ${throughGw} carry no one `
-      + "qualification, and a ranking cannot be published without it"
-    );
-  }
-
-  // The holes in the record inside the span, announced rather than skipped: a
-  // Gameweek any Entrant stored no Manager State in is removed from every
-  // Season path (ADR-0011), so it is absent from the series above and from
-  // every total. A reader given a series that jumps from 3 to 5 with nothing
-  // said would read the jump as a Gameweek nobody scored in.
-  const missingGws = gameweeks.length === 0 ? [] : Array.from(
-    { length: (throughGw ?? 0) - gameweeks[0]! + 1 },
-    (_, offset) => gameweeks[0]! + offset
-  ).filter((gw) => !gameweeks.includes(gw));
-
   const body: FplLeaderboardBody = {
     season,
     fromGw: gameweeks[0] ?? null,
     throughGw,
-    missingGws,
-    qualification,
+    missingGws: holesIn(gameweeks[0], throughGw, gameweeks),
+    qualification: qualificationAt(totals, throughGw),
     // Ranked order, and the entered order before there is a ranking to take.
     entrants: throughGw === null
       ? entrants
@@ -1341,8 +1447,56 @@ export interface FplOpponent {
   home: boolean;
 }
 
-/** A player moving in or out, named because a page cannot name an id. */
-export interface FplTransfer {
+/**
+ * What one Gameweek changed, read by diffing the Squad it fielded against the
+ * one the Entrant last stood on — the replay ADR-0003 allows, and the only
+ * record there is: a Manager State stores the Squad it arrived at and not the
+ * moves that got it there.
+ *
+ * What was held before a Free Hit is the Squad in `free_hit_stash` and not the
+ * week's borrowed fifteen: the Chip lends a Squad for one Gameweek and takes it
+ * back (`restoreFromFreeHit`), so the Gameweek after one would otherwise report
+ * fifteen Transfers for a restoration nobody made. The Gameweek's own side
+ * stays `active`, because a Free Hit's changes are that Gameweek's Transfers —
+ * spec 0003 says the Chip changes a Gameweek's Transfers and the reducer
+ * carries them out — and they are what the Sheet beside them was built from.
+ *
+ * Nothing at the Gameweek the Entrant opened in, which has nothing behind it:
+ * fifteen players arriving is a Squad being bought rather than fifteen
+ * Transfers. One function for both FPL endpoints that publish Transfers,
+ * because the Entrant record's history is the squads page's one Gameweek
+ * repeated and two readings of it could disagree about a Free Hit.
+ */
+function transfersBetween(
+  previous: SquadEnvelope | null,
+  squad: SquadEnvelope | null
+): { out: number[]; in: number[] } {
+  const fielded = new Set(squad?.active.map(({ fplId }) => fplId) ?? []);
+  const held = new Set(
+    previous === null
+      ? []
+      : (previous.free_hit_stash?.squad ?? previous.active)
+        .map(({ fplId }) => fplId)
+  );
+  return previous === null
+    ? { out: [], in: [] }
+    : {
+      out: [...held].filter((fplId) => !fielded.has(fplId)),
+      in: [...fielded].filter((fplId) => !held.has(fplId))
+    };
+}
+
+/**
+ * A player the record names in passing rather than describes: the id it moved
+ * and the name a page prints for it. A Transfer's two ends, and a captain pick
+ * and its vice, are all this and nothing more — the Squad's own fifteen are
+ * `FplSquadPlayer`, which carries the price, the club and the Gameweek points a
+ * plate is drawn from.
+ *
+ * The name is the listing that stands at the record's last Gameweek, which is
+ * how a page spells a player whatever week it is naming him in.
+ */
+export interface FplNamedPlayer {
   fplId: number;
   name: string;
 }
@@ -1376,15 +1530,9 @@ export interface FplSquadsEntrant {
   teamSheet: TeamSheet | null;
   /** The fifteen owned, in Squad order; empty before the Season starts. */
   players: FplSquadPlayer[];
-  /**
-   * What the Gameweek changed, read by diffing the Squad against the one the
-   * Entrant last stood on — the replay ADR-0003 allows, and the only record
-   * there is: a Manager State stores the Squad it arrived at and not the moves
-   * that got it there. Empty at the opening Gameweek, where fifteen players
-   * arriving is a Squad being bought rather than fifteen Transfers.
-   */
-  transfersOut: FplTransfer[];
-  transfersIn: FplTransfer[];
+  /** What the Gameweek changed; see `transfersBetween`. */
+  transfersOut: FplNamedPlayer[];
+  transfersIn: FplNamedPlayer[];
   /**
    * The Gameweek the two lists above were read against, which is the last one
    * this Entrant stored a Manager State for. Ordinarily the Gameweek before,
@@ -1564,7 +1712,7 @@ async function fplSquads(query: Query, season: string): Promise<Response> {
   );
 
   /** A player as a Transfer names him: the id the record moved and his name. */
-  const asTransfer = (fplId: number): FplTransfer =>
+  const named = (fplId: number): FplNamedPlayer =>
     ({ fplId, name: pool.player(fplId).name });
 
   // The Squad being fielded, which during a Free Hit is the borrowed fifteen
@@ -1596,32 +1744,10 @@ async function fplSquads(query: Query, season: string): Promise<Response> {
       };
     });
 
-  // What the Entrant was holding when the Gameweek opened, which the Gameweek's
-  // Transfers are read against.
-  //
-  // During a Free Hit that is the Squad in `free_hit_stash` and not the week's
-  // borrowed fifteen: the Chip lends a Squad for one Gameweek and takes it back
-  // (`restoreFromFreeHit`), so the Gameweek after one would otherwise report
-  // fifteen Transfers for a restoration nobody made.
-  //
-  // The Gameweek's own side stays `active`, because a Free Hit's changes are
-  // that Gameweek's Transfers — spec 0003 says the Chip changes a Gameweek's
-  // Transfers and the reducer carries them out — and they are what the Sheet
-  // beside them was built from.
-  const heldBefore = (squad: SquadEnvelope): OwnedPlayer[] =>
-    squad.free_hit_stash?.squad ?? squad.active;
-
   const entrants: FplSquadsEntrant[] = rows.map((row) => {
     const squad = row.squad as SquadEnvelope | null;
     const previous = row.previous_squad as SquadEnvelope | null;
-    // The Squad it fielded against the Squad it was holding. The Gameweek's own
-    // side is always `active` and is named for what it is: during a Free Hit
-    // those fifteen are borrowed rather than owned, and they are still what the
-    // Gameweek's Transfers brought in.
-    const fielded = new Set(squad?.active.map(({ fplId }) => fplId) ?? []);
-    const held = new Set(
-      previous === null ? [] : heldBefore(previous).map(({ fplId }) => fplId)
-    );
+    const { out, in: moved } = transfersBetween(previous, squad);
     // The fifteen, priced once: the Squad value is their Selling Prices added
     // up, and adding them up a second time from a second reading of the same
     // Squad would be a second answer to what the page is already being shown.
@@ -1641,12 +1767,8 @@ async function fplSquads(query: Query, season: string): Promise<Response> {
       chipActive: row.chip_active as Chip | null,
       teamSheet: row.team_sheet as TeamSheet | null,
       players,
-      transfersOut: previous === null
-        ? []
-        : [...held].filter((fplId) => !fielded.has(fplId)).map(asTransfer),
-      transfersIn: previous === null
-        ? []
-        : [...fielded].filter((fplId) => !held.has(fplId)).map(asTransfer),
+      transfersOut: out.map(named),
+      transfersIn: moved.map(named),
       transfersSinceGw: numberOrNull(row.previous_gw),
       hitPoints: numberOrNull(row.hits),
       repairs: numberOrNull(row.attempts_used),
@@ -1671,13 +1793,337 @@ async function fplSquads(query: Query, season: string): Promise<Response> {
       ? null
       : new Date(deadline.deadline_at as string | Date).toISOString(),
     maxRepairs: MAX_REPAIRS,
-    // The order the picker lists them in, which is the ranking's. Ties keep the
-    // entered order rather than sharing a place: a picker is a list of ten
-    // buttons, and the shared rank a tie deserves is the leaderboard's answer
-    // to a question this page does not ask.
-    entrants: entrants.sort(
-      (a, b) => (b.totalPoints ?? 0) - (a.totalPoints ?? 0)
-    )
+    entrants: entrants.sort(byTotalPoints)
+  };
+  return json(body, SCORED_CACHE);
+}
+
+/** One Settled Gameweek of one Entrant's record, as the design's charts read it. */
+export interface FplEntrantGameweek {
+  gw: number;
+  /** Net of Hits, which is the figure the scorer stored and the bars draw. */
+  points: number;
+  /**
+   * The fifteen at their Selling Prices, taken against the list that stood at
+   * *this* Gameweek. Pricing every Gameweek's Squad at the latest list would
+   * draw a series that moves because the market moved rather than because the
+   * Squad did.
+   */
+  squadValueTenths: number;
+  bankTenths: number;
+  /** The Chip this Gameweek played, or null. */
+  chip: Chip | null;
+  /** Who the Team Sheet nominated, which is not always who wore the armband. */
+  captain: FplNamedPlayer;
+  viceCaptain: FplNamedPlayer;
+  /**
+   * Who actually wore it: the captain, or the vice where the captain did not
+   * play at all, or nobody where neither did. Served rather than left to the
+   * page to infer, because the return beside it belongs to whoever wore it —
+   * and printing a vice-captain's doubled score under the captain's name is a
+   * misattribution a reader has no way to catch.
+   */
+  armband: FplNamedPlayer | null;
+  /**
+   * What the armband returned — the wearer's points already multiplied, so a
+   * Triple Captain reads as the three times it was worth. Null where nobody
+   * wore it, which is not a nought: a captain who played and scored nothing
+   * doubled nothing, and that is a nought.
+   */
+  captainPoints: number | null;
+  transfersOut: FplNamedPlayer[];
+  transfersIn: FplNamedPlayer[];
+  /**
+   * The Gameweek the two lists above were read against, spelled as the squads
+   * endpoint spells it and for the same reason: ordinarily the Gameweek before,
+   * and further back where the record holds a hole. Null at the Gameweek the
+   * Entrant opened in.
+   */
+  transfersSinceGw: number | null;
+  /**
+   * What this Gameweek's paid Transfers cost, which the scorer has already
+   * deducted from `points`. Which of the Transfers above was the paid one is
+   * not recorded and is not invented here.
+   */
+  hitPoints: number;
+  repairs: number;
+  rolledOver: boolean;
+}
+
+/** A Chip and the Gameweek it was spent in, which is what the strip colours. */
+export interface FplChipPlayed {
+  chip: Chip;
+  gw: number;
+}
+
+/** One Entrant's whole Season, sporting record and operator record together. */
+export interface FplEntrantRecord {
+  id: string;
+  name: string;
+  baseModel: string;
+  /** Null before the first Settled Gameweek, as every total beside it is. */
+  totalPoints: number | null;
+  /**
+   * The Chips spent and when, read from the Manager States rather than counted
+   * out of `chips_used`: the set says which are gone and the states say which
+   * Gameweek took them, and the strip cannot be drawn without the second.
+   */
+  chipsPlayed: FplChipPlayed[];
+  /** Chips still playable in the Gameweek after the record's last; see `chipsRemaining`. */
+  chipsRemaining: number | null;
+  /** Repairs spent across the Season, added up rather than recovered from the stored mean. */
+  repairs: number | null;
+  rollOvers: number | null;
+  /**
+   * Points paid for Transfers across the Season, which is what the design's
+   * `Hits taken` block stands over — a points figure and not a count of Hits.
+   *
+   * The record stores a Gameweek's cost and never which Transfer paid it, so
+   * the only count available is this divided by the game's four. That division
+   * is a rule of the game restated at a boundary that cannot check it: the game
+   * changed the Free Transfer allowance for 2026/27 and could change the price
+   * of a Transfer next, and a footer quietly dividing by a stale four would
+   * report a wrong count with nothing beside it to disagree. The cost is what
+   * was recorded, so the cost is what is served, and the page's label says
+   * points.
+   */
+  hitPoints: number | null;
+  /**
+   * Gameweeks inside the record's span this Entrant stored no Manager State
+   * for, which is what a Gap is on this track: an Entrant that never reached a
+   * legal action stores nothing at all, where one that reached none it liked
+   * Rolled Over and stored what stood. A Gap is reported, never back-filled
+   * (CONTEXT.md), and it is the reason a Gameweek can be missing from `gameweeks`.
+   */
+  gaps: number | null;
+  /** Every Settled Gameweek, in order; empty before the first one. */
+  gameweeks: FplEntrantGameweek[];
+}
+
+/**
+ * What `/api/fpl/entrants` answers with: all ten Entrants' full histories in
+ * one body, so the page's picker switches without fetching — the same bargain
+ * the squads endpoint makes, for the same picker.
+ */
+export interface FplEntrantsBody {
+  season: string;
+  fromGw: number | null;
+  throughGw: number | null;
+  missingGws: number[];
+  /**
+   * The Prompt Version the seats were entered under, which the operator footer
+   * prints. One Season fact and not ten: it is the column this endpoint already
+   * filters the roster by, so a per-Entrant copy would be the same string ten
+   * times with ten chances to disagree.
+   */
+  promptVersion: string;
+  qualification: string | null;
+  entrants: FplEntrantRecord[];
+}
+
+/**
+ * Every Entrant's Season replayed from what the record stores: the points the
+ * scorer wrote, and the Squad value, bank, Chips, captains and Transfers read
+ * back off the Manager States themselves.
+ *
+ * Only Settled Gameweeks reach `gameweeks`, and the span's holes are announced
+ * beside it. The Manager States are read past those holes all the same: a
+ * Gameweek that never settled still stored a Squad, and the Transfers of the
+ * next Settled Gameweek are the changes since the last Squad that stood —
+ * which is what `transfersSinceGw` says, exactly as the squads endpoint says it.
+ */
+async function fplEntrants(query: Query, season: string): Promise<Response> {
+  const throughGw = await fplScoredThrough(query, season);
+
+  // The Gameweek's own points and the whole of what made them: the armband, the
+  // contributions it multiplied, and the Chip. One row per Entrant per Settled
+  // Gameweek, which is also the set of Settled Gameweeks — a Gameweek settles
+  // for all ten or for none (ADR-0011), so the Gameweeks these rows name are
+  // the record's span with its holes already removed.
+  const scored = throughGw === null ? [] : await query(
+    `select model_id, gw, value, detail
+       from scores
+      where competition = 'PL' and season = $1
+        and track = 'fpl' and metric = $2 and gw <= $3
+      order by gw`,
+    [season, FPL_POINTS_METRIC, throughGw]
+  );
+
+  // The Season totals and the sentence they may not be published without, read
+  // off the cumulative rows at the scored Gameweek exactly as the leaderboard
+  // reads its ranking's.
+  const totals = throughGw === null ? [] : await query(
+    `select model_id, gw, value, detail ->> 'qualification' as qualification
+       from scores
+      where competition = 'PL' and season = $1
+        and track = 'fpl' and metric = $2 and gw = $3`,
+    [season, FPL_POINTS_SEASON_TO_DATE_METRIC, throughGw]
+  );
+
+  // Every Manager State through the scored Gameweek, in Gameweek order, which
+  // is the replay everything below is read out of. Joined to `models` rather
+  // than filtered by a list of ids, so the roster this answers for is the one
+  // the seat table says it is.
+  const states = throughGw === null ? [] : await query(
+    `select s.model_id, s.gw, s.squad, s.team_sheet, s.bank, s.chips_used,
+            s.chip_active, s.hits, s.attempts_used, s.rolled_over
+       from manager_states s
+       join models m on m.id = s.model_id
+      where s.competition = 'PL' and s.season = $1 and s.gw <= $2
+        and m.role = 'entrant' and m.prompt_version = $3
+      order by s.model_id, s.gw`,
+    [season, throughGw, FPL_PROMPT_VERSION]
+  );
+
+  const rows = await query(
+    `select id, name, base_model from models
+      where role = 'entrant' and prompt_version = $1
+      order by id`,
+    [FPL_PROMPT_VERSION]
+  );
+
+  // Every price the value series is drawn against, and the names the captain
+  // picks and the Transfer history print.
+  const pool = await listedPool(query, season, throughGw);
+
+  const gameweeks = [...new Set(scored.map((row) => Number(row.gw)))];
+  const settled = new Set(gameweeks);
+
+  const named = (fplId: number): FplNamedPlayer =>
+    ({ fplId, name: pool.player(fplId).name });
+
+  const entrants: FplEntrantRecord[] = rows.map((row) => {
+    const id = String(row.id);
+    const own = states.filter((state) => String(state.model_id) === id);
+    const points = new Map(
+      scored
+        .filter((each) => String(each.model_id) === id)
+        .map((each) => [Number(each.gw), each])
+    );
+
+    const played = own.flatMap((state, index) => {
+      const gw = Number(state.gw);
+      const row = points.get(gw);
+      if (!settled.has(gw) || row === undefined) {
+        return [];
+      }
+      const squad = state.squad as SquadEnvelope;
+      const sheet = state.team_sheet as TeamSheet;
+      const detail = row.detail as ScoreDetail;
+      const before = own[index - 1];
+      const previous = (before?.squad ?? null) as SquadEnvelope | null;
+      const { out, in: moved } = transfersBetween(previous, squad);
+      // The wearer's own contribution, which already carries the multiplier the
+      // armband applied — two ordinarily and three under a Triple Captain — so
+      // the figure is what the armband returned rather than what the player
+      // scored. `detail.captain` is null when neither of the two played.
+      const wore = detail.captain === null
+        ? undefined
+        : detail.players.find(({ fplId }) => fplId === detail.captain);
+
+      const gameweek: FplEntrantGameweek = {
+        gw,
+        points: Number(row.value),
+        squadValueTenths: squadValueAt(squad, pool, gw),
+        bankTenths: Number(state.bank),
+        chip: state.chip_active as Chip | null,
+        captain: named(sheet.captain),
+        viceCaptain: named(sheet.viceCaptain),
+        armband: wore === undefined ? null : named(wore.fplId),
+        captainPoints: wore === undefined
+          ? null
+          : wore.points * wore.multiplier,
+        transfersOut: out.map(named),
+        transfersIn: moved.map(named),
+        transfersSinceGw: before === undefined ? null : Number(before.gw),
+        hitPoints: Number(state.hits),
+        repairs: Number(state.attempts_used),
+        rolledOver: Boolean(state.rolled_over)
+      };
+      return [gameweek];
+    });
+
+    // The Chip strip's colours come from every stored state and not from the
+    // Settled ones alone: a Chip spent in a Gameweek that never settled is
+    // still spent — `chipsRemaining` below counts it gone — and a strip that
+    // left its cell blank would offer a Chip the Entrant no longer holds.
+    const chipsPlayed = own.flatMap((state) => state.chip_active === null
+      ? []
+      : [{ chip: state.chip_active as Chip, gw: Number(state.gw) }]);
+
+    const total = totals.find((each) => String(each.model_id) === id);
+    const standing = own.at(-1);
+
+    return {
+      id,
+      name: String(row.name),
+      baseModel: String(row.base_model),
+      totalPoints: numberOrNull(total?.value),
+      chipsPlayed,
+      // Counted for the Gameweek after the record's last, which is the next one
+      // a Chip could be played in — the same reading the leaderboard takes, and
+      // for the same reason: the Gameweek on the page has settled, so its
+      // deadline is behind the Entrant.
+      chipsRemaining: standing === undefined || throughGw === null
+        ? null
+        : chipsRemaining(standing.chips_used as ChipsUsed, throughGw + 1),
+      // The three below are taken over the Settled Gameweeks alone, which is a
+      // narrower span than the two around them, and the three scopes are three
+      // different questions rather than an inconsistency:
+      //
+      // A Repair, a Roll Over and a Hit are things that happened *in a
+      // Gameweek*, and the footer stands under a record that shows Settled
+      // Gameweeks and nothing else (spec 0014, story 30). A figure counting a
+      // Gameweek the reader cannot see would be a total nothing on the page
+      // adds up to.
+      //
+      // `chipsPlayed` above runs over every stored state because a Chip is not
+      // a Gameweek's event but a Season's resource: it is spent whether or not
+      // the Gameweek that spent it settled, `chipsRemaining` beside it counts
+      // it gone, and a strip that left the cell blank would offer a Chip the
+      // Entrant no longer holds.
+      //
+      // `gaps` below runs over the whole span because a Gap is precisely what
+      // stops a Gameweek settling — counting Gaps over the Settled Gameweeks
+      // would report every Gap as nought.
+      //
+      // The visible cost: a Repair or a Roll Over spent in a Gameweek that
+      // never settled is absent from this footer while a Chip spent in the same
+      // Gameweek is reported. That is the scopes doing what each is for, and it
+      // is the reading to revisit first if a reader ever asks why a Roll Over
+      // they were told about is not counted here.
+      //
+      // Added up rather than taken from the stored `repairs_season_to_date`,
+      // which is a mean: multiplying a float mean by its count to recover an
+      // integer is a rounding bug waiting for the Gameweek that makes it
+      // visible, which is the mistake the Match track's record endpoint names
+      // for itself.
+      repairs: throughGw === null
+        ? null
+        : played.reduce((sum, week) => sum + week.repairs, 0),
+      rollOvers: throughGw === null
+        ? null
+        : played.filter((week) => week.rolledOver).length,
+      hitPoints: throughGw === null
+        ? null
+        : played.reduce((sum, week) => sum + week.hitPoints, 0),
+      // The Gameweeks of the record's span this Entrant stored nothing for; the
+      // span it is taken over is argued with the three above.
+      gaps: throughGw === null ? null : holesIn(
+        gameweeks[0], throughGw, own.map((state) => Number(state.gw))
+      ).length,
+      gameweeks: played
+    };
+  });
+
+  const body: FplEntrantsBody = {
+    season,
+    fromGw: gameweeks[0] ?? null,
+    throughGw,
+    missingGws: holesIn(gameweeks[0], throughGw, gameweeks),
+    promptVersion: FPL_PROMPT_VERSION,
+    qualification: qualificationAt(totals, throughGw),
+    entrants: entrants.sort(byTotalPoints)
   };
   return json(body, SCORED_CACHE);
 }
@@ -1749,6 +2195,9 @@ export async function handleDashboardRequest(
   }
   if (pathname === "/api/fpl/squads") {
     return await fplSquads(query, season);
+  }
+  if (pathname === "/api/fpl/entrants") {
+    return await fplEntrants(query, season);
   }
   return new Response("Not found", {
     status: 404,

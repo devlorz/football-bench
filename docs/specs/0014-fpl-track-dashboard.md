@@ -193,16 +193,16 @@ establishes as the system of record).
 Per ADR-0033: `/api/fpl/leaderboard`, `/api/fpl/squads`, `/api/fpl/entrants`, three new
 branches in the Worker's existing routing chain, behind the same select-only role.
 
-- **Leaderboard** returns the ten ranked rows for the latest Settled Gameweek — Entrant,
+- **Leaderboard** returns one ranked row per seated Entrant for the latest Settled Gameweek — Entrant,
   Base Model id, Gameweek points, Season total, movement, Squad value, Chips remaining —
   plus the Race variant's full cumulative series per Entrant (the variants are one page;
   switching them must not fetch), the Gameweek span the ranking covers, and the
   Demonstration qualification read from the detail of the rows the ranking was read off.
-- **Squads** returns all ten Entrants' current-Gameweek state: the Team Sheet, the
+- **Squads** returns every seated Entrant's current-Gameweek state: the Team Sheet, the
   fifteen players with position, club, price, Selling Price and Gameweek points, the stat
-  strip's values, the Gameweek's Transfers with costs, and the validation record. All ten,
+  strip's values, the Gameweek's Transfers with costs, and the validation record. All of them,
   so the picker is a re-render.
-- **Entrants** returns all ten Entrants' full histories: per-Gameweek points, Squad value
+- **Entrants** returns every seated Entrant's full history: per-Gameweek points, Squad value
   and bank series, Chips played and remaining, captain picks with returns, Transfer history
   with costs, and the operator footer's totals including Gaps and the Prompt Version.
 
@@ -334,11 +334,18 @@ first page that needs them.
 
 ### The seed
 
-One seed serves all three endpoints: ten Entrants with Manager States across at least
+One seed serves all three endpoints: nine Entrants with Manager States across at least
 three Settled Gameweeks, including at minimum one Transfer taken as a Hit, one banked Free
 Transfer, one played Chip, one Roll Over, one Repair spent, one Gap, and one price rise
 and fall (to exercise Selling Price both ways). Movement markers need at least two
 cumulative snapshots; the GW19 expiry marker needs no seed — it is a fixed calendar fact.
+
+**Nine and not the roster of record's ten**, deliberately: spec 0015 refreshed the roster to
+ten before the first Lock and held the design-mock seed roster where it was, so the seed's
+field is nine and the endpoints' tests assert nine. Nothing above states a field size for
+that reason — an endpoint answers for whoever is seated, and a spec that counted them would
+be re-counted every time the roster moved. The count belongs to the roster of record
+(ADR-0034), which is what the user stories above describe.
 
 ### What to verify early
 
