@@ -166,6 +166,7 @@ export async function playGameweekFromContext({
       gameweek,
       state: outcome.state,
       attemptsUsed: outcome.repairsUsed,
+      rationale: outcome.rationale,
       predictedAt: outcome.receivedAt
     });
     return outcome.state;
@@ -193,6 +194,10 @@ export async function playGameweekFromContext({
       state: rolled,
       attemptsUsed: MAX_REPAIRS,
       rolledOver: true,
+      // No legal action was ever reached, so there is no Rationale to store
+      // (ADR-0041) — the rejected ones already hold their bodies verbatim in
+      // `attempts.raw_response`.
+      rationale: null,
       predictedAt: outcome.receivedAt
     });
     return rolled;

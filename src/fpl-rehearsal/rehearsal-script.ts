@@ -33,7 +33,8 @@ export const OPENING = JSON.stringify({
     bench: [58, 66, 163, 107],
     captain: 411,
     vice_captain: 154
-  }
+  },
+  rationale: "The opening fifteen."
 });
 
 /** The same Team Sheet again with no Transfer: what inaction looks like. */
@@ -41,7 +42,8 @@ export const STAND_PAT = JSON.stringify({
   transfers_in: [],
   transfers_out: [],
   chip: null,
-  team_sheet: (JSON.parse(OPENING) as { team_sheet: unknown }).team_sheet
+  team_sheet: (JSON.parse(OPENING) as { team_sheet: unknown }).team_sheet,
+  rationale: "Standing pat."
 });
 
 /**
@@ -89,7 +91,8 @@ export const SELL_INTO_A_RISE = JSON.stringify({
     bench: [58, 66, 163, 169],
     captain: 411,
     vice_captain: 154
-  }
+  },
+  rationale: "Selling into the rise."
 });
 
 /** The rebuilt Squad standing pat, which is legal only where the rebuild lasted. */
@@ -98,7 +101,8 @@ export const REBUILT_STAND_PAT = JSON.stringify({
   transfers_out: [],
   chip: null,
   team_sheet: (JSON.parse(SELL_INTO_A_RISE) as { team_sheet: unknown })
-    .team_sheet
+    .team_sheet,
+  rationale: "Standing pat."
 });
 
 /**
@@ -116,7 +120,8 @@ export const THREE_AT_THE_BACK = JSON.stringify({
     bench: [58, 107, 173, 66],
     captain: 411,
     vice_captain: 154
-  }
+  },
+  rationale: "Three at the back."
 });
 
 /**
@@ -202,7 +207,8 @@ export const SELL_THE_FALLER = JSON.stringify({
     bench: [58, GARCIA, 163, 107],
     captain: 411,
     vice_captain: 154
-  }
+  },
+  rationale: "Selling the faller."
 });
 
 /**
@@ -214,5 +220,6 @@ export const FALLER_STAND_PAT = JSON.stringify({
   transfers_out: [],
   chip: null,
   team_sheet: (JSON.parse(SELL_THE_FALLER) as { team_sheet: unknown })
-    .team_sheet
+    .team_sheet,
+  rationale: "Standing pat."
 });

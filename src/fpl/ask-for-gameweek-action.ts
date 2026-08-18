@@ -77,6 +77,7 @@ export type GameweekActionOutcome =
   | {
     kind: "action";
     state: ManagerState;
+    rationale: string;
     repairsUsed: number;
     receivedAt: Date;
   }
@@ -94,7 +95,7 @@ export type GameweekActionOutcome =
  * fourth-failure rule twice.
  */
 type JudgedResponse =
-  | { state: ManagerState }
+  | { state: ManagerState; rationale: string }
   | { kind: ViolationKind | typeof GAMEWEEK_ACTION_SCHEMA_KIND; reason: string };
 
 /**
@@ -120,7 +121,7 @@ export function judgeGameweekResponse(
   );
   return "violation" in outcome
     ? { kind: outcome.violation.kind, reason: outcome.violation.message }
-    : outcome;
+    : { state: outcome.state, rationale: validation.rationale };
 }
 
 /**
@@ -398,6 +399,7 @@ export async function askForGameweekAction({
       return {
         kind: "action",
         state: judged.state,
+        rationale: judged.rationale,
         repairsUsed: attemptNo,
         receivedAt
       };

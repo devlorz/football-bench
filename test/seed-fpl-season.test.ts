@@ -120,7 +120,11 @@ describe("the seeded FPL Season", () => {
          bool_or(free_transfers > 1) as banked,
          bool_or(chip_active is not null) as chip,
          bool_or(rolled_over) as rolled_over,
-         bool_or(attempts_used > 0 and not rolled_over) as repaired
+         bool_or(attempts_used > 0 and not rolled_over) as repaired,
+         -- A real Rationale beside every legal action (ADR-0041), and none on
+         -- the Roll Over — the same rule the loop itself stores under.
+         bool_and(rationale is not null or rolled_over) as rationale_present,
+         bool_or(rolled_over and rationale is null) as rolled_over_rationale_null
        from manager_states where season = $1`,
       [SEASON]
     );
@@ -129,7 +133,9 @@ describe("the seeded FPL Season", () => {
       banked: true,
       chip: true,
       rolled_over: true,
-      repaired: true
+      repaired: true,
+      rationale_present: true,
+      rolled_over_rationale_null: true
     });
 
     // Every call that produced nothing, and what it produced nothing for. The

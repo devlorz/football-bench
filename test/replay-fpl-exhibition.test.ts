@@ -41,7 +41,8 @@ const OPENING = JSON.stringify({
   transfers_in: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
   transfers_out: [],
   chip: null,
-  team_sheet: OPENING_SHEET
+  team_sheet: OPENING_SHEET,
+  rationale: "The opening fifteen."
 });
 
 /** The same Team Sheet again with no Transfer. */
@@ -49,7 +50,8 @@ const STAND_PAT = JSON.stringify({
   transfers_in: [],
   transfers_out: [],
   chip: null,
-  team_sheet: OPENING_SHEET
+  team_sheet: OPENING_SHEET,
+  rationale: "Standing pat."
 });
 
 const TRANSFERRED_SHEET = {
@@ -67,7 +69,8 @@ const TRANSFER = JSON.stringify({
   transfers_in: [19],
   transfers_out: [14],
   chip: null,
-  team_sheet: TRANSFERRED_SHEET
+  team_sheet: TRANSFERRED_SHEET,
+  rationale: "Muniz for Evanilson."
 });
 
 /** The Team Sheet the Transfer leaves, played again with nothing done. */
@@ -75,7 +78,8 @@ const STAND_PAT_AFTER_TRANSFER = JSON.stringify({
   transfers_in: [],
   transfers_out: [],
   chip: null,
-  team_sheet: TRANSFERRED_SHEET
+  team_sheet: TRANSFERRED_SHEET,
+  rationale: "Standing pat."
 });
 
 /**
@@ -92,7 +96,8 @@ const SELL_BACK = JSON.stringify({
   transfers_in: [14],
   transfers_out: [19],
   chip: null,
-  team_sheet: OPENING_SHEET
+  team_sheet: OPENING_SHEET,
+  rationale: "Evanilson for Muniz."
 });
 
 /** One rule broken and nothing else: the armband on a substitute. */
@@ -100,7 +105,8 @@ const CAPTAIN_ON_THE_BENCH = JSON.stringify({
   transfers_in: [],
   transfers_out: [],
   chip: null,
-  team_sheet: { ...OPENING_SHEET, captain: 2 }
+  team_sheet: { ...OPENING_SHEET, captain: 2 },
+  rationale: "Standing pat."
 });
 
 function openRouterBody(content: string): string {

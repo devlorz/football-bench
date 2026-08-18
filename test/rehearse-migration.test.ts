@@ -54,7 +54,8 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0027_a_squad_change_may_state_no_date.sql",
       "0028_dashboard_reads_the_competition_list.sql",
       "0029_a_club_carries_its_own_code.sql",
-      "0030_set_piece_and_penalty_duties_join_the_pool.sql"
+      "0030_set_piece_and_penalty_duties_join_the_pool.sql",
+      "0031_the_action_carries_a_required_rationale_back.sql"
     ]);
     // The record the copy carried, not a shape asserted about the schema: an
     // operator reading a rehearsal needs to see that it ran over rows.
@@ -115,7 +116,8 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0027_a_squad_change_may_state_no_date.sql",
       "0028_dashboard_reads_the_competition_list.sql",
       "0029_a_club_carries_its_own_code.sql",
-      "0030_set_piece_and_penalty_duties_join_the_pool.sql"
+      "0030_set_piece_and_penalty_duties_join_the_pool.sql",
+      "0031_the_action_carries_a_required_rationale_back.sql"
     ]);
     expect(rehearsal.rows).toMatchObject({ gameweeks: 1, squad_changes: 1 });
   });

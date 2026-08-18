@@ -207,7 +207,8 @@ describe("applying migrations", () => {
       "0027_a_squad_change_may_state_no_date.sql",
       "0028_dashboard_reads_the_competition_list.sql",
       "0029_a_club_carries_its_own_code.sql",
-      "0030_set_piece_and_penalty_duties_join_the_pool.sql"
+      "0030_set_piece_and_penalty_duties_join_the_pool.sql",
+      "0031_the_action_carries_a_required_rationale_back.sql"
     ]);
 
     // Relabelled, not rewritten: every row of every rekeyed table comes back
@@ -289,7 +290,8 @@ describe("applying migrations", () => {
       "0027_a_squad_change_may_state_no_date.sql",
       "0028_dashboard_reads_the_competition_list.sql",
       "0029_a_club_carries_its_own_code.sql",
-      "0030_set_piece_and_penalty_duties_join_the_pool.sql"
+      "0030_set_piece_and_penalty_duties_join_the_pool.sql",
+      "0031_the_action_carries_a_required_rationale_back.sql"
     ]);
     const backfill = await client.query<{
       observed_at: Date;

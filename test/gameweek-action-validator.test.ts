@@ -17,7 +17,8 @@ function action(chip: unknown): string {
       bench: [2, 7, 12, 15],
       captain: 8,
       vice_captain: 13
-    }
+    },
+    rationale: "Standing pat."
   });
 }
 
@@ -55,6 +56,27 @@ describe("The Chip an Entrant names", () => {
     // list where a name belongs is a schema failure the Entrant is asked to
     // Repair, not a Gameweek that quietly plays the first of them.
     expect(validateGameweekAction(action(["triple_captain", "bench_boost"])))
+      .toEqual({
+        ok: false,
+        kind: "schema",
+        message: GAMEWEEK_ACTION_SCHEMA_MESSAGE
+      });
+  });
+});
+
+describe("The Rationale an Entrant gives", () => {
+  test("carries a Rationale through to the action", () => {
+    expect(validateGameweekAction(action(null)))
+      .toMatchObject({ ok: true, rationale: "Standing pat." });
+  });
+
+  test("refuses a response with no Rationale as the schema kind", () => {
+    // Required, not optional (ADR-0041): an Entrant that omits it is refused
+    // exactly as one that omits `team_sheet`, and costs the same Repair.
+    const { rationale: _rationale, ...withoutRationale } = JSON.parse(
+      action(null)
+    ) as Record<string, unknown>;
+    expect(validateGameweekAction(JSON.stringify(withoutRationale)))
       .toEqual({
         ok: false,
         kind: "schema",

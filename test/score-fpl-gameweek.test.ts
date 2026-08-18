@@ -88,6 +88,7 @@ describe("scoring a Gameweek from what is stored", () => {
         gameweek: 1,
         state: { ...opened, hits },
         attemptsUsed: 0,
+        rationale: "Standing pat.",
         predictedAt: new Date("2026-08-21T17:00:00Z")
       });
     }
@@ -145,6 +146,7 @@ describe("scoring a Gameweek from what is stored", () => {
       gameweek,
       state,
       attemptsUsed: 0,
+      rationale: "Standing pat.",
       predictedAt: new Date("2026-08-28T17:00:00Z")
     });
   }
@@ -216,6 +218,7 @@ describe("scoring a Gameweek from what is stored", () => {
       gameweek: 2,
       state: legalStateFrom(OPENING),
       attemptsUsed: 0,
+      rationale: "Standing pat.",
       predictedAt: new Date("2026-08-28T17:00:00Z")
     });
     // Garner missed, so the Gameweek cannot be scored without knowing that
@@ -308,6 +311,7 @@ describe("scoring a Gameweek from what is stored", () => {
       state: rolledOverState({ ...legalStateFrom(OPENING), hits: 4 }),
       attemptsUsed: 3,
       rolledOver: true,
+      rationale: null,
       predictedAt: new Date("2026-08-28T17:00:00Z")
     });
     await settle(EVERYONE_PLAYED, 2);
@@ -362,6 +366,7 @@ describe("scoring a Gameweek from what is stored", () => {
       gameweek: 2,
       state: legalStateFrom(FREE_HIT_REBUILD, legalStateFrom(OPENING), 2),
       attemptsUsed: 0,
+      rationale: "Free Hit rebuild.",
       predictedAt: new Date("2026-08-28T17:00:00Z")
     });
     await settle(FREE_HIT_GAMEWEEK, 2);
@@ -409,6 +414,7 @@ describe("scoring a Gameweek from what is stored", () => {
       gameweek: 2,
       state: legalStateFrom(BENCH_BOOST, legalStateFrom(OPENING), 2),
       attemptsUsed: 0,
+      rationale: "Bench Boost.",
       predictedAt: new Date("2026-08-28T17:00:00Z")
     });
     await settle(EVERYONE_PLAYED, 2);

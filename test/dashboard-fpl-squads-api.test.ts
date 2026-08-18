@@ -682,6 +682,7 @@ async function playFreeHitAtGameweekFour(writer: pg.Client): Promise<void> {
     gameweek: 4,
     state: outcome.state,
     attemptsUsed: 0,
+    rationale: "Free Hit.",
     predictedAt: ran.predicted_at
   });
 

@@ -30,7 +30,8 @@ const OPENING = JSON.stringify({
     bench: [2, 7, 12, 15],
     captain: 8,
     vice_captain: 13
-  }
+  },
+  rationale: "The opening fifteen."
 });
 
 /** The same Team Sheet again with no Transfer: what a later Gameweek's
@@ -40,7 +41,8 @@ const STAND_PAT = JSON.stringify({
   transfers_in: [],
   transfers_out: [],
   chip: null,
-  team_sheet: (JSON.parse(OPENING) as { team_sheet: unknown }).team_sheet
+  team_sheet: (JSON.parse(OPENING) as { team_sheet: unknown }).team_sheet,
+  rationale: "Standing pat."
 });
 
 /** The same action with the armband on a substitute: one rule broken, so what

@@ -19,6 +19,12 @@ export interface StoredManagerState extends ManagerStateKey {
   state: ManagerState;
   attemptsUsed: number;
   rolledOver?: boolean;
+  /**
+   * The Rationale the Entrant gave (ADR-0041), required at every call site so
+   * a caller cannot forget it: null only for a Roll Over, which reached no
+   * legal action to explain.
+   */
+  rationale: string | null;
   predictedAt: Date;
 }
 
@@ -46,14 +52,16 @@ export async function storeManagerState(
     state,
     attemptsUsed,
     rolledOver = false,
+    rationale,
     predictedAt
   }: StoredManagerState
 ): Promise<void> {
   await database.query(
     `insert into manager_states (
        model_id, season, gw, squad, team_sheet, bank, free_transfers,
-       hits, chips_used, chip_active, rolled_over, attempts_used, predicted_at
-     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+       hits, chips_used, chip_active, rolled_over, attempts_used, rationale,
+       predicted_at
+     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
     [
       entrantId,
       season,
@@ -67,6 +75,7 @@ export async function storeManagerState(
       state.chipActive,
       rolledOver,
       attemptsUsed,
+      rationale,
       predictedAt
     ]
   );

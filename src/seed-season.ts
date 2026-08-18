@@ -654,7 +654,7 @@ function fplSheetOf(seat: number, bench: number[] = FPL_BENCH): TeamSheet {
  * Roll Over, or nothing at all.
  */
 type SeedFplGameweek =
-  | { action: GameweekAction; repairs: number }
+  | { action: GameweekAction; rationale: string; repairs: number }
   | "roll over"
   | "silent";
 
@@ -687,6 +687,7 @@ function fplGameweekOf(
         chip: null,
         teamSheet: fplSheetOf(seat)
       },
+      rationale: "The opening fifteen.",
       repairs: 0
     };
   }
@@ -701,6 +702,7 @@ function fplGameweekOf(
         chip: null,
         teamSheet: fplSheetOf(seat, [2, 7, 19, 17])
       },
+      rationale: "Two bench Transfers, worth the Hit.",
       repairs: 0
     };
   }
@@ -713,11 +715,16 @@ function fplGameweekOf(
         chip: null,
         teamSheet: fplSheetOf(seat, [2, 7, 12, 17])
       },
+      rationale: "One Transfer, banked Free Transfer spent.",
       repairs: 1
     };
   }
   if (gameweek === 3 && seat === 3) {
-    return { action: { ...bankFreeTransfer(), chip: "bench_boost" }, repairs: 0 };
+    return {
+      action: { ...bankFreeTransfer(), chip: "bench_boost" },
+      rationale: "Bench Boost, standing pat otherwise.",
+      repairs: 0
+    };
   }
   if (gameweek === 3 && seat === 4) {
     return "roll over";
@@ -726,7 +733,11 @@ function fplGameweekOf(
     return "silent";
   }
   // Everybody else banks the Gameweek's Free Transfer.
-  return { action: bankFreeTransfer(), repairs: 0 };
+  return {
+    action: bankFreeTransfer(),
+    rationale: "Standing pat, banking the Free Transfer.",
+    repairs: 0
+  };
 }
 
 /**
@@ -870,6 +881,7 @@ async function writeFplSeason(
         state,
         attemptsUsed: repairs,
         rolledOver: rolled,
+        rationale: rolled ? null : played.rationale,
         predictedAt: mainRunOf(gameweek)
       });
       states.set(seat, state);

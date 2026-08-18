@@ -30,7 +30,8 @@ const LEGAL_ACTION = JSON.stringify({
     bench: [2, 7, 12, 15],
     captain: 8,
     vice_captain: 13
-  }
+  },
+  rationale: "The opening fifteen."
 });
 
 /**
@@ -245,6 +246,16 @@ describe("starting the FPL track for all ten Entrants", () => {
       [seatId(BASE_MODELS[0]!)]
     );
     expect(first.rows).toEqual([STORED_OPENING_STATE]);
+
+    // One Rationale per seat — what each Entrant's own opening call gave
+    // (ADR-0041) — not one shared sentence, because every seat was called and
+    // answered its own conversation.
+    const rationales = await client.query<{ rationale: string | null }>(
+      "select rationale from manager_states"
+    );
+    expect(rationales.rows).toEqual(
+      BASE_MODELS.map(() => ({ rationale: "The opening fifteen." }))
+    );
   });
 
   test("stores one opening context per Entrant, every body the same", async () => {

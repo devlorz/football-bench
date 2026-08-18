@@ -57,6 +57,18 @@ export interface FplTrackOpening {
 }
 
 /**
+ * One seat's legal opening, whether just called or replayed from record — the
+ * whole of what an opening commits per Entrant, named once so the call site
+ * and the replay path cannot drift on what a legal opening carries.
+ */
+interface LegalOpening {
+  state: ManagerState;
+  rationale: string;
+  repairsUsed: number;
+  receivedAt: Date;
+}
+
+/**
  * The opening this seat already has on record for the Gameweek, replayed
  * through the rules reducer as if it had just been answered (ADR-0025) — or
  * null for a seat that never got a legal answer on record and must be called.
@@ -83,7 +95,7 @@ async function replayRecordedOpening(
   entrantId: string,
   previous: ManagerState,
   pool: PoolPlayer[]
-): Promise<{ state: ManagerState; repairsUsed: number; receivedAt: Date } | null> {
+): Promise<LegalOpening | null> {
   const recorded = await database.query<{
     attempt_no: number;
     raw_response: string | null;
@@ -119,6 +131,7 @@ async function replayRecordedOpening(
   }
   return {
     state: judged.state,
+    rationale: judged.rationale,
     repairsUsed: attempt.attempt_no,
     receivedAt: attempt.attempted_at
   };
@@ -215,11 +228,7 @@ export async function startFplTrack({
     ...windows
   });
 
-  const openings = new Map<string, {
-    state: ManagerState;
-    repairsUsed: number;
-    receivedAt: Date;
-  }>();
+  const openings = new Map<string, LegalOpening>();
   // Ten conversations at once, up to the operator's limit. Each Entrant's
   // own Repairs stay in its own conversation, so the only thing concurrency
   // shares is the wait — which is the point, with one Lock to finish inside.
@@ -268,6 +277,7 @@ export async function startFplTrack({
     if (outcome.kind === "action") {
       openings.set(entrant.id, {
         state: outcome.state,
+        rationale: outcome.rationale,
         repairsUsed: outcome.repairsUsed,
         receivedAt: outcome.receivedAt
       });
@@ -293,6 +303,7 @@ export async function startFplTrack({
         gameweek,
         state: opening.state,
         attemptsUsed: opening.repairsUsed,
+        rationale: opening.rationale,
         predictedAt: opening.receivedAt
       });
     }

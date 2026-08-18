@@ -352,6 +352,7 @@ describe("collecting settled player Gameweek points", () => {
         gameweek: 1,
         state: legalStateFrom(OPENING_ACTION),
         attemptsUsed: 0,
+        rationale: "The opening fifteen.",
         predictedAt: new Date("2026-08-21T11:30:00Z")
       });
     }

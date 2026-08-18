@@ -47,16 +47,16 @@ script their responses, and no cron calls an Entrant before the Lock.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] The action schema requires a Rationale string; a response without one fails as the
+- [x] The action schema requires a Rationale string; a response without one fails as the
       schema kind — not a ViolationKind — and costs one Repair, driven through the Gameweek
       loop over a real Postgres
-- [ ] A migration adds the nullable Rationale column to the Manager State rows; a legal
+- [x] A migration adds the nullable Rationale column to the Manager State rows; a legal
       action's Rationale is stored, a Rolled Over Gameweek stores null, and the refused
       attempts keep holding their bodies verbatim
-- [ ] The opening stores one Rationale per seat, exercised through the track-start loop
-- [ ] The seed's scripted actions carry Rationales, so every downstream reader has real
+- [x] The opening stores one Rationale per seat, exercised through the track-start loop
+- [x] The seed's scripted actions carry Rationales, so every downstream reader has real
       rows to read
-- [ ] Nothing scores or renders the Rationale anywhere
+- [x] Nothing scores or renders the Rationale anywhere
 
 ## The amended template, in one move
 

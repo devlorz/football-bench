@@ -50,7 +50,8 @@ const STAND_PAT = JSON.stringify({
     bench: [2, 7, 12, 15],
     captain: 8,
     vice_captain: 13
-  }
+  },
+  rationale: "Standing pat."
 });
 
 /**
@@ -67,7 +68,8 @@ const SELL_WILSON_BUY_EVANILSON_JSON = JSON.stringify({
     ...(JSON.parse(STAND_PAT) as { team_sheet: { bench: number[] } })
       .team_sheet,
     bench: [2, 7, 12, 19]
-  }
+  },
+  rationale: "Wilson for Evanilson."
 });
 
 /**
@@ -98,7 +100,8 @@ const OVER_BUDGET_FERNANDEZ = JSON.stringify({
     bench: [2, 7, 12, 15],
     captain: 8,
     vice_captain: 13
-  }
+  },
+  rationale: "Fernandez for Enzo."
 });
 
 /**
@@ -125,7 +128,8 @@ const FREE_HIT_REBUILD = JSON.stringify({
     bench: [2, 7, 12, 19],
     captain: 8,
     vice_captain: 13
-  }
+  },
+  rationale: "Free Hit rebuild."
 });
 
 const CAPTAIN_NOT_STARTING =
@@ -251,6 +255,7 @@ describe("opening the FPL track for a Gameweek", () => {
       gameweek,
       state: legalStateFrom(OPENING_ACTION),
       attemptsUsed: 0,
+      rationale: "The opening fifteen.",
       predictedAt: new Date("2026-08-21T11:30:00Z")
     });
   }
@@ -455,6 +460,46 @@ describe("opening the FPL track for a Gameweek", () => {
     }
   );
 
+  test("stores the Rationale a legal action gives", async () => {
+    await seedStandingManagerState();
+    await play({ responses: [STAND_PAT] });
+
+    const states = await client.query<{ rationale: string | null }>(
+      "select rationale from manager_states where gw = 2"
+    );
+    expect(states.rows).toEqual([{ rationale: "Standing pat." }]);
+  });
+
+  test("costs a Repair when the Rationale is missing, and succeeds on correction", async () => {
+    // Required, not optional (ADR-0041): a response without it fails as the
+    // `schema` kind, exactly as a response with no `team_sheet` would.
+    const noRationale = JSON.stringify({
+      ...JSON.parse(STAND_PAT) as Record<string, unknown>,
+      rationale: undefined
+    });
+    await seedStandingManagerState();
+    const conversations = await play({ responses: [noRationale, STAND_PAT] });
+
+    expect(conversations[1]).toEqual([
+      expect.anything(),
+      { role: "assistant", content: noRationale },
+      { role: "user", content: gameweekRepairMessage(GAMEWEEK_ACTION_SCHEMA_MESSAGE) }
+    ]);
+    // Not a ViolationKind: the missing Rationale is refused at the same
+    // boundary as any other malformed response, not by the Squad rules.
+    const attempts = await client.query<{ error_kind: string | null }>(
+      "select error_kind from attempts where gw = 2 order by attempt_no"
+    );
+    expect(attempts.rows).toEqual([{ error_kind: "schema" }, { error_kind: null }]);
+    const states = await client.query<{
+      attempts_used: number;
+      rationale: string | null;
+    }>("select attempts_used, rationale from manager_states where gw = 2");
+    expect(states.rows).toEqual([
+      { attempts_used: 1, rationale: "Standing pat." }
+    ]);
+  });
+
   test("sends back nothing but the frozen vocabulary, whatever went wrong", async () => {
     // ADR-0004 makes the messages part of the experiment: an Entrant told
     // something more specific mid-Season is being measured on an easier task.
@@ -641,7 +686,7 @@ describe("opening the FPL track for a Gameweek", () => {
 
     const states = await client.query(
       `select gw, squad, team_sheet, bank, free_transfers, hits, chips_used,
-              chip_active, rolled_over, attempts_used
+              chip_active, rolled_over, attempts_used, rationale
          from manager_states
         order by gw`
     );
@@ -662,7 +707,11 @@ describe("opening the FPL track for a Gameweek", () => {
       rolled_over: true,
       // All three Repairs were used, and `rolled_over` is what says they
       // failed — the fifth value on ADR-0004's scale.
-      attempts_used: 3
+      attempts_used: 3,
+      // No legal action was ever reached, so there is no Rationale to store
+      // (ADR-0041) — the rejected ones already hold their bodies verbatim in
+      // `attempts.raw_response`.
+      rationale: null
     });
 
     const attempts = await client.query(
@@ -963,6 +1012,7 @@ describe("opening the FPL track for a Gameweek", () => {
         legalStateFrom(OPENING_ACTION)
       ),
       attemptsUsed: 0,
+      rationale: "Wilson for Evanilson.",
       predictedAt: new Date("2026-08-21T11:30:00Z")
     });
 
@@ -1047,6 +1097,7 @@ describe("opening the FPL track for a Gameweek", () => {
         legalStateFrom(OPENING_ACTION)
       ),
       attemptsUsed: 0,
+      rationale: "Wilson for Evanilson.",
       predictedAt: new Date("2026-08-21T11:30:00Z")
     });
 

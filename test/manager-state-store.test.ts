@@ -72,6 +72,7 @@ describe("storing and reloading Manager State", () => {
       gameweek: 2,
       state: legalStateFrom(FREE_HIT_REBUILD, opened, 2),
       attemptsUsed: 0,
+      rationale: "Free Hit rebuild.",
       predictedAt: new Date("2026-08-28T17:00:00Z")
     });
 
@@ -122,6 +123,7 @@ describe("storing and reloading Manager State", () => {
       gameweek: 2,
       state: legalStateFrom(FREE_HIT_REBUILD, legalStateFrom(OPENING), 2),
       attemptsUsed: 0,
+      rationale: "Free Hit rebuild.",
       predictedAt: new Date("2026-08-28T17:00:00Z")
     });
     const reloaded = await loadManagerState(client, {
@@ -162,6 +164,7 @@ describe("storing and reloading Manager State", () => {
       gameweek: 1,
       state: legalStateFrom(OPENING),
       attemptsUsed: 0,
+      rationale: "The opening fifteen.",
       predictedAt: new Date("2026-08-21T17:00:00Z")
     });
 
@@ -194,6 +197,7 @@ describe("storing and reloading Manager State", () => {
       gameweek: 1,
       state: opened,
       attemptsUsed: 0,
+      rationale: "The opening fifteen.",
       predictedAt: new Date("2026-08-21T17:00:00Z")
     });
     await storeManagerState(client, {
@@ -202,6 +206,7 @@ describe("storing and reloading Manager State", () => {
       gameweek: 2,
       state: legalStateFrom(TWO_TRANSFERS, opened, 2),
       attemptsUsed: 0,
+      rationale: "Two Transfers.",
       predictedAt: new Date("2026-08-28T17:00:00Z")
     });
 
@@ -231,6 +236,7 @@ describe("storing and reloading Manager State", () => {
       gameweek: 1,
       state: opened,
       attemptsUsed: 0,
+      rationale: "The opening fifteen.",
       predictedAt: new Date("2026-08-21T17:00:00Z")
     });
 
@@ -266,6 +272,7 @@ describe("storing and reloading Manager State", () => {
       gameweek: 2,
       state: opened,
       attemptsUsed: 0,
+      rationale: "The opening fifteen.",
       predictedAt: new Date("2026-08-28T17:00:00Z")
     });
     // An Exhibition Run holds Manager States in this table too (ADR-0032), and
@@ -279,6 +286,7 @@ describe("storing and reloading Manager State", () => {
       gameweek: 1,
       state: opened,
       attemptsUsed: 0,
+      rationale: "The opening fifteen.",
       predictedAt: new Date("2026-09-30T11:30:00Z")
     });
 

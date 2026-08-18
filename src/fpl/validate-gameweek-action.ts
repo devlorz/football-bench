@@ -14,7 +14,11 @@ const gameweekActionSchema = z.strictObject({
     bench: z.array(fplId),
     captain: fplId,
     vice_captain: fplId
-  })
+  }),
+  // The Rationale beside the action (ADR-0041), matching the Match track's
+  // Prediction. The reducer never reads it — it is carried alongside the
+  // action for storage, not part of the Squad rules.
+  rationale: z.string()
 });
 
 /**
@@ -26,7 +30,7 @@ const gameweekActionSchema = z.strictObject({
 export const GAMEWEEK_ACTION_SCHEMA_KIND = "schema";
 
 export type GameweekActionValidation =
-  | { ok: true; action: GameweekAction }
+  | { ok: true; action: GameweekAction; rationale: string }
   | {
     ok: false;
     kind: typeof GAMEWEEK_ACTION_SCHEMA_KIND;
@@ -82,7 +86,8 @@ export function validateGameweekAction(
     };
   }
 
-  const { transfers_in, transfers_out, chip, team_sheet } = parsed.data;
+  const { transfers_in, transfers_out, chip, team_sheet, rationale } =
+    parsed.data;
   return {
     ok: true,
     action: {
@@ -95,6 +100,7 @@ export function validateGameweekAction(
         captain: team_sheet.captain,
         viceCaptain: team_sheet.vice_captain
       }
-    }
+    },
+    rationale
   };
 }

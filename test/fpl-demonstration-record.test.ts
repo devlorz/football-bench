@@ -113,6 +113,7 @@ describe("the FPL demonstration record", () => {
       state,
       attemptsUsed: repairs,
       rolledOver,
+      rationale: rolledOver ? null : "Standing pat.",
       predictedAt: new Date("2026-08-21T17:00:00Z")
     });
   }

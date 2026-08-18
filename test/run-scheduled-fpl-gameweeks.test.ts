@@ -26,14 +26,16 @@ const OPENING = JSON.stringify({
     bench: [2, 7, 12, 15],
     captain: 8,
     vice_captain: 13
-  }
+  },
+  rationale: "The opening fifteen."
 });
 
 const STAND_PAT = JSON.stringify({
   transfers_in: [],
   transfers_out: [],
   chip: null,
-  team_sheet: (JSON.parse(OPENING) as { team_sheet: unknown }).team_sheet
+  team_sheet: (JSON.parse(OPENING) as { team_sheet: unknown }).team_sheet,
+  rationale: "Standing pat."
 });
 
 function openRouterBody(content: string): string {
