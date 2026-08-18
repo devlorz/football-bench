@@ -1059,12 +1059,19 @@ describe("The Entrant's own record the FPL context carries", () => {
   test("holds no blank line inside the block, whatever it renders", () => {
     // The Exhibition splice finds the block's end at the first blank line, so
     // the own record must never hand it one before the block is meant to
-    // close.
+    // close. The range checked is found independently of any blank line —
+    // "Season points to date" is a fixed string, not `indexOf("", opens)` —
+    // so a stray blank earlier in the block cannot truncate the check before
+    // it and hide itself behind a slice that stopped short of it.
     const lines = context({ ownRecord: SETTLED_OWN_RECORD }).split("\n");
     const opens = lines.indexOf("Your Manager State");
-    const closes = lines.indexOf("", opens);
+    const lastContent = lines.indexOf("Season points to date: 54");
 
-    expect(lines.slice(opens, closes)).not.toContain("");
+    expect(lastContent).toBeGreaterThan(opens);
+    expect(lines.slice(opens, lastContent + 1)).not.toContain("");
+    // And the block really does close right after it, proving `lastContent`
+    // is the block's true last line and not merely one that precedes it.
+    expect(lines[lastContent + 1]).toBe("");
   });
 
   test("asks for the Rationale the schema already requires, to the byte", () => {

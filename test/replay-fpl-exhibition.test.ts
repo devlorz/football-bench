@@ -19,9 +19,9 @@ import {
 import { BASE_MODELS, seatId } from "./fpl-seat-fixture.js";
 import {
   EVERYONE_PLAYED,
-  storePlayerPoints,
   storeSettledPoints
 } from "./fpl-points-fixture.js";
+import type { PlayerGameweekPoints } from "../src/fpl/score-team-sheet.js";
 import { insertExhibition, resetSchema } from "./schema-fixture.js";
 import { firstMessageText, type CapturedTurn as Turn } from "./sent-context.js";
 
@@ -210,6 +210,24 @@ describe("replaying the FPL track as an Exhibition Run", () => {
   });
 
   /**
+   * The alternates' own settled returns — never named by the roster's own
+   * Team Sheet in this suite, only by the Exhibition's scripted Transfers, so
+   * `EVERYONE_PLAYED` alone leaves them unsettled. The own-record guard added
+   * against ADR-0041's "same function, not a second one" now refuses to fold
+   * a player it cannot find settled points or a Season position for, so every
+   * Gameweek this suite settles has to cover whoever an Exhibition script
+   * might bring in, not only the roster's fixed fifteen.
+   */
+  const ALTERNATES_PLAYED: PlayerGameweekPoints[] = [
+    { fplId: 16, minutes: 90, totalPoints: 5 },
+    { fplId: 17, minutes: 90, totalPoints: 6 },
+    { fplId: 18, minutes: 90, totalPoints: 7 },
+    { fplId: 19, minutes: 90, totalPoints: 10 },
+    { fplId: 20, minutes: 90, totalPoints: 8 },
+    { fplId: 21, minutes: 90, totalPoints: 4 }
+  ];
+
+  /**
    * The real track: ten seats opened at Gameweek 1 and carried through 2 and
    * 3, each Gameweek settling behind them. This is what an Exhibition arrives
    * to — the donor bodies and the Gameweeks that have settled are the record it
@@ -229,6 +247,7 @@ describe("replaying the FPL track as an Exhibition Run", () => {
     });
     expect(opening.missing).toEqual([]);
     await storeSettledPoints(client, 1, EVERYONE_PLAYED);
+    await storeSettledPoints(client, 1, ALTERNATES_PLAYED);
 
     for (const gameweek of [2, 3].filter((gw) => gw <= through)) {
       const run = await runFplGameweek({
@@ -243,6 +262,7 @@ describe("replaying the FPL track as an Exhibition Run", () => {
       });
       expect(run).toMatchObject({ missing: [] });
       await storeSettledPoints(client, gameweek, EVERYONE_PLAYED);
+      await storeSettledPoints(client, gameweek, ALTERNATES_PLAYED);
     }
   }
 
@@ -317,12 +337,6 @@ describe("replaying the FPL track as an Exhibition Run", () => {
 
   test("plays the season path from the opening, on its own Manager State", async () => {
     await playTheSeason();
-    // Evanilson's own settled return for the one Gameweek he starts in this
-    // Exhibition's own path — `EVERYONE_PLAYED` never names him, since no
-    // roster seat ever owns him.
-    await storePlayerPoints(client, {
-      gameweek: 2, fplId: 19, minutes: 90, total_points: 10
-    });
     // Evanilson rises to £13.0m after Gameweek 2's contexts were stored. The
     // Transfer below still pays £6.0m, because the pipeline prices an action
     // from the text on record rather than from a snapshot that has moved.

@@ -172,6 +172,7 @@ async function replaySeasonPath({
   // Positions across the Season, read once: the same lookup the scorer makes
   // and no more likely to change mid-replay than mid-scoring-run.
   const positions = await loadSeasonPositions(database, season);
+  const positioned = new Set(positions.map(({ fplId }) => fplId));
 
   // The empty Squad every Entrant was seeded from at the opening. From the
   // second Gameweek on it is whatever the Gameweek before left behind. The
@@ -251,6 +252,30 @@ async function replaySeasonPath({
     }
     const points = await loadGameweekPoints(database, season, gw);
     const pointsOf = new Map(points.map((point) => [point.fplId, point.totalPoints]));
+
+    // The scorer refuses a Gameweek outright rather than score around a
+    // player it cannot settle or place (`scoreOneGameweek`), and this bend is
+    // only safe while it means what the scorer means: a silent drop here
+    // would fold this Entrant's own record from an eleven the scorer would
+    // never have accepted.
+    const named = [...teamSheet.starters, ...teamSheet.bench];
+    for (const fplId of named) {
+      if (!pointsOf.has(fplId)) {
+        throw new Error(
+          `${exhibition.id}'s Gameweek ${gw} of ${season} names player `
+          + `${fplId}, who has no settled points, so its own record cannot `
+          + "be folded"
+        );
+      }
+      if (!positioned.has(fplId)) {
+        throw new Error(
+          `${exhibition.id}'s Gameweek ${gw} of ${season} names player `
+          + `${fplId}, for whom the Season records no single position, so `
+          + "its own record cannot be folded"
+        );
+      }
+    }
+
     const scored = scoreTeamSheet({
       teamSheet,
       positions,
