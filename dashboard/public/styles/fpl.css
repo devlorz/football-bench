@@ -362,7 +362,10 @@ circle.fplline { fill: var(--fplline); stroke: none; }
 
 /* ── latest squads ───────────────────────────────────────────────────────── */
 
-.fplsquads {
+/* The picker-aside-plus-content shape both Entrant-scoped pages wear, named
+   for the shape rather than for the squads page that happened to draw it
+   first -- the Entrant record page wears it too. */
+.fplscoped {
   display: grid;
   grid-template-columns: 236px 1fr;
   gap: 36px;
@@ -630,6 +633,160 @@ circle.fplline { fill: var(--fplline); stroke: none; }
 .fplvlabel { color: color-mix(in srgb, var(--color-text) 55%, transparent); }
 .fplvvalue { margin-left: auto; font-weight: 600; }
 
+/* ── the Entrant record ──────────────────────────────────────────────────── */
+
+/* The two charts' 2px gaps read as the rules between them, the same pattern
+   the stat strip and the Cards grid draw with: the grid's own background
+   shows through. */
+.fplrecordcharts {
+  margin-top: 24px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  background: var(--color-divider);
+}
+.fplrecordpanel { background: var(--color-bg); padding: 20px 22px; }
+
+.fplbars { display: flex; align-items: flex-end; gap: 18px; height: 170px; }
+.fplbar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
+  height: 100%;
+}
+.fplbar-value {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 15px;
+  text-align: center;
+  margin-bottom: 5px;
+}
+.fplbar-fill { background: var(--color-neutral-800); }
+/* The latest Gameweek, which is the one bar the design lifts into the accent. */
+.fplbar-on .fplbar-fill { background: var(--color-accent); }
+.fplbar-gw {
+  font-size: 11px;
+  opacity: 0.55;
+  text-align: center;
+  margin-top: 6px;
+}
+/* A Gameweek nobody stored a Manager State for: no fill and no value, so the
+   hole in the row is a hole and not a Gameweek quietly worth nought. */
+.fplbar-gap {
+  border: 1px dashed var(--color-divider);
+  align-items: flex-end;
+  padding-bottom: 6px;
+}
+
+.fplchartlegend { display: flex; gap: 20px; font-size: 11px; margin-top: 8px; }
+.fplchartlegend-row { display: inline-flex; align-items: center; gap: 6px; }
+.fplchartlegend-row strong { font-weight: 600; margin-left: 2px; }
+.fplchartlegend-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+}
+.fplchartlegend-value { background: var(--color-accent); }
+.fplchartlegend-bank { background: var(--color-neutral-600); }
+
+.fplchips { margin-top: 34px; }
+.fplchipstrip {
+  display: flex;
+  gap: 2px;
+  background: var(--color-divider);
+  border: 1px solid var(--color-divider);
+}
+.fplchipcell { flex: 1; height: 30px; background: var(--color-bg); }
+/* A Gameweek the record has reached and spent no Chip in. Unlit and unpast
+   are both `--color-bg`, so only the two states a reader can tell apart --
+   spent, and reached-but-not-spent -- are drawn differently at all. */
+.fplchipcell-past { background: var(--color-neutral-300); }
+/* A Gameweek nobody stored a Manager State for (ADR-0011): a hatch rather
+   than the flat past grey, because the strip cannot say a Chip went unspent
+   in a Gameweek it cannot say anything happened in at all. */
+.fplchipcell-gap {
+  background-image: repeating-linear-gradient(
+    45deg, var(--color-divider) 0, var(--color-divider) 2px, transparent 2px, transparent 6px
+  );
+}
+/* The design's own colour for each Chip, held apart from one another and
+   from the past/future greys so all four read at a glance in the legend as
+   well as in the strip. */
+.fplchipcell-wildcard { background: var(--color-accent); }
+.fplchipcell-triple_captain { background: var(--color-accent-700); }
+.fplchipcell-bench_boost { background: var(--color-neutral-800); }
+.fplchipcell-free_hit { background: var(--color-neutral-600); }
+/* The first set's expiry, an inset line rather than a border so it does not
+   widen the cell it falls on. */
+.fplchipcell-expiry { box-shadow: inset -2px 0 0 var(--color-accent); }
+
+.fplchiplegend { display: flex; gap: 22px; margin-top: 12px; flex-wrap: wrap; }
+.fplchiplegend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.fplchiplegend-swatch { display: inline-block; width: 14px; height: 14px; }
+.fplchiplegend-name { font-weight: 600; }
+.fplchiplegend-when { opacity: 0.55; }
+
+.fplcaptains, .fpltransfers { margin-top: 8px; }
+.fplcaptains th, .fplcaptains td,
+.fpltransfers th, .fpltransfers td { padding: 9px 8px; }
+.fplcaptains .num, .fpltransfers .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.fplcaptain-name { font-family: var(--font-heading); font-weight: 800; }
+.fplcaptain-vice { font-size: 12px; opacity: 0.6; }
+.fplcaptain-return { font-variant-numeric: tabular-nums; }
+/* The haul, in the same accent an emphasised figure wears everywhere on this
+   dashboard; an ordinary return is muted rather than coloured down, so a
+   blank Gameweek's dash reads no differently from a small one. */
+.fplcaptain-accent { color: var(--color-accent); font-weight: 600; }
+.fplcaptain-muted { opacity: 0.7; }
+/* The vice wore it, which the `Captain` column beside this cell does not say
+   on its own -- the misattribution `FplEntrantGameweek.armband` exists to
+   let this row catch. Absent in the ordinary week: the `Captain` column
+   already reads as the answer, and a badge repeated on every row would be
+   noise rather than a flag. */
+.fplcaptain-badge {
+  display: inline-block;
+  margin-right: 5px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--color-neutral-300);
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 10px;
+  vertical-align: middle;
+}
+
+.fploperator {
+  margin-top: 32px;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 2px;
+  background: var(--color-divider);
+}
+.fploperator-cell { background: var(--color-bg); padding: 12px 14px; }
+.fploperator-label {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.fploperator-value {
+  margin-top: 4px;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── 760px ───────────────────────────────────────────────────────────────── */
 
 @media (max-width: 760px) {
@@ -664,9 +821,16 @@ circle.fplline { fill: var(--fplline); stroke: none; }
      stacked full-width picker and the strip's own 2×3, and is what checks
      them; this keeps the grids this slice added inside the viewport until it
      lands. */
-  .fplsquads, .fplbelow { grid-template-columns: 1fr; }
+  .fplscoped, .fplbelow { grid-template-columns: 1fr; }
   .fplstrip { grid-template-columns: repeat(2, 1fr); }
   .fplscroll .fpllist { min-width: 700px; }
+  /* Same reason again: the Entrant record's two charts, its 38-cell Chip
+     strip and its five-cell operator footer do not fit a phone's width
+     either, and the page must never scroll sideways for them. The mobile
+     slice owns what the design actually wants at this width; this is only
+     what this slice added not pushing the document past the viewport. */
+  .fplrecordcharts, .fploperator { grid-template-columns: 1fr; }
+  .fplscroll .fplchipstrip { min-width: 640px; }
   /* The hero's flex row is `display: block` above, so the control is no longer
      pushed right by `margin-left: auto` and sits under the kicker. */
   .fplhero .seg { margin-top: 12px; }

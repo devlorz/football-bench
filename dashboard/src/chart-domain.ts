@@ -1,12 +1,16 @@
 /**
- * The two domains of the cumulative Match Points chart, which follow the data
- * rather than the design's fixed 0–260 and GW1–GW14.
+ * Chart geometry shared by both tracks: the domains and positions that can be
+ * wrong without being visible — an axis that quietly clips a line, a Gameweek
+ * drawn under the wrong point, or a line drawn through a Gameweek nobody has a
+ * figure for. A page's own script is a fetch and a render and has no test;
+ * these functions do (spec 0014's Testing Decisions: "chart geometry is
+ * tested as pure functions on their documented behaviour, not by rendering").
  *
- * They live here, apart from the page that draws with them, because they are
- * the one part of that chart that can be wrong without being visible: an axis
- * that quietly clips a line, or one that puts Gameweek 8 where Gameweek 9
- * belongs, still renders as a chart. The page is a script over a fetch and has
- * no test; these two functions do.
+ * `ceiling` and `across` opened this module for the Match track's cumulative
+ * chart and are read unchanged by the FPL leaderboard's Race chart; the two
+ * below are the FPL Entrant record's. Nothing here composes an FPL sentence
+ * or a Match one — that split stays in each track's own view module
+ * (`fpl-view.ts`), which is the FPL vocabulary and never chart arithmetic.
  */
 
 /**
@@ -45,3 +49,40 @@ export const ceiling = (most: number): number => {
  */
 export const across = (gw: number, first: number, last: number): number =>
   last === first ? 0 : (gw - first) / (last - first);
+
+/**
+ * Where a value sits in its own series' band: 0 at the series' lowest point, 1
+ * at its highest.
+ *
+ * Squad value and bank are drawn as two independently-scaled series (spec
+ * 0014, story 24), each read against its own min and max rather than one axis
+ * shared between a six-figure value and a single-figure bank. A series with no
+ * spread at all -- every Gameweek banking the same amount -- has nothing to
+ * divide the gap by; treating that gap as one rather than nought keeps every
+ * point at the same real position instead of the whole series collapsing onto
+ * a `NaN` coordinate, which is what would stop the line drawing across the
+ * chart at all.
+ */
+export const scaleOwnBand = (
+  values: readonly number[]
+): (value: number) => number => {
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  const span = hi - lo || 1;
+  return (value) => (value - lo) / span;
+};
+
+/**
+ * Whether the point at `index` starts a new run of consecutive Gameweeks
+ * rather than continuing the last one.
+ *
+ * A chart drawn by joining every point in array order in a straight line
+ * draws across a Gameweek the record holds nothing for -- the interpolation
+ * ADR-0011's "a Gap is reported, never back-filled" rule forbids. A break in
+ * the numbering is the only signal a chart has that a point is missing
+ * between two it does hold, so the check is arithmetic on the Gameweek
+ * itself and not on the array's length.
+ */
+export const startsRun = (
+  weeks: readonly { gw: number }[], index: number
+): boolean => index === 0 || weeks[index]!.gw !== weeks[index - 1]!.gw + 1;

@@ -1,9 +1,12 @@
 import { describe, expect, test } from "vitest";
 import {
-  chipLabel, chipsTag, clubTag, deltaNote, gameweekSpan, gwTag, money,
-  movement, opponentLabel, pounds, rankBand, seasonLabel, seatTeamSheet,
-  settledGws, sheetKicker, sheetSubLine, spreadLabels, statStrip, statusLine,
-  transferCost, transfersHeading, validationRows
+  captainReturnTone, captainWearerBadge, chipLabel, chipLegend, chipsTag,
+  chipStrip, chipStripKicker, clubTag, CHIP_EXPIRY_GW, deltaNote,
+  gameweekSpan, gwTag, money, movement, operatorFooter, opponentLabel,
+  pounds, rankBand, recordKicker, seasonLabel, seatTeamSheet,
+  SEASON_GAMEWEEKS, settledGws, sheetKicker, sheetSubLine, spreadLabels,
+  statStrip, statusLine, transferCost, transferGwLabel, transfersHeading,
+  validationRows
 } from "../dashboard/src/fpl-view.js";
 
 /**
@@ -456,6 +459,26 @@ describe("the Transfers below the Squad", () => {
   });
 });
 
+describe("the Entrant record's own GW column", () => {
+  test("names the Gameweek alone when it was read against the one before", () => {
+    expect(transferGwLabel(5, 4)).toBe("GW5");
+  });
+
+  test("names the Gameweek it was read against when it is not the one before", () => {
+    // The seeded Season's own shape: GW5's Transfers are read against GW3 for
+    // the Entrant that Gapped GW4, and a bare "GW5" would read that hole as a
+    // quiet week the same way an unlabelled heading would.
+    expect(transferGwLabel(5, 3)).toBe("GW5 (since GW3)");
+  });
+
+  test("has nothing to say at the Gameweek an Entrant opened in", () => {
+    // Unreachable through the page today -- an opening Gameweek makes no
+    // Transfer and never reaches a row of this history -- but the column
+    // still owes a plain answer if one ever does.
+    expect(transferGwLabel(1, null)).toBe("GW1");
+  });
+});
+
 describe("money with the sign on it", () => {
   test("carries the unit where a single figure has nowhere else to", () => {
     expect(pounds(1012)).toBe("£101.2");
@@ -555,5 +578,153 @@ describe("the stat strip over a Team Sheet", () => {
     );
     expect(strip.map(({ value }) => value))
       .toEqual(["—", "—", "—", "—", "—", "None"]);
+  });
+});
+
+describe("the kicker over an Entrant's own record", () => {
+  test("names the span it is read over", () => {
+    expect(recordKicker(1, 5, [])).toBe("Entrant record · Gameweeks 1–5");
+  });
+
+  test("does not pluralise a span of one Gameweek", () => {
+    expect(recordKicker(2, 2, [])).toBe("Entrant record · Gameweek 2");
+  });
+
+  test("names nothing before the first Settled Gameweek", () => {
+    expect(recordKicker(null, null, [])).toBe("Entrant record");
+  });
+
+  test("announces a Gameweek the record holds nothing for", () => {
+    // The seeded Season's own shape: this is the one place the record page's
+    // own header says the hole, and the bars, the chart and the Chip strip
+    // beneath it each say it again where a reader is looking.
+    expect(recordKicker(1, 5, [4]))
+      .toBe("Entrant record · Gameweeks 1–5 · not in the record: GW4");
+  });
+});
+
+describe("the Chip strip", () => {
+  test("draws all 38 Gameweeks whatever the record's own span is", () => {
+    const cells = chipStrip(4, [], []);
+    expect(cells).toHaveLength(SEASON_GAMEWEEKS);
+    expect(cells.map(({ gw }) => gw)).toEqual(
+      Array.from({ length: SEASON_GAMEWEEKS }, (_, index) => index + 1)
+    );
+  });
+
+  test("marks the Gameweeks the record has already reached", () => {
+    const cells = chipStrip(4, [], []);
+    expect(cells.slice(0, 4).every(({ past }) => past)).toBe(true);
+    expect(cells.slice(4).every(({ past }) => !past)).toBe(true);
+  });
+
+  test("says nothing has passed before the first Settled Gameweek", () => {
+    expect(chipStrip(null, [], []).every(({ past }) => !past)).toBe(true);
+  });
+
+  test("places the Chip a Gameweek played at its own cell", () => {
+    const cells = chipStrip(4, [{ chip: "wildcard", gw: 3 }], []);
+    expect(cells[2]).toEqual({ gw: 3, chip: "wildcard", past: true, gap: false });
+    expect(cells[1]).toEqual({ gw: 2, chip: null, past: true, gap: false });
+  });
+
+  test("fixes the expiry at GW19 whatever the record's own span is", () => {
+    expect(CHIP_EXPIRY_GW).toBe(19);
+  });
+
+  test("marks a Gameweek nobody stored a Manager State for apart from an ordinary past one", () => {
+    // The seeded Season's own shape again: GW4 is inside the span (past) but
+    // is a Gap, and the strip must not read that as an unplayed Chip window
+    // like every other past cell.
+    const cells = chipStrip(5, [], [4]);
+    expect(cells[3]).toEqual({ gw: 4, chip: null, past: true, gap: true });
+    expect(cells[2]).toEqual({ gw: 3, chip: null, past: true, gap: false });
+  });
+
+  test("fixes the kicker's sentence to the same Gameweek", () => {
+    expect(chipStripKicker())
+      .toBe("Chip usage — first set expires at the GW19 deadline");
+  });
+});
+
+describe("the Chip strip's legend", () => {
+  test("names every Chip played and its Gameweek", () => {
+    expect(chipLegend(
+      [{ chip: "wildcard", gw: 3 }, { chip: "bench_boost", gw: 12 }], 6
+    )).toEqual([
+      { name: "Wildcard", when: "played GW3", chip: "wildcard" },
+      { name: "Bench Boost", when: "played GW12", chip: "bench_boost" }
+    ]);
+  });
+
+  test("states the absence rather than an unlit strip alone", () => {
+    expect(chipLegend([], 8)).toEqual([
+      { name: "No Chips played", when: "8 remaining across both halves", chip: null }
+    ]);
+  });
+
+  test("says the record holds nothing rather than nought remaining", () => {
+    expect(chipLegend([], null)[0]!.when).toBe("— remaining across both halves");
+  });
+});
+
+describe("a captain's return", () => {
+  test("draws a haul in the accent", () => {
+    expect(captainReturnTone(12)).toBe("accent");
+    expect(captainReturnTone(16)).toBe("accent");
+  });
+
+  test("mutes an ordinary week", () => {
+    expect(captainReturnTone(11)).toBe("muted");
+    expect(captainReturnTone(0)).toBe("muted");
+  });
+
+  test("mutes nobody wearing the armband the same as a small return", () => {
+    // The null already tells a blank week apart from a nought
+    // (`FplEntrantGameweek.captainPoints`); the tone need not repeat it.
+    expect(captainReturnTone(null)).toBe("muted");
+  });
+});
+
+describe("which of the two names beside a return actually earned it", () => {
+  const CAPTAIN = { fplId: 13 };
+  const VICE = { fplId: 8 };
+
+  test("badges the captain wherever the captain played", () => {
+    expect(captainWearerBadge({ captain: CAPTAIN, armband: { fplId: 13 } }))
+      .toBe("C");
+  });
+
+  test("badges the vice where the captain did not play at all", () => {
+    // The record's own reason the field exists: printing the return under
+    // the Captain column alone would credit the captain with the vice's
+    // score.
+    expect(captainWearerBadge({ captain: CAPTAIN, armband: VICE })).toBe("V");
+  });
+
+  test("badges neither where nobody wore it", () => {
+    expect(captainWearerBadge({ captain: CAPTAIN, armband: null })).toBeNull();
+  });
+});
+
+describe("the operator footer", () => {
+  test("labels the track's own record, not the sporting one beside it", () => {
+    expect(operatorFooter(
+      { repairs: 1, rollOvers: 0, hitPoints: 4, gaps: 0 }, "fpl-v1"
+    )).toEqual([
+      { label: "Repairs, Season", value: "1" },
+      { label: "Roll Overs", value: "0" },
+      { label: "Hit points", value: "4" },
+      { label: "Gaps", value: "0" },
+      { label: "Prompt Version", value: "fpl-v1" }
+    ]);
+  });
+
+  test("says the record holds nothing rather than nought before the Season starts", () => {
+    const rows = operatorFooter(
+      { repairs: null, rollOvers: null, hitPoints: null, gaps: null }, "fpl-v1"
+    );
+    expect(rows.slice(0, 4).map(({ value }) => value))
+      .toEqual(["—", "—", "—", "—"]);
   });
 });

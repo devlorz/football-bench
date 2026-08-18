@@ -1,0 +1,540 @@
+---
+import FplPage from "../../layouts/FplPage.astro";
+import { SEASON_ROSTER_SIZE } from "../../../../src/season-roster.js";
+---
+<FplPage
+  title="Entrant record — Football Bench, FPL track"
+  current="entrants"
+>
+  {/*
+    Everything that is not a figure is in the built HTML: the picker's
+    heading, both charts' frames and gridlines, the Chip strip's kicker, the
+    two tables' headers and the operator footer's labels. One response fills
+    every Entrant, so the picker switches without fetching and there is one
+    wait for the page.
+  */}
+  <p class="error" id="error" hidden>
+    The Entrant record could not be read. Nothing is being retried.
+  </p>
+
+  <section class="preseason" id="preseason" hidden>
+    <div>
+      <div class="kicker">No Gameweek settled</div>
+      <h2>An Entrant's record appears once a Gameweek has been scored</h2>
+      <p>
+        Every Entrant's history builds one Settled Gameweek at a time. None is
+        shown here until the first Gameweek has settled, and a Gameweek
+        settles for the whole field or for none of it.
+      </p>
+    </div>
+  </section>
+
+  <div class="fplskeleton" id="loading" aria-hidden="true">
+    {Array.from({ length: SEASON_ROSTER_SIZE }).map(() => <div class="skeleton"></div>)}
+  </div>
+
+  <section class="fplscoped" id="record" hidden>
+    <aside class="fplpicker">
+      <div class="kicker">Entrant</div>
+      <div id="picker" role="group" aria-label="Entrant"></div>
+    </aside>
+
+    <div class="fplsheet">
+      {/* A link naming a seat this Season has none of. Said in a line rather
+          than left as a page of another Entrant's record under that link, the
+          same rule the squads page keeps. */}
+      <p class="fplnote" id="unselected" hidden>
+        No Entrant by that name entered the FPL track this Season. Pick one
+        from the list.
+      </p>
+
+      <div id="selected" hidden>
+        <section class="fplhero fplhero-sheet">
+          <div>
+            <div class="kicker" id="record-kicker">&nbsp;</div>
+            <h1 id="entrant-name">&nbsp;</h1>
+            <div class="fpl-id" id="entrant-base"></div>
+          </div>
+        </section>
+
+        <div class="fplrecordcharts">
+          <div class="fplrecordpanel">
+            <div class="kicker">Points per Gameweek</div>
+            <div class="fplbars" id="bars"></div>
+          </div>
+          <div class="fplrecordpanel">
+            <div class="kicker">Squad value &amp; bank</div>
+            <svg
+              class="fplchart"
+              id="chart"
+              viewBox="0 0 640 220"
+              role="img"
+              aria-label="Squad value and bank per Gameweek"
+            ></svg>
+            <div class="fplchartlegend" id="chart-legend"></div>
+          </div>
+        </div>
+
+        <div class="fplchips">
+          <div class="kicker" id="chips-kicker">&nbsp;</div>
+          {/* Its own scroll container, the convention every wide row on this
+              dashboard keeps: 38 cells are wider than a phone, and the page
+              itself must never scroll sideways. */}
+          <div class="fplscroll">
+            <div class="fplchipstrip" id="chip-strip"></div>
+          </div>
+          <div class="fplchiplegend" id="chip-legend"></div>
+        </div>
+
+        <div class="fplbelow">
+          <div>
+            <div class="kicker">Captain picks</div>
+            <div class="fplscroll">
+              <table class="table fplcaptains">
+                <thead>
+                  <tr>
+                    <th scope="col">GW</th>
+                    <th scope="col">Captain</th>
+                    <th scope="col">Vice</th>
+                    <th scope="col" class="num">Returned</th>
+                  </tr>
+                </thead>
+                <tbody id="captain-rows"></tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <div class="kicker">Transfer history</div>
+            <div class="fplscroll">
+              <table class="table fpltransfers">
+                <thead>
+                  <tr>
+                    <th scope="col">GW</th>
+                    <th scope="col">Out</th>
+                    <th scope="col">In</th>
+                    <th scope="col" class="num">Cost</th>
+                  </tr>
+                </thead>
+                <tbody id="transfer-rows"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="fploperator" id="operator"></div>
+      </div>
+    </div>
+  </section>
+
+  {/* Bundled rather than `is:inline`, for the reason the squads page's script
+      is: everything it says in words rather than figures lives in
+      `fpl-view.ts` and is tested there, and an inline script can import
+      nothing. */}
+  <script>
+  import {
+    captainReturnTone, captainWearerBadge, chipLabel, chipLegend, chipStrip,
+    chipStripKicker, CHIP_EXPIRY_GW, figure, gwTag, operatorFooter, pounds,
+    recordKicker, statusLine, transferCost, transferGwLabel
+  } from "../../fpl-view.js";
+  import { across, scaleOwnBand, startsRun } from "../../chart-domain.js";
+  import { entrantOf, entrantSlug } from "../../entrant-link.js";
+  import { byId as $, el, svg, text } from "../../dom.js";
+  import type {
+    FplEntrantRecord, FplEntrantsBody
+  } from "../../../../src/dashboard/read-api.js";
+
+  (() => {
+    let body: FplEntrantsBody | null = null;
+    // The seat's slug and not its id, as `?entrant=` carries it everywhere on
+    // this dashboard.
+    let selected = new URL(location.href).searchParams.get("entrant");
+
+    /**
+     * The URL is the state on screen (ADR-0028), written with `replaceState`
+     * for the reason the squads page's picker is: choosing an Entrant here is
+     * not navigation, and Back is expected to leave rather than walk back
+     * through nine choices.
+     */
+    const remember = (): void => {
+      const url = new URL(location.href);
+      const was = url.href;
+      if (selected !== null) url.searchParams.set("entrant", selected);
+      if (url.href !== was) history.replaceState(null, "", url);
+
+      // The squads page carries the same selection, and a reader who picked
+      // an Entrant here picked it for both pages.
+      const tab = document.querySelector<HTMLAnchorElement>('[data-tab="squads"]');
+      if (tab !== null && selected !== null) {
+        tab.search = new URLSearchParams({ entrant: selected }).toString();
+      }
+    };
+
+    /* ── the picker ─────────────────────────────────────────────────────── */
+
+    // In the order the body arrived in, which is the leaderboard's -- the
+    // same picker the squads page draws, re-sorted nowhere.
+    function renderPicker(data: FplEntrantsBody, chosen: string | null): void {
+      const rows = document.createDocumentFragment();
+      data.entrants.forEach((entrant, index) => {
+        const button = el("button", "fplpick");
+        button.type = "button";
+        const current = entrant.id === chosen;
+        button.classList.toggle("fplpick-on", current);
+        button.setAttribute("aria-pressed", String(current));
+        button.append(
+          el("span", "fplpick-rank", String(index + 1)),
+          el("span", "fplpick-name", entrant.name),
+          el("span", "fplpick-total", figure(entrant.totalPoints))
+        );
+        button.addEventListener("click", () => {
+          selected = entrantSlug(entrant.id);
+          render();
+        });
+        rows.append(button);
+      });
+      $("picker").replaceChildren(rows);
+    }
+
+    /* ── the points bars ────────────────────────────────────────────────── */
+
+    // The design's own ceiling: a 130px fill inside the 170px row leaves room
+    // for the value label above it and the GW tag below, both siblings in the
+    // same flex column. A percentage height resolves against that 170px row
+    // directly rather than the space `justify-content: flex-end` actually
+    // leaves the fill, so the tallest bar would overflow its own labels.
+    const BAR_CEILING = 130;
+
+    // ponytail: a bar per Gameweek in a flex row, which crowds once a Season
+    // runs past a dozen or so. Upgrade to a scrolling strip if a reader ever
+    // needs to read bars past mid-Season at a glance.
+    function renderBars(data: FplEntrantsBody, entrant: FplEntrantRecord): void {
+      const byGw = new Map(entrant.gameweeks.map((week) => [week.gw, week]));
+      const max = Math.max(1, ...entrant.gameweeks.map((week) => week.points));
+      const last = data.throughGw!;
+      const bars = document.createDocumentFragment();
+      for (let gw = data.fromGw!; gw <= last; gw += 1) {
+        const week = byGw.get(gw);
+        // A Gameweek inside the span nobody stored a Manager State for
+        // (ADR-0011): no bar to draw, and a gap in the row rather than one
+        // Gameweek's points silently missing beside its neighbours.
+        if (week === undefined) {
+          const gap = el("div", "fplbar fplbar-gap");
+          gap.title = `GW${gw} · not in the record`;
+          gap.append(el("div", "fplbar-gw", gwTag(gw)));
+          bars.append(gap);
+          continue;
+        }
+        const fill = el("div", "fplbar-fill");
+        fill.style.height = `${Math.max(2, (week.points / max) * BAR_CEILING)}px`;
+        const bar = el("div", "fplbar" + (gw === last ? " fplbar-on" : ""));
+        bar.append(
+          el("div", "fplbar-value", String(week.points)),
+          fill,
+          el("div", "fplbar-gw", gwTag(gw))
+        );
+        bars.append(bar);
+      }
+      $("bars").replaceChildren(bars);
+    }
+
+    /* ── the value/bank chart ───────────────────────────────────────────── */
+
+    const PLOT = { left: 44, right: 620, top: 12, bottom: 190 };
+
+    function renderChart(entrant: FplEntrantRecord): void {
+      const chart = $("chart");
+      chart.replaceChildren();
+      const weeks = entrant.gameweeks;
+      if (weeks.length === 0) return;
+
+      const first = weeks[0]!.gw;
+      const last = weeks.at(-1)!.gw;
+      const x = (gw: number): number =>
+        PLOT.left + across(gw, first, last) * (PLOT.right - PLOT.left);
+      const y = (frac: number): number =>
+        PLOT.bottom - frac * (PLOT.bottom - PLOT.top);
+
+      chart.append(
+        svg("line", {
+          x1: PLOT.left, x2: PLOT.right, y1: PLOT.bottom, y2: PLOT.bottom,
+          stroke: "currentColor", "stroke-opacity": 0.14
+        }),
+        svg("line", {
+          x1: PLOT.left, x2: PLOT.right, y1: PLOT.top, y2: PLOT.top,
+          stroke: "currentColor", "stroke-opacity": 0.14
+        })
+      );
+
+      // One run of consecutive Gameweeks per array: a Gameweek the record
+      // holds nothing for is a break in the numbering (`startsRun`), and a
+      // line joining across it would draw straight through a Gameweek nobody
+      // stored a Manager State for -- the interpolation ADR-0011 forbids.
+      const runs: number[][] = [];
+      weeks.forEach((_, index) => {
+        if (startsRun(weeks, index)) runs.push([index]);
+        else runs.at(-1)!.push(index);
+      });
+
+      // A run of one point draws a line to nowhere -- an "M" with no "L" -- so
+      // it is a dot instead, the same fallback the leaderboard's Race chart
+      // takes for a first Settled Gameweek's single point.
+      const drawSeries = (
+        at: (value: number) => number, values: number[],
+        attrs: Record<string, string | number>
+      ): void => {
+        for (const run of runs) {
+          if (run.length === 1) {
+            const index = run[0]!;
+            chart.append(svg("circle", {
+              cx: x(weeks[index]!.gw), cy: y(at(values[index]!)), r: 3,
+              fill: attrs.stroke!
+            }));
+            continue;
+          }
+          const d = run
+            .map((index, position) =>
+              `${position === 0 ? "M" : "L"}${x(weeks[index]!.gw)} ${y(at(values[index]!))}`)
+            .join(" ");
+          chart.append(svg("path", { d, fill: "none", ...attrs }));
+        }
+      };
+
+      const values = weeks.map((week) => week.squadValueTenths);
+      const banks = weeks.map((week) => week.bankTenths);
+      const valueAt = scaleOwnBand(values);
+      const bankAt = scaleOwnBand(banks);
+
+      // The axis reads the Squad value series alone: the two lines are scaled
+      // independently, and a chart labelled with one axis for both would put
+      // one of the two lines against a scale that is not its own.
+      const maxValue = Math.max(...values);
+      const minValue = Math.min(...values);
+      const axisLabel = (frac: number, atValue: number): SVGElement => {
+        const label = svg("text", {
+          x: 0, y: y(frac) + 4, "font-size": 10,
+          fill: "currentColor", "fill-opacity": 0.55
+        });
+        label.textContent = pounds(atValue);
+        return label;
+      };
+      chart.append(axisLabel(1, maxValue), axisLabel(0, minValue));
+
+      // At most eight labels however long the Season is, the Race chart's own
+      // rule (ADR-0033).
+      const every = Math.ceil(weeks.length / 8);
+      weeks.forEach((week, index) => {
+        if (index % every !== 0 && index !== weeks.length - 1) return;
+        const label = svg("text", {
+          x: x(week.gw), y: PLOT.bottom + 16, "font-size": 11,
+          "text-anchor": index === 0
+            ? "start"
+            : index === weeks.length - 1 ? "end" : "middle",
+          fill: "currentColor", "fill-opacity": 0.5
+        });
+        label.textContent = gwTag(week.gw);
+        chart.append(label);
+      });
+
+      drawSeries(bankAt, banks, {
+        stroke: "var(--color-neutral-600)", "stroke-width": 2,
+        "stroke-dasharray": "4 3"
+      });
+      // Last, so the value line is drawn over the bank line.
+      drawSeries(valueAt, values, {
+        stroke: "var(--color-accent)", "stroke-width": 2
+      });
+    }
+
+    function renderChartLegend(entrant: FplEntrantRecord): void {
+      const latest = entrant.gameweeks.at(-1);
+      const row = (label: string, value: string, cls: string): HTMLElement => {
+        const item = el("span", "fplchartlegend-row");
+        item.append(
+          el("span", `fplchartlegend-swatch ${cls}`),
+          document.createTextNode(label),
+          el("strong", "", value)
+        );
+        return item;
+      };
+      $("chart-legend").replaceChildren(
+        row("Squad value", pounds(latest?.squadValueTenths ?? null), "fplchartlegend-value"),
+        row("Bank", pounds(latest?.bankTenths ?? null), "fplchartlegend-bank")
+      );
+    }
+
+    /* ── the Chip strip ─────────────────────────────────────────────────── */
+
+    function renderChips(data: FplEntrantsBody, entrant: FplEntrantRecord): void {
+      text($("chips-kicker"), chipStripKicker());
+
+      const cells = document.createDocumentFragment();
+      for (const cell of
+        chipStrip(data.throughGw, entrant.chipsPlayed, data.missingGws)) {
+        // A Chip played always wins the colour; the gap and the ordinary-past
+        // tones are two different silences and are told apart, on the reason
+        // `ChipCell.gap`'s own docstring gives: the strip cannot say a Chip
+        // went unspent in a Gameweek it cannot say anything happened in.
+        const div = el(
+          "div",
+          "fplchipcell"
+            + (cell.chip !== null
+              ? ` fplchipcell-${cell.chip}`
+              : cell.gap ? " fplchipcell-gap" : cell.past ? " fplchipcell-past" : "")
+            + (cell.gw === CHIP_EXPIRY_GW ? " fplchipcell-expiry" : "")
+        );
+        div.title = cell.chip !== null
+          ? `${chipLabel(cell.chip)} · GW${cell.gw}`
+          : cell.gap ? `GW${cell.gw} · not in the record` : `GW${cell.gw}`;
+        cells.append(div);
+      }
+      $("chip-strip").replaceChildren(cells);
+
+      const legend = document.createDocumentFragment();
+      for (const row of chipLegend(entrant.chipsPlayed, entrant.chipsRemaining)) {
+        const item = el("div", "fplchiplegend-row");
+        item.append(
+          el(
+            "span",
+            "fplchiplegend-swatch"
+              + (row.chip !== null ? ` fplchipcell-${row.chip}` : " fplchipcell-past")
+          ),
+          el("span", "fplchiplegend-name", row.name),
+          el("span", "fplchiplegend-when", row.when)
+        );
+        legend.append(item);
+      }
+      $("chip-legend").replaceChildren(legend);
+    }
+
+    /* ── captain picks and Transfer history ─────────────────────────────── */
+
+    function renderCaptains(entrant: FplEntrantRecord): void {
+      const rows = document.createDocumentFragment();
+      for (const week of entrant.gameweeks) {
+        const row = document.createElement("tr");
+        const returned = el(
+          "td",
+          `num fplcaptain-return fplcaptain-${captainReturnTone(week.captainPoints)}`
+        );
+        // Flagged only where the vice wore it: the ordinary week already
+        // reads as the `Captain` column's own name, and a "C" repeated on
+        // every row would be noise rather than a signal. The exception is
+        // the one the misattribution `FplEntrantGameweek.armband` was served
+        // to let the page catch -- the return beside a nominated captain who
+        // did not play at all belongs to the vice instead.
+        if (captainWearerBadge(week) === "V") {
+          returned.append(el("span", "fplcaptain-badge", "V"));
+        }
+        returned.append(document.createTextNode(figure(week.captainPoints)));
+        row.append(
+          el("td", "muted", gwTag(week.gw)),
+          el("td", "fplcaptain-name", week.captain.name),
+          el("td", "fplcaptain-vice", week.viceCaptain.name),
+          returned
+        );
+        rows.append(row);
+      }
+      $("captain-rows").replaceChildren(rows);
+    }
+
+    /**
+     * One row per Transfer, grouped by Gameweek. The GW cell and the Cost
+     * cell print once per group and not once per row: a Manager State stores
+     * the Squad an action arrived at and what the Gameweek's paid Transfers
+     * cost, and never which of them was the paid one, so repeating that cost
+     * down a Wildcard's fifteen rows would read as a cost known per player
+     * that was never known at all (ADR-0033).
+     */
+    function renderTransfers(entrant: FplEntrantRecord): void {
+      const rows = document.createDocumentFragment();
+      for (const week of entrant.gameweeks) {
+        const moves = Math.max(week.transfersOut.length, week.transfersIn.length);
+        if (moves === 0) continue;
+        const label = transferGwLabel(week.gw, week.transfersSinceGw);
+
+        for (let index = 0; index < moves; index += 1) {
+          const row = document.createElement("tr");
+          row.append(
+            el("td", "muted", index === 0 ? label : ""),
+            el("td", "fplout", week.transfersOut[index]?.name ?? ""),
+            el("td", "fplin", week.transfersIn[index]?.name ?? ""),
+            el("td", "num", index === 0 ? transferCost(moves, week.hitPoints) : "")
+          );
+          rows.append(row);
+        }
+      }
+      $("transfer-rows").replaceChildren(rows);
+    }
+
+    /* ── the operator footer ────────────────────────────────────────────── */
+
+    function renderOperator(data: FplEntrantsBody, entrant: FplEntrantRecord): void {
+      const cells = document.createDocumentFragment();
+      for (const { label, value } of operatorFooter(entrant, data.promptVersion)) {
+        const cell = el("div", "fploperator-cell");
+        cell.append(
+          el("div", "fploperator-label", label),
+          el("div", "fploperator-value", value)
+        );
+        cells.append(cell);
+      }
+      $("operator").replaceChildren(cells);
+    }
+
+    /* ── the page ───────────────────────────────────────────────────────── */
+
+    function render(): void {
+      const data = body;
+      if (data === null) return;
+
+      text($("status"),
+        statusLine(data.season, data.throughGw, data.entrants.length));
+
+      const pre = data.throughGw === null;
+      $("loading").hidden = true;
+      $("preseason").hidden = !pre;
+      $("record").hidden = pre;
+      if (pre) return;
+
+      const chosen = entrantOf(selected, data.entrants.map(({ id }) => id));
+      renderPicker(data, chosen);
+      $("unselected").hidden = chosen !== null;
+      $("selected").hidden = chosen === null;
+      if (chosen === null) return;
+
+      const entrant = data.entrants.find((each) => each.id === chosen)!;
+      selected = entrantSlug(entrant.id);
+      remember();
+
+      text($("record-kicker"),
+        recordKicker(data.fromGw, data.throughGw, data.missingGws));
+      text($("entrant-name"), entrant.name);
+      text($("entrant-base"), entrant.baseModel);
+
+      renderBars(data, entrant);
+      renderChart(entrant);
+      renderChartLegend(entrant);
+      renderChips(data, entrant);
+      renderCaptains(entrant);
+      renderTransfers(entrant);
+      renderOperator(data, entrant);
+    }
+
+    // A relative path: the Worker claims `/api/*` on this hostname, so
+    // nothing is cross-origin and no origin was a build input.
+    fetch("/api/fpl/entrants")
+      .then((response) => {
+        if (!response.ok) throw new Error(String(response.status));
+        return response.json() as Promise<FplEntrantsBody>;
+      })
+      .then((json) => { body = json; render(); })
+      .catch(() => {
+        // One line, and nothing retries.
+        $("error").hidden = false;
+        $("loading").hidden = true;
+        $("record").hidden = true;
+        $("preseason").hidden = true;
+      });
+  })();
+  </script>
+</FplPage>

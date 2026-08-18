@@ -69,7 +69,7 @@ of the `scores` rows where the scorer froze it.
 - Only Settled Gameweeks appear, and a missing Gameweek is announced rather than silently
   absent — the same two rules the rest of the record already obeys, restated in the handoff
   and binding on all three endpoints.
-- The implementation deviates from the design files in exactly nine places: "Model stats"
+- The implementation deviates from the design files in exactly eleven places: "Model stats"
   is rendered "Entrant record", `.dark` is `data-theme`, the container query is a media
   query, the Race chart's panel has a 10px foot rather than the handoff's 20px, its
   Gameweek axis is an absolutely positioned label at every Gameweek up to eight of them,
@@ -141,6 +141,37 @@ of the `scores` rows where the scorer froze it.
   The lesson is worth more than the correction. An ADR that closes a story with a reason
   that is not true is worse than no ADR: it stops the next reader one line short of the
   column that was there all along.
+
+- The operator footer's "Hits taken" block is labelled **Hit points**, the tenth deviation.
+  A Manager State stores what a Gameweek's paid Transfers cost and never how many were paid
+  for, so the count the handoff's label promises can only be recovered by dividing this
+  figure by the game's four points a Hit costs — a rule of the game restated at a boundary
+  that cannot check it, and one that has already gone stale once: the Free Transfer
+  allowance the division assumes changed for 2026/27. The endpoint serves the cost because
+  the cost is what the record holds, and the label says so instead of promising a count
+  the division would eventually get wrong.
+
+- The Entrant record's Squad value & bank chart is not drawn at the handoff's own geometry,
+  the eleventh deviation. The prototype's four Gameweeks fit a fixed `viewBox="0 0 360 170"`
+  with four hand-placed `<text>` labels and a plot inset for a four-point line; a 38-Gameweek
+  Season needs the Race chart's own treatment instead, for the same reason ADR-0033 already
+  gives the Race chart's axis: a full Season's labels thin to at most eight, positioned by
+  the Gameweek's own number (`across`) rather than spaced evenly, so a Gameweek the record
+  holds nothing for is a longer segment rather than a label sitting under the wrong point.
+  The min/max axis labels are SVG `<text>` and not the handoff's positioned HTML `<span>`,
+  because nothing here needed the escape the Race chart's labels did — the two figures never
+  collide with each other the way nine Entrants' names can.
+
+  The same Gameweek this chart's axis has to thin for is also the one both this chart and the
+  points bars have to announce rather than smooth over: a run of consecutive Gameweeks draws
+  as its own line or its own bar, and a Gameweek the record holds nothing for breaks the run
+  rather than being joined across — the interpolation CONTEXT.md and ADR-0011 forbid
+  everywhere else on this dashboard, extended to the two charts the prototype's contiguous
+  four Gameweeks never had to make that decision for. A run of one point is a dot rather than
+  a vanished line, the fallback the leaderboard's Race chart already takes for a Season's
+  first Settled Gameweek. The Chip strip and the record page's own kicker say the same
+  Gameweek a third and a fourth time, each where a reader is looking at the moment the hole
+  falls in rather than only once at the top of the page.
 
 - A club is named by the three-letter code FPL authors for it, stored on the player rows a
   Lock writes (migration 0029), because the design prints a code and never a name in the

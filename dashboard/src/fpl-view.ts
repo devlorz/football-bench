@@ -99,30 +99,39 @@ export const settledGws = (
         (_, offset) => fromGw + offset
       ).filter((gw) => !missingGws.includes(gw));
 
+/** "Gameweeks 1-5", "Gameweek 2", or nothing settled yet -- the phrase every span reads. */
+const spanPhrase = (fromGw: number | null, throughGw: number | null): string =>
+  fromGw === null || throughGw === null
+    ? "no Gameweek settled"
+    : fromGw === throughGw
+      ? `Gameweek ${throughGw}`
+      : `Gameweeks ${fromGw}–${throughGw}`;
+
+/**
+ * The clause naming a hole inside a span, or nothing where the span has none.
+ *
+ * Its own function because every reading of a span on this page -- the
+ * kicker, the ranking's, the points bars, the value/bank chart, the Chip
+ * strip -- has to name the same holes the same way: a Gameweek any Entrant
+ * stored no Manager State in is removed from every Season path (ADR-0011), so
+ * "Gameweeks 1-5" over a record that skipped one is a claim about five
+ * Gameweeks that four of them answer.
+ */
+const missingSuffix = (missingGws: number[]): string =>
+  missingGws.length === 0
+    ? ""
+    : ` · not in the record: ${missingGws.map((gw) => `GW${gw}`).join(", ")}`;
+
 /**
  * The kicker beside the title: what the ranking is cumulative over, and any
  * Gameweek inside that span the record holds nothing for.
- *
- * The hole is named rather than smoothed over. A Gameweek any Entrant stored no
- * Manager State in is removed from every Season path (ADR-0011), so it is in no
- * total on the page -- and "Gameweeks 1-5" over a record that skipped one is a
- * claim about five Gameweeks that four of them answer.
  */
 export const gameweekSpan = (
   fromGw: number | null,
   throughGw: number | null,
   missingGws: number[]
-): string => {
-  const span = fromGw === null || throughGw === null
-    ? "no Gameweek settled"
-    : fromGw === throughGw
-      ? `Gameweek ${throughGw}`
-      : `Gameweeks ${fromGw}–${throughGw}`;
-  const missing = missingGws.length === 0
-    ? ""
-    : ` · not in the record: ${missingGws.map((gw) => `GW${gw}`).join(", ")}`;
-  return `Cumulative, ${span}${missing}`;
-};
+): string =>
+  `Cumulative, ${spanPhrase(fromGw, throughGw)}${missingSuffix(missingGws)}`;
 
 /**
  * The Season as the rest of the site prints it. One place, because the header
@@ -597,6 +606,23 @@ export const transfersHeading = (
 };
 
 /**
+ * The GW column's own label on the Entrant record's Transfer history: the
+ * Gameweek, with the one it was read against named whenever that is not the
+ * one before.
+ *
+ * Not `transfersHeading` above, on ADR-0033's own instruction: that heading
+ * answers for one active Gameweek over a Team Sheet, and this is a column of
+ * a table that states thirty-eight at once, only some of them read across a
+ * hole. The "Opening Squad" wording it carries has nowhere to go in a column
+ * this narrow either way -- an Entrant's opening Gameweek makes no Transfer at
+ * all, so it never reaches a row of this history to be labelled.
+ */
+export const transferGwLabel = (gw: number, sinceGw: number | null): string =>
+  sinceGw !== null && sinceGw !== gw - 1
+    ? `${gwTag(gw)} (since GW${sinceGw})`
+    : gwTag(gw);
+
+/**
  * What the Gameweek's Transfers cost, stated once for the Gameweek and not once
  * per Transfer.
  *
@@ -674,3 +700,172 @@ export const statusLine = (
   throughGw === null ? "no Gameweek settled" : `GW${throughGw} settled`,
   `${entrants} ${entrants === 1 ? "entrant" : "entrants"}`
 ].join(" · ");
+
+/* ── the Entrant record ───────────────────────────────────────────────────── */
+
+/**
+ * The kicker over an Entrant's name on its own record page: the span it is
+ * read over, and any Gameweek inside that span the record holds nothing for.
+ * A hole named here is the only place the record page's own header says so;
+ * the charts and the Chip strip beneath it each say it again where a reader
+ * is looking at the moment the hole falls in.
+ */
+export const recordKicker = (
+  fromGw: number | null,
+  throughGw: number | null,
+  missingGws: number[]
+): string =>
+  fromGw === null || throughGw === null
+    ? "Entrant record"
+    : `Entrant record · ${spanPhrase(fromGw, throughGw)}${missingSuffix(missingGws)}`;
+
+/** How many Gameweeks the Chip strip draws, whatever the record's own span is. */
+export const SEASON_GAMEWEEKS = 38;
+
+/** The Gameweek the first set of Chips expires at the deadline of. */
+export const CHIP_EXPIRY_GW = 19;
+
+/** The kicker over the Chip strip, fixed for the reason the expiry is. */
+export const chipStripKicker = (): string =>
+  `Chip usage — first set expires at the GW${CHIP_EXPIRY_GW} deadline`;
+
+/** One cell of the 38-Gameweek strip. */
+export interface ChipCell {
+  gw: number;
+  /** The Chip played this Gameweek, or null. */
+  chip: Chip | null;
+  /**
+   * A Gameweek the record's span has already reached, whether or not a Chip
+   * was spent in it -- the strip's only way to tell an unplayed past Gameweek
+   * from one still ahead of the reader's Season.
+   */
+  past: boolean;
+  /**
+   * A Gameweek inside the record's span nobody stored a Manager State for
+   * (ADR-0011). Drawn apart from an ordinary unplayed past Gameweek: the
+   * strip cannot say a Chip went unspent here, because it cannot say anything
+   * happened here at all.
+   */
+  gap: boolean;
+}
+
+/**
+ * All 38 Gameweeks of the Season, whether or not the record has reached them
+ * yet.
+ *
+ * Fixed-length rather than cut to the record's own span (spec 0014, story 25):
+ * the GW19 expiry has to sit at the same place in the strip on GW1 and on
+ * GW30, and a strip that grew with the Season would put the boundary
+ * somewhere different every week.
+ */
+export const chipStrip = (
+  throughGw: number | null,
+  chipsPlayed: readonly { chip: Chip; gw: number }[],
+  missingGws: readonly number[]
+): ChipCell[] =>
+  Array.from({ length: SEASON_GAMEWEEKS }, (_, index) => {
+    const gw = index + 1;
+    return {
+      gw,
+      chip: chipsPlayed.find((each) => each.gw === gw)?.chip ?? null,
+      past: throughGw !== null && gw <= throughGw,
+      gap: missingGws.includes(gw)
+    };
+  });
+
+/** One row of the strip's legend. */
+export interface ChipLegendRow {
+  name: string;
+  when: string;
+  /** Which cell colour the swatch matches; null for the no-Chips row. */
+  chip: Chip | null;
+}
+
+/**
+ * The strip's legend: one row per Chip played, or the single row saying none
+ * has been and how many remain -- absence stated rather than left for a
+ * reader to infer from a strip with nothing lit (spec 0014, story 26).
+ */
+export const chipLegend = (
+  chipsPlayed: readonly { chip: Chip; gw: number }[],
+  chipsRemaining: number | null
+): ChipLegendRow[] =>
+  chipsPlayed.length === 0
+    ? [{
+        name: "No Chips played",
+        when: `${figure(chipsRemaining)} remaining across both halves`,
+        chip: null
+      }]
+    : chipsPlayed.map((played) => ({
+        name: chipLabel(played.chip),
+        when: `played GW${played.gw}`,
+        chip: played.chip
+      }));
+
+/** The return a Gameweek's armband has to clear to draw as a haul. */
+const CAPTAIN_HAUL = 12;
+
+/**
+ * Whether a Gameweek's armband return reads as a haul or an ordinary week.
+ *
+ * Nobody wearing the armband at all is the same tone as a small return: both
+ * are a captaincy that did not pay off, and the null is what already tells
+ * that story apart from a nought (`FplEntrantGameweek.captainPoints`).
+ */
+export const captainReturnTone = (points: number | null): "accent" | "muted" =>
+  points !== null && points >= CAPTAIN_HAUL ? "accent" : "muted";
+
+/**
+ * Which of the two names beside a Gameweek's return actually earned it: the
+ * nominated captain, the vice standing in for one who did not play, or
+ * neither where neither did.
+ *
+ * The Returned figure is `captainPoints`, which is already whoever wore the
+ * armband's contribution, doubled -- but the row still prints both names, and
+ * a reader with nothing else on the row to go by reads a doubled score under
+ * a `Captain` column as that captain's. Where the vice wore it instead, that
+ * is the misattribution the field was added to the record to stop
+ * (`FplEntrantGameweek.armband`'s own docstring), and it survives unless
+ * something on the row says which of the two names the figure belongs to.
+ */
+export const captainWearerBadge = (week: {
+  captain: { fplId: number };
+  armband: { fplId: number } | null;
+}): "C" | "V" | null =>
+  week.armband === null
+    ? null
+    : week.armband.fplId === week.captain.fplId ? "C" : "V";
+
+/** One row of the operator footer under an Entrant's Transfer history. */
+export interface OperatorRow {
+  label: string;
+  value: string;
+}
+
+/**
+ * The track's own operating record, apart from the sporting one above it
+ * (spec 0014, story 29).
+ *
+ * Labelled "Hit points" and not the design's "Hits taken": the record stores
+ * what a Gameweek's paid Transfers cost and never how many were paid for, so
+ * a count recovered by dividing this by the game's four points a Hit costs
+ * would restate a rule of the game at a boundary that cannot check it -- and
+ * the boundary would already be wrong, because the Free Transfer allowance
+ * this division assumes has changed once already. ADR-0033 records the
+ * relabelling as its tenth deviation from the design.
+ */
+export const operatorFooter = (
+  entrant: {
+    repairs: number | null;
+    rollOvers: number | null;
+    hitPoints: number | null;
+    gaps: number | null;
+  },
+  promptVersion: string
+): OperatorRow[] => [
+  { label: "Repairs, Season", value: figure(entrant.repairs) },
+  { label: "Roll Overs", value: figure(entrant.rollOvers) },
+  { label: "Hit points", value: figure(entrant.hitPoints) },
+  { label: "Gaps", value: figure(entrant.gaps) },
+  { label: "Prompt Version", value: promptVersion }
+];

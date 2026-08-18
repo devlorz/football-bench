@@ -1,10 +1,15 @@
 import { describe, expect, test } from "vitest";
-import { across, ceiling } from "../dashboard/src/chart-domain.js";
+import {
+  across, ceiling, scaleOwnBand, startsRun
+} from "../dashboard/src/chart-domain.js";
 
 /**
- * The Entrant record's chart, at the two Season lengths spec 0011 names. No
- * database: these are the two functions the page's domains are computed by, and
- * they are here because a wrong axis still renders as a chart.
+ * Chart geometry pure enough to test without a database or a render: `ceiling`
+ * and `across` compute the Match Entrant record's domains at the two Season
+ * lengths spec 0011 names and are read unchanged by the FPL leaderboard's Race
+ * chart; `scaleOwnBand` and `startsRun` are the FPL Entrant record's own. A
+ * wrong axis, a wrongly-scaled line, or a line drawn through a Gameweek
+ * nobody has a figure for all still render as a chart.
  */
 describe("the cumulative chart's domains", () => {
   test("never clips the field, at either Season length", () => {
@@ -49,5 +54,40 @@ describe("the cumulative chart's domains", () => {
   test("draws a Season of one Gameweek at the left edge", () => {
     expect(across(1, 1, 1)).toBe(0);
     expect(ceiling(0)).toBe(4);
+  });
+});
+
+describe("scaling a series against its own band", () => {
+  test("puts the lowest point at 0 and the highest at 1", () => {
+    const at = scaleOwnBand([100.6, 101.2, 100.9, 101.2]);
+    expect(at(100.6)).toBe(0);
+    expect(at(101.2)).toBe(1);
+    expect(at(100.9)).toBeCloseTo(0.5);
+  });
+
+  test("still resolves every point on a flat series, rather than dividing by nought", () => {
+    // A bank line that never moved has no spread to scale against. Every
+    // point still has to be a real number, or the polyline collapses on a
+    // `NaN` coordinate and the line never draws at all.
+    const at = scaleOwnBand([0.9, 0.9, 0.9]);
+    expect(at(0.9)).toBe(0);
+    expect(Number.isFinite(at(0.9))).toBe(true);
+  });
+});
+
+describe("splitting a series at a Gameweek it does not hold", () => {
+  test("starts a run at the first point and continues while Gameweeks are consecutive", () => {
+    const weeks = [{ gw: 1 }, { gw: 2 }, { gw: 3 }];
+    expect(weeks.map((_, index) => startsRun(weeks, index)))
+      .toEqual([true, false, false]);
+  });
+
+  test("starts a new run wherever a Gameweek is missing between two the record holds", () => {
+    // The seeded Season's own shape: GW4 is missing, so GW5 starts a run
+    // rather than continuing from GW3 -- a chart joining the two with one
+    // line would draw straight across the hole.
+    const weeks = [{ gw: 1 }, { gw: 2 }, { gw: 3 }, { gw: 5 }];
+    expect(weeks.map((_, index) => startsRun(weeks, index)))
+      .toEqual([true, false, false, true]);
   });
 });

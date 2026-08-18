@@ -167,15 +167,15 @@ the operator footer.
 
 **Blocked by:** "The FPL section and the ranking page", "The Entrant-record endpoint".
 
-- [ ] The points bars emphasise the latest Gameweek and label every bar
-- [ ] The value/bank chart scales each series independently from its own min and max — a
+- [x] The points bars emphasise the latest Gameweek and label every bar
+- [x] The value/bank chart scales each series independently from its own min and max — a
       pure function with its own tests proving a flat series still spans its band
-- [ ] The Chip strip renders one cell per Gameweek of the Season, colours played Chips,
+- [x] The Chip strip renders one cell per Gameweek of the Season, colours played Chips,
       distinguishes past-unplayed from future, and marks the GW19 expiry
-- [ ] The no-Chips-played legend states the absence and the count remaining
-- [ ] Captain picks show the vice and the captain's return, emphasised at the design's
+- [x] The no-Chips-played legend states the absence and the count remaining
+- [x] Captain picks show the vice and the captain's return, emphasised at the design's
       threshold; Transfer history shows out, in and cost
-- [ ] The picker and `?entrant=` behave as on the squads page, and the selection survives
+- [x] The picker and `?entrant=` behave as on the squads page, and the selection survives
       switching between the two pages in both directions
 
 ## The mobile collapse
