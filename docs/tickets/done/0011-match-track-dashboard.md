@@ -377,6 +377,11 @@ breakpoint's branch was exercised at 757 and the 375 case was checked by squeezi
 to 375 within it: `scrollWidth` stayed at 375 and the only elements past the edge were the
 column headers inside their clipped 1px box. Nothing was seen at a real 375-pixel viewport.
 
+*Superseded 2026-08-18: an `<iframe>` is its own browsing context and does not have this
+limit — see [testing-narrow-viewports](../../runbooks/testing-narrow-viewports.md). A real
+375px viewport is renderable and measurable; this record stands as what was actually
+checked at the time, not as a standing limitation.*
+
 **The banner's two wordings both walked.** It carries the −6h / −2h sentence while the Lock is
 ahead and swaps it once the Lock has passed, because saying two runs *fire* when both are
 behind the deadline is false. Walked at `pending`, the second wording by moving Gameweek 15's
@@ -480,7 +485,7 @@ will not size its own window below about 757 CSS pixels. The breakpoint's branch
 at 757 — burger shown, nav links hidden, the headline strip at two columns, the charts row at
 one — and the 375 case was checked by squeezing the document within it: `body.scrollWidth`
 stayed at 375, and the per-Gameweek table scrolled inside its own wrapper (560px of table in a
-343px box) rather than moving the page.
+343px box) rather than moving the page. *Superseded — see the note above.*
 
 **The chart's axis labels are small on a phone**, and this is stated rather than fixed. The
 SVG keeps its 880-unit viewBox and scales to the column, so at 375px the 11px tick labels

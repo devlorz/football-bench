@@ -790,12 +790,42 @@ circle.fplline { fill: var(--fplline); stroke: none; }
 /* ── 760px ───────────────────────────────────────────────────────────────── */
 
 @media (max-width: 760px) {
-  /* `overrides.css` collapses the header at this width already -- the tabs into
-     the burger's panel, the padding to 16px -- and this puts back the vertical
-     padding the zeroed `padding-block` above took off it. The status line still
-     sits in the collapsed header; taking it out is the mobile slice's own
-     acceptance box and not this one's. */
-  .nav { padding-block: 12px; }
+  /* `overrides.css` collapses the header at this width already -- the tabs
+     into the burger's panel, the padding to 16px. This puts back the
+     vertical padding the zeroed `padding-block` above took off it, and
+     undoes the horizontal `flex-wrap: wrap` that's needed for the Match
+     header's own wider content but leaves this one two rows tall: the
+     design's phone header is brand, theme icon, hamburger, all one row.
+     `overrides.css` is not edited for it, the same box every other rule in
+     this block is held to, so it is undone here instead. */
+  .nav { padding-block: 12px; flex-wrap: nowrap; }
+  /* The design's one-row phone header drops the Gameweek status line
+     visually, not out of the document: `overrides.css`'s own `.lbhead` and
+     `.fxtable .fxhead` clip rather than `display: none` for the reason their
+     comments give -- a reader who cannot see the words is exactly the one a
+     screen reader still owes the Season and the settled Gameweek to, on
+     every one of the three pages this status line is the only place either
+     appears at this width. Restated inline rather than a shared `.vh` class,
+     because `.vh` would have to be added to the markup only for widths under
+     760px and a class cannot conditionally apply itself. */
+  .fplstatus {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  /* The brand shrinks because `nowrap` alone still doesn't fit it: 18px
+     `FOOTBALL BENCH` plus 13px `FPL TRACK` overflows into the icons at
+     every width from 320px to 390px tested, hidden status line and all. */
+  .brand-name { font-size: 15px; }
+  .brand-track { font-size: 10px; }
+  /* The dropdown panel's rows are `overrides.css`'s own -- `12px 0` padding
+     and a 2px top rule, the Match track's own answer and not edited there
+     for the same reason the header rules above are not. The design's is
+     `14px 16px` and a 1px bottom rule; the font already matches at 15px. */
+  .nav.menu-open .navlinks a { padding: 14px 16px; border-top: 0; border-bottom: 1px solid var(--color-divider); }
 
   /* The design's `22px 16px 60px`, said in full. A media query adds no weight
      to a selector, so `overrides.css`'s phone padding and the `padding-top`
@@ -805,31 +835,39 @@ circle.fplline { fill: var(--fplline); stroke: none; }
   .fplhero { display: block; }
   .fplhero h1 { font-size: 28px; }
   .fplhero .kicker { margin-top: 8px; }
-  /* Scrolls inside `.fplscroll` rather than squashing seven columns of figures
-     into a phone's width. The floor is what the six fixed columns and their
-     padding come to; below it the Entrant names wrap to one word a line. */
-  .fplscroll .fpltable { min-width: 720px; }
+  /* The design drops Squad value and Chips left rather than scrolling for
+     them: the five columns left over fit a phone once the padding and type
+     shrink with them, so `.fplscroll` has nothing left to scroll here. */
+  .fpltable th, .fpltable td { padding: 8px 6px; font-size: 13px; }
+  .fpltable th:nth-child(6), .fpltable td:nth-child(6),
+  .fpltable th:nth-child(7), .fpltable td:nth-child(7) { display: none; }
   /* Stacked, because a 260px standings column and three tiles across do not
-     fit a phone and the page itself must never scroll sideways. The mobile
-     slice owns what else collapses at this width and is what checks it; this
-     is only the two grids this slice added not pushing the document past the
-     viewport in the meantime. */
-  .fplrace, .fplcards { grid-template-columns: 1fr; }
-  /* Same reason for the same slice's worth of it: the picker column, the stat
-     strip's six across and the two columns below the Squad do not fit a phone,
-     and the page itself must never scroll sideways. The mobile slice owns the
-     stacked full-width picker and the strip's own 2×3, and is what checks
-     them; this keeps the grids this slice added inside the viewport until it
-     lands. */
-  .fplscoped, .fplbelow { grid-template-columns: 1fr; }
+     fit a phone and the page itself must never scroll sideways. `minmax(0,
+     1fr)` and not bare `1fr`: a grid item's automatic minimum width is its
+     content's min-content by default, so a bare `1fr` still blows the track
+     out to whatever the widest item wants -- and the Entrant record's chart
+     panels are wide enough that it did. */
+  .fplrace, .fplcards { grid-template-columns: minmax(0, 1fr); }
+  /* Same reason: the picker column and the two columns below the Squad do
+     not fit a phone. `.fplscoped`'s 236px column collapsing to 1fr is what
+     turns the picker into the design's stacked full-width list -- `.fplpick`
+     is already `width: 100%` at every width, so the column it sits in is the
+     only thing that had to give. The `minmax(0, ...)` here is load-bearing
+     and not belt-and-braces: `.fplsheet` shares this track with the picker,
+     and its own descendant `.fplscroll .fplchipstrip` is 640px of min-content
+     that a bare `1fr` let blow the whole track -- and every grid below it,
+     since they all measure against the now-640px `.fplsheet` -- out past the
+     viewport. `overflow-x: auto` only zeroes a box's own contribution to an
+     ancestor's min-content; it does nothing for the boxes between here and
+     there. */
+  .fplscoped, .fplbelow { grid-template-columns: minmax(0, 1fr); }
   .fplstrip { grid-template-columns: repeat(2, 1fr); }
   .fplscroll .fpllist { min-width: 700px; }
-  /* Same reason again: the Entrant record's two charts, its 38-cell Chip
-     strip and its five-cell operator footer do not fit a phone's width
-     either, and the page must never scroll sideways for them. The mobile
-     slice owns what the design actually wants at this width; this is only
-     what this slice added not pushing the document past the viewport. */
-  .fplrecordcharts, .fploperator { grid-template-columns: 1fr; }
+  /* The Entrant record's two charts and its five-cell operator footer do not
+     fit a phone's width either. The 38-cell Chip strip and its own
+     `.fplscroll` are untouched: the design does not collapse it, and 38
+     cells do not fit a phone at any padding. */
+  .fplrecordcharts, .fploperator { grid-template-columns: minmax(0, 1fr); }
   .fplscroll .fplchipstrip { min-width: 640px; }
   /* The hero's flex row is `display: block` above, so the control is no longer
      pushed right by `margin-left: auto` and sits under the kicker. */

@@ -111,6 +111,11 @@ observation. Neither was driveable from the session that walked the rest: synthe
 never left `document.body`, and the window would not resize below a 601px viewport, so
 375px was never rendered.
 
+*Superseded 2026-08-18, for step 7 only: an `<iframe>` sized to 375px is its own browsing
+context and does not carry the window's resize floor — see
+[testing-narrow-viewports](../../runbooks/testing-narrow-viewports.md). Step 6's synthetic-Tab
+limit is a separate problem this does not touch.*
+
 The waiver's reason is what this slice changed — the number of placeholder rows in a
 loading state, from nine to ten. Step 6 tests focus order and the focus ring; a skeleton
 block is `aria-hidden`, holds no control, takes no focus, and is replaced the moment data

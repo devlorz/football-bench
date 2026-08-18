@@ -186,14 +186,14 @@ and the leaderboard dropping its two least essential columns.
 
 **Blocked by:** "Race and Cards variants", "The latest-squads page", "The Entrant-record page".
 
-- [ ] At the design's breakpoint the header stays one row and the tabs fold into a
+- [x] At the design's breakpoint the header stays one row and the tabs fold into a
       full-width menu that closes on selection
-- [ ] The leaderboard hides Squad value and Chips left; every two- and three-column grid
+- [x] The leaderboard hides Squad value and Chips left; every two- and three-column grid
       stacks; the stat strip goes to two by three
-- [ ] The Entrant picker becomes a stacked full-width list on both Entrant-scoped pages
-- [ ] The collapse is driven by the repo's existing media-query convention — the deliberate
+- [x] The Entrant picker becomes a stacked full-width list on both Entrant-scoped pages
+- [x] The collapse is driven by the repo's existing media-query convention — the deliberate
       deviation ADR-0033 records
-- [ ] Every interactive control keeps a visible focus state at every width
+- [x] Every interactive control keeps a visible focus state at every width
 
 ## First deploy of the section
 
