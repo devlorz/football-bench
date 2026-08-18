@@ -42,7 +42,21 @@ const playerSchema = z.looseObject({
   status: z.string().min(1),
   chance_of_playing_next_round: z.number().int().min(0).max(100).nullable(),
   news: z.string(),
-  news_added: z.iso.datetime().nullable()
+  news_added: z.iso.datetime().nullable(),
+  /**
+   * A club's known set-piece and penalty takers, in the order FPL ranks
+   * them. Populated for the roughly 60-80 of ~590 players FPL lists a taker
+   * for on any given bootstrap; null is the source's own silence, not a
+   * missing fact.
+   *
+   * Required (`nullable`, never `nullish`): every archived bootstrap carries
+   * all three keys on every element, so a player missing one of them is the
+   * source's own shape breaking, not an untaken duty, and the Lock should
+   * fail loudly rather than silently accept a bootstrap it cannot fully read.
+   */
+  penalties_order: z.number().int().positive().nullable(),
+  direct_freekicks_order: z.number().int().positive().nullable(),
+  corners_and_indirect_freekicks_order: z.number().int().positive().nullable()
 });
 
 const bootstrapSchema = z.looseObject({
@@ -406,10 +420,12 @@ async function fetchFpl({
           `insert into fpl_players (
              season, gw, fpl_id, team_name, short_name, web_name, position,
              price_tenths, status, chance_of_playing_next_round, news,
-             news_added, observed_at
+             news_added, observed_at, penalties_order, direct_freekicks_order,
+             corners_and_indirect_freekicks_order
            )
            values (
-             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+             $15, $16
            )`,
           [
             season,
@@ -424,7 +440,10 @@ async function fetchFpl({
             player.chance_of_playing_next_round,
             player.news,
             player.news_added,
-            observedAt
+            observedAt,
+            player.penalties_order,
+            player.direct_freekicks_order,
+            player.corners_and_indirect_freekicks_order
           ]
         );
       }

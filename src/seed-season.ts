@@ -563,6 +563,10 @@ const FPL_GAP_CAUSE: GapCause = "provider";
 
 interface SeedFplPlayer extends PoolPlayer {
   webName: string;
+  /** FPL's known penalty taker order, where FPL names one. */
+  penaltiesOrder?: number;
+  /** FPL's known direct-free-kick taker order, where FPL names one. */
+  directFreekicksOrder?: number;
 }
 
 /**
@@ -583,7 +587,10 @@ const SEED_FPL_POOL: readonly SeedFplPlayer[] = [
   { fplId: 5, webName: "Konate", club: "Liverpool", position: "DEF", priceTenths: 55 },
   { fplId: 6, webName: "Branthwaite", club: "Everton", position: "DEF", priceTenths: 45 },
   { fplId: 7, webName: "Cucurella", club: "Chelsea", position: "DEF", priceTenths: 50 },
-  { fplId: 8, webName: "Salah", club: "Liverpool", position: "MID", priceTenths: 110 },
+  {
+    fplId: 8, webName: "Salah", club: "Liverpool", position: "MID",
+    priceTenths: 110, penaltiesOrder: 1, directFreekicksOrder: 2
+  },
   { fplId: 9, webName: "Palmer", club: "Chelsea", position: "MID", priceTenths: 95 },
   { fplId: 10, webName: "Ndiaye", club: "Everton", position: "MID", priceTenths: 60 },
   { fplId: 11, webName: "Semenyo", club: "Bournemouth", position: "MID", priceTenths: 65 },
@@ -745,12 +752,15 @@ async function writeFplSeason(
         `insert into fpl_players (
            season, gw, fpl_id, team_name, short_name, web_name, position,
            price_tenths, status, chance_of_playing_next_round, news, news_added,
-           observed_at
-         ) values ($1, $2, $3, $4, $5, $6, $7, $8, 'a', null, '', null, $9)`,
+           observed_at, penalties_order, direct_freekicks_order
+         ) values (
+           $1, $2, $3, $4, $5, $6, $7, $8, 'a', null, '', null, $9, $10, $11
+         )`,
         [
           season, gameweek, player.fplId, player.club, codeOf(player.club),
           player.webName, player.position, player.priceTenths,
-          mainRunOf(gameweek)
+          mainRunOf(gameweek), player.penaltiesOrder ?? null,
+          player.directFreekicksOrder ?? null
         ]
       );
       // Every Gameweek the seed plays is Settled — absence of these rows is

@@ -274,6 +274,34 @@ describe("the seeded FPL Season", () => {
       ]);
     });
 
+  test("the pool carries two duties for the player FPL names them for, and none for the rest",
+    async () => {
+      await seedSeason({ database: client, season: SEASON, stopAt: "pending" });
+
+      const duties = await client.query<{
+        fpl_id: number;
+        penalties_order: number | null;
+        direct_freekicks_order: number | null;
+        corners_and_indirect_freekicks_order: number | null;
+      }>(
+        `select fpl_id, penalties_order, direct_freekicks_order,
+                corners_and_indirect_freekicks_order
+           from fpl_players
+          where season = $1 and gw = 1
+            and (penalties_order is not null
+              or direct_freekicks_order is not null
+              or corners_and_indirect_freekicks_order is not null)
+          order by fpl_id`,
+        [SEASON]
+      );
+      expect(duties.rows).toEqual([{
+        fpl_id: 8,
+        penalties_order: 1,
+        direct_freekicks_order: 2,
+        corners_and_indirect_freekicks_order: null
+      }]);
+    });
+
   test("every FPL scores row is the real scorer's and none is the seed's",
     async () => {
       // `scored_at` is left out: the FPL scorer takes no clock, so the one

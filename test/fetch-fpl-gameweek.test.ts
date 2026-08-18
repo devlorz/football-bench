@@ -106,7 +106,9 @@ describe("fetching an FPL Gameweek", () => {
     const players = await client.query(
       `select
          season, gw, fpl_id, team_name, web_name, position, price_tenths,
-         status, chance_of_playing_next_round, news, news_added, observed_at
+         status, chance_of_playing_next_round, news, news_added, observed_at,
+         penalties_order, direct_freekicks_order,
+         corners_and_indirect_freekicks_order
          from fpl_players
         where fpl_id in (1, 5)
         order by fpl_id`
@@ -125,7 +127,12 @@ describe("fetching an FPL Gameweek", () => {
         chance_of_playing_next_round: null,
         news: "",
         news_added: null,
-        observed_at: new Date("2026-08-21T17:00:00.000Z")
+        observed_at: new Date("2026-08-21T17:00:00.000Z"),
+        // Raya is a goalkeeper: FPL names no set-piece taker for one, so the
+        // duty columns project the source's silence rather than a fact.
+        penalties_order: null,
+        direct_freekicks_order: null,
+        corners_and_indirect_freekicks_order: null
       },
       {
         season: "2026-27",
@@ -139,9 +146,25 @@ describe("fetching an FPL Gameweek", () => {
         chance_of_playing_next_round: 0,
         news: "Groin injury - Expected back 21 Aug",
         news_added: new Date("2026-07-23T12:01:23.272Z"),
-        observed_at: new Date("2026-08-21T17:00:00.000Z")
+        observed_at: new Date("2026-08-21T17:00:00.000Z"),
+        penalties_order: null,
+        direct_freekicks_order: null,
+        corners_and_indirect_freekicks_order: null
       }
     ]);
+
+    // Saka: the archive's own taker, projected from the same bootstrap.
+    const taker = await client.query(
+      `select penalties_order, direct_freekicks_order,
+              corners_and_indirect_freekicks_order
+         from fpl_players
+        where season = '2026-27' and gw = 1 and fpl_id = 12`
+    );
+    expect(taker.rows).toEqual([{
+      penalties_order: 1,
+      direct_freekicks_order: 2,
+      corners_and_indirect_freekicks_order: 6
+    }]);
     const playerCount = await client.query(
       "select count(*)::int as count from fpl_players"
     );

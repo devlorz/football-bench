@@ -28,14 +28,14 @@ club-code pattern repeated for three nullable columns. Nothing renders them yet.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] A migration adds the three nullable duty columns to the Gameweek-scoped player rows,
+- [x] A migration adds the three nullable duty columns to the Gameweek-scoped player rows,
       and the schema and migration suites cover it
-- [ ] The fetch projects all three from the bootstrap it archives; a player the source
+- [x] The fetch projects all three from the bootstrap it archives; a player the source
       lists no duty for projects null, proven by replaying an archived bootstrap through
       the fetch seam
-- [ ] The seeded pool carries at least one player with a duty and one without, so the
+- [x] The seeded pool carries at least one player with a duty and one without, so the
       render slice has both states to draw
-- [ ] No template sentence changes; the context renders exactly as before
+- [x] No template sentence changes; the context renders exactly as before
 
 ## The Rationale's storage and refusal
 
