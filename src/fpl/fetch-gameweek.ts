@@ -351,10 +351,15 @@ async function fetchFpl({
   const fixturesToStore = requestedGameweek === undefined
     ? rows
     : rows.filter(({ event }) => event === requestedGameweek);
+  // The Premier League's rows only (ADR-0035). Unfiltered this reads two rows
+  // per Gameweek into a Map keyed by `gw`, where the second silently
+  // overwrites the first -- and a Gameweek judged locked against another
+  // league's earlier deadline is one this fetch stops updating.
   const storedGameweeks = await database.query(
     `select gw, deadline_at
        from gameweeks
-      where season = $1 and gw = any($2::integer[])`,
+      where competition = 'PL' and season = $1
+        and gw = any($2::integer[])`,
     [season, bootstrap.events.map(({ id }) => id)]
   );
   const storedDeadlines = new Map<number, Date>(
@@ -401,8 +406,12 @@ async function fetchFpl({
     for (const event of eventsToStore) {
       if (!lockedGameweeks.has(event.id)) {
         await database.query(
-          `insert into gameweeks (season, gw, deadline_at)
-           values ($1, $2, $3)
+          // Said and not left to the column default: migration 0024 dropped
+          // the defaults it could because the unsaid Competition is the one
+          // mistake nothing downstream can catch. This fetch is the Premier
+          // League's by nature.
+          `insert into gameweeks (competition, season, gw, deadline_at)
+           values ('PL', $1, $2, $3)
            on conflict (competition, season, gw)
            do update set deadline_at = excluded.deadline_at`,
           [season, event.id, event.deadline_time]
@@ -455,8 +464,12 @@ async function fetchFpl({
       // statement below skips rows already in the state it writes, so observing
       // the same withdrawal on a later fetch touches nothing.
       await database.query(
+        // `competition` is in the key (ADR-0035) and the two feeds number
+        // their Fixtures independently, so a bare `fixture_id` names a row in
+        // every league at once. Today the ranges happen not to overlap; the
+        // key does not depend on that and neither should a delete.
         `delete from fixtures
-          where season = $1
+          where competition = 'PL' and season = $1
             and fixture_id = any($2::integer[])
             and locked_in_gw is null`,
         [season, unscheduledFixtureIds]
@@ -466,10 +479,12 @@ async function fetchFpl({
             set deferred = true,
                 updated_at = now()
            from gameweeks locked_gameweek
-          where f.season = $1
+          where f.competition = 'PL'
+            and f.season = $1
             and f.fixture_id = any($2::integer[])
             and f.locked_in_gw = locked_gameweek.gw
             and f.season = locked_gameweek.season
+            and locked_gameweek.competition = 'PL'
             and locked_gameweek.deadline_at <= $3
             and not f.deferred`,
         [season, unscheduledFixtureIds, observedAt]
@@ -480,7 +495,7 @@ async function fetchFpl({
         `update fixtures
             set unscheduled = true,
                 updated_at = now()
-          where season = $1
+          where competition = 'PL' and season = $1
             and fixture_id = any($2::integer[])
             and not unscheduled`,
         [season, unscheduledFixtureIds]
@@ -496,11 +511,12 @@ async function fetchFpl({
         ? nextOpenGameweek ?? null
         : null;
       await database.query(
+        // Said, not defaulted, for the reason the Gameweek insert above says.
         `insert into fixtures (
-           season, fixture_id, gw, locked_in_gw, home_team, away_team, kickoff_at,
-           result
+           competition, season, fixture_id, gw, locked_in_gw, home_team,
+           away_team, kickoff_at, result
          )
-         values ($1, $2, $3, $4, $5, $6, $7, $9)
+         values ('PL', $1, $2, $3, $4, $5, $6, $7, $9)
          on conflict (competition, season, fixture_id)
          do update set
            gw = excluded.gw,
@@ -515,7 +531,8 @@ async function fetchFpl({
              and exists (
                select 1
                  from gameweeks locked_gameweek
-                where locked_gameweek.season = fixtures.season
+                where locked_gameweek.competition = 'PL'
+                  and locked_gameweek.season = fixtures.season
                   and locked_gameweek.gw = fixtures.locked_in_gw
                   and locked_gameweek.deadline_at <= $8
              )

@@ -79,7 +79,9 @@ async function readDeadline(
   gameweek: number
 ): Promise<Date> {
   const result = await database.query<{ deadline_at: Date }>(
-    "select deadline_at from gameweeks where season = $1 and gw = $2",
+    // The Premier League's row, as every FPL read takes (ADR-0035).
+    `select deadline_at from gameweeks
+      where competition = 'PL' and season = $1 and gw = $2`,
     [season, gameweek]
   );
   const deadline = result.rows[0]?.deadline_at;

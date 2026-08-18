@@ -180,6 +180,41 @@ describe("scheduled FPL Gameweek runs", () => {
     expect(timeouts.every((timeout) => timeout === 600_000)).toBe(true);
   });
 
+  test("queues one run per Gameweek when a second Competition shares the "
+    + "numbering", async () => {
+    // `gameweeks` holds one row per Competition since ADR-0035, and every
+    // Competition numbers its Gameweeks from 1 -- so a queue filtered by Season
+    // and Gameweek alone finds this Gameweek twice and pays for the same ten
+    // Entrant calls twice. The seeded Season carries `PL` alone, which is why
+    // no other test here can tell the filtered query from the unfiltered one;
+    // production has seated La Liga since spec 0016.
+    await openTheTrack();
+    await client.query(
+      "insert into competitions (competition, season) values ('PD', '2026-27')"
+    );
+    // La Liga's own Gameweek 2, deadline-relative to the same clock this run
+    // observes: due at 11:00 and still ahead at 11:30, so it qualifies on every
+    // condition the queue applies and only `competition` separates it. Given a
+    // past deadline instead it would be filtered out by the ledger clause and
+    // this test would pass without a fix.
+    await client.query(
+      `insert into gameweeks (competition, season, gw, deadline_at) values
+         ('PD', '2026-27', 1, '2026-08-21T17:00:00Z'),
+         ('PD', '2026-27', 2, '2026-08-28T17:00:00Z')`
+    );
+    const script = answering(STAND_PAT);
+
+    const runs = await schedule({
+      at: "2026-08-28T11:30:00Z",
+      http: script.http
+    });
+
+    expect(runs).toHaveLength(1);
+    expect(runs.map(({ gameweek }) => gameweek)).toEqual([2]);
+    // The count is the money: one call per seat, not two.
+    expect(script.calls()).toBe(SEASON_ROSTER_SIZE);
+  });
+
   test("runs a Gameweek when its Lock is six hours away", async () => {
     await openTheTrack();
     const script = answering(STAND_PAT);

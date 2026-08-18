@@ -441,6 +441,36 @@ describe("replaying the FPL track as an Exhibition Run", () => {
     );
   });
 
+  test("walks each Gameweek once when a second Competition shares the numbering",
+    async () => {
+      // `gameweeks` holds one row per Competition since ADR-0035, and every
+      // Competition numbers its Gameweeks from 1. Unfiltered, the walk finds
+      // each Gameweek twice: the second pass reads the Manager State the first
+      // one wrote and adds the same Gameweek to the path again, so a replayed
+      // Season path claims twice the Gameweeks it played. The seeded Season
+      // carries `PL` alone, which is why no other test here separates the
+      // filtered walk from the unfiltered one.
+      await playTheSeason();
+      await client.query(
+        "insert into competitions (competition, season) values ('PD', '2026-27')"
+      );
+      await client.query(
+        `insert into gameweeks (competition, season, gw, deadline_at) values
+           ('PD', '2026-27', 1, '2026-08-15T17:00:00Z'),
+           ('PD', '2026-27', 2, '2026-08-22T17:00:00Z'),
+           ('PD', '2026-27', 3, '2026-09-05T17:00:00Z')`
+      );
+
+      const { covered, calls } = await replay({
+        responses: [OPENING, TRANSFER, SELL_BACK]
+      });
+
+      expect(covered).toEqual([1, 2, 3]);
+      // The call count is the other half: a doubled walk pays a second time
+      // for a Gameweek already on the chain.
+      expect(calls).toHaveLength(3);
+    });
+
   test("refuses a Season whose FPL track never started", async () => {
     let calls = 0;
     await expect(replay({

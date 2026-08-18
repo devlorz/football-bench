@@ -74,9 +74,11 @@ export async function carriedThroughSilence(
   gameweek: number
 ): Promise<ManagerState> {
   const silent = await database.query<{ count: number }>(
+    // One row per Competition (ADR-0035): unfiltered, every Gameweek counts
+    // twice and a silence folds twice as many Roll Overs as it lived.
     `select count(*)::int as count
        from gameweeks
-      where season = $1 and gw > $2 and gw < $3`,
+      where competition = 'PL' and season = $1 and gw > $2 and gw < $3`,
     [season, standing.gameweek, gameweek]
   );
   const passed = silent.rows[0]?.count ?? 0;

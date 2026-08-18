@@ -206,9 +206,14 @@ async function schedule(
   gameweek: number
 ): Promise<FplFixture[]> {
   const ahead = await database.query<FixtureRow>(
+    // The Premier League's Fixtures only. `fixtures` holds one row per
+    // Competition since ADR-0035, so an unfiltered read hands an FPL
+    // Entrant La Liga's calendar beside its own -- clubs its pool does not
+    // contain, in a Gameweek numbering that is not the one it plays.
     `select gw, home_team, away_team, kickoff_at
        from fixtures
-      where season = $1 and gw between $2 and $3 and not unscheduled
+      where competition = 'PL' and season = $1
+        and gw between $2 and $3 and not unscheduled
       order by gw, kickoff_at, fixture_id`,
     [season, gameweek, gameweek + SCHEDULE_GAMEWEEKS - 1]
   );
@@ -271,8 +276,14 @@ export async function loadLockedGameweek(
   season: string,
   gameweek: number
 ): Promise<LockedGameweek> {
+  // `gameweeks` holds one row per Competition since ADR-0035, so a read
+  // filtered by Season and Gameweek alone matches La Liga's row as readily as
+  // the Premier League's and takes whichever Postgres returns first. The FPL
+  // track is the Premier League by nature rather than by argument, which is
+  // the literal every FPL read states at its own boundary.
   const scheduled = await database.query<{ deadline_at: Date }>(
-    "select deadline_at from gameweeks where season = $1 and gw = $2",
+    `select deadline_at from gameweeks
+      where competition = 'PL' and season = $1 and gw = $2`,
     [season, gameweek]
   );
   const [gameweekRow] = scheduled.rows;

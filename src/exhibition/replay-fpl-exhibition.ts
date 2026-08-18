@@ -79,7 +79,7 @@ async function gameweeksFrom(
                where p.season = g.season and p.gw = g.gw
             ) as settled
        from gameweeks g
-      where g.season = $1 and g.gw >= $2
+      where g.competition = 'PL' and g.season = $1 and g.gw >= $2
       order by g.gw`,
     [season, startedAt]
   );

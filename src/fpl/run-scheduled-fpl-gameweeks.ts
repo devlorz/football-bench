@@ -107,7 +107,8 @@ export async function runScheduledFplGameweeks({
          left join fpl_runs existing
            on existing.season = g.season
           and existing.gw = g.gw
-        where g.season = $1
+        where g.competition = 'PL'
+          and g.season = $1
           and g.gw >= $4
           and g.deadline_at - $3::interval <= $2
           and existing.completed_at is null
