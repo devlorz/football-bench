@@ -222,6 +222,10 @@ export async function startFplTrack({
     gameweek,
     state: previous,
     pool: contextPool,
+    // An opening is every Entrant's first Gameweek: nothing has settled for
+    // any of them, on this Season path or any other, so the own record is
+    // absent for all ten alike — not read per seat.
+    ownRecord: null,
     // A Season opened at its first Gameweek has nothing Settled behind it and
     // the context says so. A track opened mid-Season is the one with windows
     // to show, and the Lock read them once for every Entrant.

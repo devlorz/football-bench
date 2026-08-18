@@ -14,6 +14,7 @@ import {
 } from "./ask-for-gameweek-action.js";
 import {
   loadLockedGameweek,
+  loadOwnRecord,
   storeFplContext,
   type LockedGameweek
 } from "./fpl-gameweek-context.js";
@@ -277,6 +278,10 @@ export async function playFplGameweek({
   const previous =
     await carriedThroughSilence(database, season, standing, gameweek);
 
+  // This Entrant's own record, read from the scorer's own account of the
+  // latest Gameweek it has one for — never recomputed here (ADR-0041).
+  const ownRecord = await loadOwnRecord(database, season, entrantId, gameweek);
+
   // This Entrant's own context, carrying this Entrant's own Squad. Stored
   // before the call, so what it saw is on record whatever the call comes to.
   const body = await storeFplContext(
@@ -289,6 +294,7 @@ export async function playFplGameweek({
       gameweek,
       state: previous,
       pool: contextPool,
+      ownRecord,
       ...windows
     })
   );

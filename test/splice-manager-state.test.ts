@@ -2,7 +2,8 @@ import { describe, expect, test } from "vitest";
 import {
   buildFplTrackContext,
   spliceManagerState,
-  type BuildFplTrackContextOptions
+  type BuildFplTrackContextOptions,
+  type OwnRecord
 } from "../src/context/build-fpl-track-context.js";
 import {
   CHIPS,
@@ -85,7 +86,8 @@ const SHARED: Omit<BuildFplTrackContextOptions, "state"> = {
       }
     }
   ],
-  settledThrough: 7
+  settledThrough: 7,
+  ownRecord: null
 };
 
 function body(state: ManagerState): string {
@@ -110,12 +112,12 @@ function stateBlock(body: string): string[] {
 
 describe("A stored FPL context with another Manager State spliced in", () => {
   test("renders what the builder renders for the spliced state", () => {
-    expect(spliceManagerState(body(OPENED), ON_FREE_HIT))
+    expect(spliceManagerState(body(OPENED), ON_FREE_HIT, null))
       .toBe(body(ON_FREE_HIT));
   });
 
   test("counts the Chips the spliced state holds, not the donor's", () => {
-    const spliced = spliceManagerState(body(OPENED), ON_FREE_HIT);
+    const spliced = spliceManagerState(body(OPENED), ON_FREE_HIT, null);
 
     expect(spliced).toContain(
       "Chips unspent, first half (through Gameweek 19): "
@@ -137,11 +139,11 @@ describe("A stored FPL context with another Manager State spliced in", () => {
     );
   });
 
-  test("closes the block on the Chip line in every Manager State", () => {
+  test("closes the block on the own record's last line, in every Manager State", () => {
     // The splice takes the first blank line after the heading as the end of
     // the block, which is only the end of it while the block holds no blank
     // line of its own. Stated here so a section that grows one fails loudly
-    // rather than leaving the donor's Chip lines under a spliced block.
+    // rather than leaving the donor's own-record lines under a spliced block.
     const spent = [...CHIPS];
     for (const state of [
       openingManagerState(),
@@ -149,14 +151,33 @@ describe("A stored FPL context with another Manager State spliced in", () => {
       ON_FREE_HIT,
       { ...OPENED, chipsUsed: { firstHalf: spent, secondHalf: spent } }
     ]) {
-      expect(stateBlock(body(state)).at(-1)).toMatch(
-        /^Chips you can play this Gameweek: /
+      expect(stateBlock(body(state)).at(-1)).toBe(
+        "Your own record: no Gameweek has settled yet."
       );
     }
+
+    // The harder case: a settled own record renders several lines, and none
+    // of them may be blank without truncating the block early.
+    const SETTLED: OwnRecord = {
+      gameweek: 7,
+      starters: [{ fplId: 1, points: 6 }],
+      bench: [{ fplId: 2, points: 0 }],
+      armband: { fplId: 1, points: 6, multiplier: 2, contribution: 12 },
+      seasonPoints: 54
+    };
+    const settled = buildFplTrackContext({
+      ...SHARED,
+      state: OPENED,
+      ownRecord: SETTLED
+    });
+    expect(stateBlock(settled).at(-1)).toBe("Season points to date: 54");
+    expect(stateBlock(settled)).toContain(
+      "Your own record, from Gameweek 7, the latest Settled Gameweek:"
+    );
   });
 
   test("reverts the spliced state's Free Hit before showing it", () => {
-    const spliced = spliceManagerState(body(OPENED), ON_FREE_HIT);
+    const spliced = spliceManagerState(body(OPENED), ON_FREE_HIT, null);
 
     // The permanent Squad and its bank, not the borrowed pair the row stores.
     expect(spliced).toContain("Bank: £4.5m");
@@ -171,17 +192,17 @@ describe("A stored FPL context with another Manager State spliced in", () => {
     const shared = (at: string): string =>
       at.slice(at.indexOf("\nFixtures, this Gameweek"));
 
-    expect(shared(spliceManagerState(donor, ON_FREE_HIT))).toBe(shared(donor));
+    expect(shared(spliceManagerState(donor, ON_FREE_HIT, null))).toBe(shared(donor));
   });
 
   test("refuses a body it cannot find the block in", () => {
     const headed = "Fantasy Premier League — 2026-27 Gameweek 8";
 
-    expect(() => spliceManagerState(`${headed}\n\nYour Squad\n\nFixtures`, OPENED))
+    expect(() => spliceManagerState(`${headed}\n\nYour Squad\n\nFixtures`, OPENED, null))
       .toThrow(/Your Manager State/);
     // A body of some other Prompt Version — the Match track's, or an FPL body
     // whose heading a later version rewrites.
-    expect(() => spliceManagerState(body(OPENED).replace(headed, "Gameweek 8"), OPENED))
+    expect(() => spliceManagerState(body(OPENED).replace(headed, "Gameweek 8"), OPENED, null))
       .toThrow(/donor is not a/);
   });
 });

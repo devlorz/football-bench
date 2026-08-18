@@ -7,6 +7,9 @@ type Database = Pick<Client, "query">;
 
 export interface FixturePlayer extends PoolPlayer {
   webName: string;
+  penaltyOrder?: number | null;
+  directFreeKickOrder?: number | null;
+  cornerOrder?: number | null;
 }
 
 /**
@@ -29,10 +32,12 @@ export async function lockPool(
     await database.query(
       `insert into fpl_players (
          season, gw, fpl_id, team_name, web_name, position, price_tenths,
-         status, chance_of_playing_next_round, news, news_added, observed_at
+         status, chance_of_playing_next_round, news, news_added, observed_at,
+         penalties_order, direct_freekicks_order,
+         corners_and_indirect_freekicks_order
        ) values (
          '2026-27', $1, $2, $3, $4, $5, $6, 'a', null, '', null,
-         '2026-08-21T17:00:00Z'
+         '2026-08-21T17:00:00Z', $7, $8, $9
        )`,
       [
         gameweek,
@@ -40,7 +45,10 @@ export async function lockPool(
         player.club,
         player.webName,
         player.position,
-        player.priceTenths
+        player.priceTenths,
+        player.penaltyOrder ?? null,
+        player.directFreeKickOrder ?? null,
+        player.cornerOrder ?? null
       ]
     );
   }
@@ -95,7 +103,10 @@ export function trackPool(
     ...player,
     status: "a",
     chanceOfPlaying: null,
-    news: ""
+    news: "",
+    penaltyOrder: player.penaltyOrder ?? null,
+    directFreeKickOrder: player.directFreeKickOrder ?? null,
+    cornerOrder: player.cornerOrder ?? null
   }));
 }
 

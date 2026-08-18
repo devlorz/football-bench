@@ -3,7 +3,8 @@ import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import {
   FPL_PROMPT_VERSION,
-  spliceManagerState
+  spliceManagerState,
+  type OwnRecord
 } from "../src/context/build-fpl-track-context.js";
 import { replayFplExhibition } from "../src/exhibition/replay-fpl-exhibition.js";
 import { loadManagerState } from "../src/fpl/manager-state-store.js";
@@ -16,7 +17,11 @@ import {
   FPL_POOL, FPL_POOL_ALTERNATES, lockPool
 } from "./fpl-pool-fixture.js";
 import { BASE_MODELS, seatId } from "./fpl-seat-fixture.js";
-import { EVERYONE_PLAYED, storeSettledPoints } from "./fpl-points-fixture.js";
+import {
+  EVERYONE_PLAYED,
+  storePlayerPoints,
+  storeSettledPoints
+} from "./fpl-points-fixture.js";
 import { insertExhibition, resetSchema } from "./schema-fixture.js";
 import { firstMessageText, type CapturedTurn as Turn } from "./sent-context.js";
 
@@ -276,8 +281,48 @@ describe("replaying the FPL track as an Exhibition Run", () => {
     return row!.body;
   }
 
+  /**
+   * Gameweek 1's own record by hand, over `EVERYONE_PLAYED` and the opening
+   * Team Sheet's captain (8) and bench — the same arithmetic
+   * `score-fpl-gameweek.test.ts` checks for the roster's identical Team
+   * Sheet: the eleven score 6+2+5+1+2+9+3+7+2+4+8 = 49 and Palmer's armband
+   * doubles his 9 for 58. Hand-computed rather than called through
+   * `scoreTeamSheet`/`ownRecordFromDetail`, so this is a check on what the
+   * replay stored and not a restatement of the functions that produced it.
+   */
+  const OWN_RECORD_AFTER_ONE: OwnRecord = {
+    gameweek: 1,
+    starters: [
+      { fplId: 1, points: 6 },
+      { fplId: 3, points: 2 },
+      { fplId: 4, points: 5 },
+      { fplId: 5, points: 1 },
+      { fplId: 6, points: 2 },
+      { fplId: 8, points: 9 },
+      { fplId: 9, points: 3 },
+      { fplId: 10, points: 7 },
+      { fplId: 11, points: 2 },
+      { fplId: 13, points: 4 },
+      { fplId: 14, points: 8 }
+    ],
+    bench: [
+      { fplId: 2, points: 10 },
+      { fplId: 7, points: 9 },
+      { fplId: 12, points: 11 },
+      { fplId: 15, points: 12 }
+    ],
+    armband: { fplId: 8, points: 9, multiplier: 2, contribution: 18 },
+    seasonPoints: 58
+  };
+
   test("plays the season path from the opening, on its own Manager State", async () => {
     await playTheSeason();
+    // Evanilson's own settled return for the one Gameweek he starts in this
+    // Exhibition's own path — `EVERYONE_PLAYED` never names him, since no
+    // roster seat ever owns him.
+    await storePlayerPoints(client, {
+      gameweek: 2, fplId: 19, minutes: 90, total_points: 10
+    });
     // Evanilson rises to £13.0m after Gameweek 2's contexts were stored. The
     // Transfer below still pays £6.0m, because the pipeline prices an action
     // from the text on record rather than from a snapshot that has moved.
@@ -324,10 +369,62 @@ describe("replaying the FPL track as an Exhibition Run", () => {
       gameweek: 2
     });
     const shown = await bodyOf(EXHIBITION, 3);
-    expect(shown).toBe(spliceManagerState(donor, afterTwo!));
+    // The own record Gameweek 3's context shows is Gameweek 2's, folded on
+    // top of Gameweek 1's — by hand: the eleven score 6+2+5+1+2+9+3+7+2+4+10
+    // = 51 (Evanilson's 10 in Muniz's old place) and Palmer's armband adds 9
+    // for 60, on top of Gameweek 1's 58 for 118. Neither Gameweek was ever
+    // scored for this Exhibition seat, so this is checked against what the
+    // replay actually stored, not against the functions that computed it.
+    const OWN_RECORD_AFTER_TWO: OwnRecord = {
+      gameweek: 2,
+      starters: [
+        { fplId: 1, points: 6 },
+        { fplId: 3, points: 2 },
+        { fplId: 4, points: 5 },
+        { fplId: 5, points: 1 },
+        { fplId: 6, points: 2 },
+        { fplId: 8, points: 9 },
+        { fplId: 9, points: 3 },
+        { fplId: 10, points: 7 },
+        { fplId: 11, points: 2 },
+        { fplId: 13, points: 4 },
+        { fplId: 19, points: 10 }
+      ],
+      bench: OWN_RECORD_AFTER_ONE.bench,
+      armband: { fplId: 8, points: 9, multiplier: 2, contribution: 18 },
+      seasonPoints: 118
+    };
+    expect(shown).toBe(
+      spliceManagerState(donor, afterTwo!, OWN_RECORD_AFTER_TWO)
+    );
     // The purchase price it paid, beside the one the roster is still carrying.
     expect(shown).toContain("- 19 | bought for £6.0m");
     expect(donor).toContain("- 14 | bought for £7.0m");
+
+    // And Gameweek 2's own context — built one Gameweek earlier in the same
+    // walk — showed Gameweek 1's own record on the same terms.
+    expect(await bodyOf(EXHIBITION, 2)).toContain(
+      "Your own record, from Gameweek 1, the latest Settled Gameweek:\n"
+      + "Starters, with what each returned:\n"
+      + "- 1 | 6 pts\n"
+      + "- 3 | 2 pts\n"
+      + "- 4 | 5 pts\n"
+      + "- 5 | 1 pts\n"
+      + "- 6 | 2 pts\n"
+      + "- 8 | 9 pts\n"
+      + "- 9 | 3 pts\n"
+      + "- 10 | 7 pts\n"
+      + "- 11 | 2 pts\n"
+      + "- 13 | 4 pts\n"
+      + "- 14 | 8 pts\n"
+      + "Bench, with what each returned:\n"
+      + "- 2 | 10 pts\n"
+      + "- 7 | 9 pts\n"
+      + "- 12 | 11 pts\n"
+      + "- 15 | 12 pts\n"
+      + "Armband: 8 | 9 pts x2 = 18 pts\n"
+      + `Season points to date: ${OWN_RECORD_AFTER_ONE.seasonPoints}`
+    );
   });
 
   test("refuses a Season whose FPL track never started", async () => {

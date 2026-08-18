@@ -2,7 +2,10 @@ import pg from "pg";
 import { buildFplTrackContext } from "../context/build-fpl-track-context.js";
 import { FPL_PROMPT_VERSION } from "../context/build-fpl-track-context.js";
 import { openingManagerState } from "../fpl/apply-gameweek-action.js";
-import { loadLockedGameweek } from "../fpl/fpl-gameweek-context.js";
+import {
+  loadLockedGameweek,
+  loadOwnRecord
+} from "../fpl/fpl-gameweek-context.js";
 import { loadStandingManagerState } from "../fpl/manager-state-store.js";
 import { carriedThroughSilence } from "../fpl/open-fpl-gameweek.js";
 import { readFetchJobConfig } from "./config.js";
@@ -56,11 +59,15 @@ try {
       : await carriedThroughSilence(
         database, config.season, standing, config.gameweek
       );
+    const ownRecord = await loadOwnRecord(
+      database, config.season, id, config.gameweek
+    );
     const body = buildFplTrackContext({
       season: config.season,
       gameweek: config.gameweek,
       state,
       pool,
+      ownRecord,
       ...windows
     });
     bodies.set(body, [...bodies.get(body) ?? [], id]);

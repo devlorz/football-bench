@@ -140,7 +140,8 @@ describe("storing and reloading Manager State", () => {
       schedule: [],
       league: null,
       performance: [],
-      settledThrough: null
+      settledThrough: null,
+      ownRecord: null
     });
 
     expect(body).toContain("Bank: £4.5m");

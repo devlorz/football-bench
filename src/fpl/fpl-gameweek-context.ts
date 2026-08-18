@@ -6,14 +6,25 @@ import {
   type FplLeagueTable,
   type FplPerformanceWindow,
   type FplPlayerPerformance,
-  type FplTrackPlayer
+  type FplTrackPlayer,
+  type OwnRecord,
+  type OwnRecordPick
 } from "../context/build-fpl-track-context.js";
 import {
   leagueTable,
   type HistoricalMatch
 } from "../context/build-historical-context.js";
 import { teamNamesOf } from "../football-data/team-identity.js";
-import type { Position } from "./apply-gameweek-action.js";
+import {
+  FPL_POINTS_METRIC,
+  FPL_POINTS_SEASON_TO_DATE_METRIC
+} from "./demonstration-record.js";
+import type { Position, TeamSheet } from "./apply-gameweek-action.js";
+import type {
+  PlayerGameweekPoints,
+  PlayerPosition,
+  ScoreDetail
+} from "./score-team-sheet.js";
 
 type Database = Pick<Client, "query">;
 
@@ -26,6 +37,9 @@ interface PoolRow {
   status: string;
   chance_of_playing_next_round: number | null;
   news: string;
+  penalties_order: number | null;
+  direct_freekicks_order: number | null;
+  corners_and_indirect_freekicks_order: number | null;
 }
 
 /**
@@ -268,7 +282,8 @@ export async function loadLockedGameweek(
 
   const players = await database.query<PoolRow>(
     `select fpl_id, team_name, web_name, position, price_tenths, status,
-            chance_of_playing_next_round, news
+            chance_of_playing_next_round, news, penalties_order,
+            direct_freekicks_order, corners_and_indirect_freekicks_order
        from fpl_players
       where season = $1 and gw = $2
       order by fpl_id`,
@@ -294,9 +309,182 @@ export async function loadLockedGameweek(
       priceTenths: row.price_tenths,
       status: row.status,
       chanceOfPlaying: row.chance_of_playing_next_round,
-      news: row.news
+      news: row.news,
+      penaltyOrder: row.penalties_order,
+      directFreeKickOrder: row.direct_freekicks_order,
+      cornerOrder: row.corners_and_indirect_freekicks_order
     }))
   };
+}
+
+/**
+ * Every player's position across the Season, for however many the Season
+ * records exactly one for. Read the same way the scorer reads it
+ * (`scoreFplGameweek`): scoring prices nobody, so a Gameweek whose pre-Lock
+ * snapshot was missed still has to be scoreable, and a player the Season
+ * disagrees with itself about is left out rather than guessed at.
+ */
+export async function loadSeasonPositions(
+  database: Database,
+  season: string
+): Promise<PlayerPosition[]> {
+  const listed = await database.query<{ fpl_id: number; positions: Position[] }>(
+    `select fpl_id, array_agg(distinct position) as positions
+       from fpl_players
+      where season = $1
+      group by fpl_id`,
+    [season]
+  );
+  return listed.rows.flatMap((row) =>
+    row.positions.length === 1 ? [{ fplId: row.fpl_id, position: row.positions[0]! }] : []
+  );
+}
+
+/** One Gameweek's settled points, every player FPL scored. */
+export async function loadGameweekPoints(
+  database: Database,
+  season: string,
+  gameweek: number
+): Promise<PlayerGameweekPoints[]> {
+  const settled = await database.query<{
+    fpl_id: number;
+    minutes: number;
+    total_points: number;
+  }>(
+    `select fpl_id, minutes, total_points
+       from fpl_player_points
+      where season = $1 and gw = $2`,
+    [season, gameweek]
+  );
+  return settled.rows.map((row) => ({
+    fplId: row.fpl_id,
+    minutes: row.minutes,
+    totalPoints: row.total_points
+  }));
+}
+
+/**
+ * The `OwnRecord` a Team Sheet and a scored detail come to, over one
+ * Gameweek's raw settled points — the one seam both readers of an Entrant's
+ * own record share, whether the detail came from the scorer's stored row (the
+ * roster) or from calling `scoreTeamSheet` directly (an Exhibition Run, whose
+ * own scored rows do not exist yet at replay time; ADR-0041).
+ *
+ * Each pick's points are read off the raw settled record rather than off
+ * `detail.players`, because that list holds only the eleven or fifteen that
+ * counted after substitutions — a bench player who never came on has a raw
+ * return, and "what each pick returned" means the whole Team Sheet's.
+ */
+export function ownRecordFromDetail(
+  gameweek: number,
+  teamSheet: TeamSheet,
+  pointsOf: ReadonlyMap<number, number>,
+  detail: ScoreDetail,
+  seasonPoints: number
+): OwnRecord {
+  const pick = (fplId: number): OwnRecordPick => ({
+    fplId,
+    points: pointsOf.get(fplId) ?? 0
+  });
+  const wore = detail.captain === null
+    ? undefined
+    : detail.players.find(({ fplId }) => fplId === detail.captain);
+  return {
+    gameweek,
+    starters: teamSheet.starters.map(pick),
+    bench: teamSheet.bench.map(pick),
+    // `points * multiplier` restates a stored factor rather than deriving a
+    // new number — the same read the dashboard's `fplEntrants` endpoint
+    // already makes off this exact `ScoreDetail` shape for its own
+    // `captainPoints` field, not a second scoring of the Team Sheet.
+    armband: wore === undefined
+      ? null
+      : {
+          fplId: wore.fplId,
+          points: wore.points,
+          multiplier: wore.multiplier,
+          contribution: wore.points * wore.multiplier
+        },
+    seasonPoints
+  };
+}
+
+/**
+ * An Entrant's own record as the roster reads it: the scorer's own stored
+ * detail and cumulative row for the latest Gameweek this Entrant holds a
+ * scored FPL record for, strictly before `gameweek` — or null before one
+ * exists, which the opening always is.
+ *
+ * Reads `scores` rather than `fpl_player_points` for "the latest Settled
+ * Gameweek", deliberately: a Gameweek whose points have landed but has not
+ * yet been scored has nothing this Entrant's own record can show, and the
+ * block falls back to the Gameweek before it rather than a fact the scorer
+ * has not written yet.
+ */
+export async function loadOwnRecord(
+  database: Database,
+  season: string,
+  entrantId: string,
+  gameweek: number
+): Promise<OwnRecord | null> {
+  const scored = await database.query<{ gw: number; detail: ScoreDetail }>(
+    `select gw, detail
+       from scores
+      where model_id = $1 and season = $2 and track = 'fpl'
+        and metric = $3 and gw < $4
+      order by gw desc
+      limit 1`,
+    [entrantId, season, FPL_POINTS_METRIC, gameweek]
+  );
+  const [row] = scored.rows;
+  if (row === undefined) {
+    return null;
+  }
+  const settledGw = row.gw;
+
+  const stored = await database.query<{ team_sheet: TeamSheet }>(
+    `select team_sheet
+       from manager_states
+      where model_id = $1 and season = $2 and gw = $3`,
+    [entrantId, season, settledGw]
+  );
+  const teamSheet = stored.rows[0]?.team_sheet;
+  if (teamSheet === undefined) {
+    throw new Error(
+      `${entrantId} holds a scored FPL record for Gameweek ${settledGw} of `
+      + `${season} but no Manager State for it`
+    );
+  }
+
+  const points = await loadGameweekPoints(database, season, settledGw);
+  const pointsOf = new Map(points.map((point) => [point.fplId, point.totalPoints]));
+
+  const total = await database.query<{ value: string }>(
+    `select value
+       from scores
+      where model_id = $1 and season = $2 and track = 'fpl'
+        and metric = $3 and gw = $4`,
+    [entrantId, season, FPL_POINTS_SEASON_TO_DATE_METRIC, settledGw]
+  );
+  const totalRow = total.rows[0];
+  // The scorer writes both rows in the same transaction (`writeRecord`), so
+  // one without the other is a corrupted record rather than a Gameweek with
+  // nothing to report — a silent zero would misreport the Entrant's Season.
+  if (totalRow === undefined) {
+    throw new Error(
+      `${entrantId} holds a scored FPL Gameweek ${settledGw} points row for `
+      + `${season} but no Season-to-date row for it`
+    );
+  }
+  const seasonPoints = Number(totalRow.value);
+
+  return ownRecordFromDetail(
+    settledGw,
+    teamSheet,
+    pointsOf,
+    row.detail,
+    seasonPoints
+  );
 }
 
 /**

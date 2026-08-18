@@ -31,6 +31,48 @@ export interface FplTrackPlayer {
   chanceOfPlaying: number | null;
   /** FPL's own note behind a flag, empty when there is nothing to report. */
   news: string;
+  /**
+   * A club's known penalty, direct-free-kick and corner/indirect-free-kick
+   * takers, in the order FPL ranks them — null wherever FPL names none, which
+   * is most of the pool: the source's own silence, not a fact dressed up as
+   * one (ADR-0041).
+   */
+  penaltyOrder: number | null;
+  directFreeKickOrder: number | null;
+  cornerOrder: number | null;
+}
+
+export interface OwnRecordPick {
+  fplId: number;
+  /** This pick's raw Gameweek points, from the settled player record. */
+  points: number;
+}
+
+/**
+ * Who actually wore the armband and what it returned, already multiplied —
+ * two ordinarily, three under a Triple Captain — read from the scorer's own
+ * stored detail rather than recomputed here. Null when neither the captain
+ * nor the vice-captain played, which is not a nought: nobody wore it.
+ */
+export interface OwnRecordArmband {
+  fplId: number;
+  points: number;
+  multiplier: number;
+  contribution: number;
+}
+
+/**
+ * The Entrant's own record: the latest Settled Gameweek's Team Sheet with
+ * what each pick returned, what the armband contributed, and the Season's
+ * points to date — read entirely from stored facts (ADR-0041). Null before
+ * any Gameweek has settled, which the opening always is.
+ */
+export interface OwnRecord {
+  gameweek: number;
+  starters: OwnRecordPick[];
+  bench: OwnRecordPick[];
+  armband: OwnRecordArmband | null;
+  seasonPoints: number;
 }
 
 /**
@@ -133,6 +175,13 @@ export interface BuildFplTrackContextOptions {
    * so the stored text never depends on when the fetch ran.
    */
   settledThrough: number | null;
+  /**
+   * This Entrant's own record — its latest Settled Gameweek's Team Sheet, or
+   * null before one exists. Required rather than defaulted, so a caller
+   * cannot forget to read it and silently show the opening's absence to an
+   * Entrant with a real record standing (ADR-0041).
+   */
+  ownRecord: OwnRecord | null;
 }
 
 const STATUS_LABELS: Readonly<Record<string, string>> = {
@@ -243,6 +292,11 @@ function playerLine(
       ? {}
       : { chance: player.chanceOfPlaying }),
     ...(player.news.trim() === "" ? {} : { news: player.news }),
+    ...(player.penaltyOrder === null ? {} : { pen: player.penaltyOrder }),
+    ...(player.directFreeKickOrder === null
+      ? {}
+      : { fk: player.directFreeKickOrder }),
+    ...(player.cornerOrder === null ? {} : { corners: player.cornerOrder }),
     ...(season === undefined ? {} : { season }),
     ...(lastFive === undefined ? {} : { last5: lastFive })
   });
@@ -281,6 +335,25 @@ function availabilityLegend(pool: FplTrackPlayer[]): string[] {
     (player) => player.chanceOfPlaying !== null || player.news.trim() !== ""
   );
   return carried ? [AVAILABILITY_LEGEND] : [];
+}
+
+/**
+ * What the three duty keys mean, on the same rule as the availability legend:
+ * shown only when a line below carries at least one of them, and never a
+ * verdict about who scores — the order alone, verbatim from FPL (ADR-0041).
+ */
+const DUTIES_LEGEND =
+  "Duty keys: pen = penalty order, fk = direct free-kick order, corners = "
+  + "corner and indirect free-kick order, each FPL's own ranking of known "
+  + "takers. A player FPL names no taker for carries none of the three.";
+
+function dutiesLegend(pool: FplTrackPlayer[]): string[] {
+  const carried = pool.some(
+    (player) => player.penaltyOrder !== null
+      || player.directFreeKickOrder !== null
+      || player.cornerOrder !== null
+  );
+  return carried ? [DUTIES_LEGEND] : [];
 }
 
 /**
@@ -429,29 +502,79 @@ function squadSection(state: ManagerState): string[] {
   ];
 }
 
+/**
+ * A pick's own return, or the armband's — the one line shape both lists and
+ * the armband share, so a reader learns it once.
+ */
+function pickLine({ fplId, points }: OwnRecordPick): string {
+  return `- ${fplId} | ${points} pts`;
+}
+
+/**
+ * The Entrant's own record, appended inside the Manager State block: the
+ * latest Settled Gameweek's Team Sheet with what each pick returned and what
+ * the armband contributed, and the Season's points to date — always naming
+ * the Gameweek it reads (ADR-0041).
+ *
+ * Every branch is one sentence or a run of `- ` lines, and none of them is
+ * blank: the splice finds the block's end at the first blank line, so this
+ * section must never hand it one before the block is meant to close.
+ */
+function ownRecordSection(ownRecord: OwnRecord | null): string[] {
+  if (ownRecord === null) {
+    return ["Your own record: no Gameweek has settled yet."];
+  }
+  const armband = ownRecord.armband === null
+    ? "Armband: nobody wore it."
+    : `Armband: ${ownRecord.armband.fplId} | ${ownRecord.armband.points} pts `
+    + `x${ownRecord.armband.multiplier} = ${ownRecord.armband.contribution} pts`;
+  return [
+    `Your own record, from Gameweek ${ownRecord.gameweek}, the latest `
+    + "Settled Gameweek:",
+    "Starters, with what each returned:",
+    ...ownRecord.starters.map(pickLine),
+    "Bench, with what each returned:",
+    ...ownRecord.bench.map(pickLine),
+    armband,
+    `Season points to date: ${ownRecord.seasonPoints}`
+  ];
+}
+
 /** The heading the Manager State block opens on, and the splice finds it by. */
 const MANAGER_STATE_HEADING = "Your Manager State";
 
 /**
  * The one block that belongs to the Manager State rather than to the Gameweek:
- * the Squad, the bank, the Free Transfers and the Chips. Everything else the
- * context shows is the same whoever is reading it, which is what lets an
- * Exhibition Run borrow a stored body and replace only this (spec 0013).
+ * the Squad, the bank, the Free Transfers, the Chips and the Entrant's own
+ * record. Everything else the context shows is the same whoever is reading
+ * it, which is what lets an Exhibition Run borrow a stored body and replace
+ * only this (spec 0013).
  *
  * The reversion happens here, on the same stored row the reducer reverts, so
  * what the reader is shown is what its action will be judged against. Taking
  * the row as it stands would show a Free Hit's borrowed Squad and borrowed bank
  * to a reader that owns neither. Doing it in the block means neither the
  * builder nor the splice can forget, and doing it twice is doing it once.
+ *
+ * `ownRecord` is taken rather than read off `stored`, because the two callers
+ * differ over where it comes from: the roster reads the scorer's own record,
+ * and an Exhibition Run — whose own scored rows do not exist yet at replay
+ * time — computes it for itself over the same shared player points
+ * (ADR-0041). Neither belongs to this function to decide.
  */
-function managerStateSection(stored: ManagerState, gameweek: number): string[] {
+function managerStateSection(
+  stored: ManagerState,
+  gameweek: number,
+  ownRecord: OwnRecord | null
+): string[] {
   const state = carriedIntoNextGameweek(stored);
   return [
     MANAGER_STATE_HEADING,
     ...squadSection(state),
     `Bank: ${money(state.bankTenths)}`,
     `Free Transfers: ${state.freeTransfers}`,
-    ...chipsSection(state, gameweek)
+    ...chipsSection(state, gameweek),
+    ...ownRecordSection(ownRecord)
   ];
 }
 
@@ -463,7 +586,8 @@ export function buildFplTrackContext({
   schedule,
   league,
   performance,
-  settledThrough
+  settledThrough,
+  ownRecord
 }: BuildFplTrackContextOptions): string {
   const windows = new Map(
     performance.map((player) => [player.fplId, player])
@@ -475,7 +599,7 @@ export function buildFplTrackContext({
     "You manage one Squad for the whole Season. Your decisions persist: the "
     + "Squad you pick now is the Squad you carry into the next Gameweek.",
     "",
-    ...managerStateSection(stored, gameweek),
+    ...managerStateSection(stored, gameweek, ownRecord),
     "",
     ...fixturesSection(schedule),
     "",
@@ -483,6 +607,7 @@ export function buildFplTrackContext({
     "",
     ...performanceHeading(settledThrough),
     ...availabilityLegend(pool),
+    ...dutiesLegend(pool),
     POOL_HEADING,
     ...pool.map((player) => playerLine(player, windows.get(player.fplId))),
     "",
@@ -499,7 +624,8 @@ export function buildFplTrackContext({
         bench: [],
         captain: 0,
         vice_captain: 0
-      }
+      },
+      rationale: ""
     })
   ].join("\n");
 }
@@ -520,7 +646,8 @@ const TRACK_HEADING_PATTERN = /^Fantasy Premier League — .+ Gameweek (\d+)$/;
  */
 export function spliceManagerState(
   donor: string,
-  state: ManagerState
+  state: ManagerState,
+  ownRecord: OwnRecord | null
 ): string {
   const lines = donor.split("\n");
   const title = TRACK_HEADING_PATTERN.exec(lines[0] ?? "");
@@ -541,7 +668,7 @@ export function spliceManagerState(
   }
   return [
     ...lines.slice(0, blockOpens),
-    ...managerStateSection(state, Number(title[1])),
+    ...managerStateSection(state, Number(title[1]), ownRecord),
     ...lines.slice(blockCloses)
   ].join("\n");
 }

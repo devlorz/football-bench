@@ -1,19 +1,26 @@
 import type { Client } from "pg";
 import {
   FPL_PROMPT_VERSION,
-  spliceManagerState
+  spliceManagerState,
+  type OwnRecord
 } from "../context/build-fpl-track-context.js";
 import { whileHoldingLockOrRefuse } from "../db/advisory-lock.js";
 import {
   openingManagerState,
   type ManagerState
 } from "../fpl/apply-gameweek-action.js";
-import { storeFplContext } from "../fpl/fpl-gameweek-context.js";
+import {
+  loadGameweekPoints,
+  loadSeasonPositions,
+  ownRecordFromDetail,
+  storeFplContext
+} from "../fpl/fpl-gameweek-context.js";
 import {
   loadManagerState,
   loadStartingGameweek
 } from "../fpl/manager-state-store.js";
 import { playGameweekFromContext } from "../fpl/open-fpl-gameweek.js";
+import { scoreTeamSheet } from "../fpl/score-team-sheet.js";
 import type { HttpFetcher } from "../http.js";
 import { loadExhibition } from "./load-exhibition.js";
 
@@ -162,9 +169,16 @@ async function replaySeasonPath({
     );
   }
 
+  // Positions across the Season, read once: the same lookup the scorer makes
+  // and no more likely to change mid-replay than mid-scoring-run.
+  const positions = await loadSeasonPositions(database, season);
+
   // The empty Squad every Entrant was seeded from at the opening. From the
-  // second Gameweek on it is whatever the Gameweek before left behind.
+  // second Gameweek on it is whatever the Gameweek before left behind. The
+  // own record follows the same rule: null until a Gameweek has been folded.
   let previous: ManagerState = openingManagerState();
+  let ownRecord: OwnRecord | null = null;
+  let seasonPoints = 0;
   const covered: number[] = [];
   for (const { gw, deadline_at: deadline, settled } of
     await gameweeksFrom(database, season, startedAt)) {
@@ -179,38 +193,80 @@ async function replaySeasonPath({
       season,
       gameweek: gw
     });
+
+    let state: ManagerState;
     if (already !== null) {
-      previous = already;
-      covered.push(gw);
-      continue;
+      state = already;
+    } else {
+      // Stored before the call and hashed like every other context, so what
+      // the Exhibition Run saw is on record whatever the call comes to — and
+      // is comparable, line for line, with what the roster saw the same
+      // Gameweek.
+      const body = await storeFplContext(
+        database,
+        season,
+        gw,
+        exhibition.id,
+        spliceManagerState(
+          await donorBody(database, season, gw),
+          previous,
+          ownRecord
+        )
+      );
+      const played = await playGameweekFromContext({
+        database,
+        season,
+        gameweek: gw,
+        caller: exhibition,
+        body,
+        previous,
+        deadline,
+        apiKey,
+        entrantCallTimeoutMs,
+        http,
+        now
+      });
+      if (played === null) {
+        break;
+      }
+      state = played;
     }
 
-    // Stored before the call and hashed like every other context, so what the
-    // Exhibition Run saw is on record whatever the call comes to — and is
-    // comparable, line for line, with what the roster saw the same Gameweek.
-    const body = await storeFplContext(
-      database,
-      season,
-      gw,
-      exhibition.id,
-      spliceManagerState(await donorBody(database, season, gw), previous)
-    );
-    const state = await playGameweekFromContext({
-      database,
-      season,
-      gameweek: gw,
-      caller: exhibition,
-      body,
-      previous,
-      deadline,
-      apiKey,
-      entrantCallTimeoutMs,
-      http,
-      now
-    });
-    if (state === null) {
-      break;
+    // This Gameweek's own record, folded in whether it was just played or
+    // already stood: the Exhibition Run's own scored rows do not exist yet at
+    // replay time, so its own record is computed here with the scorer's own
+    // pure function over the shared player points, exactly as the next
+    // Gameweek's spliced context is going to need it (ADR-0041).
+    // A Manager State this Gameweek stored — whether from a legal action or a
+    // Roll Over — always names a Team Sheet: the opening is the only state
+    // without one, and it is never what this loop just settled (`playGameweekFromContext`
+    // refuses a Roll Over with nothing standing behind it). A stored row with
+    // none is a broken record, not a state this replay can fold silently.
+    const { teamSheet } = state;
+    if (teamSheet === null) {
+      throw new Error(
+        `${exhibition.id} holds a Manager State for Gameweek ${gw} of ${season} `
+        + "with no Team Sheet, so its own record cannot be folded"
+      );
     }
+    const points = await loadGameweekPoints(database, season, gw);
+    const pointsOf = new Map(points.map((point) => [point.fplId, point.totalPoints]));
+    const scored = scoreTeamSheet({
+      teamSheet,
+      positions,
+      points,
+      hits: state.hits,
+      chip: state.chipActive
+    });
+    seasonPoints += scored.points;
+    ownRecord = ownRecordFromDetail(
+      gw,
+      teamSheet,
+      pointsOf,
+      scored.detail,
+      seasonPoints
+    );
+
     previous = state;
     covered.push(gw);
   }

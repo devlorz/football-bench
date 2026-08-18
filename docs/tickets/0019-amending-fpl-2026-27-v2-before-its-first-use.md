@@ -70,25 +70,25 @@ amended packet.
 
 **Blocked by:** "Duties into the record", "The Rationale's storage and refusal".
 
-- [ ] The pool line renders each player's duties as optional keys, and a player without
+- [x] The pool line renders each player's duties as optional keys, and a player without
       any renders exactly as today — the source's silence, not a null dressed as a fact
-- [ ] The own-record block renders from stored facts only — the scorer's detail, the
+- [x] The own-record block renders from stored facts only — the scorer's detail, the
       settled player points, the stored Team Sheet, the cumulative row — and computes no
       score of its own
-- [ ] The block names the Gameweek it reads in all four states: a named ordinary week, the
+- [x] The block names the Gameweek it reads in all four states: a named ordinary week, the
       opening's announced absence, the post-Gap week naming the older Gameweek it reads,
       and the Rolled Over week showing the standing Sheet that played
-- [ ] The shape line and the action schema agree on the Rationale to the byte
-- [ ] No other seat's totals, no ranking, and no digest of the numbers appear anywhere in
+- [x] The shape line and the action schema agree on the Rationale to the byte
+- [x] No other seat's totals, no ranking, and no digest of the numbers appear anywhere in
       the packet
-- [ ] The Exhibition splice still works on the amended template — the Manager State block
+- [x] The Exhibition splice still works on the amended template — the Manager State block
       it replaces carries the own-record block whole, with no blank line inside it to cut
       the splice's block detection short — proven through the FPL Exhibition replay suite
-- [ ] The Exhibition path fills the own-record for itself: the armband's contribution and
+- [x] The Exhibition path fills the own-record for itself: the armband's contribution and
       the running Season total computed with the scorer's own pure function over the shared
       player points as the replay walks, because its own scored rows do not exist yet by
       construction
-- [ ] Every render assertion moved in this change and in no other
+- [x] Every render assertion moved in this change and in no other
 
 ## The gate walked
 

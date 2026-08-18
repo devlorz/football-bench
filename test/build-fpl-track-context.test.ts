@@ -5,7 +5,8 @@ import {
   type BuildFplTrackContextOptions,
   type FplFixture,
   type FplLeagueTable,
-  type FplPlayerPerformance
+  type FplPlayerPerformance,
+  type OwnRecord
 } from "../src/context/build-fpl-track-context.js";
 import {
   openingManagerState,
@@ -24,6 +25,10 @@ import {
   OPENING_ACTION,
   STAND_PAT
 } from "./fpl-action-fixture.js";
+import {
+  GAMEWEEK_ACTION_SCHEMA_KIND,
+  validateGameweekAction
+} from "../src/fpl/validate-gameweek-action.js";
 
 const POOL = trackPool([...FPL_POOL, ...FPL_POOL_ALTERNATES]);
 
@@ -45,6 +50,7 @@ function context(
     league: null,
     performance: [],
     settledThrough: null,
+    ownRecord: null,
     ...overrides
   });
 }
@@ -907,6 +913,191 @@ describe("The availability detail the FPL pool carries", () => {
     expect(() => parseFplTrackContextPool(
       body.replace('"price_tenths":120', '"price_tenths":"120"')
     )).toThrow("malformed player pool line");
+  });
+});
+
+/**
+ * The pool with one club's known takers on it, in the shape FPL's own feed
+ * sends: two of the three orders named, the third left silent — which is not
+ * the same as a zero.
+ */
+const DUTY_POOL = POOL.map((player) => player.fplId === 8
+  ? { ...player, penaltyOrder: 1, directFreeKickOrder: 2, cornerOrder: null }
+  : player);
+
+describe("The duties the FPL pool carries", () => {
+  test("puts each published order on its own key, and none where FPL is silent", () => {
+    const body = context({ pool: DUTY_POOL });
+
+    expect(poolLine(body, 8)).toEqual({
+      id: 8,
+      name: "Palmer",
+      club: "Chelsea",
+      position: "MID",
+      price: "£12.0m",
+      price_tenths: 120,
+      status: "available",
+      pen: 1,
+      fk: 2
+    });
+    // A player FPL names no taker for renders exactly as today: the source's
+    // own silence, not a null dressed up as a fact.
+    expect(poolLine(body, 2)).toEqual({
+      id: 2,
+      name: "Kelleher",
+      club: "Brentford",
+      position: "GKP",
+      price: "£4.0m",
+      price_tenths: 40,
+      status: "available"
+    });
+  });
+
+  test("leaves the legend out of a pool FPL names no taker in", () => {
+    expect(context()).not.toContain("Duty keys: ");
+  });
+
+  test("defines the duty keys exactly once, above the pool, once any is named", () => {
+    const body = context({ pool: DUTY_POOL });
+    const lines = body.split("\n");
+    const defined = lines.filter((at) => at.startsWith("Duty keys: "));
+
+    expect(defined).toHaveLength(1);
+    expect(defined[0]).toContain("pen = ");
+    expect(defined[0]).toContain("fk = ");
+    expect(defined[0]).toContain("corners = ");
+    expect(lines.indexOf(defined[0]!)).toBeLessThan(
+      lines.findIndex((at) => at.startsWith("{\"id\":"))
+    );
+  });
+
+  test("reads the priced pool back out of a body carrying duties", () => {
+    const body = context({ pool: DUTY_POOL, schedule: SCHEDULE, league: LEAGUE });
+
+    expect(parseFplTrackContextPool(body)).toEqual(LOCKED_POOL);
+  });
+});
+
+/**
+ * A latest Settled Gameweek's own record, arbitrary in every number so a test
+ * reading one back proves it read the right one rather than a coincidence.
+ */
+const SETTLED_OWN_RECORD: OwnRecord = {
+  gameweek: 7,
+  starters: [
+    { fplId: 1, points: 6 },
+    { fplId: 8, points: 9 }
+  ],
+  bench: [
+    { fplId: 2, points: 0 }
+  ],
+  armband: { fplId: 8, points: 9, multiplier: 2, contribution: 18 },
+  seasonPoints: 54
+};
+
+describe("The Entrant's own record the FPL context carries", () => {
+  test("announces plainly that nothing has settled yet", () => {
+    // The opening's own state: no Gameweek behind it, so nothing is folded
+    // and nothing to fold with it — the same emptiness a Season records for
+    // every ten Entrants at once (`startFplTrack`).
+    expect(
+      sectionShown(context({ ownRecord: null }), "Your own record")
+    ).toEqual(["Your own record: no Gameweek has settled yet."]);
+  });
+
+  test("names the Gameweek it reads, and shows every stored fact beside it", () => {
+    // After a Gap the latest Settled Gameweek sits further back than the one
+    // being played, and the block names it rather than saying "last
+    // Gameweek" — the same rule the performance heading follows. This same
+    // block shape is what a Rolled Over Gameweek renders too: the Team Sheet
+    // it names is read verbatim off the stored row, and a Roll Over's row
+    // holds the standing Sheet unchanged (`rolledOverState`) — so there is no
+    // second branch here for a Roll Over to take.
+    const body = context({
+      gameweek: 9,
+      ownRecord: { ...SETTLED_OWN_RECORD, gameweek: 4 }
+    });
+
+    expect(sectionShown(body, "Your own record")).toEqual([
+      "Your own record, from Gameweek 4, the latest Settled Gameweek:",
+      "Starters, with what each returned:",
+      "- 1 | 6 pts",
+      "- 8 | 9 pts",
+      "Bench, with what each returned:",
+      "- 2 | 0 pts",
+      "Armband: 8 | 9 pts x2 = 18 pts",
+      "Season points to date: 54"
+    ]);
+  });
+
+  test("says plainly when nobody wore the armband", () => {
+    // Neither the captain nor the vice played — not a nought, nobody wore it.
+    const body = context({
+      ownRecord: { ...SETTLED_OWN_RECORD, armband: null }
+    });
+
+    expect(sectionShown(body, "Your own record")).toEqual([
+      "Your own record, from Gameweek 7, the latest Settled Gameweek:",
+      "Starters, with what each returned:",
+      "- 1 | 6 pts",
+      "- 8 | 9 pts",
+      "Bench, with what each returned:",
+      "- 2 | 0 pts",
+      "Armband: nobody wore it.",
+      "Season points to date: 54"
+    ]);
+  });
+
+  test("gives the Season's points to date, and no other seat's", () => {
+    const body = context({ ownRecord: SETTLED_OWN_RECORD });
+
+    expect(body).toContain("Season points to date: 54");
+    // No other seat's totals, no ranking, no digest of the numbers.
+    expect(body).not.toMatch(/\brank\b/i);
+  });
+
+  test("holds no blank line inside the block, whatever it renders", () => {
+    // The Exhibition splice finds the block's end at the first blank line, so
+    // the own record must never hand it one before the block is meant to
+    // close.
+    const lines = context({ ownRecord: SETTLED_OWN_RECORD }).split("\n");
+    const opens = lines.indexOf("Your Manager State");
+    const closes = lines.indexOf("", opens);
+
+    expect(lines.slice(opens, closes)).not.toContain("");
+  });
+
+  test("asks for the Rationale the schema already requires, to the byte", () => {
+    // The shape line's own key — read off it rather than assumed — so a
+    // rename on either side of the pair fails this test rather than passing
+    // it by coincidence.
+    const shapeLine = context().split("\n").at(-1)!;
+    const shape = JSON.parse(shapeLine) as Record<string, unknown>;
+    const key = Object.keys(shape).find((at) => /rationale/i.test(at));
+    expect(key).toBe("rationale");
+
+    // A fully legal action, built independently of the shape line, carrying
+    // the exact key it asks for: the schema accepts it with the key present
+    // and refuses it, as the schema kind, with the key gone — proving the two
+    // agree on this key and not merely on every other one.
+    const legal = {
+      transfers_in: OPENING_ACTION.transfersIn,
+      transfers_out: OPENING_ACTION.transfersOut,
+      chip: OPENING_ACTION.chip,
+      team_sheet: {
+        starters: OPENING_ACTION.teamSheet.starters,
+        bench: OPENING_ACTION.teamSheet.bench,
+        captain: OPENING_ACTION.teamSheet.captain,
+        vice_captain: OPENING_ACTION.teamSheet.viceCaptain
+      },
+      [key!]: "Standing pat."
+    };
+    expect(validateGameweekAction(JSON.stringify(legal)))
+      .toMatchObject({ ok: true, rationale: "Standing pat." });
+
+    const { [key!]: _dropped, ...withoutIt } = legal;
+    expect(validateGameweekAction(JSON.stringify(withoutIt)))
+      .toMatchObject({ ok: false, kind: GAMEWEEK_ACTION_SCHEMA_KIND });
   });
 });
 
