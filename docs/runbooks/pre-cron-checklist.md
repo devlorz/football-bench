@@ -22,7 +22,16 @@ session-level advisory lock, which the transaction pooler on 6543 would break.
 
 To confirm the deployed schema matches the repository, build a temporary Postgres from the
 migrations and compare `pg_dump --schema-only` output from both, filtering
-`^--|^$|^SET |^SELECT pg_catalog|^\(un)?restrict`. This has caught real drift twice.
+`^--|^$|^SET |^SELECT pg_catalog|^\(un)?restrict`. This has caught real drift three
+times.
+
+**A merged migration is not an applied one.** Migrations land on `main` continuously
+while this checklist runs only before a deploy or a rehearsal, so a migration can sit
+merged and unapplied for days with nothing between the two noticing. Ticket 0019's gate
+found exactly that: `0030` and `0031` were merged and production was still on `0029`,
+two days before the Season's first Lock. Apply at ship time, not at gate time — and if
+the gate is the first time anyone looked, say so in the ticket, because the gap was
+real even though the outcome was fine.
 
 **On a database migrated from empty, list the Season's Competitions by hand.** Migration
 0022 relabels the record it finds, so a database with no Gameweek in it gets no
@@ -209,6 +218,14 @@ completed-match regression fixture for result ingestion. Confirm that `finished`
 scoreability gate, including the observed state of `finished_provisional`, before trusting the
 10:00 UTC scorer. If the observed semantics disagree, stop and revise the decision rather than
 adapting the fixture.
+
+**Measure the FPL context's real cost after Gameweek 1.** ADR-0041 widened
+`fpl/2026-27-v2` — the duties on every pool line, the Entrant's own record, and the Rationale
+coming back — on a track spec 0003 already called several times the Match track's cost, and
+both documents refuse to estimate: the figure is read from `attempts.tokens_in` and
+`tokens_out` once ten seats have played a real Gameweek. Read it, and record it where the
+next version's scope will be argued. This is the one consequence ADR-0041 left with an action
+and no owner until here.
 
 **Pin one observed checked FPL Gameweek response after Gameweek 1 settles.** The pre-Season
 archive can prove only `data_checked = false`. Once FPL reports Gameweek 1 checked, archive the

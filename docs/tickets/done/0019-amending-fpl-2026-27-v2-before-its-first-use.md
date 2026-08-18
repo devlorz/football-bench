@@ -5,9 +5,9 @@ Season's first Lock — **2026-08-21T17:30Z** — under the spec's ship-or-freez
 is everything merged, `fpl:rehearse` green and the pre-cron checklist walked before the
 Lock's cron takes over; whatever is frozen at the Lock is the Season's, and anything
 unfinished waits for the next version.
-Source: [spec 0019](../specs/0019-amending-fpl-2026-27-v2-before-its-first-use.md).
-Decision: [ADR-0041](../adr/0041-duties-the-entrants-own-record-and-a-required-reason-join-fpl-2026-27-v2-before-its-first-use.md).
-Vocabulary: [CONTEXT.md](../../CONTEXT.md), including **Rationale** and the widened
+Source: [spec 0019](../../specs/0019-amending-fpl-2026-27-v2-before-its-first-use.md).
+Decision: [ADR-0041](../../adr/0041-duties-the-entrants-own-record-and-a-required-reason-join-fpl-2026-27-v2-before-its-first-use.md).
+Vocabulary: [CONTEXT.md](../../../CONTEXT.md), including **Rationale** and the widened
 **Entrant Record**.
 
 Work the **frontier**: the first two open at once; the template moves once, after both; the
