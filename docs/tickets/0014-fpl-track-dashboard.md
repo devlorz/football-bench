@@ -203,13 +203,70 @@ ADR-0029 records is that cache behaviour is walked, not read.
 
 **Blocked by:** "The mobile collapse".
 
-- [ ] The deploy follows the runbook — build first, then deploy — and all three pages render
-      over production data
-- [ ] Each FPL endpoint's cache headers are observed on the live edge: a warmed request
+- [x] The deploy follows the runbook — build first, then deploy — and all three pages render
+      the honest pre-season empty state against production data (no Settled Gameweek exists
+      yet, so this is not a claim about rendering a Season)
+- [x] Each FPL endpoint's cache headers are observed on the live edge: a warmed request
       HITs, and the browser header is `no-cache`
 - [ ] A deploy empties the cache for the new endpoints, keeping the runbook's revoke step
-      true
-- [ ] The Demonstration qualification is visible under the live leaderboard
-- [ ] The Match track still renders untouched at the paths spec 0017 moved it to — `/pl`,
+      true — not walked correctly: the deploy's own MISS-then-HIT on a canonical FPL URL
+      only proves the cache fills, since no pre-deploy HIT was captured to show there was a
+      warmed entry for that key to purge. The actual walk this needs is a pre-deploy HIT,
+      then the deploy, then a canonical MISS immediately after — a pair spanning the deploy
+      itself, which this pass didn't take
+- [ ] The Demonstration qualification is visible under the live leaderboard — not yet
+      checkable: production has no Settled Gameweek, so `/api/fpl/leaderboard` correctly
+      returns the honest pre-season empty shape (`qualification: null`). The first deadline
+      is 2026-08-21, but per CONTEXT.md a Gameweek is Settled only once the feed declares it
+      final, never inferred from the clock — that date is when Gameweek 1 locks, not a date
+      to check back on. Resolves itself once the feed settles the first Gameweek, whenever
+      that lands
+- [x] The Match track still renders untouched at the paths spec 0017 moved it to — `/pl`,
       `/pl/fixtures`, `/pl/entrants` and the same three for `/pd` — and the three redirects
       that replaced its old URLs (`/` → `/pl`, `/fixtures`, `/entrants`) still answer
+
+### The deploy
+
+Live at **<https://football-bench.leelorz6.workers.dev>**, against the production Supabase.
+Runbook: [docs/runbooks/dashboard-deploy.md](../runbooks/dashboard-deploy.md).
+
+Production was already at migration 0029 — the full 29/29 the repository defines — so this
+deploy applied none; the FPL grants (`0020`, `0021`) and the Entrant-record read path were
+already in place from earlier slices. `deployed` tag moved from `440bf0b` to `29640eb`,
+published to `origin` (`PUSH_TAG=1`), matching `wrangler deployments list`'s `--message`.
+
+Production holds the real Season and nothing scored: ten seated Entrants on both tracks, no
+`scores` row, first Gameweek deadline 2026-08-21. Every FPL page therefore renders its
+pre-season empty state, confirmed in a driven Chrome on the hosted URL for all three —
+`/fpl`'s "The ranking fills after the first Gameweek is settled", `/fpl/squads`'s "Team
+Sheets appear once a Gameweek has been scored", `/fpl/entrants`'s "An Entrant's record
+appears once a Gameweek has been scored" — no console errors on any of the three. The Match
+track's own pre-season state renders the same way at `/pl`, `/pl/fixtures`, `/pl/entrants`
+and the `/pd` equivalents, and the three old-URL redirects (`/`, `/fixtures`, `/entrants`)
+still land on `/pl`'s paths.
+
+**Cache headers were walked, not read, for what a warmed request looks like.** All three FPL
+endpoints: browser `cache-control: no-cache`; a unique query key MISSes and the same key
+HITs on repeat. A later independent re-check caught `cf-cache-status: UPDATING` on a key past
+its 300s `max-age` — stronger evidence than the acceptance criterion asked for, since it
+shows `stale-while-revalidate=3600` actually holding on the live edge and not just sitting in
+`SCORED_CACHE`'s header string.
+
+**The deploy-empties-the-cache criterion is not walked, and is left open above rather than
+ticked from the architecture.** Proving it needs a pair spanning the deploy itself — a
+canonical key warmed to `HIT` beforehand, the same key `MISS` immediately after — the way
+ticket 0011 walked it for the Match track. This deploy's own check only ran after the fact
+(MISS-then-HIT on a fresh key), which shows the cache fills correctly but not that this
+specific deploy purged anything. Re-running the walk now would mean deploying again just to
+get the pair, which isn't warranted on its own; left as a real gap rather than closed on
+`cross_version_cache` being off in `wrangler.toml`.
+
+**The runbook's revoke procedure never named the FPL endpoints, and that's now fixed.** It
+assumed `/api/pl/*` throughout — `grep -ci fpl docs/runbooks/dashboard-deploy.md` was `0`
+before this ticket. Caught by review: `/api/fpl/leaderboard`, `/api/fpl/squads` and
+`/api/fpl/entrants` carry the identical `SCORED_CACHE` lifetime
+(`src/dashboard/read-api.ts`) and are not covered by the Match track's per-competition
+`MATCH_PROMPT_COMPETITIONS` list, so an operator revoking access in an emergency and watching
+only `/api/pl/*` go dark could report the incident closed while `/fpl` kept serving a cached
+ranking for up to the same hour and five minutes. The runbook's revoke-assumption section and
+its post-purge confirm walk both now name all three FPL endpoints alongside the Match ones.

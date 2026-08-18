@@ -361,6 +361,15 @@ window is per league and clearing one clears nothing else. The `pl` above is an
 example and not the whole of it: the served list is
 `MATCH_PROMPT_COMPETITIONS`.
 
+**The FPL track's three endpoints are not in that list and are not
+per-competition — assume them dark for the same window regardless.**
+`/api/fpl/leaderboard`, `/api/fpl/squads` and `/api/fpl/entrants` carry the
+identical `SCORED_CACHE` lifetime as `/api/pl/leaderboard` and
+`/api/pl/entrants` (`max-age=300, stale-while-revalidate=3600,
+stale-if-error=0`, `src/dashboard/read-api.ts`), so a revoke that only watches
+`/api/pl/*` go dark can report the incident closed while `/fpl` keeps serving
+a cached ranking for up to the hour and five minutes above.
+
 Any of it is too long if hiding the data is why you revoked. Empty the cache.
 
 The purge is a deploy, and it is the *same* deploy — same script, same
@@ -604,14 +613,20 @@ a unique key the cache cannot answer. The first says readers are dark; the
 second says the Worker is:
 
 ```sh
-BASE=https://football-bench.leelorz6.workers.dev/api/pl/leaderboard
-curl -sS -o /dev/null -w 'canonical %{http_code}\n' "$BASE"
-curl -sS -o /dev/null -w 'unique    %{http_code}\n' "$BASE?rev=$(date +%s)"
-# require: 500 from both
+for BASE in \
+  https://football-bench.leelorz6.workers.dev/api/pl/leaderboard \
+  https://football-bench.leelorz6.workers.dev/api/fpl/leaderboard; do
+  curl -sS -o /dev/null -w "canonical $BASE %{http_code}\n" "$BASE"
+  curl -sS -o /dev/null -w "unique    $BASE %{http_code}\n" "$BASE?rev=$(date +%s)"
+done
+# require: 500 from all four
 ```
 
-A 200 on the canonical URL with a 500 on the unique one means the deploy has
-not landed yet, or did not run — readers are still being served the old data.
+A 200 on either canonical URL with a 500 on its unique one means the deploy
+has not landed yet, or did not run — readers are still being served the old
+data. Both tracks are checked because they hold separate cache entries and a
+Match-only check would miss a stranded FPL cache — the same gap the revoke
+step above calls out.
 
 The pages then show their one error line. To take the login away as well,
 `drop role` each of the same names — but revoke, invalidate and confirm as
