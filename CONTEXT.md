@@ -100,6 +100,12 @@ within one.
 What one Entrant submits for one Fixture: a probability distribution over Home / Draw / Away
 together with a Predicted Score. Immutable once written.
 
+**Rationale**:
+The reason an Entrant gives beside a Prediction or a Gameweek action, required in the
+response on both tracks. Part of the record and nothing else: stored, never scored, and
+never shown back to any Entrant in a later context.
+_Avoid_: chain of thought, reasoning trace
+
 **Predicted Score**:
 The exact scoreline an Entrant names for a Fixture. Scored into Match Points; also the basis
 for Coherence.
@@ -236,9 +242,11 @@ of comparison on the leaderboard — it cancels out how hard the Fixture was and
 which Entrant forecast it better.
 
 **Entrant Record**:
-One Entrant's history Gameweek by Gameweek — Match Points, Bet Points, exact scorelines,
-correct outcomes, RPS and Gaps — read only over Gameweeks that have been scored. Nothing in
-a Record is back-filled, so a Gameweek an Entrant Gapped stays visible as a Gap.
+One Entrant's history Gameweek by Gameweek, read only over Gameweeks that have been scored —
+on the Match track its Match Points, Bet Points, exact scorelines, correct outcomes, RPS and
+Gaps; on the FPL track its points, Team Sheets, Transfers, Chips, Repairs and Roll Overs. An
+Entrant may be shown its own Record and is never shown another's. Nothing in a Record is
+back-filled, so a Gameweek an Entrant Gapped stays visible as a Gap.
 _Avoid_: model stats
 
 **Comparison Anchor**:
