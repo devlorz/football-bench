@@ -100,10 +100,38 @@ file before the Lock's cron takes over.
 
 **Blocked by:** "The amended template, in one move".
 
-- [ ] `fpl:rehearse` is green over an archive that exercises the amended template — a
+- [x] `fpl:rehearse` is green over an archive that exercises the amended template — a
       rehearsal replaying a pre-amendment archive proves the old loop and does not count
-- [ ] The FPL suites pass as a set: fetch, reducer, loop, render, seed, rehearsal
-- [ ] The pre-cron checklist is walked, including the roster standing untouched under the
+- [x] The FPL suites pass as a set: fetch, reducer, loop, render, seed, rehearsal
+- [x] The pre-cron checklist is walked, including the roster standing untouched under the
       unchanged version string
-- [ ] The ship-or-freeze outcome is recorded here with a timestamp: what was frozen at the
+- [x] The ship-or-freeze outcome is recorded here with a timestamp: what was frozen at the
       Lock, and what — if anything — waits for the next version
+
+### Ship-or-freeze outcome — 2026-08-19T02:40Z
+
+**Shipped**, with two days of margin before the Lock (2026-08-21T17:30Z). All four tickets
+in this set are merged to `main`; the gate is green.
+
+- `fpl:rehearse` ran against the real archive (production's `raw_snapshots`, read-only) and
+  passed: 10 Entrants, 3 Gameweeks, 240 metric rows, all as expected. The archived
+  `fpl_bootstrap` carries genuine duty data — 65 players with a penalty order, 54 with a
+  direct-free-kick order, 79 with a corner/indirect order out of 590 — so this run exercises
+  the amended fetch's duty projection, not a pre-amendment archive. The rehearsal script's
+  scripted responses already carry a Rationale on every action.
+- The FPL suites passed as a set: 46 test files, 608 tests, run together against the local
+  Postgres (fetch, the reducer's manager-state tests, the loop, the render seam including
+  `load-own-record` and the Exhibition splice, the seed, and the rehearsal suite itself).
+- The pre-cron checklist was walked. It found migrations `0030` (duties) and `0031`
+  (Rationale) applied in the repo but **not yet applied to production** — production was
+  still on `0029`. Applied both (`npm run db:migrate`, session pooler); both are additive
+  nullable columns, confirmed low-risk before running. Verified after: production's `public`
+  schema now diffs clean against a fresh local migration of the same repo (the only
+  differences are `pg_dump`'s per-run `\restrict`/`\unrestrict` tokens and Supabase's default
+  schema comment — no real drift). The roster was confirmed untouched: 10 seats still seated
+  under `fpl/2026-27-v2`, `models.prompt_version` never bumped, `competitions` still holds
+  `PL` and `PD` for `2026-27`, and zero FPL contexts are stored in production — the ADR-0026
+  door was still open at the moment of this check.
+
+Nothing waits for the next version. Duties, the Rationale and the Entrant's own record all
+ship in `fpl/2026-27-v2` at this Lock.
