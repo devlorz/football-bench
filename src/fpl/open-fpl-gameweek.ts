@@ -66,7 +66,7 @@ export interface OpenFplGameweekOptions {
  * subtracting, because that table is the record of which Gameweeks a Season
  * has and arithmetic would invent any it does not.
  */
-async function carriedThroughSilence(
+export async function carriedThroughSilence(
   database: Database,
   season: string,
   standing: StandingManagerState,

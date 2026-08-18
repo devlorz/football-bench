@@ -23,6 +23,7 @@
     "test": "vitest run",
     "predict:preview": "tsx src/cli/predict-preview.ts",
     "context:show": "tsx src/cli/show-context.ts",
+    "context:show:fpl": "tsx src/cli/show-fpl-context.ts",
     "roster:enter": "tsx src/cli/roster-enter.ts",
     "seed": "tsx src/cli/seed.ts",
     "dev:api": "tsx src/cli/dev-api.ts"
