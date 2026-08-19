@@ -138,10 +138,10 @@ rtk init --global       # Add RTK to ~/.claude/CLAUDE.md
 Overall average: **60-90% token reduction** on common development operations.
 <!-- /rtk-instructions -->
 
-# Paid model calls — ask first, every time
+# Paid Base Model calls — ask first, every time
 
-**Never start a run that spends money on OpenRouter. Ask, then wait for an
-explicit yes.**
+**Never start a run that spends money calling a Base Model. Ask, then wait for
+an explicit yes.**
 
 This covers `npm run predict:preview` (the bench), `npm run predict`,
 `npm run predict:scheduled`, `npm run preflight`, `npm run exhibition:replay`,

@@ -5,6 +5,7 @@ import { predictGameweek } from "../predictions/predict-gameweek.js";
 import type { DryRunArchive } from "./load-archive.js";
 import { prepareArchivedGameweek } from "./prepare-archived-gameweek.js";
 import { resolveDryRunInstant } from "./dry-run-clock.js";
+import { readGameweekDeadline } from "./gameweek-deadline.js";
 
 type Database = Pick<Client, "query">;
 
@@ -87,17 +88,9 @@ export async function previewGameweek({
     footballDataSeason
   });
 
-  const deadlineResult = await target.query<{ deadline_at: Date }>(
-    `select deadline_at from gameweeks
-      where competition = $1 and season = $2 and gw = $3`,
-    [competition, season, gameweek]
+  const deadline = await readGameweekDeadline(
+    target, competition, season, gameweek
   );
-  const deadline = deadlineResult.rows[0]?.deadline_at;
-  if (deadline === undefined) {
-    throw new Error(
-      `The archive produced no Gameweek ${gameweek} for Season ${season}`
-    );
-  }
   const instant = resolveDryRunInstant(at, deadline);
 
   const startedAt = Date.now();
@@ -125,7 +118,9 @@ export async function previewGameweek({
             p.pred_away as "predictedAway",
             p.attempts_used as repairs
        from predictions p
-       join fixtures f on f.season = p.season and f.fixture_id = p.fixture_id
+       join fixtures f
+         on f.competition = p.competition and f.season = p.season
+        and f.fixture_id = p.fixture_id
        join models m on m.id = p.model_id
       where p.competition = $1 and p.season = $2
       order by f.fixture_id, m.name`,
@@ -137,7 +132,9 @@ export async function previewGameweek({
             f.home_team || ' v ' || f.away_team as fixture,
             c.body
        from contexts c
-       join fixtures f on f.season = c.season and f.fixture_id = c.fixture_id
+       join fixtures f
+         on f.competition = c.competition and f.season = c.season
+        and f.fixture_id = c.fixture_id
       where c.competition = $1 and c.season = $2 and c.gw = $3
         and c.track = 'match'
       order by c.fixture_id`,

@@ -5,6 +5,7 @@ import { matchPromptOf } from "../predictions/openrouter-entrant.js";
 import { createArchiveReplayFetcher } from "./archive-replay-fetcher.js";
 import { prepareArchivedGameweek } from "./prepare-archived-gameweek.js";
 import { resolveDryRunInstant } from "./dry-run-clock.js";
+import { readGameweekDeadline } from "./gameweek-deadline.js";
 import {
   expectedDryRunOutcome,
   type ExpectedDryRunOutcome
@@ -47,26 +48,6 @@ export interface DryRunResult {
   contexts: DryRunContext[];
   phases: DryRunPhase[];
   expected: ExpectedDryRunOutcome;
-}
-
-async function readDeadline(
-  database: Database,
-  competition: string,
-  season: string,
-  gameweek: number
-): Promise<Date> {
-  const result = await database.query<{ deadline_at: Date }>(
-    `select deadline_at from gameweeks
-      where competition = $1 and season = $2 and gw = $3`,
-    [competition, season, gameweek]
-  );
-  const deadline = result.rows[0]?.deadline_at;
-  if (deadline === undefined) {
-    throw new Error(
-      `The archive produced no Gameweek ${gameweek} for Season ${season}`
-    );
-  }
-  return deadline;
 }
 
 async function readFixtureIds(
@@ -141,7 +122,9 @@ export async function runDryRun({
   const http = createArchiveReplayFetcher(archive.snapshots);
   await prepareArchivedGameweek({ target, archive, season, footballDataSeason });
 
-  const deadline = await readDeadline(target, competition, season, gameweek);
+  const deadline = await readGameweekDeadline(
+    target, competition, season, gameweek
+  );
   const instant = resolveDryRunInstant(at, deadline);
 
   // The Fill is rehearsed as well as the main run: it is the newest machinery

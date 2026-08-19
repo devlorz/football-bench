@@ -1,8 +1,11 @@
 -- Ticket 0020 slice 3: the bench's numbers need La Liga's v1 Gameweek 1 beside
--- them. Read-only. Coherence is computed here the way the scorer computes it
--- (score-match-gameweek.ts: the likeliest outcome by `probs` against the
--- outcome the Predicted Score implies), so the bench's 50 forecasts and the
--- record's 60 Predictions are counted by one rule.
+-- them. Read-only.
+--
+-- Coherence is counted by the scorer's rule (score-match-gameweek.ts): the
+-- likeliest outcome by `probs`, ties included, against the outcome the
+-- Predicted Score implies. The Gameweek is selected by the scorer's rule too --
+-- `locked_in_gw`, never `gw` (ADR-0013, ADR-0015) -- so a Fixture the calendar
+-- moved is counted where it Locked and nowhere else.
 with v1 as (
   select
     p.model_id,
@@ -18,7 +21,7 @@ with v1 as (
    and f.fixture_id = p.fixture_id
   where p.competition = 'PD'
     and p.season = '2026-27'
-    and coalesce(f.locked_in_gw, f.gw) = 1
+    and f.locked_in_gw = 1
 ),
 scored as (
   select

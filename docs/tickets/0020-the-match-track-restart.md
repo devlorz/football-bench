@@ -341,16 +341,22 @@ at all.)
       anchor is picked up at all — with RPS deltas at n=6 named as noise in the findings.
 - [x] The findings are written into this ticket, and any sentence they move is moved in
       slice 2's tests before the flip.
-- [x] The bench gates nothing: if the clock runs short, ship-or-freeze applies and the
-      flip proceeds without it, recorded as skipped.
+- [ ] The bench gates nothing: if the clock runs short, ship-or-freeze applies and the
+      flip proceeds without it, recorded as skipped. **N/A** — the clock did not run
+      short, the bench ran, and nothing was skipped. The evidence that would close this
+      box lives in a branch that did not happen; it is left open rather than ticked.
 
 ### The bench, run — recorded 2026-08-19
 
 The amended template was put to the real roster over La Liga's Gameweek 1 through
 `predict:preview`, dated six hours before that Gameweek's own Lock, against a throwaway
 cluster built from the archive. Fifty forecasts, ten Gaps, 342 seconds, 115,630 tokens in
-and 115,579 out. Nothing was written to the record: the preview's database is created for
-the run and dropped with it.
+and 115,579 out. **Nothing was written to production**, and that is the accurate claim
+rather than the box's "touches": production is read — `raw_snapshots` for the bytes and
+`models` for the roster — over a session `restrictToReadOnly` downgrades before the first
+statement, and every write goes to the `startTemporaryPostgres` cluster dropped in the
+`finally`. The run's own output is kept as
+[a report](../reports/2026-08-19-match-restart-bench-pd-gw1.md).
 
 **Two things had to move before the bench could be attempted**, both recorded in the
 commits rather than here: `previewGameweek` named `PL` as a literal and ran at the wall
@@ -375,10 +381,13 @@ its six Fixtures and reached the other two only after three Repairs each, which 
 ceiling. Every other seat answered every Fixture with no Repair at all. The remaining six
 Gaps are timeouts and not format: DeepSeek V4 Pro three, Qwen3.8 Max two, Kimi K3 one.
 
-**The incoherence is not new, and its shape is.** Counted by the scorer's own rule — the
-likeliest outcome by `probs` against the outcome the Predicted Score implies — the bench
-runs 17 incoherent of 50 (34%) against the record's 18 of 60 (30%) under v1. At this n
-the difference is noise. What is not noise is what changed underneath it:
+**ADR-0043 predicted this would fall, and it did not.** "The expected effect is a lower
+incoherence rate across the board" is the decision's own sentence, and it is the thing
+this bench was in a position to check. Counted by the scorer's rule — the likeliest
+outcome by `probs` against the outcome the Predicted Score implies — the bench runs 17
+incoherent of 50 (34%) against the record's 18 of 60 (30%) under v1. **The expected fall
+was not observed at n = 50; the reading moved the other way by 4 points, which at this n
+is noise either way.** What is not noise is what changed underneath it:
 
 | | v1, the record | The bench, amended |
 | --- | --- | --- |
@@ -388,14 +397,17 @@ the difference is noise. What is not noise is what changed underneath it:
 
 Every incoherent forecast in the bench is the same forecast: a 1-1 scoreline with Home
 ranked top. No seat ranked the draw first even once, where v1 did five times.
-**The amendment's own sentence and the Coherence metric now point in opposite
-directions** — `score is the exact final scoreline you judge most likely — not expected
-goals rounded` invites exactly the 1-1-under-a-Home-lean answer that Coherence counts as
-incoherent, and the sentence beside it naming RPS pushes the probabilities toward the
-distribution rather than toward the scoreline. This is a question about a metric, not a
-defect in a rendered sentence, so **no sentence moves and slice 2's tests stand**. It
-belongs to whoever reads Coherence after the restart, and is recorded here rather than
-acted on before the gate.
+**The amendment's own sentence and the Coherence metric point in opposite directions**,
+which is the mechanism behind the number ADR-0043 expected to fall: `score is the exact
+final scoreline you judge most likely — not expected goals rounded` invites exactly the
+1-1-under-a-Home-lean answer Coherence counts as incoherent, and the sentence beside it
+naming RPS pushes the probabilities toward the distribution rather than toward the
+scoreline. ADR-0043 accepted that Coherence changes meaning and expected the rate to
+improve; what this run shows is the meaning changing without the improvement. That is a
+question about a metric and its decision, not a defect in a rendered sentence, so **no
+sentence moves and slice 2's tests stand** — which is also what box 4 asks. It is
+recorded here for whoever reads Coherence after the restart rather than acted on before
+the gate.
 
 **The base-rates anchor is picked up.** The roster's mean forecast moved toward the line
 the packet now states, on both halves that matter:
@@ -415,8 +427,14 @@ not proof of it.
 **RPS deltas are not reported at all.** At n=6 they would be noise, ADR-0026's dry
 opening said so, and the bench was not scored.
 
-The comparison is reproducible from `docs/queries/0020-slice-3-v1-coherence.sql`, which
-counts the record's sixty Predictions by the scorer's rule.
+Half of this comparison can be re-derived and half cannot, which is worth stating
+plainly. The record's sixty Predictions are re-countable at any time from
+`docs/queries/0020-slice-3-v1-coherence.sql`, by the scorer's own rule and the scorer's
+own `locked_in_gw` attribution. The bench's fifty — the 17, the draw counts, the means —
+came out of a cluster that was dropped with the process, from Base Models that answer
+differently each time. Re-running the command produces a different run, not this one.
+What stands behind those numbers is the run's own output, kept at
+[docs/reports/2026-08-19-match-restart-bench-pd-gw1.md](../reports/2026-08-19-match-restart-bench-pd-gw1.md).
 
 ## 4 — The flip and the re-seat
 

@@ -130,7 +130,7 @@ describe("previewing a Gameweek with live Entrants", () => {
       concurrency: 1,
       at: "deadline-6h",
       http: async () => { throw new Error("no call should be made"); }
-    })).rejects.toThrow("The archive produced no Gameweek 1 for Season 2026-27");
+    })).rejects.toThrow("The archive produced no PD Gameweek 1 for Season 2026-27");
   });
 
   test("runs at an instant the Gameweek's own Lock dates, not at the wall clock", async () => {
@@ -161,7 +161,10 @@ describe("previewing a Gameweek with live Entrants", () => {
 
     const timing = await client.query<{ deadline: Date; started: Date }>(
       `select g.deadline_at as deadline, min(a.attempted_at) as started
-         from gameweeks g, attempts a
+         from gameweeks g
+         join attempts a
+           on a.competition = g.competition and a.season = g.season
+          and a.gw = g.gw
         where g.competition = 'PL' and g.season = $1 and g.gw = $2
         group by g.deadline_at`,
       [SEASON, GAMEWEEK]

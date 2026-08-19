@@ -93,6 +93,7 @@ export interface FplStartJobConfig extends ScheduledFplJobConfig {
 }
 
 export interface PreviewJobConfig extends DailyFetchJobConfig {
+  competition: string;
   gameweek: number;
   concurrency: number;
   openRouterApiKey: string;
@@ -488,12 +489,21 @@ export function readPreviewJobConfig(
     throw new Error("PREDICT_CONCURRENCY must be a positive integer");
   }
   const openRouterApiKey = required(environment, "OPENROUTER_API_KEY");
+  // Defaulted rather than required, because a preview writes to a database
+  // that exists for the run and is thrown away: a wrong Competition costs a
+  // rehearsal and nothing else. Read here rather than in the CLI so one job has
+  // one place its input is read and shaped, the way every other field is.
+  const competition = environment.COMPETITION?.trim().toUpperCase() || "PL";
+  if (!/^[A-Z]{2,3}$/.test(competition)) {
+    throw new Error("COMPETITION must be a Competition code such as PL or PD");
+  }
   const at = environment.PREVIEW_AT?.trim() || "deadline-6h";
   // Read now so an unusable instant fails before a cluster is built for it.
   resolveDryRunInstant(at, new Date(0));
 
   return {
     ...dailyFetch,
+    competition,
     gameweek,
     concurrency,
     openRouterApiKey,
