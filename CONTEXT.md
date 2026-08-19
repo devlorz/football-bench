@@ -43,8 +43,10 @@ The Entrants included in Season-wide comparisons. One per track and, on the matc
 per Competition: every `models` row with `role = 'entrant'` carrying that Prompt Version,
 since a seat is entered for a track and a Competition while every seat holds the same role.
 The roster itself is one roster — what multiplies is seats, not Entrants, and every
-Competition seats the roster that stood at the Season's first Lock however late it opens
-(ADR-0034, ADR-0038). No exclusion within a track is representable.
+Competition seats the roster that stood at the first Lock of the Season's standing Prompt
+Versions, however late it opens (ADR-0034, ADR-0038; a restart that retires a version
+reopens the window until the restarted versions' first Lock, ADR-0042). No exclusion
+within a track is representable.
 Removing an Entrant would require a new recorded decision, ADR and storage representation.
 
 **Exhibition Run**:
@@ -165,6 +167,13 @@ A real club signing a player (a Signing) or letting one go (a Departure) during 
 window, as the public record states it. A fact about a club, never an Entrant action — an
 Entrant changes its Squad only through Transfers.
 _Avoid_: transfer (a Transfer is the FPL track's swap and nothing else)
+
+**Head Coach**:
+The person managing a real club, as the public record names them. A fact about a club,
+like a Squad Change — never an Entrant. A Head Coach change is an event: who left, the
+stated manner, who arrived, and when.
+_Avoid_: manager (a Manager is the FPL track's persona — see Manager State — and nothing
+else)
 
 ### Fantasy
 
