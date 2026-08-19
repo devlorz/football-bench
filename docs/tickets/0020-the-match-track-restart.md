@@ -604,6 +604,41 @@ Prompt Version at all (`migrations/0001_initial.sql`), so nothing about the flip
 stored context unresolvable — the hole is the Competition axis, and it predates the
 restart.
 
+### The window used, on one track of two — recorded 2026-08-19
+
+GLM 5.3 is real and it clears the edge that decides everything else. OpenRouter
+publishes it as `z-ai/glm-5.3`, canonical slug `z-ai/glm-5.3-20260816`, released
+**2026-08-18T20:57:35Z** — inside ADR-0034's arrival cutoff of 2026-08-19 by some
+twenty-seven hours. Z.AI is its only endpoint and serves it at fp8, the same pin the
+outgoing seat carried, so the swap moves the Base Model and nothing else about how it is
+reached. The outgoing seat is `z-ai/glm-5.2`, `z-ai/glm-5.2-20260616`, also Z.AI at fp8.
+
+The Match track's seat is moved in `SEASON_ROSTER`: `match/glm-5.2` becomes
+`match/glm-5.3`. **The seeding run needs one operator step before it.** A swap changes
+the seat id, so the outgoing row stands in `models` under a Match Prompt Version naming
+a Base Model the roster no longer has, and `enterSeasonRoster` refuses exactly that —
+"Seat match/glm-5.2 is stored at a Match Prompt Version and is not in the roster being
+entered". The refusal is right and already tested; the step is ADR-0034's own road,
+which deleted the outgoing Qwen3.7 and Grok 4.5 rows the same way. Delete
+`match/glm-5.2` before `roster:enter`, not after, and only once the FPL side below is
+settled.
+
+**The FPL track cannot be moved from here, and may not be movable at all.** Its ten
+seats are not in any constant — ADR-0034 enters them by hand at `fpl/2026-27-v2` — so
+"update both tracks" is one code edit and one `update models` against production. Worse,
+ADR-0034 names the edge this runs into: `manager_states` is insert-only, so once a seat
+has a Season path, reassigning it to a different Base Model is not representable, and it
+says in the same breath that "moving only the Match seat would leave one Entrant name
+covering two Base Models across the tracks". So the Match-side edit above is either half
+of a swap or a defect, and which one it is depends on rows this repository cannot see.
+`docs/queries/0020-slice-4-fpl-track-started.sql` asks: no `manager_states` rows for
+2026-27 means the door is open and the FPL seat moves with it; any rows and the decision
+is between two Base Models under one Entrant name and leaving GLM 5.2 seated on both.
+
+Box 4 stays open on that answer. The decision it asks to be recorded is made for the
+Match track and is above; it is not made until it is made for both, because ADR-0034
+says the tracks move together.
+
 ## 5 — The frozen block
 
 **What to build:** A reader of the La Liga page sees Gameweek 1 whole and labelled —
