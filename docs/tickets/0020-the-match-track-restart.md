@@ -535,6 +535,34 @@ clause cannot be honestly ticked until it is settled. Contexts carry no Prompt V
 at all (`migrations/0001_initial.sql`), so nothing about the flip makes a stored context
 unresolvable.
 
+**A criterion met, and the decision sent where it belongs.** The `seatSlug`/
+`entrantSlug` twins took their first forced simultaneous edit in this slice — both moved
+`indexOf` to `lastIndexOf` in lockstep, which is the exact case the repo's own bar for
+extraction waits for. Noticed, not merged: their doc blocks already say the merge is
+moving `entrant-link.ts` into `src/`, a build-boundary decision spec 0017 declined to
+make and this ticket declines the same way (its own Out of Scope: dashboard work beyond
+the frozen block). A ticket of its own carries it, citing this slice's commit as the
+evidence that opened the question.
+
+**Boxes 1 and 2 are ticked here and nowhere else.** This work sits on
+`slice-4-flip`, off `main`, because slice 1's rule holds until the last kickoff has been
+scored: `main` is what `score.yml` checks out, and the constant on v2 with no v2 seat
+seeded would leave Gameweek 1 at five Fixtures forever. It lands after the completing
+run, not before. **Found by review**, along with three smaller things it was right about
+— the claim that v1 was still unused, left standing in the pin's own comment one file
+over from the constants this change corrects; a `match-pd/2026-27-v2/` literal written
+three lines after the same change replaced a literal for turning every restart into a
+false failure; and a qualified id spelled `${seatPrefix}/${version.split("/")[1]}/`,
+which re-derives the version from its own pieces and drops a third segment in silence
+where `${version}/` is the same string and says so.
+
+**Box 5 stays open on one clause.** The store-seeded-with-both-versions half is proven —
+the retired ten keep their ids and their version, the standing ten are new rows, and
+every seat-selecting query filters on the standing version already. The Exhibition clause
+is not, and cannot be until `replayMatchExhibition` takes a Competition: it loads its
+seat at the Premier League's `MATCH_PROMPT_VERSION` while selecting contexts by season
+and track alone. Named above rather than fixed here — it predates the slice.
+
 ## 5 — The frozen block
 
 **What to build:** A reader of the La Liga page sees Gameweek 1 whole and labelled —
