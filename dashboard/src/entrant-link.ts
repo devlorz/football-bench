@@ -31,12 +31,16 @@
  * same way: everything after a prefix that is not there is all of it.
  *
  * `seatSlug` in `src/season-roster.ts` is this function, character for
- * character, and reads the same slug off the same ids. They stand apart
- * because merging them runs a dependency backwards: every import in this
- * repository points from `dashboard/` into `src/`, and the roster importing
- * out of `dashboard/` would be the first the other way. The merge is a move of
- * this module into `src/` — which it is free to make, importing nothing — and
- * that is a decision of its own, not one spec 0017 makes.
+ * character, and reads the same slug off the same ids. The merge is a move of
+ * this module into `src/`, and it was declined: the paragraph above is a rule
+ * about what this file may import, and what enforces it is that no server
+ * module sits within reach. In `src/` every neighbour is one, and the
+ * duplicated line is cheaper than the import nobody notices adding.
+ *
+ * What replaces the merge is a parity test —
+ * `test/dashboard-competition-view.test.ts`, the one file that already imports
+ * across the boundary — reading both twins over the same ids. Edit one and
+ * not the other and the build says so.
  */
 export const entrantSlug = (id: string): string =>
   id.slice(id.lastIndexOf("/") + 1);

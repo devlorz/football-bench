@@ -4,7 +4,7 @@ import {
   competitionRoutes, pageHref
 } from "../dashboard/src/competition-view.js";
 import { entrantOf, entrantSlug } from "../dashboard/src/entrant-link.js";
-import { SEASON_ROSTER } from "../src/season-roster.js";
+import { SEASON_ROSTER, seatSlug } from "../src/season-roster.js";
 
 /**
  * The Match track's pages, one per Competition, with no DOM and no database.
@@ -177,6 +177,43 @@ describe("the Competition switcher", () => {
  * their own link, with the page saying nothing about the substitution — the
  * quietest failure the Entrant record can have.
  */
+/**
+ * `seatSlug` and `entrantSlug` are one function written twice, and this is what
+ * stands in place of merging them. The merge would move `entrant-link.ts` into
+ * `src/`, where the rule that it imports nothing a browser cannot have loses
+ * the only thing enforcing it — the absence of any server module near enough to
+ * import. So the duplication stays, and the divergence it invites fails here.
+ *
+ * The one file in the repository that already reaches across the boundary, so
+ * the twins cost no new import to compare. Assert on both together rather than
+ * on each separately: an assertion per function passes while they disagree,
+ * which is the only failure this test exists for.
+ */
+describe("the seat slug, read from both sides of the dashboard boundary", () => {
+  test("gives one answer to every id shape a seat is written in", () => {
+    // Not correctness — `the Entrant a link names` covers that. This is
+    // sameness: whatever the answer is, both twins give it. The third is the
+    // shape slice 4 was for, a restart's seat under a version segment
+    // (ADR-0042), and the one an edit to a single copy would break first.
+    for (const id of [
+      "match/claude-opus-5",
+      "match-pd/claude-opus-5",
+      "match-pd/2026-27-v2/claude-opus-5",
+      "claude-opus-5"
+    ]) {
+      expect([id, seatSlug(id)]).toEqual([id, entrantSlug(id)]);
+    }
+  });
+
+  test("agrees on every seat the Season Roster actually holds", () => {
+    // The written ids above are a guess at what the roster looks like; these
+    // are what it is. A Base Model added with a slug neither twin was tried on
+    // arrives here on its own.
+    expect(SEASON_ROSTER.map(({ id }) => seatSlug(id)))
+      .toEqual(SEASON_ROSTER.map(({ id }) => entrantSlug(id)));
+  });
+});
+
 describe("the Entrant a link names", () => {
   /** One Base Model, seated in both leagues. */
   const PREMIER_LEAGUE = ["match/claude-opus-5", "match/gpt-5"];
