@@ -137,6 +137,20 @@ describe("the Fixtures endpoint on the design's Season", () => {
                  'anthropic', $1, 'entrant')`,
       [matchPromptOf("PD").version, SPANISH_SEAT]
     );
+    // And the seat La Liga's restart retired (ADR-0042), which stands in the
+    // record for the sake of the Gameweek it played and belongs to no roster
+    // read. Same Competition, same `entrant` role -- the Prompt Version is the
+    // only thing telling it from the seat above, which is the whole boundary:
+    // the slots below are the roster on every Fixture, so a read that dropped
+    // the filter would put a retired seat in front of a reader as a Gap it
+    // will never fill.
+    await writer.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values ('match-pd/claude/retired', 'Retired Spanish Claude',
+                 'anthropic/claude-opus-4.5', 'anthropic',
+                 'match-pd/2026-27-v1', 'entrant')`
+    );
 
     return async () => {
       await writer.end();
@@ -181,12 +195,13 @@ describe("the Fixtures endpoint on the design's Season", () => {
     async () => {
       // The precondition the assertion below would otherwise assume: the seed
       // enters an FPL seat beside every Match one, and this suite enters La
-      // Liga's, all carrying the same `entrant` role — so nine is the roster
-      // filter's answer and not the whole table's.
+      // Liga's standing seat and the one its restart retired, all carrying the
+      // same `entrant` role — so nine is the roster filter's answer and not
+      // the whole table's.
       const seats = await writer.query(
         "select 1 from models where role = 'entrant'"
       );
-      expect(seats.rowCount).toBe(ROSTER.length * 2 + 1);
+      expect(seats.rowCount).toBe(ROSTER.length * 2 + 2);
 
       const body = await fixtures();
 

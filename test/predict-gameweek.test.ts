@@ -4,6 +4,9 @@ import { insertExhibition, resetSchema } from "./schema-fixture.js";
 import type { HttpRequest } from "../src/http.js";
 import { predictGameweek } from "../src/predictions/predict-gameweek.js";
 import {
+  matchPromptOf
+} from "../src/predictions/openrouter-entrant.js";
+import {
   firstMessageText,
   type CapturedTurn
 } from "./sent-context.js";
@@ -1373,6 +1376,96 @@ describe("predicting a Gameweek", () => {
     );
     expect(attempted.rows).toEqual([{ model_id: "entrant/v1" }]);
   });
+
+  // ADR-0042: La Liga restarted, so its ten v1 rows stand in the record with a
+  // Gameweek's Predictions on them while the standing seats sit under v2. The
+  // boundary is one `prompt_version = $n` in each of the two queries below,
+  // and nothing anywhere filters v1 out by name -- so this is the test that
+  // says the retired seats are gone from the run rather than merely unasked
+  // for.
+  test("leaves a retired version's seats out of the run and out of the Gaps",
+    async () => {
+      await client.query(
+        `insert into gameweeks (competition, season, gw, deadline_at)
+         values ('PD', '2026-27', 1, '2026-08-21T17:30:00Z')`
+      );
+      await client.query(
+        `insert into fixtures (
+           season, fixture_id, gw, competition, home_team, away_team,
+           kickoff_at
+         ) values (
+           '2026-27', 101, 1, 'PD', 'Real Madrid', 'Getafe',
+           '2026-08-21T19:00:00Z'
+         )`
+      );
+      await client.query(
+        `insert into models (
+           id, name, base_model, provider, prompt_version, role
+         ) values (
+           'match-pd/retired', 'Retired Seat', 'vendor/retired-model',
+           'vendor', 'match-pd/2026-27-v1', 'entrant'
+         ), (
+           'match-pd/2026-27-v2/standing', 'Standing Seat',
+           'vendor/standing-model', 'vendor', $1, 'entrant'
+         )`,
+        [matchPromptOf("PD").version]
+      );
+      const called: string[] = [];
+
+      const outcome = await predictGameweek({
+        competition: "PD",
+        database: client,
+        season: "2026-27",
+        gameweek: 1,
+        concurrency: 2,
+        apiKey: "test-key",
+        now: () => new Date("2026-08-21T17:29:00Z"),
+        http: async (_url, options) => {
+          called.push((JSON.parse(options?.body ?? "{}") as {
+            model: string;
+          }).model);
+          return {
+            status: 200,
+            body: JSON.stringify({
+              choices: [{
+                message: {
+                  content: JSON.stringify({
+                    fixture_id: 101,
+                    probs: { H: 0.7, D: 0.2, A: 0.1 },
+                    score: { home: 2, away: 0 },
+                    rationale: "Standing seat only."
+                  })
+                }
+              }],
+              usage: { prompt_tokens: 83, completion_tokens: 37 }
+            })
+          };
+        }
+      });
+
+      // One call, one Prediction, one attempt: the standing seat's. The
+      // retired seat is not a seat that failed -- it is not in the run at all,
+      // which is why it leaves no attempt behind either.
+      expect(called).toEqual(["vendor/standing-model"]);
+      const stored = await client.query<{ model_id: string }>(
+        "select model_id from predictions order by model_id"
+      );
+      expect(stored.rows).toEqual([{ model_id: "match-pd/2026-27-v2/standing" }]);
+      const attempted = await client.query<{ model_id: string }>(
+        "select distinct model_id from attempts order by model_id"
+      );
+      expect(attempted.rows)
+        .toEqual([{ model_id: "match-pd/2026-27-v2/standing" }]);
+
+      // And the Gap query, which is the other half of the boundary: a retired
+      // seat with no Prediction for a Locked Fixture is exactly the shape of a
+      // Gap, so an alert that read the role alone would page an operator every
+      // Gameweek for ten seats that were never asked.
+      // No alert at all, which is the whole answer: the retired seat holds no
+      // Prediction for Fixture 101, so a Gap query that saw it would return
+      // one and this would be a `GapAlert` naming `match-pd/retired`.
+      expect(outcome).toBeNull();
+    });
 
   test("leaves an Exhibition Run out of the work and out of the alert", async () => {
     // An Exhibition Run carries this track's frozen Prompt Version, so Prompt
