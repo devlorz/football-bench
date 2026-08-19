@@ -3,6 +3,7 @@ import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { insertExhibition, resetSchema } from "./schema-fixture.js";
 import { replayMatchExhibition } from "../src/exhibition/replay-match-exhibition.js";
+import { matchPromptOf } from "../src/predictions/openrouter-entrant.js";
 import { firstMessageText, type CapturedTurn } from "./sent-context.js";
 
 const { Client } = pg;
@@ -23,13 +24,68 @@ function sha256(body: string): string {
 async function storeContext(
   database: pg.Client,
   gameweek: number,
-  fixtureId: number
+  fixtureId: number,
+  competition = "PL"
 ): Promise<void> {
   await database.query(
-    `insert into contexts (season, gw, track, fixture_id, hash, body)
-     values ('2026-27', $1, 'match', $2, $3, $4)`,
-    [gameweek, fixtureId, sha256(storedBody(fixtureId)), storedBody(fixtureId)]
+    `insert into contexts (
+       competition, season, gw, track, fixture_id, hash, body
+     ) values ($1, '2026-27', $2, 'match', $3, $4, $5)`,
+    [
+      competition,
+      gameweek,
+      fixtureId,
+      sha256(storedBody(fixtureId)),
+      storedBody(fixtureId)
+    ]
   );
+}
+
+/** The six Fixtures La Liga's Gameweek 1 Lock owned, in football-data ids. */
+const LA_LIGA_GAMEWEEK_ONE = [101, 102, 103, 104, 105, 106];
+
+/**
+ * La Liga's Gameweek 1 as the record holds it: six played Fixtures and the six
+ * contexts the retired `match-pd/2026-27-v1` roster was shown. The contexts
+ * carry no Prompt Version — the column does not exist
+ * (`migrations/0001_initial.sql`) — so they stay replayable under the standing
+ * one, which is the whole reason an Exhibition can still reach them.
+ */
+async function seedLaLigaGameweekOne(database: pg.Client): Promise<void> {
+  await database.query(
+    `insert into gameweeks (competition, season, gw, deadline_at) values
+       ('PD', '2026-27', 1, '2026-08-15T17:00:00Z');
+     insert into fixtures (
+       competition, season, fixture_id, gw, locked_in_gw, home_team, away_team,
+       kickoff_at, result
+     ) values
+       ('PD', '2026-27', 101, 1, 1, 'Alaves', 'Getafe',
+        '2026-08-15T17:30:00Z',
+        jsonb_build_object('home_goals', 3, 'away_goals', 0, 'outcome', 'H')),
+       ('PD', '2026-27', 102, 1, 1, 'Sevilla', 'Rayo Vallecano',
+        '2026-08-15T19:30:00Z',
+        jsonb_build_object('home_goals', 2, 'away_goals', 1, 'outcome', 'H')),
+       ('PD', '2026-27', 103, 1, 1, 'Racing Santander', 'Villarreal',
+        '2026-08-16T15:00:00Z',
+        jsonb_build_object('home_goals', 2, 'away_goals', 2, 'outcome', 'D')),
+       ('PD', '2026-27', 104, 1, 1, 'Espanyol', 'Levante',
+        '2026-08-16T17:00:00Z',
+        jsonb_build_object('home_goals', 3, 'away_goals', 0, 'outcome', 'H')),
+       ('PD', '2026-27', 105, 1, 1, 'Deportivo La Coruna', 'Elche',
+        '2026-08-17T19:00:00Z',
+        jsonb_build_object('home_goals', 1, 'away_goals', 1, 'outcome', 'D')),
+       ('PD', '2026-27', 106, 1, 1, 'Atletico Madrid', 'Malaga',
+        '2026-08-19T19:00:00Z',
+        jsonb_build_object('home_goals', 0, 'away_goals', 2, 'outcome', 'A'))`
+  );
+  for (const fixtureId of LA_LIGA_GAMEWEEK_ONE) {
+    await storeContext(database, 1, fixtureId, "PD");
+  }
+}
+
+/** What one replayed Fixture puts on the wire: its stored bytes, verbatim. */
+function replayedBodies(fixtureIds: readonly number[]): Map<number, string> {
+  return new Map(fixtureIds.map((id) => [id, storedBody(id)]));
 }
 
 function answeredPrediction(fixtureId: number): string {
@@ -125,6 +181,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
 
     const gameweeks = await replayMatchExhibition({
       database: client,
+      competition: "PL",
       season: "2026-27",
       exhibitionModelId: "exhibition/late",
       concurrency: 2,
@@ -198,11 +255,124 @@ describe("replaying the Match track as an Exhibition Run", () => {
     ]);
   });
 
+  test("replays La Liga's Gameweek 1 and files every write under PD", async () => {
+    await seedLaLigaGameweekOne(client);
+    await insertExhibition(client, {
+      id: "exhibition-pd/late",
+      promptVersion: matchPromptOf("PD").version,
+      provider: "late-provider",
+      quantization: "fp8"
+    });
+    const sent = new Map<number, string>();
+
+    const gameweeks = await replayMatchExhibition({
+      database: client,
+      competition: "PD",
+      season: "2026-27",
+      exhibitionModelId: "exhibition-pd/late",
+      concurrency: 2,
+      apiKey: "test-key",
+      now: () => RAN_AT,
+      http: async (_url, options) => {
+        const fixtureId = requestedFixtureId(options?.body ?? "{}");
+        const request = JSON.parse(options!.body!) as {
+          messages: CapturedTurn[];
+        };
+        sent.set(fixtureId, firstMessageText(request.messages));
+        return { status: 200, body: answeredPrediction(fixtureId) };
+      }
+    });
+
+    expect(gameweeks).toEqual([1]);
+    // La Liga's six and nobody else's: the Premier League's own settled
+    // Gameweek 1 sits in the same tables under the same number, and this run
+    // is not owed an ask on any of it.
+    expect(sent).toEqual(replayedBodies(LA_LIGA_GAMEWEEK_ONE));
+    expect(
+      (await client.query(
+        `select competition, season, fixture_id, pred_home, pred_away
+           from predictions
+          where model_id = 'exhibition-pd/late'
+          order by fixture_id`
+      )).rows
+    ).toEqual(LA_LIGA_GAMEWEEK_ONE.map((fixture_id) => ({
+      competition: "PD",
+      season: "2026-27",
+      fixture_id,
+      pred_home: 2,
+      pred_away: 1
+    })));
+    expect(
+      (await client.query(
+        `select competition, season, gw, track, fixture_id, ok, trigger
+           from attempts
+          where model_id = 'exhibition-pd/late'
+          order by fixture_id`
+      )).rows
+    ).toEqual(LA_LIGA_GAMEWEEK_ONE.map((fixture_id) => ({
+      competition: "PD",
+      season: "2026-27",
+      gw: 1,
+      track: "match",
+      fixture_id,
+      ok: true,
+      trigger: "manual"
+    })));
+  });
+
+  test("a Premier League replay sweeps no La Liga Gameweek in", async () => {
+    await seedLaLigaGameweekOne(client);
+    // A Gameweek number is one Competition's round (ADR-0035), and this is a
+    // number the Premier League's Season does not reach: a run that reported
+    // covering it read La Liga's record as its own.
+    await client.query(
+      `insert into gameweeks (competition, season, gw, deadline_at) values
+         ('PD', '2026-27', 3, '2026-08-28T15:30:00Z');
+       insert into fixtures (
+         competition, season, fixture_id, gw, locked_in_gw, home_team,
+         away_team, kickoff_at, result
+       ) values
+         ('PD', '2026-27', 301, 3, 3, 'Barcelona', 'Athletic Club',
+          '2026-08-29T19:00:00Z',
+          jsonb_build_object('home_goals', 1, 'away_goals', 0, 'outcome', 'H'))`
+    );
+    await storeContext(client, 3, 301, "PD");
+    const sent = new Map<number, string>();
+
+    const gameweeks = await replayMatchExhibition({
+      database: client,
+      competition: "PL",
+      season: "2026-27",
+      exhibitionModelId: "exhibition/late",
+      concurrency: 2,
+      apiKey: "test-key",
+      now: () => RAN_AT,
+      http: async (_url, options) => {
+        const fixtureId = requestedFixtureId(options?.body ?? "{}");
+        const request = JSON.parse(options!.body!) as {
+          messages: CapturedTurn[];
+        };
+        sent.set(fixtureId, firstMessageText(request.messages));
+        return { status: 200, body: answeredPrediction(fixtureId) };
+      }
+    });
+
+    expect(gameweeks).toEqual([1]);
+    expect(sent).toEqual(replayedBodies([1, 2]));
+    expect(
+      (await client.query(
+        `select count(*) as predictions from predictions
+          where competition = 'PD'`
+      )).rows
+    ).toEqual([{ predictions: "0" }]);
+  });
+
   test("calls the row's pinned provider and quantization, fallbacks off", async () => {
     let request: Record<string, unknown> = {};
 
     await replayMatchExhibition({
       database: client,
+      competition: "PL",
       season: "2026-27",
       exhibitionModelId: "exhibition/late",
       concurrency: 1,
@@ -233,6 +403,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
 
     await expect(replayMatchExhibition({
       database: client,
+      competition: "PL",
       season: "2026-27",
       exhibitionModelId: "exhibition/fpl",
       concurrency: 1,
@@ -257,6 +428,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
 
     await replayMatchExhibition({
       database: client,
+      competition: "PL",
       season: "2026-27",
       exhibitionModelId: "exhibition/late",
       concurrency: 2,
@@ -285,6 +457,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
   test("logs every call in attempts under trigger 'manual'", async () => {
     await replayMatchExhibition({
       database: client,
+      competition: "PL",
       season: "2026-27",
       exhibitionModelId: "exhibition/late",
       concurrency: 1,
@@ -327,6 +500,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
 
     await replayMatchExhibition({
       database: client,
+      competition: "PL",
       season: "2026-27",
       exhibitionModelId: "exhibition/late",
       concurrency: 1,
@@ -378,6 +552,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
 
     await replayMatchExhibition({
       database: client,
+      competition: "PL",
       season: "2026-27",
       exhibitionModelId: "exhibition/late",
       concurrency: 2,
@@ -407,6 +582,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
     let secondRunCalls = 0;
     await replayMatchExhibition({
       database: client,
+      competition: "PL",
       season: "2026-27",
       exhibitionModelId: "exhibition/late",
       concurrency: 2,
@@ -459,6 +635,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
 
     const gameweeks = await replayMatchExhibition({
       database: client,
+      competition: "PL",
       season: "2026-27",
       exhibitionModelId: "exhibition/late",
       concurrency: 2,
@@ -501,6 +678,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
 
     await replayMatchExhibition({
       database: client,
+      competition: "PL",
       season: "2026-27",
       exhibitionModelId: "exhibition/late",
       concurrency: 1,
@@ -554,6 +732,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
 
     await replayMatchExhibition({
       database: client,
+      competition: "PL",
       season: "2026-27",
       exhibitionModelId: "exhibition/late",
       concurrency: 1,
@@ -578,6 +757,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
 
       await expect(replayMatchExhibition({
         database: client,
+        competition: "PL",
         season: "2026-27",
         exhibitionModelId: "exhibition/late",
         concurrency: 1,
@@ -612,6 +792,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
     );
     const replay = (exhibitionModelId: string) => replayMatchExhibition({
       database: client,
+      competition: "PL",
       season: "2026-27",
       exhibitionModelId,
       concurrency: 1,

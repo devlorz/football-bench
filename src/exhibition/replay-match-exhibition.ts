@@ -6,7 +6,7 @@ import {
   requireCallConcurrency,
   type MatchCall
 } from "../predictions/attempt-match-calls.js";
-import { MATCH_PROMPT_VERSION } from "../predictions/openrouter-entrant.js";
+import { matchPromptOf } from "../predictions/openrouter-entrant.js";
 import { REPAIRABLE_KINDS } from "../predictions/validate-prediction.js";
 import { MAX_REPAIRS } from "../repairs.js";
 import { loadExhibition } from "./load-exhibition.js";
@@ -22,6 +22,13 @@ const EXHIBITION_REPLAY_LOCK_KEY = 8150530;
 
 export interface ReplayMatchExhibitionOptions {
   database: Database;
+  /**
+   * The one Competition this run replays. An Exhibition Run is
+   * Competition-scoped (ADR-0032): it replays one Competition's stored
+   * contexts under that Competition's Prompt Version, so this decides both
+   * which rows are read and which the run's writes are filed under.
+   */
+  competition: string;
   season: string;
   /** The `models` row to replay; everything else about it is read from it. */
   exhibitionModelId: string;
@@ -55,26 +62,34 @@ interface ReplayedFixture {
  *
  * The run resolves this itself rather than taking a range: an operator naming
  * Gameweeks would be a second opinion about which of them are Settled.
+ *
+ * One Competition's, throughout. A Gameweek number names a round of one league
+ * (ADR-0035), so a select over the Season alone would answer with La Liga's
+ * Gameweek 1 and the Premier League's as if they were one — and hold one
+ * league's round open on the other's unplayed Fixtures.
  */
 async function settledGameweeks(
   database: Database,
+  competition: string,
   season: string
 ): Promise<number[]> {
   const settled = await database.query<{ gw: number }>(
     `select distinct c.gw
        from contexts c
-      where c.season = $1
+      where c.competition = $1
+        and c.season = $2
         and c.track = 'match'
         and not exists (
           select 1
             from fixtures f
-           where f.season = c.season
+           where f.competition = c.competition
+             and f.season = c.season
              and coalesce(f.locked_in_gw, f.gw) = c.gw
              and not f.deferred
              and f.result is null
         )
       order by c.gw`,
-    [season]
+    [competition, season]
   );
   return settled.rows.map(({ gw }) => gw);
 }
@@ -117,6 +132,7 @@ async function settledGameweeks(
  */
 async function remainingFixtures(
   database: Database,
+  competition: string,
   season: string,
   gameweek: number,
   exhibitionModelId: string
@@ -125,34 +141,39 @@ async function remainingFixtures(
     `select f.fixture_id, c.id as context_id, c.body as context_body
        from fixtures f
        join contexts c
-         on c.season = f.season
+         on c.competition = f.competition
+        and c.season = f.season
         and c.track = 'match'
-        and c.gw = $2
+        and c.gw = $3
         and c.fixture_id = f.fixture_id
-      where f.season = $1
-        and f.locked_in_gw = $2
+      where f.competition = $1
+        and f.season = $2
+        and f.locked_in_gw = $3
         and f.result is not null
         and not exists (
           select 1
             from predictions p
-           where p.model_id = $3
+           where p.model_id = $4
+             and p.competition = f.competition
              and p.season = f.season
              and p.fixture_id = f.fixture_id
         )
         and not exists (
           select 1
             from attempts a
-           where a.model_id = $3
+           where a.model_id = $4
+             and a.competition = f.competition
              and a.season = f.season
              and a.track = 'match'
              and a.fixture_id = f.fixture_id
              and (
-               a.attempt_no = $4
-               or not (a.error_kind = any($5))
+               a.attempt_no = $5
+               or not (a.error_kind = any($6))
              )
         )
       order by f.fixture_id`,
     [
+      competition,
       season,
       gameweek,
       exhibitionModelId,
@@ -164,8 +185,8 @@ async function remainingFixtures(
 }
 
 /**
- * Every Settled Gameweek's stored Match contexts, put to the named Exhibition
- * row, returning the Gameweeks covered.
+ * Every Settled Gameweek of one Competition, its stored Match contexts put to
+ * the named Exhibition row, returning the Gameweeks covered.
  *
  * The call path is the Entrants' own, unchanged (ADR-0032): the same request
  * shape, the same three Repairs, the same failure taxonomy, the same attempt
@@ -175,6 +196,7 @@ async function remainingFixtures(
  */
 async function replayCoveredGameweeks({
   database,
+  competition,
   season,
   exhibitionModelId,
   concurrency,
@@ -185,13 +207,15 @@ async function replayCoveredGameweeks({
   const exhibition = await loadExhibition(
     database,
     exhibitionModelId,
-    MATCH_PROMPT_VERSION
+    matchPromptOf(competition).version
   );
 
   const covered: number[] = [];
-  for (const gameweek of await settledGameweeks(database, season)) {
+  const gameweeks = await settledGameweeks(database, competition, season);
+  for (const gameweek of gameweeks) {
     const fixtures = await remainingFixtures(
       database,
+      competition,
       season,
       gameweek,
       exhibition.id
@@ -211,9 +235,7 @@ async function replayCoveredGameweeks({
     }));
     await attemptMatchCalls({
       database,
-      // An Exhibition Run replays a Premier League Gameweek's stored contexts;
-      // no other Competition has ever had one.
-      competition: "PL",
+      competition,
       season,
       gameweek,
       concurrency,

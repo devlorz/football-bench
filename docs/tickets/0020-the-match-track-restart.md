@@ -483,7 +483,7 @@ Fixtures, which arrives with the last kickoff, not with the ticket's opening.
 - [ ] The roster window is exercised or explicitly declined: the GLM seat's 5.3 decision
       is made before the gate and recorded either way, because the window closes whether
       or not anyone chose.
-- [ ] The coexistence suites prove the boundary: v1 seats out of prediction runs, gap
+- [x] The coexistence suites prove the boundary: v1 seats out of prediction runs, gap
       alerts and every roster read; v2 seats in; an Exhibition replay of Gameweek 1
       still resolving v1's stored contexts.
 - [ ] Prediction pre-flight passes for both Competitions on the restarted versions.
@@ -580,6 +580,52 @@ every seat-selecting query filters on the standing version already. The Exhibiti
 is not, and cannot be until `replayMatchExhibition` takes a Competition: it loads its
 seat at the Premier League's `MATCH_PROMPT_VERSION` while selecting contexts by season
 and track alone. Named above rather than fixed here — it predates the slice.
+
+### The Exhibition Run takes a Competition — recorded 2026-08-19
+
+**Box 5 is closed.** `replayMatchExhibition` now takes the Competition it replays and
+threads it through everything it reads and writes, which is what its own ADR always said
+it was: ADR-0032 defines an Exhibition Run as replaying one Competition's stored contexts
+under that Competition's Prompt Version. Three things were the one-league assumption,
+all older than this ticket and all live from the moment `contexts` held two Competitions:
+
+- The seat was loaded at `MATCH_PROMPT_VERSION`, the Premier League's frozen constant. It
+  reads `matchPromptOf(competition).version` now, as every other seat-selecting call site
+  does — which also makes a La Liga Exhibition sayable, where the door's own comment said
+  it was deliberately unsayable until this work happened.
+- `attemptMatchCalls` was passed `competition: "PL"` as a literal, under a comment saying
+  no other Competition had ever had an Exhibition Run. That value is what every Prediction
+  and attempt the run writes is filed under; the literal and the comment are gone.
+- `settledGameweeks` selected contexts by Season and track alone, and its `not exists`
+  joined `fixtures` on Season and Gameweek alone, so it mixed the two leagues' Gameweeks
+  in both directions. `remainingFixtures` was the same: its `fixtures`/`contexts` join and
+  both of its `not exists` subqueries carried no Competition either.
+
+The door in `load-exhibition.ts` widened with it. Its `FrozenPromptVersion` union named
+the two constants precisely so a non-`PL` Exhibition could not be said, with a comment
+naming this change as the work that should widen it. What was actually keeping a replay
+off the wrong league's prompt was never the type — a Match caller derives the version
+from the Competition it was handed, and the row check refuses a seat carrying another —
+so the type is `string` and the check is the guard.
+
+Two tests, both red against the old code for the right reasons. A La Liga replay of
+Gameweek 1 puts its six stored contexts on the wire byte for byte and files every
+Prediction and attempt under `PD`; it failed before with
+`exhibition-pd/late is at Prompt Version match-pd/2026-27-v2, not match/2026-27-v2` —
+the pinned Premier League constant, refusing the only seat that could have run it. And a
+Premier League replay covers Gameweek 1 alone where La Liga holds a settled Gameweek 3;
+it failed before with `Fixture 101 has no Lock`, which is a Premier League run reaching
+for a La Liga Fixture and finding the Lock it has no business assigning.
+
+Contexts carry no Prompt Version column (`migrations/0001_initial.sql`), so the six
+Gameweek 1 contexts built under the retired `match-pd/2026-27-v1` stay replayable under
+the standing v2 — the reason an Exhibition can reach Gameweek 1 at all after the flip,
+and what the first test asserts by sending their stored bytes unchanged.
+
+The command reads `COMPETITION` the way `predict.ts` does, defaulted to `PL`. Safe to
+default here for a stronger reason than that command has: the seat is loaded at the named
+Competition's Prompt Version, so a La Liga row run under `PL` is refused before the first
+paid call rather than replayed under the wrong league's prompt.
 
 ## 5 — The frozen block
 
