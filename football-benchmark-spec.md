@@ -113,7 +113,7 @@ football-data.co.uk┘         │                        │
 | Workflow | Schedule | Responsibility |
 |---|---|---|
 | `fetch.yml` | daily 06:00 UTC | FPL bootstrap-static, fixtures, Gameweek deadlines; `E0.csv` / `E1.csv`. Upsert and archive a raw snapshot every run. Idempotent. |
-| `predict.yml` | poll every 15m for **GW deadline − 6h** (main) and **deadline − 2h** (fill), plus `workflow_dispatch` | Derive due work from stored deadlines, build context per Fixture, call every Entrant, validate, insert. The fill run and any manual run fill only Fixtures with no Prediction, reusing the stored context verbatim. All completed runs report Gaps; a scheduled Fill with Gaps opens or updates an actionable issue (ADR-0006, ADR-0011). |
+| `predict.yml` | poll every 30m for **GW deadline − 6h** (main) and **deadline − 2h** (fill), plus `workflow_dispatch` | Derive due work from stored deadlines, build context per Fixture, call every Entrant, validate, insert. The fill run and any manual run fill only Fixtures with no Prediction, reusing the stored context verbatim. All completed runs report Gaps; a scheduled Fill with Gaps opens or updates an actionable issue (ADR-0006, ADR-0011). |
 | `score.yml` | daily **10:00 UTC** | Score Fixtures that have results. FPL finalises a Gameweek at 09:00 UK the day after its last match, so anything earlier reads bonus points and defensive contributions before they settle. Pure deterministic TypeScript. |
 
 The fifteen-minute Prediction poll is deployed from a **public GitHub repository**. At the

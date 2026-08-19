@@ -5,7 +5,7 @@ on:
   # Postgres deadlines still decide when work is due — the FPL scheduler polls
   # exactly as the Match one does — but the two tracks share a deadline
   # (ADR-0006) and the Match track's write path must not wait behind an FPL
-  # Gameweek. A second `*/15` cron ran the two in whichever order GitHub
+  # Gameweek. A second poll cron ran the two in whichever order GitHub
   # happened to start them; `workflow_run` puts Predictions first every time.
   #
   # `types: [completed]` fires whatever the Match run concluded. A failing
@@ -27,7 +27,7 @@ permissions:
 # Its own group, deliberately not `prediction-runs`. The ordering above decides
 # which starts first; this decides that neither ever queues behind the other —
 # an FPL Gameweek that overran would otherwise hold up the next Prediction poll
-# fifteen minutes later.
+# half an hour later.
 concurrency:
   group: fpl-runs
   cancel-in-progress: false

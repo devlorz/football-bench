@@ -15,7 +15,7 @@ function concurrencyGroup(yaml: string): string {
 describe("the FPL workflow's place in the schedule", () => {
   test("runs after the Prediction workflow rather than beside it", () => {
     // Both tracks lock at the same deadline (ADR-0006) and the Match track's
-    // write path must not wait behind an FPL Gameweek. Two `*/15` crons left
+    // write path must not wait behind an FPL Gameweek. Two poll crons left
     // the order to whichever GitHub happened to start first; chaining decides
     // it. The FPL scheduler still polls Postgres for what is due — the trigger
     // says when to look, not what to do.
@@ -45,7 +45,7 @@ describe("the FPL workflow's place in the schedule", () => {
   test("keeps a concurrency group of its own", () => {
     // The chaining decides which starts first; this decides that neither ever
     // queues behind the other — an FPL Gameweek that overran would otherwise
-    // hold up the next Prediction poll fifteen minutes later.
+    // hold up the next Prediction poll half an hour later.
     expect(concurrencyGroup(fplWorkflow))
       .not.toBe(concurrencyGroup(predictWorkflow));
   });

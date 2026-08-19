@@ -212,7 +212,7 @@ covers `fetch` and `predict`. `score` is built later from stored data (ADR-0005)
 | Workflow | Schedule | In scope here |
 |---|---|---|
 | `fetch` | daily 06:00 UTC | yes |
-| `predict` | poll every 15m; run at deadline −6h and deadline −2h; manual dispatch | yes |
+| `predict` | poll every 30m; run at deadline −6h and deadline −2h; manual dispatch | yes |
 | `score` | daily 10:00 UTC | no — see Out of Scope |
 
 The fifteen-minute schedule assumes a public GitHub repository. At the plan limits reviewed
@@ -317,7 +317,7 @@ enforced by the database rather than by application code:
   fpl_id)` rather than rebuilding it. Rebuilding would hand late-filled Entrants fresher
   information (ADR-0006). If the main run did not store a context, a Fill fails before making
   an outbound call.
-- GitHub Actions polls every fifteen minutes. The scheduler derives due work from
+- GitHub Actions polls every thirty minutes. The scheduler derives due work from
   `gameweeks.deadline_at`, records only completed main and Fill runs as done, and retries an
   incomplete run after persistence recovers. A run claimed before the Lock is retried even if
   recovery is later, so the late attempt is recorded and refused rather than left
