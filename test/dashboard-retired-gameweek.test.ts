@@ -49,10 +49,19 @@ const MOVED = 4;
 const RPS = [0.2, 0.25, 0.3];
 
 describe("La Liga's retired Gameweek", () => {
-  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  /** Seeds and rewrites. Nothing reads through this one. */
+  const writer = new Client({ connectionString: process.env.DATABASE_URL });
+  /**
+   * Every read the seam makes, under the role the Worker holds in production.
+   * A table granted without a policy returns nothing under Row Level Security
+   * and reports no error, so reading as the owner here would pass a suite the
+   * deployed dashboard fails — and this block is a new read of `models`,
+   * `scores` and `fixtures` rather than a new use of an old one.
+   */
+  const reader = new Client({ connectionString: process.env.DATABASE_URL });
 
   const query: Query = async (sql, parameters = []) =>
-    (await client.query(sql, [...parameters])).rows;
+    (await reader.query(sql, [...parameters])).rows;
 
   const get = async (path: string): Promise<Response> =>
     handleDashboardRequest(
@@ -73,7 +82,7 @@ describe("La Liga's retired Gameweek", () => {
   const score = async (
     seat: string, gw: number, metric: string, value: number
   ): Promise<void> => {
-    await client.query(
+    await writer.query(
       `insert into scores (
          model_id, competition, season, gw, track, metric, value, n
        ) values ($1, 'PD', $2, $3, 'match', $4, $5, $6)`,
@@ -82,16 +91,17 @@ describe("La Liga's retired Gameweek", () => {
   };
 
   beforeAll(async () => {
-    await client.connect();
-    await resetSchema(client);
+    await writer.connect();
+    await reader.connect();
+    await resetSchema(writer);
 
     for (const competition of ["PL", "PD"]) {
-      await client.query(
+      await writer.query(
         "insert into competitions (competition, season) values ($1, $2)",
         [competition, SEASON]
       );
       for (const gw of [1, 2]) {
-        await client.query(
+        await writer.query(
           `insert into gameweeks (competition, season, gw, deadline_at)
            values ($1, $2, $3, $4)`,
           [
@@ -107,7 +117,7 @@ describe("La Liga's retired Gameweek", () => {
     // other four were scheduled into Gameweek 1 and moved, so they lock into
     // Gameweek 2 and are asked there under the restarted version.
     for (let fixture = 1; fixture <= OWNED + MOVED; fixture += 1) {
-      await client.query(
+      await writer.query(
         `insert into fixtures (
            competition, season, fixture_id, gw, locked_in_gw, home_team,
            away_team, kickoff_at, result
@@ -127,7 +137,7 @@ describe("La Liga's retired Gameweek", () => {
       [MATCH_PROMPT_VERSION, ["match/claude-opus-5"]]
     ] as const) {
       for (const seat of seats) {
-        await client.query(
+        await writer.query(
           `insert into models (
              id, name, base_model, provider, prompt_version, role
            ) values ($1, 'Seat', 'anthropic/claude-opus-5', 'anthropic', $2,
@@ -137,8 +147,11 @@ describe("La Liga's retired Gameweek", () => {
       }
     }
 
+    await reader.query("set role dashboard_read");
+
     return async () => {
-      await client.end();
+      await writer.end();
+      await reader.end();
     };
   });
 
@@ -189,9 +202,49 @@ describe("La Liga's retired Gameweek", () => {
         .toEqual(["entrants", "fixtures", "gw", "promptVersion", "season"]);
     });
 
+  test("keeps the retired Gameweek out of the ranking beside it", async () => {
+    // The block's whole premise, read from the other side. The v1 rows seeded
+    // above are La Liga's only scored Gameweek and the leaderboard must not
+    // date itself from them: they were earned under a question the ranking no
+    // longer asks, and reading them would rank the restarted seats as noughts
+    // against a Gameweek none of them was entered for.
+    //
+    // Neither figure below is filtered by a Prompt Version anywhere — a
+    // Gameweek is scored, and a Fixture settles, whoever answered it — so this
+    // is the one place the retired Gameweek can reach the ranking, and the one
+    // place it is kept out.
+    const beforeRestart = await (await get("/api/pd/leaderboard")).json() as
+      LeaderboardBody;
+
+    expect(beforeRestart.throughGw).toBeNull();
+    // Not six. Gameweek 1's Lock owned six settled Fixtures, and the figure the
+    // ranking is presented against counts none of them.
+    expect(beforeRestart.settledFixtures).toBe(0);
+    // And the Lock a reader is told to wait for is the restarted version's
+    // first, not the one that has already been played and retired.
+    expect(beforeRestart.nextLock?.gw).toBe(2);
+
+    // The same reads, once the restarted version has a Gameweek of its own:
+    // the window opens at Gameweek 2 rather than being shut. A filter that
+    // answered null whatever the store held would pass everything above.
+    await score(V2_SEATS[0]!, 2, RPS_METRIC, 0.19);
+    await writer.query(
+      `update fixtures set result = $2
+        where competition = 'PD' and season = $1 and locked_in_gw = 2
+          and fixture_id = $3`,
+      [SEASON, JSON.stringify({ home: 2, away: 2 }), OWNED + 1]
+    );
+
+    const afterRestart = await (await get("/api/pd/leaderboard")).json() as
+      LeaderboardBody;
+
+    expect(afterRestart.throughGw).toBe(2);
+    expect(afterRestart.settledFixtures).toBe(1);
+  });
+
   test("says so rather than guessing when the scores are not stored",
     async () => {
-      await client.query(
+      await writer.query(
         "delete from scores where model_id = any($1)", [V1_SEATS]
       );
 
@@ -236,10 +289,20 @@ describe("La Liga's retired Gameweek", () => {
       LeaderboardBody;
     const entrants = await (await get("/api/pd/entrants")).json() as
       { entrants: Array<{ id: string }> };
+    // The third roster-shaped read, and the one that seats the roster against
+    // every Fixture: a Gameweek's slots are the standing seats, so a retired
+    // seat reaching them would be a Gap on every Fixture of the Season.
+    const fixtures = await (await get("/api/pd/fixtures")).json() as
+      { fixtures: Array<{ slots: Array<{ entrant: { id: string } }> }> };
     const retired = await block();
 
-    expect(leaderboard.entrants.map(({ id }) => id)).toEqual([...V2_SEATS].sort());
-    expect(entrants.entrants.map(({ id }) => id)).toEqual([...V2_SEATS].sort());
+    const seated = [...V2_SEATS].sort();
+    expect(leaderboard.entrants.map(({ id }) => id)).toEqual(seated);
+    expect(entrants.entrants.map(({ id }) => id)).toEqual(seated);
+    expect(fixtures.fixtures.length).toBeGreaterThan(0);
+    for (const fixture of fixtures.fixtures) {
+      expect(fixture.slots.map(({ entrant }) => entrant.id)).toEqual(seated);
+    }
     expect(retired.entrants.map(({ id }) => id)).toEqual(V1_SEATS);
   });
 });

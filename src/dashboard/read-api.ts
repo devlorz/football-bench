@@ -11,7 +11,7 @@ import {
 } from "../fpl/demonstration-record.js";
 import type { ScoreDetail } from "../fpl/score-team-sheet.js";
 import {
-  MATCH_PROMPT_COMPETITIONS, matchPromptOf, retiredPromptOf,
+  MATCH_PROMPT_COMPETITIONS, matchPromptOf, retiredGameweekOf,
   type RetiredGameweek
 } from "../predictions/openrouter-entrant.js";
 import {
@@ -188,6 +188,27 @@ const scoredOrNull = (
 ): number | null => throughGw === null ? null : Number(value ?? 0);
 
 /**
+ * The first Gameweek a Competition's ranking may read.
+ *
+ * One for every Competition that has run one question all Season, and one past
+ * the retired Gameweek on a Competition that restarted: ADR-0042 keeps that
+ * Gameweek whole under its own label and says Season scoring starts fresh at
+ * the restarted versions, so a ranking that read it would be the merge the ADR
+ * forbids, arriving through the back door.
+ *
+ * It is needed because neither read below names a Prompt Version. The seat
+ * joins do — the retired seats left every roster the moment the constant moved
+ * — but a Gameweek is scored, and Fixtures settle, whoever answered them: the
+ * retired version's own `scores` rows would date the Season at its Gameweek and
+ * rank the restarted seats as ten noughts against it, and its settled Fixtures
+ * would be counted into the `n` the whole ranking is presented against. Story
+ * 28 asks for that accidental read to be impossible; this is where it is made
+ * so, because this is where a Gameweek is read without a version beside it.
+ */
+const rankedFrom = (competition: string): number =>
+  (retiredGameweekOf(competition)?.gw ?? 0) + 1;
+
+/**
  * The Gameweek the Season has been *scored* through, which is not the last
  * Gameweek holding a `scores` row. Coherence, Gaps and Repairs are behavioural:
  * the scorer answers them the moment a Lock passes, so a Locked and unplayed
@@ -232,8 +253,8 @@ async function scoredThrough(
   const [scored] = await query(
     `select max(gw) as through_gw from scores
       where competition = $3 and season = $1
-        and track = 'match' and metric = $2`,
-    [season, RPS_METRIC, competition]
+        and track = 'match' and metric = $2 and gw >= $4`,
+    [season, RPS_METRIC, competition, rankedFrom(competition)]
   );
   return numberOrNull(scored?.through_gw);
 }
@@ -301,19 +322,23 @@ async function leaderboard(
   const [lock] = throughGw === null
     ? await query(
       `select gw, deadline_at from gameweeks
-        where competition = $2 and season = $1 order by gw limit 1`,
-      [season, competition]
+        where competition = $2 and season = $1 and gw >= $3
+        order by gw limit 1`,
+      [season, competition, rankedFrom(competition)]
     )
     : [];
 
   // Not any Entrant's `n`: the figure the whole ranking is presented against is
   // counted from the Fixtures a Lock owns that have a result, without reference
   // to any Entrant, so one Entrant's Gap cannot move it.
+  // `locked_in_gw >= $3` is also the "has been Locked at all" test the count
+  // has always made: an unlocked Fixture's null compares to nothing and drops
+  // out, exactly as `is not null` dropped it.
   const [settled] = await query(
     `select count(*) as settled from fixtures
       where competition = $2 and season = $1
-        and locked_in_gw is not null and result is not null`,
-    [season, competition]
+        and locked_in_gw >= $3 and result is not null`,
+    [season, competition, rankedFrom(competition)]
   );
 
   // `role = 'entrant'` selects both tracks' seats, so the roster is the Season
@@ -2305,7 +2330,7 @@ export async function handleDashboardRequest(
     // built from, and an empty body would be a claim that something was retired
     // and scored nought — so it falls through to the 404 every other unserved
     // path gets.
-    const retired = retiredPromptOf(competition);
+    const retired = retiredGameweekOf(competition);
     if (endpoint === "retired" && retired !== null) {
       return await retiredGameweek(query, season, competition, retired);
     }

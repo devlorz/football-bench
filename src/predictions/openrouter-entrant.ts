@@ -120,7 +120,7 @@ export function matchPromptOf(competition: string): MatchPrompt {
  * and the reason the block is one league's and not a page shape every league
  * carries empty.
  */
-export function retiredPromptOf(competition: string): RetiredGameweek | null {
+export function retiredGameweekOf(competition: string): RetiredGameweek | null {
   return matchPromptOf(competition).retired ?? null;
 }
 

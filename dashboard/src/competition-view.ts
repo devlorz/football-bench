@@ -1,6 +1,6 @@
 import {
   MATCH_PROMPT_COMPETITIONS, matchPromptOf, retiredGameweekLabel,
-  retiredPromptOf
+  retiredGameweekOf
 } from "../../src/predictions/openrouter-entrant.js";
 
 /** The Match track's three pages, which are the three links in the chrome. */
@@ -90,7 +90,7 @@ export interface CompetitionRoute {
 export const competitionRoutes = (): CompetitionRoute[] =>
   MATCH_PROMPT_COMPETITIONS.map((competition) => {
     const segment = competition.toLowerCase();
-    const retired = retiredPromptOf(competition);
+    const retired = retiredGameweekOf(competition);
     return {
       params: { competition: segment },
       props: {

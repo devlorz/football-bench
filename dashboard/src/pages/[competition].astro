@@ -192,9 +192,10 @@ const { competition, competitionName, path, api, retiredLabel } = Astro.props;
       build's. A reader sees what the block is before its figures arrive, which
       is what the rest of this page does with everything that is not a number.
 
-      Below the ranking, and outside it: the leaderboard begins at Gameweek 2
-      and contains nothing of this, which is the separation the ADR asks for
-      read as a position on the page. */}
+      Below the ranking and outside it, which is where it reads and not what
+      keeps it out of the ranking: the leaderboard begins at Gameweek 2 because
+      `rankedFrom` in the read API refuses the retired Gameweek to every figure
+      the ranking is built from. A position on a page separates nothing. */}
   {retiredLabel !== null && (
     <section class="frozen" id="frozen">
       <div class="rankbar">
@@ -445,10 +446,10 @@ const { competition, competitionName, path, api, retiredLabel } = Astro.props;
       const scored = frozen.entrants
         .some((entrant) => entrant.matchPoints !== null);
       text($("frozen-note"), scored
-        ? "Read from the scores stored for that Gameweek, under the retired "
-          + "version named above. It is not merged into the ranking and carries "
-          + "no interval and no Comparison Anchor: one Gameweek supports "
-          + "neither."
+        // Nothing, and deliberately: the line exists to say something is wrong,
+        // and a block that read correctly has nothing to tell a reader that the
+        // figures above it do not.
+        ? ""
         : "This Gameweek was played and no scores are stored for it. The "
           + "record is incomplete \u2014 nothing here is being estimated, and "
           + "nothing is being retried.");

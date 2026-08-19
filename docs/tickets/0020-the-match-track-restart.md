@@ -770,6 +770,50 @@ and one unread block must not report the whole page as unread.
 readings of one body and only one may be shown; this is a block that either belongs on
 the page or was never built into it.
 
+### The leaderboard did not begin at Gameweek 2 — found by review, 2026-08-19
+
+The first writing of this slice put the block below the ranking and called the position
+the separation. It is not. Two reads in the leaderboard name no Prompt Version at all,
+because neither is about a seat: `scoredThrough` takes `max(gw)` over the Competition's
+RPS rows, and `settledFixtures` counts every Locked Fixture with a result. A Gameweek is
+scored, and a Fixture settles, whoever answered it — so the moment slice 1's completing
+run writes La Liga's v1 rows, the ranking would have dated itself at Gameweek 1, ranked
+the restarted seats as ten noughts against a Gameweek none of them was entered for, and
+counted that Gameweek's six Fixtures into the `n` the whole ranking is presented against.
+That is the merge ADR-0042 forbids, arriving through the one door that was not watched,
+and it is exactly the accidental read story 28 asks to be made impossible.
+
+`rankedFrom` is where it is made impossible: one past the retired Gameweek where a
+Competition has one, one everywhere else, read from the same `retired` field the block
+is built from. Both reads take it, and so does the pre-season Lock — a reader waiting for
+La Liga's next deadline is waiting for the restarted version's first, not for one that
+has been played and retired.
+
+The test seeds the v1 Gameweek and then asserts the leaderboard beside it: `throughGw`
+null, `settledFixtures` nought over six settled Fixtures, `nextLock` at Gameweek 2. Then
+it scores Gameweek 2 and settles one of its Fixtures, so a filter that answered null
+whatever the store held would fail — which the first writing of the assertion did not
+catch until the constant was walked back by hand.
+
+### What the review asked for and did not get — recorded 2026-08-19
+
+**The three left joins on `scores` stay duplicated.** `retiredGameweek` repeats the shape
+`entrants` already has. They are not one thing yet: one reads per-Gameweek metrics at a
+retired version's Gameweek, the other reads Season-to-date metrics at the scored one, and
+nothing has ever forced the two to be edited together. Extract it the first time a change
+has to be made in both.
+
+**The block's two sentences are asserted nowhere.** The heading is pinned byte for byte
+in `dashboard-competition-view.test.ts` because it is built at build time; the scope line
+and the absent-scores line are written by the page's inline script, which nothing in this
+repo drives. The prior art for making one testable is `chart-domain.ts` — lift the pure
+part into a module the page imports — and that is not open to this page: its script
+carries `define:vars`, which implies `is:inline`, and an inline script imports nothing.
+So what is proven is the API half: every figure null with every seat still listed. What
+is not proven is that the page turns that into the sentence. Recorded rather than papered
+over with an assertion against the file's own source text, which would pin the string
+without proving the branch ever reaches it.
+
 ## 6 — Head Coach changes, racing the cutoff
 
 **What to build:** A Fixture's packet states each club's Head Coach changes — who left,
