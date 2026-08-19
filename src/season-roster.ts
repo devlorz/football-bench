@@ -409,6 +409,12 @@ export async function enterSeasonRoster(
   // follows a v1 that ran. Whole roster and not seat by seat: ten seats under
   // one version are one shape, and a half-qualified roster is a Competition
   // whose seats no longer sort together.
+  //
+  // ponytail: select-then-upsert, not one statement. Two operators seeding the
+  // same Competition at once could read "not taken" together and race; the
+  // door is run by hand, one operator, a few times a Season. A single
+  // statement that qualified the id in SQL is the upgrade if that stops being
+  // true.
   const retired = await database.query<{ id: string }>(
     `select id from models
       where id = any($1) and prompt_version <> $2`,
@@ -416,7 +422,7 @@ export async function enterSeasonRoster(
   );
   const seats = retired.rows.length === 0 ? plain : plain.map((entrant) => ({
     ...entrant,
-    id: `${seatPrefix}/${version.split("/")[1]}/${seatSlug(entrant.id)}`
+    id: `${version}/${seatSlug(entrant.id)}`
   }));
 
   await database.query("begin");

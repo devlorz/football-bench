@@ -383,7 +383,8 @@ describe("entering the Season Roster", () => {
       );
       expect(standing.map(({ id }) => id).sort()).toEqual(
         SEASON_ROSTER
-          .map(({ id }) => `match-pd/2026-27-v2/${id.slice("match/".length)}`)
+          .map(({ id }) => `${matchPromptOf("PD").version}/${
+            id.slice("match/".length)}`)
           .sort()
       );
       expect(standing.map(({ base_model }) => base_model).sort())

@@ -173,12 +173,14 @@ describe("the Match Prompt Version", () => {
     });
 
   // The same mechanism, over La Liga's rendering of the same facts: no
-  // availability section (ADR-0037), and now that ticket 6 has named the
-  // Spanish divisions, a league table that reads "no result has been played
-  // yet this Season" rather than one that states it is unavailable. That is
-  // the move this hash was written to expect -- `match-pd/2026-27-v1` is
-  // still unused and the freeze binds at first use (ADR-0038), so re-pinning
-  // here is the freeze taking its final shape, not a frozen prompt changing.
+  // availability section (ADR-0037), and a league table that reads "no result
+  // has been played yet this Season" rather than one that states it is
+  // unavailable. Read off `matchPromptOf` rather than a constant of its own,
+  // because which version La Liga stands on is the thing that moves: this pin
+  // is `match-pd/2026-27-v2`'s, taken from a real render of the template
+  // ADR-0043 amended. Its v1 was used -- Gameweek 1, six contexts and sixty
+  // Predictions -- and is retired unamendable (ADR-0042), so this is a new
+  // version being frozen and not a frozen prompt changing.
   test("pins La Liga's own rendering under its own Prompt Version", () => {
     expect(sha256(buildMatchContext(FIXTURE, contextData("PD"))))
       .toBe(matchPromptOf("PD").sha256);
