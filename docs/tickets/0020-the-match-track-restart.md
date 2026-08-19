@@ -335,10 +335,15 @@ at all.)
       bench is attempted — a dry run replays bytes and invents none.
 - [ ] The bench runs the amended builder over the same Fixtures at the same as-of instant
       and touches no production table: the context identity, the restarted scoring and
-      ADR-0032's objection all forbid it, each independently. **Two of the three.** The
-      Fixtures are the same six and nothing was written to production; the instant is an
-      hour off production's, and production is read. Both deviations are measured below
-      rather than waved at.
+      ADR-0032's objection all forbid it, each independently. **Two of the three, and the
+      third accepted rather than pending.** The Fixtures are the same six and nothing was
+      written to production. The instant is an hour off production's and production is
+      read; both deviations are measured below, and the measurement is what settles them.
+      The packet does not move across that hour, checked source by source rather than
+      assumed, so a re-run at the absolute instant would spend a second roster's worth of
+      paid calls to confirm what reading already established. The box stays open because
+      it says "same" and "touches" and neither is literally true of what ran. No work is
+      waiting behind it, and nothing in slice 4 reads it.
 - [x] What is read from it is what ADR-0026's dry opening read: Repair and format
       failures, the incoherence rate under the new sentences, and whether the base-rates
       anchor is picked up at all — with RPS deltas at n=6 named as noise in the findings.
