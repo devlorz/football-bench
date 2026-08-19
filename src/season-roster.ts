@@ -255,13 +255,22 @@ function identityOfSeat(seat: StoredSeat): Record<string, string | null> {
  * carries no slash, so the last one ends the prefix however long it is.
  *
  * `entrantSlug` in `dashboard/src/entrant-link.ts` is this function again, for
- * the `?entrant=` a reader copies. The two stand apart because merging them
- * would run a dependency backwards: every import in this repository points
- * from `dashboard/` into `src/`, and this file importing out of `dashboard/`
- * would be the first the other way. Merging is a move of that module into
- * `src/`, which is a decision of its own and not one spec 0017 makes.
+ * the `?entrant=` a reader copies. Ticket 0020's slice 4 edited both at once
+ * — `indexOf` to `lastIndexOf`, twice, by hand — and the twins were kept
+ * anyway. Merging them means moving that module into `src/`, and the module's
+ * own rule is that it imports nothing a browser cannot have: it is bundled and
+ * shipped to every reader, and it sat in `competition-view.ts` until fifty
+ * kilobytes of `zod` and frozen Prompt Versions rode six lines of string
+ * handling into the page. What keeps that rule today is the distance — there
+ * is no server module next to it to reach for. In `src/` there is nothing but,
+ * and one import added a year from now by someone who never read this puts the
+ * roster's dependencies back in the browser. That is the trade the merge asks
+ * for, and one line of duplication is the cheaper side of it.
+ *
+ * Exported for the parity test that stands in the merge's place: divergence
+ * between the twins now fails a build rather than a reader.
  */
-function seatSlug(id: string): string {
+export function seatSlug(id: string): string {
   return id.slice(id.lastIndexOf("/") + 1);
 }
 
