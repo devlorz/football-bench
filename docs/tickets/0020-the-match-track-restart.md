@@ -498,6 +498,12 @@ against per game on the Prior-Season line, and the two closing instruction sente
 and La Liga's carries neither an availability section (ADR-0037) nor an FPL block.
 `match/2026-27-v2` is `cdebf27b`; `match-pd/2026-27-v2` is `f54e7347`.
 
+**Both have since moved, and this box's claim moved with them.** Slice 6 added a section
+to every rendered packet, so the pins are now `c80fb360` and `3a0fb89d` — taken from the
+test's own render rather than from a real one. This box read true when it was ticked and
+does not read true now; what closes it again is slice 6's box 6, before the gate. Do not
+trust the two digests above as the values in the constants.
+
 Then the re-seat refused to be a constant move. `enterSeasonRoster` names a seat
 `<prefix>/<slug>` where the prefix is the Prompt Version's leading segment, so
 `match-pd/2026-27-v1` and `match-pd/2026-27-v2` want the same ten ids — and the write is
