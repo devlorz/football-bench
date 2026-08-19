@@ -11,8 +11,8 @@ import {
 } from "../fpl/demonstration-record.js";
 import type { ScoreDetail } from "../fpl/score-team-sheet.js";
 import {
-  MATCH_PROMPT_COMPETITIONS, matchPromptOf, retiredGameweekOf,
-  type RetiredGameweek
+  MATCH_PROMPT_COMPETITIONS, matchPromptOf, RETIRED_GAMEWEEK_CAVEAT,
+  retiredGameweekOf, type RetiredGameweek
 } from "../predictions/openrouter-entrant.js";
 import {
   BET_POINTS_METRIC, BET_POINTS_QUALIFICATION,
@@ -2188,6 +2188,20 @@ export interface RetiredGameweekBody {
   promptVersion: string;
   gw: number;
   /**
+   * The three sentences the figures below may not reach a reader without
+   * (ADR-0012). The first two are the scorer's own, read out of the rows this
+   * body is built from exactly as the leaderboard reads its ranking's — the
+   * per-Gameweek rows carry them, so the block needs no plumbing of its own.
+   * The third is the evidential layer's, which has no stored sentence because
+   * ADR-0042 refuses this block the interval that would be its claim.
+   *
+   * All three are null in the one state where nothing is published: no stored
+   * scores at all, which the block says outright.
+   */
+  matchPointsQualification: string | null;
+  betPointsQualification: string | null;
+  evidenceCaveat: string | null;
+  /**
    * The Fixtures that Gameweek's Lock owned, which is the attribution the
    * record has (ADR-0013) and not the count the calendar scheduled into it. A
    * reader comparing this block against a Fixtures list must be able to read
@@ -2215,7 +2229,9 @@ async function retiredGameweek(
   const rows = await query(
     `select m.id, m.name,
             points.value as match_points,
+            points.detail ->> 'qualification' as match_qualification,
             bets.value as bet_points,
+            bets.detail ->> 'qualification' as bet_qualification,
             rps.value as rps
        from models m
        left join scores points
@@ -2249,18 +2265,59 @@ async function retiredGameweek(
     [season, retired.gw, competition]
   );
 
+  const entrants: RetiredGameweekEntrant[] = rows.map((row) => ({
+    id: String(row.id),
+    name: String(row.name),
+    matchPoints: numberOrNull(row.match_points),
+    betPoints: numberOrNull(row.bet_points),
+    rps: numberOrNull(row.rps)
+  }));
+
+  // Whether anything is published at all, asked of all three figures and not of
+  // the Match Points alone: a seat holding a Bet Points row and no Match Points
+  // one publishes a number, and a block that decided on one column would print
+  // it under a sentence saying nothing is stored.
+  const published = entrants.some(
+    ({ matchPoints, betPoints, rps }) =>
+      matchPoints !== null || betPoints !== null || rps !== null
+  );
+
+  // Read off the rows rather than restated from the scorer's constants, for the
+  // reason the leaderboard reads its own: the claim is that what the scorer
+  // stored reaches a reader intact, and restating it would answer that question
+  // with itself. Taken from whichever row has one, because a seat that settled
+  // nothing has no row and therefore no sentence.
+  //
+  // It fails closed. The leaderboard's one documented fallback is a scored
+  // Season with no ranking row anywhere; this block has no such state — a
+  // figure here comes from a row, and a row carries the sentence — so a figure
+  // published without one is a storage fault, and a reader is left with the
+  // page's failure line rather than a number stripped of what it means.
+  const qualification = (column: string): string | null => {
+    if (!published) {
+      return null;
+    }
+    const stored = textOrNull(
+      rows.map((row) => row[column]).find((each) => each != null)
+    );
+    if (stored === null) {
+      throw new Error(
+        `The retired Gameweek's rows carry no ${column}, and a figure cannot `
+        + "be published without it"
+      );
+    }
+    return stored;
+  };
+
   const body: RetiredGameweekBody = {
     season,
     promptVersion: retired.version,
     gw: retired.gw,
+    matchPointsQualification: qualification("match_qualification"),
+    betPointsQualification: qualification("bet_qualification"),
+    evidenceCaveat: published ? RETIRED_GAMEWEEK_CAVEAT : null,
     fixtures: Number(owned?.owned ?? 0),
-    entrants: rows.map((row) => ({
-      id: String(row.id),
-      name: String(row.name),
-      matchPoints: numberOrNull(row.match_points),
-      betPoints: numberOrNull(row.bet_points),
-      rps: numberOrNull(row.rps)
-    }))
+    entrants
   };
   return json(body, SCORED_CACHE);
 }
@@ -2330,9 +2387,11 @@ export async function handleDashboardRequest(
     // built from, and an empty body would be a claim that something was retired
     // and scored nought — so it falls through to the 404 every other unserved
     // path gets.
-    const retired = retiredGameweekOf(competition);
-    if (endpoint === "retired" && retired !== null) {
-      return await retiredGameweek(query, season, competition, retired);
+    if (endpoint === "retired") {
+      const retired = retiredGameweekOf(competition);
+      if (retired !== null) {
+        return await retiredGameweek(query, season, competition, retired);
+      }
     }
   }
 

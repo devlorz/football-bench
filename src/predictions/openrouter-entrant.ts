@@ -44,6 +44,25 @@ export const retiredGameweekLabel = ({ version, gw }: RetiredGameweek): string =
   `Gameweek ${gw} — played under ${version}, before the restart`;
 
 /**
+ * What the block's RPS may not reach a reader without.
+ *
+ * The two rankings carry their own stored sentences and this one carries the
+ * evidential layer's, which has none to store: ADR-0012 says a claim about one
+ * Base Model forecasting better than another rests on Paired Differences and
+ * their interval, and ADR-0042 refuses this block both — one Gameweek supports
+ * no claim. So the figure is published with the reason it proves nothing,
+ * which is the only shape in which it may be published at all.
+ *
+ * A constant and not a `scores` row: it qualifies no computed number, it is
+ * ADR-0042's own sentence, and there is nothing for the scorer to have written
+ * it into — the retired version's rows were written before this block existed.
+ */
+export const RETIRED_GAMEWEEK_CAVEAT =
+  "One Gameweek supports no claim. These figures carry no interval and no "
+  + "Comparison Anchor, and nothing about whether one Base Model forecasts "
+  + "better than another can be read off them.";
+
+/**
  * One template, one frozen Prompt Version per Competition (ADR-0038). The
  * wording is shared; the Competition's name is the only thing that differs, so
  * no two leagues can drift into being asked different questions.

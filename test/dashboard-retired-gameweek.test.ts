@@ -5,11 +5,13 @@ import {
   type RetiredGameweekBody
 } from "../src/dashboard/read-api.js";
 import {
-  MATCH_PROMPT_VERSION, matchPromptOf
+  MATCH_PROMPT_VERSION, matchPromptOf, RETIRED_GAMEWEEK_CAVEAT
 } from "../src/predictions/openrouter-entrant.js";
 import {
-  BET_POINTS_METRIC, BET_POINTS_SEASON_TO_DATE_METRIC, MATCH_POINTS_METRIC,
-  MATCH_POINTS_SEASON_TO_DATE_METRIC, RPS_METRIC
+  BET_POINTS_METRIC, BET_POINTS_QUALIFICATION,
+  BET_POINTS_SEASON_TO_DATE_METRIC, MATCH_POINTS_METRIC,
+  MATCH_POINTS_QUALIFICATION, MATCH_POINTS_SEASON_TO_DATE_METRIC,
+  REFERENCE_HOME, RPS_METRIC
 } from "../src/predictions/score-match-gameweek.js";
 import { resetSchema } from "./schema-fixture.js";
 
@@ -48,6 +50,12 @@ const MOVED = 4;
 /** One stored RPS per v1 seat, distinct so no assertion passes by accident. */
 const RPS = [0.2, 0.25, 0.3];
 
+/** What the scorer stores beside each figure, by the metric it qualifies. */
+const QUALIFICATIONS: Record<string, string> = {
+  [MATCH_POINTS_METRIC]: MATCH_POINTS_QUALIFICATION,
+  [BET_POINTS_METRIC]: BET_POINTS_QUALIFICATION
+};
+
 describe("La Liga's retired Gameweek", () => {
   /** Seeds and rewrites. Nothing reads through this one. */
   const writer = new Client({ connectionString: process.env.DATABASE_URL });
@@ -84,9 +92,17 @@ describe("La Liga's retired Gameweek", () => {
   ): Promise<void> => {
     await writer.query(
       `insert into scores (
-         model_id, competition, season, gw, track, metric, value, n
-       ) values ($1, 'PD', $2, $3, 'match', $4, $5, $6)`,
-      [seat, SEASON, gw, metric, value, OWNED]
+         model_id, competition, season, gw, track, metric, value, n, detail
+       ) values ($1, 'PD', $2, $3, 'match', $4, $5, $6, $7)`,
+      [
+        seat, SEASON, gw, metric, value, OWNED,
+        // The sentence the scorer writes into every row a figure can be read
+        // off. RPS carries none, which is why the block's third sentence is a
+        // constant rather than a read.
+        QUALIFICATIONS[metric] === undefined
+          ? null
+          : JSON.stringify({ qualification: QUALIFICATIONS[metric] })
+      ]
     );
   };
 
@@ -147,6 +163,22 @@ describe("La Liga's retired Gameweek", () => {
       }
     }
 
+    // The three Reference Lines, which sit under the Premier League's frozen
+    // version and carry rows for every Competition they were run over — La
+    // Liga's retired Gameweek 1 among them. They are the trap in this slice:
+    // a ranking window narrowed by Prompt Version would keep them, because
+    // theirs is the version that still stands, and a window narrowed by
+    // `role = 'entrant'` would keep them too. Only the Gameweek excludes them,
+    // which is why the window is a Gameweek.
+    await writer.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values ($1, 'Home advantage', 'reference', 'reference', $2,
+                 'reference')`,
+      [REFERENCE_HOME, MATCH_PROMPT_VERSION]
+    );
+    await score(REFERENCE_HOME, 1, RPS_METRIC, 0.31);
+
     await reader.query("set role dashboard_read");
 
     return async () => {
@@ -198,8 +230,16 @@ describe("La Liga's retired Gameweek", () => {
       // Three numbers per seat and no fourth: an interval, a Comparison Anchor
       // or a Season total would each be a field here, and one Gameweek supports
       // none of them.
-      expect(Object.keys(body).sort())
-        .toEqual(["entrants", "fixtures", "gw", "promptVersion", "season"]);
+      expect(Object.keys(body).sort()).toEqual([
+        "betPointsQualification", "entrants", "evidenceCaveat", "fixtures",
+        "gw", "matchPointsQualification", "promptVersion", "season"
+      ]);
+      // Byte for byte out of storage, which is the claim: the scorer writes the
+      // sentence into every row a figure can be read off, and the block reads
+      // it back rather than restating the constant.
+      expect(body.matchPointsQualification).toBe(MATCH_POINTS_QUALIFICATION);
+      expect(body.betPointsQualification).toBe(BET_POINTS_QUALIFICATION);
+      expect(body.evidenceCaveat).toBe(RETIRED_GAMEWEEK_CAVEAT);
     });
 
   test("keeps the retired Gameweek out of the ranking beside it", async () => {
@@ -216,6 +256,8 @@ describe("La Liga's retired Gameweek", () => {
     const beforeRestart = await (await get("/api/pd/leaderboard")).json() as
       LeaderboardBody;
 
+    // Null, with a Reference Line's own RPS row sitting on that Gameweek as
+    // well: the retired Gameweek is refused whoever wrote it.
     expect(beforeRestart.throughGw).toBeNull();
     // Not six. Gameweek 1's Lock owned six settled Fixtures, and the figure the
     // ranking is presented against counts none of them.
@@ -241,26 +283,6 @@ describe("La Liga's retired Gameweek", () => {
     expect(afterRestart.throughGw).toBe(2);
     expect(afterRestart.settledFixtures).toBe(1);
   });
-
-  test("says so rather than guessing when the scores are not stored",
-    async () => {
-      await writer.query(
-        "delete from scores where model_id = any($1)", [V1_SEATS]
-      );
-
-      const body = await block();
-
-      // Every seat still listed and every figure null. This state means slice
-      // 1's scoring run never landed, and the page's honesty is the alarm — a
-      // block that dropped the seats, or drew noughts, would report a Gameweek
-      // nobody scored as a Gameweek everybody lost.
-      expect(body.entrants.map(({ id }) => id)).toEqual(V1_SEATS);
-      for (const entrant of body.entrants) {
-        expect(entrant.matchPoints).toBeNull();
-        expect(entrant.betPoints).toBeNull();
-        expect(entrant.rps).toBeNull();
-      }
-    });
 
   test("counts the Fixtures the retired Gameweek's Lock owned, not the ten "
     + "scheduled into it", async () => {
@@ -305,4 +327,49 @@ describe("La Liga's retired Gameweek", () => {
     }
     expect(retired.entrants.map(({ id }) => id)).toEqual(V1_SEATS);
   });
+
+  test("refuses to publish a figure whose stored sentence is missing",
+    async () => {
+      // The sentence stripped from storage while the figures stay. It fails
+      // closed rather than dropping the qualification and publishing the
+      // numbers: ADR-0012's rule is that a value cannot reach a reader without
+      // it, so a reader gets the page's failure line and not a Match Points
+      // column stripped of what it means.
+      //
+      // A guard nothing has ever seen bite is the kind that turns out not to,
+      // which is why it is walked into here rather than argued in a comment.
+      await writer.query(
+        `update scores set detail = '{}'
+          where model_id = any($1) and metric = $2`,
+        [V1_SEATS, MATCH_POINTS_METRIC]
+      );
+
+      await expect(get("/api/pd/retired"))
+        .rejects.toThrow(/cannot be published without it/);
+    });
+
+  test("says so rather than guessing when the scores are not stored",
+    async () => {
+      await writer.query(
+        "delete from scores where model_id = any($1)", [V1_SEATS]
+      );
+
+      const body = await block();
+
+      // Every seat still listed, in order, and every figure null — asserted as
+      // one shape rather than field by field, so a seat losing its name, the
+      // order changing, or a fourth field arriving fails here too. This state
+      // means slice 1's scoring run never landed, and the page's honesty is the
+      // alarm: a block that dropped the seats, or drew noughts, would report a
+      // Gameweek nobody scored as a Gameweek everybody lost.
+      expect(body.entrants).toEqual(V1_SEATS.map((id) => ({
+        id, name: "Seat", matchPoints: null, betPoints: null, rps: null
+      })));
+      // And nothing is qualified, because nothing is published. The three
+      // sentences exist to let a figure reach a reader; with no figure they
+      // would be three claims about an empty table.
+      expect(body.matchPointsQualification).toBeNull();
+      expect(body.betPointsQualification).toBeNull();
+      expect(body.evidenceCaveat).toBeNull();
+    });
 });

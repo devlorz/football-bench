@@ -215,7 +215,14 @@ const { competition, competitionName, path, api, retiredLabel } = Astro.props;
         <div id="frozen-rows" role="rowgroup"></div>
       </div>
 
+      {/* Both stored sentences and the evidential one, at the length the
+          scorer and ADR-0042 wrote them, above the line that speaks only when
+          something is wrong. Every figure in the block is qualified by one of
+          the three, which is what lets any of them be published (ADR-0012). */}
       <div class="qualifications">
+        <p id="frozen-qual-match"></p>
+        <p id="frozen-qual-bet"></p>
+        <p id="frozen-caveat"></p>
         <p id="frozen-note"></p>
       </div>
     </section>
@@ -443,8 +450,13 @@ const { competition, competitionName, path, api, retiredLabel } = Astro.props;
       // than drawn around: this Gameweek was played, so an empty block is a
       // fault in the record and the page saying so is the only alarm a reader
       // gets.
-      const scored = frozen.entrants
-        .some((entrant) => entrant.matchPoints !== null);
+      text($("frozen-qual-match"), frozen.matchPointsQualification ?? "");
+      text($("frozen-qual-bet"), frozen.betPointsQualification ?? "");
+      text($("frozen-caveat"), frozen.evidenceCaveat ?? "");
+
+      // The body's own answer to whether anything was published, and not a
+      // fourth derivation of it beside the three sentences it already decided.
+      const scored = frozen.evidenceCaveat !== null;
       text($("frozen-note"), scored
         // Nothing, and deliberately: the line exists to say something is wrong,
         // and a block that read correctly has nothing to tell a reader that the

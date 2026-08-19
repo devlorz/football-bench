@@ -795,6 +795,46 @@ it scores Gameweek 2 and settles one of its Fixtures, so a filter that answered 
 whatever the store held would fail — which the first writing of the assertion did not
 catch until the constant was walked back by hand.
 
+### The block published two rankings' figures with no sentence — found by review
+
+ADR-0012's rule reaches further than the leaderboard: the scorer stores its qualification
+in the detail of every row a figure can be read off "so a value cannot reach a reader
+without it". The block published Match Points and Bet Points with neither. It reads both
+back off its own rows now — the per-Gameweek rows carry them, so this needed no plumbing,
+only the two columns — and it fails closed like the ranking does, because a figure here
+always comes from a row and a row always carries the sentence, so a missing one is a
+storage fault rather than the leaderboard's one documented exception. The guard is walked
+into by a test that strips the sentence and leaves the figures.
+
+RPS has no stored sentence anywhere and needed the third: `RETIRED_GAMEWEEK_CAVEAT` says
+one Gameweek supports no claim, which is ADR-0042's own reason for refusing this block the
+interval that would be its claim. It is a constant, not a row — it qualifies no computed
+number, and the retired version's rows were written before this block existed.
+
+Beside it, the block's "is anything published" question asked only the Match Points. A
+seat holding Bet Points and no Match Points would have printed a number under the sentence
+saying nothing is stored. It asks all three figures now, and the page reads the body's
+answer rather than deriving a fourth of its own.
+
+### A suite that deleted the evidence before asserting on it — found by review
+
+Three of the tests ran after the absent-scores case had deleted every score, so the
+sentence "proven over a store seeded with both versions" covered the seat filters and
+nothing else — which is precisely how the `scoredThrough` bug above survived a suite
+written to catch it. The absent case runs last now, and the coexistence assertions run
+with the retired Gameweek's rows and the restarted Gameweek's rows both standing.
+
+The seed gained the trap that makes the window's shape load-bearing: a Reference Line,
+which sits under the *Premier League's* frozen version and carries an RPS row for La
+Liga's retired Gameweek. A ranking window narrowed by Prompt Version would keep it,
+because its version is the one that still stands; a window narrowed by `role = 'entrant'`
+would keep it too. Only the Gameweek excludes it, which is why the window is a Gameweek —
+and the seed now fails if that reasoning is ever undone.
+
+The absent-scores assertion was a loop of `toBeNull` per field, which would have passed a
+seat that lost its name, an order that changed, or a fourth field arriving. One `toEqual`
+over the whole array, as the test one screen above it already did.
+
 ### What the review asked for and did not get — recorded 2026-08-19
 
 **The three left joins on `scores` stay duplicated.** `retiredGameweek` repeats the shape
@@ -802,6 +842,11 @@ catch until the constant was walked back by hand.
 retired version's Gameweek, the other reads Season-to-date metrics at the scored one, and
 nothing has ever forced the two to be edited together. Extract it the first time a change
 has to be made in both.
+
+**`retiredUrl` is still decided by the heading being null.** The heading and the endpoint
+are built from one call to `retiredGameweekOf`, so the string cannot be present where the
+field is absent; passing the field as well would put a second copy of the same decision in
+the page's props to keep in step with the first.
 
 **The block's two sentences are asserted nowhere.** The heading is pinned byte for byte
 in `dashboard-competition-view.test.ts` because it is built at build time; the scope line
