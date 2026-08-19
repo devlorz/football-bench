@@ -1,6 +1,4 @@
 import type { Client } from "pg";
-import type { FPL_PROMPT_VERSION } from "../context/build-fpl-track-context.js";
-import type { MATCH_PROMPT_VERSION } from "../predictions/openrouter-entrant.js";
 import type { ModelRole } from "../season-roster.js";
 
 type Database = Pick<Client, "query">;
@@ -27,20 +25,18 @@ export interface CalledRow {
 
 /**
  * The frozen Prompt Versions a run can be at — which is the same thing as
- * which track it is. Named as the two constants rather than as `string`, so a
- * caller cannot ask this door to admit a version nothing builds.
+ * which track it is, and on the match track which Competition it is.
  *
- * Narrower than that since ADR-0038: the match track now builds one Prompt
- * Version per Competition, and this admits only the Premier League's. Left
- * narrow deliberately — an Exhibition Run replays one Competition's stored
- * contexts under that Competition's version (ADR-0038's own consequence), and
- * deciding what that means is the work that should widen this, not a `string`
- * here ahead of it. Until then a non-`PL` Exhibition is unsayable rather than
- * silently replayed under the wrong league's prompt.
+ * Once the match track built one Prompt Version per Competition (ADR-0038) the
+ * two constants stopped being a list this type could name: `matchPromptOf`
+ * answers with a `string` per Competition, and the union admitted only the
+ * Premier League's. Widened rather than kept narrow, because what was keeping
+ * a non-`PL` Exhibition from being replayed under the wrong league's prompt
+ * was not this type — a Match caller derives the version from the Competition
+ * it was given, and the check below refuses a row that carries another. A
+ * version nothing builds now fails on that check rather than at the door.
  */
-type FrozenPromptVersion =
-  | typeof MATCH_PROMPT_VERSION
-  | typeof FPL_PROMPT_VERSION;
+type FrozenPromptVersion = string;
 
 /**
  * The one Exhibition row the operator named, or a refusal saying which of the

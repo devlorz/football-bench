@@ -651,6 +651,58 @@ cannot be re-seeded until slice 1's completing run has written Gameweek 1 under 
 closes with the seeding run, which needs `match/glm-5.2` deleted first. If the flip is
 abandoned instead of landed, this is the row that has to go back.
 
+### The Exhibition Run takes a Competition — recorded 2026-08-19
+
+**The clause box 5 sent away is settled.** `replayMatchExhibition` takes the Competition
+it replays and threads it through everything it reads and writes, which is what its own
+ADR always said it was: ADR-0032 defines an Exhibition Run as replaying one Competition's
+stored contexts under that Competition's Prompt Version. Recorded here and not under
+slice 4's boxes, because the narrowing above is right — none of this is the flip's doing,
+and all of it was as true the day before. Three things were the one-league assumption,
+all live from the moment `contexts` held two Competitions:
+
+- The seat was loaded at `MATCH_PROMPT_VERSION`, the Premier League's frozen constant. It
+  reads `matchPromptOf(competition).version` now, as every other seat-selecting call site
+  does — which also makes a La Liga Exhibition sayable, where the door's own comment said
+  it was deliberately unsayable until this work happened.
+- `attemptMatchCalls` was passed `competition: "PL"` as a literal, under a comment saying
+  no other Competition had ever had an Exhibition Run. That value is what every Prediction
+  and attempt the run writes is filed under; the literal and the comment are gone.
+- `settledGameweeks` selected contexts by Season and track alone, and its `not exists`
+  joined `fixtures` on Season and Gameweek alone, so it mixed the two leagues' Gameweeks
+  in both directions. `remainingFixtures` was the same: its `fixtures`/`contexts` join and
+  both of its `not exists` subqueries carried no Competition either.
+
+The door in `load-exhibition.ts` widened with it. Its `FrozenPromptVersion` union named
+the two constants precisely so a non-`PL` Exhibition could not be said, with a comment
+naming this change as the work that should widen it. What was actually keeping a replay
+off the wrong league's prompt was never the type — a Match caller derives the version
+from the Competition it was handed, and the row check refuses a seat carrying another —
+so the type is `string` and the check is the guard.
+
+Two tests, both red against the old code for the right reasons. A La Liga replay of
+Gameweek 1 puts its six stored contexts on the wire byte for byte and files every
+Prediction and attempt under `PD`; it failed before with
+`exhibition-pd/late is at Prompt Version match-pd/2026-27-v2, not match/2026-27-v2` —
+the pinned Premier League constant, refusing the only seat that could have run it. And a
+Premier League replay covers Gameweek 1 alone where La Liga holds a settled Gameweek 3;
+it failed before with `Fixture 101 has no Lock`, which is a Premier League run reaching
+for a La Liga Fixture and finding the Lock it has no business assigning.
+
+Contexts carry no Prompt Version column (`migrations/0001_initial.sql`), so the six
+Gameweek 1 contexts built under the retired `match-pd/2026-27-v1` stay replayable under
+the standing v2 — the reason an Exhibition can reach Gameweek 1 at all after the flip,
+and what the first test asserts by sending their stored bytes unchanged.
+
+The command reads `COMPETITION` the way `predict.ts` does, defaulted to `PL`. Safe to
+default here for a stronger reason than that command has: the seat is loaded at the named
+Competition's Prompt Version, so a La Liga row run under `PL` is refused before the first
+paid call rather than replayed under the wrong league's prompt.
+
+What the clause asked for — an Exhibition replay of Gameweek 1 still resolving v1's
+stored contexts — is a test now rather than a claim, and slice 4's boxes are unmoved
+by it.
+
 ## 5 — The frozen block
 
 **What to build:** A reader of the La Liga page sees Gameweek 1 whole and labelled —

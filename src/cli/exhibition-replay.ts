@@ -46,6 +46,13 @@ try {
   } else {
     const gameweeks = await replayMatchExhibition({
       database,
+      // An Exhibition Run is one Competition's (ADR-0032), and this is the
+      // operator's — defaulted to the Premier League the way the prediction
+      // command's is, and stated whenever it is anything else. A wrong one
+      // here spends nothing: the seat is loaded at this Competition's Prompt
+      // Version, so a La Liga row named under `PL` is refused before the
+      // first call.
+      competition: process.env.COMPETITION?.trim() || "PL",
       season: config.season,
       exhibitionModelId: config.exhibitionModelId,
       concurrency: config.concurrency,
