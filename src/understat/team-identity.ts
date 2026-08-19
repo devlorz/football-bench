@@ -60,22 +60,30 @@ const LA_LIGA_TEAM_NAMES: Readonly<Record<string, string>> = {
   // nothing left over on either side. Reviewed and approved 2026-08-15; the
   // eight entries whose two sides differ are where a review can find anything,
   // and `Ath Bilbao` against `Ath Madrid` is the one swap that would still read
-  // plausibly. The 2026-27 feed lists no match yet, so
-  // that Season's three promoted clubs are deliberately absent: they arrive as
-  // `unknown Understat team name` at the first pre-Season fetch, which is the
-  // pre-cron checklist's step and the failure this map is designed to make.
+  // plausibly.
+  //
+  // 2026-27's three promoted clubs arrived exactly as designed: the feed
+  // published its fixtures, and the 2026-08-18 fetch failed with three
+  // `unknown Understat team name` issues rather than storing xG under names
+  // nothing would join. Added below from `mmz4281/2627/SP1.csv` — note
+  // `Dep. A Coruna`, which football-data.co.uk spelt `La Coruna` the last time
+  // the club was in this division. The relegated three stay: the five-match
+  // form window still reaches back into 2025-26.
   Alaves: "Alaves",
   "Athletic Club": "Ath Bilbao",
   "Atletico Madrid": "Ath Madrid",
   Barcelona: "Barcelona",
   "Celta Vigo": "Celta",
+  "Deportivo La Coruna": "Dep. A Coruna",
   Elche: "Elche",
   Espanyol: "Espanol",
   Getafe: "Getafe",
   Girona: "Girona",
   Levante: "Levante",
+  Malaga: "Malaga",
   Mallorca: "Mallorca",
   Osasuna: "Osasuna",
+  "Racing Santander": "Santander",
   "Rayo Vallecano": "Vallecano",
   "Real Betis": "Betis",
   "Real Madrid": "Real Madrid",

@@ -6,6 +6,7 @@ import {
   UnderstatSourceHttpError,
   UnderstatSourceValidationError
 } from "../src/understat/fetch-season-xg.js";
+import { resolveUnderstatTeamName } from "../src/understat/team-identity.js";
 
 const { Client } = pg;
 
@@ -22,6 +23,11 @@ interface CannedMatch {
 /**
  * Understat's internal endpoint returns finished and upcoming matches
  * together, xG as strings, and no timezone on the kick-off.
+ *
+ * An upcoming fixture carries `xG: {h: null, a: null}` rather than omitting
+ * the field — read off the live `getLeagueData/La_liga/2026` feed on
+ * 2026-08-19, and the shape that broke the 2026-08-18 fetch, which read absent
+ * xG as "not yet played" and so raised on all 375 unplayed matches.
  */
 function leagueBody(matches: CannedMatch[]): string {
   return JSON.stringify({
@@ -31,7 +37,7 @@ function leagueBody(matches: CannedMatch[]): string {
       h: { id: "1", title: home, short_title: home.slice(0, 3).toUpperCase() },
       a: { id: "2", title: away, short_title: away.slice(0, 3).toUpperCase() },
       ...(xg === undefined
-        ? { isResult: false }
+        ? { xG: { h: null, a: null }, isResult: false }
         : { xG: { h: xg[0], a: xg[1] }, isResult: true })
     })),
     teams: {},
@@ -74,7 +80,7 @@ describe("fetching Understat per-match xG", () => {
         xg: ["1.07", "1.40"]
       },
       {
-        // Not yet played: Understat sends no xG field at all.
+        // Not yet played: Understat sends xG with both sides null.
         id: "29003",
         datetime: "2026-08-22 14:00:00",
         home: "Arsenal",
@@ -118,6 +124,65 @@ describe("fetching Understat per-match xG", () => {
       }
     ]);
   });
+
+  // The other half of the rule above, and the reason the skip reads `isResult`
+  // rather than a wider "xG is null or missing" test. Widening the null check
+  // would have cleared the 2026-08-18 failure just as well, and would have
+  // bought it back the first time Understat published a result before its xG
+  // model had run: the match would slip through the skip and simply never be
+  // stored, which is the silent gap this source refuses everywhere else.
+  test("refuses a match Understat calls a result but sends no xG for",
+    async () => {
+      const body = JSON.stringify({
+        dates: [
+          {
+            id: "29001",
+            datetime: "2026-08-15 11:30:00",
+            h: { title: "Liverpool" },
+            a: { title: "Bournemouth" },
+            xG: { h: "2.31", a: "0.78" },
+            isResult: true
+          },
+          {
+            // Played, per the feed's own flag, but the xG field never arrived.
+            id: "29002",
+            datetime: "2026-08-15 14:00:00",
+            h: { title: "Manchester City" },
+            a: { title: "Nottingham Forest" },
+            isResult: true
+          }
+        ]
+      });
+
+      await expect(fetchUnderstatSeasonXg({
+        database: client,
+        competition: "PL",
+        season: "2026-27",
+        http: async () => ({ status: 200, body })
+      })).rejects.toMatchObject({
+        name: UnderstatSourceValidationError.name,
+        source: "understat:2026-27:EPL",
+        issues: [
+          {
+            field: "dates.1.xG.h",
+            detail: "expected a non-negative decimal string"
+          },
+          {
+            field: "dates.1.xG.a",
+            detail: "expected a non-negative decimal string"
+          }
+        ]
+      });
+
+      // Nothing stored, including the sound first match: one unusable entry
+      // fails the fetch rather than landing a partial Season.
+      const stored = await client.query(
+        `select
+           (select count(*)::int from understat_match_xg) as xg,
+           (select count(*)::int from raw_snapshots) as snapshots`
+      );
+      expect(stored.rows).toEqual([{ xg: 0, snapshots: 1 }]);
+    });
 
   test("archives a reshaped body, then names every offending field", async () => {
     // Understat renames a key and starts sending xG as a number: every
@@ -377,6 +442,65 @@ describe("fetching Understat per-match xG", () => {
       source: "understat:2025-26:La_liga"
     }]);
   });
+
+  // Ticket: the 2026-08-18 daily fetch. La Liga's Season opened and the feed
+  // published a fixture list naming three clubs the map had never seen, so
+  // every PD run failed on `unknown Understat team name` and no 2026-27 xG
+  // landed. The names are pinned in both directions on purpose: the key is
+  // what makes the *fetch* pass, and the value is what makes the *join* in
+  // build-match-context find a stored result. A plausible-looking value —
+  // `La Coruna`, which is how football-data.co.uk spelt the club the last time
+  // it was in this division — would pass every fetch test here and still
+  // render "xG unavailable" on every Deportivo form line.
+  test("stores xG for La Liga's promoted clubs under joinable names",
+    async () => {
+      const body = leagueBody([
+        {
+          id: "30772",
+          datetime: "2026-08-16 16:00:00",
+          home: "Racing Santander",
+          away: "Villarreal",
+          xg: ["1.42", "1.55"]
+        },
+        {
+          id: "30774",
+          datetime: "2026-08-17 18:00:00",
+          home: "Deportivo La Coruna",
+          away: "Elche",
+          xg: ["0.93", "1.21"]
+        },
+        {
+          id: "30775",
+          datetime: "2026-08-19 19:00:00",
+          home: "Atletico Madrid",
+          away: "Malaga",
+          xg: ["2.06", "0.44"]
+        }
+      ]);
+
+      await fetchUnderstatSeasonXg({
+        database: client,
+        competition: "PD",
+        season: "2026-27",
+        http: async () => ({ status: 200, body })
+      });
+
+      const stored = await client.query(
+        `select home_team, away_team from understat_match_xg
+          order by understat_match_id`
+      );
+      expect(stored.rows).toEqual([
+        { home_team: "Racing Santander", away_team: "Villarreal" },
+        { home_team: "Deportivo La Coruna", away_team: "Elche" },
+        { home_team: "Atletico Madrid", away_team: "Malaga" }
+      ]);
+
+      // football-data.co.uk's own spellings, read off `mmz4281/2627/SP1.csv`.
+      expect([
+        "Racing Santander", "Deportivo La Coruna", "Malaga"
+      ].map((team) => resolveUnderstatTeamName("PD", team)))
+        .toEqual(["Santander", "Dep. A Coruna", "Malaga"]);
+    });
 
   // The failure the per-Competition alias map exists for, driven end to end.
   // `UNDERSTAT_LEAGUES` is a slug this codebase picks, so one wrong character

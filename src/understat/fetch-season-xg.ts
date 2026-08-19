@@ -140,6 +140,7 @@ function parseMatches(
     const match = (entry ?? {}) as {
       id?: unknown;
       datetime?: unknown;
+      isResult?: unknown;
       h?: { title?: unknown };
       a?: { title?: unknown };
       xG?: { h?: unknown; a?: unknown };
@@ -166,15 +167,23 @@ function parseMatches(
       }
     }
 
-    // No xG field at all means the match has not been played. Skipped, never
-    // stored as a zero.
-    if (match.xG === undefined || match.xG === null) {
+    // `isResult` is the feed's own answer to "has this been played", and the
+    // only one that stays true. Reading absent xG as "not played" held while
+    // Understat omitted the field on an upcoming fixture; once the 2026-27
+    // fixture list was published it began sending `xG: {h: null, a: null}`
+    // instead, and every unplayed match in the Season failed validation.
+    //
+    // The flag is also the stricter reading, which is why it is not merely a
+    // wider null check: a match Understat *does* call a result must still
+    // carry parseable xG, and one that arrives without it raises here rather
+    // than disappearing into the skip.
+    if (match.isResult !== true) {
       continue;
     }
 
     const kickedOffAt = parseKickOff(match.datetime);
-    const homeXg = parseXg(match.xG.h);
-    const awayXg = parseXg(match.xG.a);
+    const homeXg = parseXg(match.xG?.h);
+    const awayXg = parseXg(match.xG?.a);
 
     if (typeof match.id !== "string" || match.id.length === 0) {
       issues.push({
