@@ -108,7 +108,13 @@ export function matchContext(
     "Return only JSON with fixture_id, probs (H, D, A), score (home, away), and rationale.",
     "The first character must be { and the last character must be }.",
     "Do not use Markdown or wrap the JSON in code fences.",
-    "Probabilities must each be between 0 and 1 and sum to 1. Goals must be non-negative integers."
+    "Probabilities must each be between 0 and 1 and sum to 1. Goals must be non-negative integers.",
+    // ADR-0043, verbatim. Facts and the game's rule, never advice (ADR-0018):
+    // the first settles which of two readings `score` has, the second names
+    // the rule the probabilities are judged by. Telling an Entrant what to do
+    // with either would be the coaching that ADR rejected.
+    "score is the exact final scoreline you judge most likely — not expected goals rounded.",
+    "Probabilities are scored with the ranked probability score over the ordered outcomes Home, Draw, Away; lower is better."
   ].join("\n");
 }
 

@@ -86,9 +86,14 @@ describe("building historical Match context", () => {
       "1. Arsenal — Pld 1, W 1, D 0, L 0, GF 2, GA 0, Pts 3",
       "2. Fulham — Pld 1, W 0, D 0, L 1, GF 0, GA 2, Pts 0",
       "",
+      "Prior-Season base rates (2025-26 Premier League, 4 matches): "
+        + "home wins 50.0%, draws 25.0%, away wins 25.0%, 2.25 goals per match.",
+      "",
       "Arsenal",
       "Prior-Season final position: 1st in 2025-26 Premier League; promoted: no.",
-      "Prior-Season points per game: 2.50 overall, 3.00 home, 2.00 away.",
+      "Prior-Season points per game: 2.50 overall, 3.00 home, 2.00 away; "
+        + "xG for and against per game unavailable overall, unavailable home, "
+        + "unavailable away.",
       "Current-Season overall: 1 played, 1W 0D 0L, GF 2, GA 0, "
         + "shots unavailable, on target unavailable, xG unavailable.",
       "Current-Season home split: no home matches played.",
@@ -108,7 +113,11 @@ describe("building historical Match context", () => {
       "",
       "Coventry City",
       "Prior-Season final position: 1st in 2025-26 Championship; promoted: yes.",
-      "Prior-Season points per game: 2.50 overall, 3.00 home, 2.00 away.",
+      // A promoted club is unavailable by nature: Understat carries no second
+      // division, so its prior Season has no figure to average.
+      "Prior-Season points per game: 2.50 overall, 3.00 home, 2.00 away; "
+        + "xG for and against per game unavailable overall, unavailable home, "
+        + "unavailable away.",
       "Premier League history: none in stored data; promoted from the Championship.",
       "Current-Season overall: no matches played.",
       "Current-Season home split: no home matches played.",
@@ -163,13 +172,17 @@ describe("building historical Match context", () => {
 
     expect(context).toContain([
       "Prior-Season final position: 1st in 2025-26 Premier League; promoted: no.",
-      "Prior-Season points per game: 1.67 overall, 1.33 home, 2.00 away."
+      "Prior-Season points per game: 1.67 overall, 1.33 home, 2.00 away; "
+        + "xG for and against per game unavailable overall, unavailable home, "
+        + "unavailable away."
     ].join("\n"));
     // The promoted club's own Championship rates, unnormalised, with the
     // division named only by the line above.
     expect(context).toContain([
       "Prior-Season final position: 1st in 2025-26 Championship; promoted: yes.",
-      "Prior-Season points per game: 1.40 overall, 1.50 home, 1.33 away."
+      "Prior-Season points per game: 1.40 overall, 1.50 home, 1.33 away; "
+        + "xG for and against per game unavailable overall, unavailable home, "
+        + "unavailable away."
     ].join("\n"));
   });
 
@@ -190,13 +203,17 @@ describe("building historical Match context", () => {
     // 26 away over 19 — the away-better-than-home inversion.
     expect(context).toContain([
       "Prior-Season final position: 17th in 2025-26 Premier League; promoted: no.",
-      "Prior-Season points per game: 1.08 overall, 0.79 home, 1.37 away."
+      "Prior-Season points per game: 1.08 overall, 0.79 home, 1.37 away; "
+        + "xG for and against per game unavailable overall, unavailable home, "
+        + "unavailable away."
     ].join("\n"));
     // The promoted club's real Championship season — 95 points over 46 — beside
     // it, unnormalised, with the division named only by the line above.
     expect(context).toContain([
       "Prior-Season final position: 1st in 2025-26 Championship; promoted: yes.",
-      "Prior-Season points per game: 2.07 overall, 2.39 home, 1.74 away."
+      "Prior-Season points per game: 2.07 overall, 2.39 home, 1.74 away; "
+        + "xG for and against per game unavailable overall, unavailable home, "
+        + "unavailable away."
     ].join("\n"));
   });
 
@@ -211,7 +228,9 @@ describe("building historical Match context", () => {
         match("2025-26", "Premier League", "2025-08-10", "Arsenal", "Everton", 2, 0)
       ]
     })).toContain(
-      "Prior-Season points per game: 3.00 overall, 3.00 home, unavailable away."
+      "Prior-Season points per game: 3.00 overall, 3.00 home, unavailable away; "
+        + "xG for and against per game unavailable overall, unavailable home, "
+        + "unavailable away."
     );
   });
 
@@ -499,6 +518,9 @@ describe("building historical Match context", () => {
       "5. Liverpool — Pld 3, W 0, D 2, L 1, GF 4, GA 5, Pts 2",
       "6. Fulham — Pld 3, W 0, D 2, L 1, GF 2, GA 4, Pts 2",
       "",
+      "Prior-Season base rates (2025-26 Premier League, 1 match): "
+        + "home wins 100.0%, draws 0.0%, away wins 0.0%, 9.00 goals per match.",
+      "",
       "Arsenal"
     ].join("\n"));
   });
@@ -521,6 +543,9 @@ describe("building historical Match context", () => {
       "Historical context as of 2026-08-21T17:30:00.000Z",
       "",
       "Premier League table: no result has been played yet this Season.",
+      "",
+      "Prior-Season base rates (2025-26 Premier League, 1 match): "
+        + "home wins 100.0%, draws 0.0%, away wins 0.0%, 1.00 goals per match.",
       "",
       "Arsenal",
       "Prior-Season final position: 1st in 2025-26 Premier League; promoted: no."
@@ -591,6 +616,114 @@ describe("building historical Match context", () => {
     );
     expect(context).not.toContain(
       "Historical data status: team name did not resolve against stored results."
+    );
+  });
+  test("states the prior Season's base rates once, off stored results", () => {
+    const context = buildHistoricalContext({
+      competition: "PL",
+      season: "2026-27",
+      asOf: new Date("2026-08-21T17:30:00.000Z"),
+      homeTeam: "Arsenal",
+      awayTeam: "Everton",
+      matches: [
+        match("2025-26", "Premier League", "2026-05-01", "Arsenal", "Chelsea", 2, 0),
+        match("2025-26", "Premier League", "2026-05-01", "Everton", "Fulham", 1, 0),
+        match("2025-26", "Premier League", "2026-05-01", "Liverpool", "Tottenham", 1, 1),
+        match("2025-26", "Premier League", "2026-05-08", "Fulham", "Arsenal", 0, 3),
+        // Neither distractor is the top flight of the prior Season, and neither
+        // may move a share or the match count.
+        match("2025-26", "Championship", "2026-05-01", "Hull", "Stoke", 4, 0),
+        match("2026-27", "Premier League", "2026-08-10", "Arsenal", "Everton", 5, 0)
+      ]
+    });
+
+    expect(context).toContain([
+      "Premier League table (results through 2026-08-10):",
+      "1. Arsenal — Pld 1, W 1, D 0, L 0, GF 5, GA 0, Pts 3",
+      "2. Everton — Pld 1, W 0, D 0, L 1, GF 0, GA 5, Pts 0",
+      "",
+      "Prior-Season base rates (2025-26 Premier League, 4 matches): "
+        + "home wins 50.0%, draws 25.0%, away wins 25.0%, 2.00 goals per match.",
+      "",
+      "Arsenal"
+    ].join("\n"));
+  });
+  // The uncurated case both sections share: absence is announced, and a
+  // Competition with no stored divisions has lost no rows to be missing.
+  test("announces base rates unavailable for a Competition with no divisions", () => {
+    expect(buildHistoricalContext({
+      competition: "SA",
+      season: "2026-27",
+      asOf: new Date("2026-08-21T17:30:00.000Z"),
+      homeTeam: "Juventus",
+      awayTeam: "Napoli",
+      matches: []
+    })).toContain([
+      "League table: unavailable; no division history is stored for this "
+        + "Competition.",
+      "",
+      "Prior-Season base rates: unavailable; no division history is stored "
+        + "for this Competition.",
+      "",
+      "Juventus"
+    ].join("\n"));
+  });
+
+  test("states an unstored prior Season rather than dividing by zero", () => {
+    expect(buildHistoricalContext({
+      competition: "PL",
+      season: "2026-27",
+      asOf: new Date("2026-08-21T17:30:00.000Z"),
+      homeTeam: "Arsenal",
+      awayTeam: "Everton",
+      matches: [
+        match("2026-27", "Premier League", "2026-08-10", "Arsenal", "Everton", 1, 0)
+      ]
+    })).toContain(
+      "Prior-Season base rates: no 2025-26 Premier League results stored."
+    );
+  });
+  test("carries prior-Season xG for and against per game at every venue", () => {
+    expect(buildHistoricalContext({
+      competition: "PL",
+      season: "2026-27",
+      asOf: new Date("2026-08-21T17:30:00.000Z"),
+      homeTeam: "Arsenal",
+      awayTeam: "Everton",
+      matches: [
+        match("2025-26", "Premier League", "2026-05-01", "Arsenal", "Chelsea", 2, 0, {
+          home_xg: 2, away_xg: 1
+        }),
+        match("2025-26", "Premier League", "2026-05-08", "Fulham", "Arsenal", 0, 3, {
+          home_xg: 0.5, away_xg: 2.5
+        })
+      ]
+    })).toContain([
+      "Prior-Season final position: 1st in 2025-26 Premier League; promoted: no.",
+      "Prior-Season points per game: 3.00 overall, 3.00 home, 3.00 away; "
+        + "xG for and against per game 2.25-0.75 overall, 2.00-1.00 home, "
+        + "2.50-0.50 away."
+    ].join("\n"));
+  });
+
+  test("announces short xG coverage and reads a bare venue unavailable", () => {
+    expect(buildHistoricalContext({
+      competition: "PL",
+      season: "2026-27",
+      asOf: new Date("2026-08-21T17:30:00.000Z"),
+      homeTeam: "Arsenal",
+      awayTeam: "Everton",
+      matches: [
+        match("2025-26", "Premier League", "2026-05-01", "Arsenal", "Chelsea", 2, 0, {
+          home_xg: 2, away_xg: 1
+        }),
+        match("2025-26", "Premier League", "2026-05-08", "Arsenal", "Everton", 1, 1),
+        match("2025-26", "Premier League", "2026-05-15", "Fulham", "Arsenal", 0, 3)
+      ]
+    })).toContain(
+      "Prior-Season points per game: 2.33 overall, 2.00 home, 3.00 away; "
+      + "xG for and against per game 2.00-1.00 (over 1 of 3 matches) overall, "
+      + "2.00-1.00 (over 1 of 2 matches) home, unavailable away."
     );
   });
 });

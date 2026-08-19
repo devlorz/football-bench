@@ -132,9 +132,14 @@ describe("pre-flight for the Base Model roster", () => {
       "",
       "Premier League table: no result has been played yet this Season.",
       "",
+      "Prior-Season base rates (2025-26 Premier League, 1 match): "
+        + "home wins 100.0%, draws 0.0%, away wins 0.0%, 4.00 goals per match.",
+      "",
       "Arsenal",
       "Prior-Season final position: 1st in 2025-26 Premier League; promoted: no.",
-      "Prior-Season points per game: 3.00 overall, 3.00 home, unavailable away.",
+      "Prior-Season points per game: 3.00 overall, 3.00 home, "
+        + "unavailable away; xG for and against per game unavailable overall, "
+        + "unavailable home, unavailable away.",
       "Current-Season overall: no matches played.",
       "Current-Season home split: no home matches played.",
       "Current-Season away split: no away matches played.",
@@ -144,7 +149,9 @@ describe("pre-flight for the Base Model roster", () => {
       "",
       "Coventry City",
       "Prior-Season final position: 1st in 2025-26 Championship; promoted: yes.",
-      "Prior-Season points per game: 3.00 overall, 3.00 home, unavailable away.",
+      "Prior-Season points per game: 3.00 overall, 3.00 home, "
+        + "unavailable away; xG for and against per game unavailable overall, "
+        + "unavailable home, unavailable away.",
       "Premier League history: none in stored data; promoted from the Championship.",
       "Current-Season overall: no matches played.",
       "Current-Season home split: no home matches played.",
@@ -183,7 +190,9 @@ describe("pre-flight for the Base Model roster", () => {
       "Return only JSON with fixture_id, probs (H, D, A), score (home, away), and rationale.",
       "The first character must be { and the last character must be }.",
       "Do not use Markdown or wrap the JSON in code fences.",
-      "Probabilities must each be between 0 and 1 and sum to 1. Goals must be non-negative integers."
+      "Probabilities must each be between 0 and 1 and sum to 1. Goals must be non-negative integers.",
+      "score is the exact final scoreline you judge most likely — not expected goals rounded.",
+      "Probabilities are scored with the ranked probability score over the ordered outcomes Home, Draw, Away; lower is better."
     ].join("\n");
 
     const report = await preflightBaseModels({

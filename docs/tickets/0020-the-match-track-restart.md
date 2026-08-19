@@ -154,21 +154,81 @@ render it identically; every sentence the packet can now say is a test's expecte
 
 **Blocked by:** None — can start immediately, in parallel with 1.
 
-- [ ] One base-rates line per context: the prior Season's top-flight home-win, draw and
+- [x] One base-rates line per context: the prior Season's top-flight home-win, draw and
       away-win shares, goals per match, and the match count they cover — computed from
       stored results alone, once per packet, not per team.
-- [ ] A Competition with no curated divisions renders the base-rates unavailable sentence
+- [x] A Competition with no curated divisions renders the base-rates unavailable sentence
       in the family the table section already uses.
-- [ ] The Prior-Season line carries xG for and against per game — overall, home and away —
+- [x] The Prior-Season line carries xG for and against per game — overall, home and away —
       under the form lines' both-or-nothing rule: short coverage announced, zero coverage
       reading unavailable, a promoted club unavailable by nature.
-- [ ] The two instruction sentences appear in the closing block exactly as ADR-0043
+- [x] The two instruction sentences appear in the closing block exactly as ADR-0043
       quotes them — score as the likeliest exact scoreline, probabilities scored by RPS
       over the ordered outcomes — and a render test holds each verbatim.
-- [ ] No coaching sentence enters; the additions are facts and the game's rule, nothing
+- [x] No coaching sentence enters; the additions are facts and the game's rule, nothing
       else (ADR-0018 unmoved).
 - [ ] The rendered packet is read by eye over production data for both Competitions —
       the `context:show` discipline that found both of PD's earlier moves.
+
+### The additions, rendered — recorded 2026-08-19
+
+Five of the six boxes are closed in code, all at the two seams spec 0020 named. The
+sixth is the eye-read and is the user's to run; the commands are at the end of this
+section.
+
+The base-rates line renders once per context, between the current-Season table and the
+two club sections — league-wide facts first, then per-club. Its shape, over the four
+seeded results the suite computes it from rather than any production reading:
+
+> Prior-Season base rates (2025-26 Premier League, 4 matches): home wins 50.0%, draws
+> 25.0%, away wins 25.0%, 2.25 goals per match.
+
+The count and the shares are computed over the prior Season's top-flight stored results
+alone; what production renders is what the eye-read below is for.
+
+It has two other states and both are tested as whole lines: a Competition with no
+curated divisions reads `Prior-Season base rates: unavailable; no division history is
+stored for this Competition.`, in the same family the table section's unavailable
+sentence uses, and a curated Competition with no prior-Season rows reads
+`Prior-Season base rates: no 2025-26 Premier League results stored.` rather than dividing
+by zero. The match count is singular where it is one, which the seeded suites do render.
+
+The xG rates are appended to the points-per-game line rather than given one of their
+own — ADR-0043 says appended, and one Prior-Season rate line carrying two rates is what
+that means — in the same venue shape:
+
+> Prior-Season points per game: 3.00 overall, 3.00 home, 3.00 away; xG for and against
+> per game 2.25-0.75 overall, 2.00-1.00 home, 2.50-0.50 away.
+
+under the form lines' both-or-nothing rule, which is now one function rather than two
+copies of it: short coverage announces itself
+(`2.00-1.00 (over 1 of 3 matches) overall`), a venue with no covered match reads
+`unavailable`, and a promoted club reads unavailable at every venue by nature — Understat
+carries no second division, which the cross-Season packet test asserts on Coventry.
+
+The two instruction sentences close the block, verbatim from ADR-0043 and beside the
+shape rules they qualify. No coaching sentence entered: what was added is two
+arithmetic sums over stored results and the game's own rule, and ADR-0018 is unmoved.
+
+**The two frozen sha pins are red, and that is slice 4's box.** Changing the packet
+changed both renders, so `test/openrouter-entrant.test.ts`'s two checksum tests fail
+until the constants move — which slice 4 does in one reviewed change, from real renders
+of this template. Every other test over the packet was moved with the sentences: the
+builder suite, the prediction and pre-flight packets, and the stored-context hash the
+prediction path pins.
+
+The eye-read, from a shell with production's `DATABASE_URL`:
+
+```
+SEASON=2026-27 GAMEWEEK=1 npm run context:show
+SEASON=2026-27 GAMEWEEK=2 COMPETITION=PD npm run context:show
+```
+
+The Premier League's Gameweek 1 and La Liga's Gameweek 2 are the two packets the gate
+freezes. What to read for: that the base-rates line carries a real 380-match count and
+not an `unavailable` nobody intended, and that the xG lines are not `unavailable` across
+the board — spec 0020 asks for prior-Season Understat rows to be verified in production,
+and this is the read that verifies them.
 
 ## 3 — The bench: the amended question against Gameweek 1's record
 

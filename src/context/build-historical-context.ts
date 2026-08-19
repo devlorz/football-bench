@@ -38,6 +38,14 @@ export interface BuildHistoricalContextOptions {
 }
 
 /**
+ * The one sentence an uncurated Competition's sections say. Frozen text is a
+ * constant: two copies of it are two things to edit and one of them will be
+ * missed.
+ */
+const NO_DIVISIONS = "unavailable; no division history is stored for this "
+  + "Competition.";
+
+/**
  * The names this Competition's rows are stored under, read from the one list
  * the fetch writes them by (`football-data/divisions.ts`). Undefined means the
  * Competition has no curated divisions, and therefore no stored rows for the
@@ -203,6 +211,13 @@ interface StatSpec {
   decimals: number;
 }
 
+const XG_SPEC: StatSpec = {
+  label: "xG",
+  home: (match) => match.home_xg,
+  away: (match) => match.away_xg,
+  decimals: 2
+};
+
 const STAT_SPECS: StatSpec[] = [
   {
     label: "shots",
@@ -216,22 +231,22 @@ const STAT_SPECS: StatSpec[] = [
     away: (match) => match.away_shots_on_target,
     decimals: 0
   },
-  { label: "xG", home: (match) => match.home_xg, away: (match) => match.away_xg, decimals: 2 }
+  XG_SPEC
 ];
 
 /**
- * One stat pair summed over a record line's matches, this-team-first. A match
- * counts only when it carries both sides' figure, the same both-or-nothing rule
- * the form lines use; a pair covering fewer matches than the line announces it,
- * and a pair with no covered matches reads `unavailable` rather than a silent
- * zero.
+ * One stat pair summed over a record line's matches, this-team-first, under the
+ * both-or-nothing rule the form lines are read by: a match counts only when it
+ * carries both sides' figure. The covered count comes back with the sums
+ * because every caller renders it -- what a partial pair means is the caller's
+ * sentence, not this one's.
  */
-function statSegment(
+function coveredSums(
   names: TeamNames | undefined,
   matches: HistoricalMatch[],
   canonical: string,
   spec: StatSpec
-): string {
+): { forSum: number; againstSum: number; covered: number } {
   let forSum = 0;
   let againstSum = 0;
   let covered = 0;
@@ -245,14 +260,53 @@ function statSegment(
       covered += 1;
     }
   }
+  return { forSum, againstSum, covered };
+}
+
+function coverageOf(covered: number, of: number): string {
+  return covered < of ? ` (over ${covered} of ${of} matches)` : "";
+}
+
+/**
+ * One stat pair as a form line says it: a pair covering fewer matches than the
+ * line announces it, and a pair with no covered matches reads `unavailable`
+ * rather than a silent zero.
+ */
+function statSegment(
+  names: TeamNames | undefined,
+  matches: HistoricalMatch[],
+  canonical: string,
+  spec: StatSpec
+): string {
+  const { forSum, againstSum, covered } =
+    coveredSums(names, matches, canonical, spec);
   if (covered === 0) {
     return `${spec.label} unavailable`;
   }
   const pair = `${forSum.toFixed(spec.decimals)}-${againstSum.toFixed(spec.decimals)}`;
-  const coverage = covered < matches.length
-    ? ` (over ${covered} of ${matches.length} matches)`
-    : "";
-  return `${spec.label} ${pair}${coverage}`;
+  return `${spec.label} ${pair}${coverageOf(covered, matches.length)}`;
+}
+
+/**
+ * xG for and against per game over the matches of one venue, under the same
+ * both-or-nothing rule (ADR-0043): a match counts only when both sides' figure
+ * is stored, the rate is over the covered matches and says so when they fall
+ * short, and a venue with no covered match reads `unavailable` rather than a
+ * silent zero. A promoted club is unavailable by nature -- Understat carries no
+ * second division.
+ */
+function xgRatePerGame(
+  names: TeamNames | undefined,
+  matches: HistoricalMatch[],
+  canonical: string
+): string {
+  const { forSum, againstSum, covered } =
+    coveredSums(names, matches, canonical, XG_SPEC);
+  if (covered === 0) {
+    return "unavailable";
+  }
+  return `${(forSum / covered).toFixed(2)}-${(againstSum / covered).toFixed(2)}`
+    + coverageOf(covered, matches.length);
 }
 
 function formatRecord(
@@ -370,6 +424,12 @@ function priorSeasonLine(
   const clubMatches = divisionMatches.filter((match) =>
     includesTeam(names, match, canonical)
   );
+  const homeMatches = clubMatches.filter((match) =>
+    footballDataTeamName(names, match.home_team) === canonical
+  );
+  const awayMatches = clubMatches.filter((match) =>
+    footballDataTeamName(names, match.away_team) === canonical
+  );
   const formatPointsPerGame = (of: HistoricalMatch[]): string => {
     const record = teamRecord(names, of, canonical);
     return record.played === 0
@@ -381,12 +441,14 @@ function priorSeasonLine(
       + `${priorSeason} ${division}; promoted: ${promoted ? "yes" : "no"}.`
       + `\nPrior-Season points per game: `
       + `${formatPointsPerGame(clubMatches)} overall, `
-      + `${formatPointsPerGame(clubMatches.filter((match) =>
-        footballDataTeamName(names, match.home_team) === canonical
-      ))} home, `
-      + `${formatPointsPerGame(clubMatches.filter((match) =>
-        footballDataTeamName(names, match.away_team) === canonical
-      ))} away.`,
+      + `${formatPointsPerGame(homeMatches)} home, `
+      + `${formatPointsPerGame(awayMatches)} away; `
+      // Appended to the points-per-game line rather than given one of its own
+      // (ADR-0043): one Prior-Season rate line, two rates on it.
+      + `xG for and against per game `
+      + `${xgRatePerGame(names, clubMatches, canonical)} overall, `
+      + `${xgRatePerGame(names, homeMatches, canonical)} home, `
+      + `${xgRatePerGame(names, awayMatches, canonical)} away.`,
     promoted
   };
 }
@@ -492,10 +554,7 @@ function tableSection(
   currentMatches: HistoricalMatch[]
 ): string[] {
   if (divisions === undefined) {
-    return [
-      "League table: unavailable; no division history is stored for this "
-      + "Competition."
-    ];
+    return [`League table: ${NO_DIVISIONS}`];
   }
   if (currentMatches.length === 0) {
     return [
@@ -513,6 +572,48 @@ function tableSection(
       + `D ${row.draws}, L ${row.losses}, GF ${row.goalsFor}, `
       + `GA ${row.goalsAgainst}, Pts ${row.points}`
     )
+  ];
+}
+
+/**
+ * The prior Season's top flight in one line: the three outcome shares, goals
+ * per match, and the match count they are computed over (ADR-0043). Once per
+ * context and league-wide -- an anchor for turning a read of two clubs into a
+ * distribution is not a per-team fact -- and computed from the same stored
+ * results the table is, so there is no new data behind it.
+ */
+function baseRatesSection(
+  divisions: Divisions | undefined,
+  priorSeason: string,
+  eligibleMatches: HistoricalMatch[]
+): string[] {
+  if (divisions === undefined) {
+    return [`Prior-Season base rates: ${NO_DIVISIONS}`];
+  }
+  const matches = eligibleMatches.filter((match) =>
+    match.season === priorSeason && match.division === divisions.top
+  );
+  if (matches.length === 0) {
+    return [
+      `Prior-Season base rates: no ${priorSeason} ${divisions.top} results `
+      + "stored."
+    ];
+  }
+  const share = (count: number): string =>
+    ((count / matches.length) * 100).toFixed(1);
+  const homeWins = matches
+    .filter((match) => match.home_goals > match.away_goals).length;
+  const draws = matches
+    .filter((match) => match.home_goals === match.away_goals).length;
+  const goals = matches
+    .reduce((sum, match) => sum + match.home_goals + match.away_goals, 0);
+  return [
+    `Prior-Season base rates (${priorSeason} ${divisions.top}, `
+    + `${matches.length} match${matches.length === 1 ? "" : "es"}): `
+    + `home wins ${share(homeWins)}%, `
+    + `draws ${share(draws)}%, `
+    + `away wins ${share(matches.length - homeWins - draws)}%, `
+    + `${(goals / matches.length).toFixed(2)} goals per match.`
   ];
 }
 
@@ -545,6 +646,10 @@ export function buildHistoricalContext(
     `Historical context as of ${options.asOf.toISOString()}`,
     "",
     ...tableSection(names, divisions, currentMatches),
+    "",
+    ...baseRatesSection(
+      divisions, previousSeason(options.season), eligibleMatches
+    ),
     "",
     ...teamSection(options, names, divisions, options.homeTeam, eligibleMatches, currentMatches),
     "",

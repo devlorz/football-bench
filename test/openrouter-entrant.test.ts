@@ -229,6 +229,23 @@ describe("the Match Prompt Version", () => {
     }
   });
 
+  // ADR-0043's two sentences, verbatim and beside the shape rules they
+  // qualify: the rules above say what the JSON must look like, these two say
+  // what `score` means and by what rule the probabilities are judged. A
+  // drifted word is a different question asked of every seat, so the strings
+  // are asserted whole.
+  test("closes with the two instruction sentences ADR-0043 fixes", () => {
+    expect(matchContext(FIXTURE, "Recent form: no matches on record.", "PL"))
+      .toContain([
+        "Probabilities must each be between 0 and 1 and sum to 1. "
+          + "Goals must be non-negative integers.",
+        "score is the exact final scoreline you judge most likely — not "
+          + "expected goals rounded.",
+        "Probabilities are scored with the ranked probability score over the "
+          + "ordered outcomes Home, Draw, Away; lower is better."
+      ].join("\n"));
+  });
+
   test("refuses a Competition with no frozen Prompt Version", () => {
     expect(() => matchContext(FIXTURE, "", "SA"))
       .toThrow("Competition SA has no frozen Prompt Version");

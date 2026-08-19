@@ -309,6 +309,8 @@ describe("predicting a Gameweek", () => {
       "",
       "Premier League table: no result has been played yet this Season.",
       "",
+      "Prior-Season base rates: no 2025-26 Premier League results stored.",
+      "",
       "Arsenal",
       "Prior-Season final position: no 2025-26 league data.",
       "Premier League history: none in stored data.",
@@ -347,7 +349,9 @@ describe("predicting a Gameweek", () => {
       "Return only JSON with fixture_id, probs (H, D, A), score (home, away), and rationale.",
       "The first character must be { and the last character must be }.",
       "Do not use Markdown or wrap the JSON in code fences.",
-      "Probabilities must each be between 0 and 1 and sum to 1. Goals must be non-negative integers."
+      "Probabilities must each be between 0 and 1 and sum to 1. Goals must be non-negative integers.",
+      "score is the exact final scoreline you judge most likely — not expected goals rounded.",
+      "Probabilities are scored with the ranked probability score over the ordered outcomes Home, Draw, Away; lower is better."
     ].join("\n");
 
     await predictGameweek({
@@ -450,7 +454,7 @@ describe("predicting a Gameweek", () => {
       track: "match",
       fixture_id: 1,
       body: context,
-      hash: "77fd6b71e7c1efa3d6026d001997729e6970581e0afb9d74e5afbcdc755ea479",
+      hash: "819993011546cd6c0c083042342769889e6568c1bdbf62f81c18ec1b3734715f",
       model_id: "entrant/v1",
       probs: { H: 0.6003600360036003, D: 0.23982398239823982, A: 0.15981598159815982 },
       pred_home: 2,
