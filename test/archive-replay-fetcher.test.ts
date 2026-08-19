@@ -72,6 +72,36 @@ describe("the archive replay fetcher", () => {
       .toBe("{\"dates\":[]}");
   });
 
+  /**
+   * The two Wikipedia pages a packet is built from, told apart by their
+   * titles: a transfer list is filed under its window's name and a season
+   * article under its own. Left unmapped, either would replay as a stated
+   * absence over an archive that held the page, which is the failure this
+   * file's comments have already recorded twice.
+   */
+  test("replays both Wikipedia pages under the names they are archived by",
+    async () => {
+      const http = createArchiveReplayFetcher([
+        {
+          source: "wikipedia:squad-changes:summer-2026",
+          body: "the transfer list"
+        },
+        {
+          source: "wikipedia:head-coach-changes:2026-27-premier-league",
+          body: "the season article"
+        }
+      ]);
+
+      expect((await http(
+        "https://en.wikipedia.org/w/index.php"
+        + "?title=List_of_English_football_transfers_summer_2026&action=raw"
+      )).body).toBe("the transfer list");
+      expect((await http(
+        "https://en.wikipedia.org/w/index.php"
+        + "?title=2026%E2%80%9327_Premier_League&action=raw"
+      )).body).toBe("the season article");
+    });
+
   test("serves each Entrant the archived response recorded for its own Base Model", async () => {
     const http = createArchiveReplayFetcher([
       { source: "openrouter-preflight:x-ai/grok-4.5", body: "grok body" },

@@ -24,7 +24,7 @@ This page is what to write before that one runs.
 
 ---
 
-## 1. The six edits
+## 1. The seven edits
 
 In this order. Each is small; the risk is entirely in stopping one short.
 
@@ -36,6 +36,7 @@ In this order. Each is small; the risk is entirely in stopping one short.
 | 4 | `migrations/00XX` — `historical_matches_division_check` | The two names edit 3 added, character for character | The backfill fails on its first insert |
 | 5 | `src/understat/team-identity.ts` + `UNDERSTAT_LEAGUES` | The league slug and that league's ~20 club names | No xG, or — with the slug wrong — another league's rows relabelled |
 | 6 | `src/squad-changes/transfer-window.ts` + `club-identity.ts` | The country's two windows with their page titles and page `format`, and that league's ~20 clubs by live-source spelling | No Squad Changes section, and — with the format wrong — a page parsed as a shape it is not |
+| 7 | `src/head-coach/head-coach-source.ts` — `SEASON_ARTICLES` | The Season's article title for the league, under the Season already listed | No Head Coach changes section, silently — the fetch stores nothing and the packet says the article is not listed |
 
 Edits 3 and 4 are one change and are checked against each other by
 `test/schema.test.ts`; edit 2's `competitionName` must equal edit 3's top-flight name and

@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const MATCH_PROMPT_VERSION = "match/2026-27-v2";
 export const MATCH_PROMPT_SHA256 =
-  "cdebf27b99633896af1b3284ccdeb96f0792c5970c36c19ef6b9f6ab51efb204";
+  "dc2ed52eb8fad16c3382d3ebb18f9d859d05305a2147cc9c77d7c21f4d2d2d67";
 
 export interface MatchPrompt {
   /** The Prompt Version a Competition's seats are entered under. */
@@ -73,7 +73,7 @@ export const RETIRED_GAMEWEEK_CAVEAT =
  * amendable until its first Lock, 2026-08-21T17:30Z, and is unamendable from
  * there. Every other Competition is opened at
  * `match-<code, lowercased>/2026-27-v1`, and opening a league is one entry
- * here. One of six, though: this file, `DIVISIONS`, the division check
+ * here. One of seven, though: this file, `DIVISIONS`, the division check
  * constraint, the Understat league and its club map, the transfer windows with
  * their own club map, and the `competition_code` domain if the code is new —
  * gathered in
@@ -103,7 +103,7 @@ const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
   PD: {
     version: "match-pd/2026-27-v2",
     sha256:
-      "f54e73470037eab257bb7648eed4c9579a52ab46fba5f4239cc3d060a2a596ba",
+      "ba4d797ff28e530f348f6ccb9a1e4ccdba109ccc7520dd0d73385f5ea26d237d",
     competitionName: "La Liga",
     retired: { version: "match-pd/2026-27-v1", gw: 1 }
   }

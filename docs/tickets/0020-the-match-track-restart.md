@@ -871,18 +871,76 @@ version — ADR-0044 executing, not failing.
 **Blocked by:** 4 — it re-pins the shas the flip set, and only a standing restart can
 receive it.
 
-- [ ] Both season articles' tables are verified to exist and parse before the pipeline is
+- [x] Both season articles' tables are verified to exist and parse before the pipeline is
       committed to — a source that fails its first read loses the race on the spot.
-- [ ] Rows land in a per-Gameweek partition through a fetch that archives the raw
+- [x] Rows land in a per-Gameweek partition through a fetch that archives the raw
       wikitext and refuses a moved shape with the source named.
-- [ ] The section renders the Fixture's two clubs' events dated, in the Squad Changes
+- [x] The section renders the Fixture's two clubs' events dated, in the Squad Changes
       section's manner; a club with no change costs no line; outside the gate the section
       is absent rather than empty.
-- [ ] Every rendered fact is bounded by the deadline the context is built for — a sacking
+- [x] Every rendered fact is bounded by the deadline the context is built for — a sacking
       after the Lock can never leak backward.
-- [ ] Everything is named head coach — table, section, source string — and "manager"
+- [x] Everything is named head coach — table, section, source string — and "manager"
       appears nowhere in the slice.
 - [ ] Both sha pins are re-pinned from real renders carrying the section, before the
       gate.
 - [ ] If the cutoff passes first: the slice is closed as deferred with a line saying so,
       and no other slice reopens.
+
+### What the five boxes landed — recorded 2026-08-19
+
+**Box 1, the read the race turned on.** Both articles answered 200 on 2026-08-19 and both
+carry a `===Managerial changes===` table: nine rows for the Premier League, six for La
+Liga. Both are pinned as fixtures and both parse, which is the box — a source that failed
+its first read would have lost on the spot.
+
+**The two tables share a heading and nothing else.** England quotes its attributes and
+spans one column; Spain writes `rowspan=2` bare and spans three at once, so a row can
+arrive three cells short of the seven. The transfer lists' parser infers a single leading
+span and cannot be reused: this one reads the counts and fills a grid, and a row that does
+not come out to exactly seven columns stops the parse rather than being skipped. Skipping
+would be worse here than on a transfer list — this table is short, and one row dropped is
+a club that reads as having kept its Head Coach.
+
+**The citations had to come out before the rows were split.** A `{{cite}}` runs to several
+lines on both pages and its continuation lines begin with `|url=`, which is a new cell to
+anything reading line by line. Every row carrying a multi-line citation would have arrived
+one cell too wide with every column after it belonging to somebody else.
+
+**A club is two link conventions, not one.** The season article links
+`[[Real Madrid CF|Real Madrid]]` where the transfer list links `[[Real Madrid]]`, so the
+transfer parser's rule — the article is the identity, and a row displaying one of the
+twenty while linking elsewhere is refused — would have refused a page that is not wrong.
+Here either identity resolves, and the check that replaces it is stronger: this column
+holds nothing but the Competition's own clubs, so a Team cell resolving to neither is
+drift and is refused by name.
+
+**Box 4 is a render bound, not only a trigger.** The store's trigger already proves every
+row was fetched before the Lock, and that is not enough: this table publishes the future,
+so a Head Coach announced in April to arrive on 1 July sits on the page for three months
+before the seat is his. The section drops anything dated after the deadline's own day and
+keeps that day, which is the day everything stored was observed before.
+
+**Two rows per change, not one.** The vacancy and the appointment are dated
+independently, and a Gameweek whose deadline falls between them is a club genuinely
+between Head Coaches. One row holding both would force the render either to publish an
+appointment the Entrant could not know of or to drop a vacancy it certainly could.
+
+**The archive replay needed the new page too, and would have gone quiet without it.**
+`archive-replay-fetcher.ts` maps a URL back to the name its bytes are archived under, and
+its own comments record this gap being missed twice — for Understat and for the transfer
+lists — each time silent, because both sources degrade to a stated absence rather than to
+a failure. A Head Coach section does the same. Mapped, and covered.
+
+**Box 5, with one thing to know.** Everything this pipeline names is head coach: the
+table, the section, the source string, the error classes, the module. The page's own words
+— its `Managerial changes` heading and its `Outgoing manager` column labels — are quoted
+in one constant each, to detect their movement and for nothing else. Pinning the labels is
+what makes a reordered table a refusal rather than a page of confidently transposed names.
+
+**Box 6 is still open, and the pins have moved once already.** Adding a section changes
+every rendered packet, so both shas had to move for the suite to be honest about what the
+template now says. They are taken from the test's own render, which is not what box 6
+asks for: it wants them re-pinned from real renders before the gate, and that is still to
+do.
+

@@ -12,6 +12,10 @@ import {
   type SquadChangeRow
 } from "../context/build-squad-changes-context.js";
 import {
+  buildHeadCoachChangesContext,
+  type HeadCoachChangeRow
+} from "../context/build-head-coach-changes-context.js";
+import {
   matchContext,
   type MatchPromptFixture
 } from "./openrouter-entrant.js";
@@ -73,6 +77,7 @@ export interface MatchContextData {
   historicalMatches: HistoricalMatch[];
   fplPlayers: FplPlayer[];
   squadChanges: SquadChangeRow[];
+  headCoachChanges: HeadCoachChangeRow[];
 }
 
 export async function loadMatchContextData(
@@ -128,6 +133,16 @@ export async function loadMatchContextData(
       where competition = $1 and season = $2 and gw = $3`,
     [competition, season, gameweek]
   );
+  // The Gameweek's own partition, on the same terms as the Squad Changes
+  // above. `dated_on` comes back as text: the render both bounds by it and
+  // prints it, and a `date` handed over as local midnight would be a day out
+  // on either side of UTC.
+  const headCoachChanges = await database.query<HeadCoachChangeRow>(
+    `select club, direction, head_coach, manner, dated_on::text as dated_on
+       from head_coach_changes
+      where competition = $1 and season = $2 and gw = $3`,
+    [competition, season, gameweek]
+  );
   return {
     competition,
     season,
@@ -136,7 +151,8 @@ export async function loadMatchContextData(
       competition, historicalMatches.rows, storedXg.rows
     ),
     fplPlayers: fplPlayers.rows,
-    squadChanges: squadChanges.rows
+    squadChanges: squadChanges.rows,
+    headCoachChanges: headCoachChanges.rows
   };
 }
 
@@ -179,6 +195,16 @@ export function buildMatchContext(
         homeTeam: fixture.home_team,
         awayTeam: fixture.away_team,
         changes: data.squadChanges
+      }),
+      // Undefined for a Season whose article is not listed, and then the
+      // section is absent rather than empty.
+      buildHeadCoachChangesContext({
+        competition: data.competition,
+        season: data.season,
+        deadline: data.deadline,
+        homeTeam: fixture.home_team,
+        awayTeam: fixture.away_team,
+        changes: data.headCoachChanges
       })
     ].filter((section) => section !== undefined).join("\n\n"),
     data.competition

@@ -14,6 +14,10 @@ import {
   fetchSquadChanges,
   type FetchSquadChangesResult
 } from "../squad-changes/fetch-squad-changes.js";
+import {
+  fetchHeadCoachChanges,
+  type FetchHeadCoachChangesResult
+} from "../head-coach/fetch-head-coach-changes.js";
 import { errorText } from "../error-text.js";
 import type { HttpFetcher } from "../http.js";
 
@@ -53,10 +57,21 @@ export type DailySquadChangeOutcome =
   | FetchSquadChangesResult
   | { stored: false; failure: string };
 
+/**
+ * Head Coach changes are enrichment on the same terms as Squad Changes
+ * (ADR-0044): a Wikipedia outage degrades the section to a stated absence and
+ * must never cost a Gameweek of Predictions. A Season the article list does
+ * not carry stores nothing and is not a failure.
+ */
+export type DailyHeadCoachOutcome =
+  | FetchHeadCoachChangesResult
+  | { stored: false; failure: string };
+
 export interface DailyFetchResult {
   fpl: FetchFplDailyResult;
   xg: DailyXgOutcome;
   squadChanges: DailySquadChangeOutcome;
+  headCoachChanges: DailyHeadCoachOutcome;
 }
 
 export class StaleFootballDataSeasonError extends Error {
@@ -245,6 +260,7 @@ export async function runDailyFetch({
   // Competition's failure joins `errors` and fails the run at the end.
   let xg: DailyXgOutcome | undefined;
   let squadChanges: DailySquadChangeOutcome | undefined;
+  let headCoachChanges: DailyHeadCoachOutcome | undefined;
   for (const competition of listed) {
     try {
       await fetchUnderstatSeasonXg({ database, competition, season, http });
@@ -276,12 +292,31 @@ export async function runDailyFetch({
         errors.push(error);
       }
     }
+    try {
+      const outcome = await fetchHeadCoachChanges({
+        database,
+        competition,
+        season,
+        http,
+        now: () => observedAt
+      });
+      if (competition === "PL" || headCoachChanges === undefined) {
+        headCoachChanges = outcome;
+      }
+    } catch (error) {
+      if (competition === "PL") {
+        headCoachChanges = { stored: false, failure: errorText(error) };
+      } else {
+        errors.push(error);
+      }
+    }
   }
   // A Season with no Competition listed reaches no source at all, which the
   // pre-cron checklist calls the quietest way for a deployment to do nothing.
   const unlisted = "no Competition is listed for the Season";
   xg ??= { stored: false, failure: unlisted };
   squadChanges ??= { stored: false, failure: unlisted };
+  headCoachChanges ??= { stored: false, failure: unlisted };
   if (errors.length === 1) {
     throw errors[0];
   }
@@ -291,5 +326,5 @@ export async function runDailyFetch({
   if (fpl === undefined) {
     throw new Error("Daily FPL fetch completed without a result");
   }
-  return { fpl, xg, squadChanges };
+  return { fpl, xg, squadChanges, headCoachChanges };
 }

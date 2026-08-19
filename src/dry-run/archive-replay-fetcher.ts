@@ -1,6 +1,10 @@
 import type { HttpFetcher, HttpRequestOptions } from "../http.js";
 import { squadChangeSource } from "../squad-changes/fetch-squad-changes.js";
 import { transferWindowByPage } from "../squad-changes/transfer-window.js";
+import {
+  headCoachSourceByPage,
+  headCoachSourceOf
+} from "../head-coach/head-coach-source.js";
 
 export interface ArchivedSnapshot {
   source: string;
@@ -90,7 +94,7 @@ function footballDataOrgSource(url: string): string | null {
   return `football_data_org:${startYear}-${endYear}:${competition}`;
 }
 
-const WIKIPEDIA_TRANSFERS_URL =
+const WIKIPEDIA_PAGE_URL =
   /^https:\/\/en\.wikipedia\.org\/w\/index\.php\?title=([^&]+)&action=raw$/;
 
 /**
@@ -106,13 +110,30 @@ const WIKIPEDIA_TRANSFERS_URL =
  * the Understat gap above earned, one source later.
  */
 function squadChangeSourceFor(url: string): string | null {
-  const match = WIKIPEDIA_TRANSFERS_URL.exec(url);
+  const match = WIKIPEDIA_PAGE_URL.exec(url);
   if (match?.[1] === undefined) {
     return null;
   }
   const page = decodeURIComponent(match[1]).replace(/_/g, " ");
   const window = transferWindowByPage(page);
   return window === undefined ? null : squadChangeSource(window);
+}
+
+/**
+ * A season article is archived under its own name and requested by its page
+ * title, exactly as a transfer list is -- and left out, it would go quiet in
+ * exactly the same way, because a Head Coach section with no rows reads as a
+ * stated absence rather than as a failure (ADR-0044). Two sources have now
+ * earned that paragraph; the third one added here does not have to.
+ */
+function headCoachChangeSourceFor(url: string): string | null {
+  const match = WIKIPEDIA_PAGE_URL.exec(url);
+  if (match?.[1] === undefined) {
+    return null;
+  }
+  const page = decodeURIComponent(match[1]).replace(/_/g, " ");
+  const article = headCoachSourceByPage(page);
+  return article === undefined ? null : headCoachSourceOf(article);
 }
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -148,6 +169,7 @@ function archiveSource(
     ?? understatSource(url)
     ?? footballDataOrgSource(url)
     ?? squadChangeSourceFor(url)
+    ?? headCoachChangeSourceFor(url)
     ?? openRouterSource(url, options);
 }
 

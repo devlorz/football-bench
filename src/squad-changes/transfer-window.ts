@@ -59,7 +59,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * are already stored under them. Spain's carry their country because the two
  * must not collide in `raw_snapshots`.
  *
- * Sixth of six, counting the whole change:
+ * Sixth of seven, counting the whole change:
  * `docs/runbooks/opening-a-competition.md` has the list.
  */
 const TRANSFER_WINDOWS: Readonly<Record<string, readonly TransferWindow[]>> = {

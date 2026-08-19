@@ -1,5 +1,12 @@
 import type { WikipediaClub } from "./club-identity.js";
 import type { TransferListFormat } from "./transfer-window.js";
+import {
+  cellSource,
+  cellText,
+  clubLink,
+  parseDate,
+  type ClubLink
+} from "../wikipedia/wikitext.js";
 
 /** One club's side of one move (ADR-0031). */
 export interface SquadChange {
@@ -62,80 +69,6 @@ function clubIndex(pinned: PinnedClubs): ClubIndex {
       [...pinned].map(([club, { article }]) => [article, club])
     ),
     byName: new Map([...pinned].map(([club, { name }]) => [name, club]))
-  };
-}
-
-const MONTHS = [
-  "january", "february", "march", "april", "may", "june",
-  "july", "august", "september", "october", "november", "december"
-];
-
-/** "6 February 2026" — the only date form either table uses. */
-function parseDate(value: string): string | undefined {
-  const match = /^(\d{1,2}) ([A-Za-z]+) (\d{4})$/.exec(value);
-  const month = MONTHS.indexOf((match?.[2] ?? "").toLowerCase());
-  if (match?.[1] === undefined || match[3] === undefined || month < 0) {
-    return undefined;
-  }
-  const day = match[1].padStart(2, "0");
-  return `${match[3]}-${String(month + 1).padStart(2, "0")}-${day}`;
-}
-
-/**
- * A cell with its wrapping stripped but its links intact: the flag and
- * sort-key templates that decorate every name, and the citation each fee row
- * carries, are noise in every column.
- */
-function cellSource(cell: string): string {
-  return cell
-    // A cell may open with HTML attributes -- `rowspan="9" |` -- and the
-    // spacing around them is not consistent down the page.
-    .replace(/^\s*[a-z]+="[^"]*"\s*\|/i, "")
-    .replace(/<ref[^>]*\/>/g, "")
-    .replace(/<ref[\s\S]*?<\/ref>/g, "")
-    // {{ntsh|92500000}} is the column's hidden sort key, not a fee.
-    .replace(/\{\{ntsh\|[^}]*\}\}/gi, "")
-    .replace(/\{\{flagg?\|[^}]*\}\}/gi, "")
-    // {{sortname|Jan Paul|van Hecke|dab=footballer}} -- named parameters are
-    // disambiguation for the link target and are never part of the name.
-    .replace(/\{\{sortname\|([^}]*)\}\}/gi, (_, parameters: string) =>
-      parameters.split("|").filter((part) => !part.includes("=")).join(" "))
-    .replace(/'''?/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/** What a reader sees in a cell: link syntax collapsed to its display text. */
-function cellText(cell: string): string {
-  return cellSource(cell)
-    .replace(/\[\[[^\]|]*\|([^\]]*)\]\]/g, "$1")
-    .replace(/\[\[([^\]]*)\]\]/g, "$1")
-    .trim();
-}
-
-interface ClubLink {
-  /** The linked article's title, or the bare text where a cell has no link. */
-  article: string;
-  /** What the row displays. */
-  text: string;
-}
-
-/**
- * A club cell as both of the things it says: which article it points at and
- * what it shows. The article is the identity -- `[[Tottenham Hotspur F.C.|`
- * is Spurs whether the row displays `Tottenham Hotspur`, `Spurs` or
- * `THFC` -- and the display text is what a Squad Change row records as the
- * counterpart.
- */
-function clubLink(cell: string): ClubLink {
-  const source = cellSource(cell);
-  const link = /\[\[([^\]|]+)(?:\|([^\]]*))?\]\]/.exec(source);
-  if (link?.[1] === undefined) {
-    return { article: source, text: source };
-  }
-  return {
-    article: link[1].trim(),
-    text: (link[2] ?? link[1]).trim()
   };
 }
 

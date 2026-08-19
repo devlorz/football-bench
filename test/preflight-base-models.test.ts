@@ -102,6 +102,22 @@ describe("pre-flight for the Base Model roster", () => {
            null, true, '2026-08-01', '2026-08-21T17:00:00Z'
          )`
     );
+    // One club changed and the other did not, which is the section's whole
+    // shape: the absence of the event is the fact, so Coventry costs no line.
+    await client.query(
+      `insert into head_coach_changes (
+         competition, season, gw, club, direction, head_coach, manner,
+         dated_on, observed_at
+       ) values
+         (
+           'PL', '2026-27', 1, 'Arsenal', 'out', 'Departed Coach', 'Sacked',
+           '2026-05-30', '2026-08-21T17:00:00Z'
+         ),
+         (
+           'PL', '2026-27', 1, 'Arsenal', 'in', 'Arrived Coach', null,
+           '2026-06-04', '2026-08-21T17:00:00Z'
+         )`
+    );
     for (let index = 1; index <= 9; index += 1) {
       await client.query(
         `insert into models (
@@ -186,6 +202,12 @@ describe("pre-flight for the Base Model roster", () => {
       "Coventry City",
       "In: none recorded",
       "Out: none recorded",
+      "",
+      "Head Coach changes this Season:",
+      "",
+      "Arsenal",
+      "Out: Departed Coach (sacked, 30 May 2026)",
+      "In: Arrived Coach (4 Jun 2026)",
       "",
       "Return only JSON with fixture_id, probs (H, D, A), score (home, away), and rationale.",
       "The first character must be { and the last character must be }.",

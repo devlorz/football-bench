@@ -44,6 +44,14 @@ const SPANISH_SUMMER_TRANSFERS_URL =
   "https://en.wikipedia.org/w/index.php"
   + "?title=List_of_Spanish_football_transfers_summer_2026&action=raw";
 
+const ENGLISH_SEASON_ARTICLE_URL =
+  "https://en.wikipedia.org/w/index.php"
+  + "?title=2026%E2%80%9327_Premier_League&action=raw";
+
+const SPANISH_SEASON_ARTICLE_URL =
+  "https://en.wikipedia.org/w/index.php"
+  + "?title=2026%E2%80%9327_La_Liga&action=raw";
+
 const UNDERSTAT_LEAGUE_BODY = JSON.stringify({
   dates: [{
     id: "29001",
@@ -92,6 +100,14 @@ async function sourceResponses(
       SPANISH_SUMMER_TRANSFERS_URL,
       await archivedBody("wikipedia-transfers-spain-summer-2026.txt.gz")
     ],
+    [
+      ENGLISH_SEASON_ARTICLE_URL,
+      await archivedBody("wikipedia-2026-27-premier-league.txt.gz")
+    ],
+    [
+      SPANISH_SEASON_ARTICLE_URL,
+      await archivedBody("wikipedia-2026-27-la-liga.txt.gz")
+    ],
     ...overrides
   ]);
 }
@@ -112,7 +128,7 @@ describe("the daily fetch", () => {
     await client.query(
       `truncate
          historical_matches, fpl_players, fixtures, gameweeks, raw_snapshots,
-         understat_match_xg, squad_changes, competitions
+         understat_match_xg, squad_changes, head_coach_changes, competitions
        restart identity cascade`
     );
     // Every source the fetch reaches, it reaches per listed Competition, so a
@@ -230,7 +246,7 @@ describe("the daily fetch", () => {
          (select count(*)::int from historical_matches) as matches`
     );
     expect(stored.rows).toEqual([{
-      snapshots: 6,
+      snapshots: 7,
       gameweeks: 38,
       fixtures: 380,
       players: 563,
@@ -285,7 +301,7 @@ describe("the daily fetch", () => {
          (select count(*)::int from fpl_players) as players`
     );
     expect(recovered.rows).toEqual([{
-      snapshots: 7,
+      snapshots: 8,
       matches: 932,
       players: 563
     }]);

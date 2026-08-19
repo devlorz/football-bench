@@ -162,6 +162,42 @@ const contextData = (competition: string): MatchContextData => ({
       loan: true,
       dated_on: new Date("2026-08-01T00:00:00Z")
     }
+  ],
+  // A departure with its manner, the arrival that answered it, a second
+  // vacancy nobody has filled, and an appointment dated after the deadline
+  // that the render must not reach -- against an away club that kept its Head
+  // Coach and so costs no line. Between them every shape this section can
+  // take, so the pinned hash moves if any of them is reformatted or if the
+  // bound stops holding.
+  headCoachChanges: [
+    {
+      club: "Arsenal",
+      direction: "out" as const,
+      head_coach: "Departed Coach",
+      manner: "Sacked",
+      dated_on: "2026-05-30"
+    },
+    {
+      club: "Arsenal",
+      direction: "in" as const,
+      head_coach: "Arrived Coach",
+      manner: null,
+      dated_on: "2026-06-04"
+    },
+    {
+      club: "Arsenal",
+      direction: "out" as const,
+      head_coach: "Interim Coach",
+      manner: "End of interim spell",
+      dated_on: "2026-08-10"
+    },
+    {
+      club: "Arsenal",
+      direction: "in" as const,
+      head_coach: "Unseen Coach",
+      manner: null,
+      dated_on: "2026-09-01"
+    }
   ]
 });
 
