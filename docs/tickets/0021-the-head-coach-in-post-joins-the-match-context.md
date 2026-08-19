@@ -88,18 +88,28 @@ instant the row was observed, and it refuses to outlive the Lock it was fetched 
 
 **Blocked by:** None — can start immediately; slices 4 and 5 need it.
 
-- [ ] A per-Gameweek partition beside the Head Coach Change store, scoped by Competition,
+- [x] A per-Gameweek partition beside the Head Coach Change store, scoped by Competition,
       Season and Gameweek, carrying the club, the Head Coach and the instant observed —
       and nothing else. Not a column on the Change store and **not a third `direction`**:
       those rows are events with a direction, a manner and a date, and an incumbent has
-      none of the three.
-- [ ] The observed instant is the whole of the pre-Lock guarantee, because this source
+      none of the three. Migration `0033_the_head_coach_in_post.sql`, table
+      `head_coaches`, one row per club per Gameweek where the Change store deliberately
+      allows a club two.
+- [x] The observed instant is the whole of the pre-Lock guarantee, because this source
       carries no dates. It is stored so the guarantee can be checked rather than inferred
-      from the fetch's schedule.
-- [ ] The migration is covered by the schema, migration and rehearsal suites the way
-      migration 0032 is.
-- [ ] The rehearsal reports every existing table came back whole, run against a copy of
-      the record before anything touches production.
+      from the fetch's schedule — by the same two triggers 0018 and 0032 carry, named
+      `head_coach_precedes_deadline` and `gameweek_deadline_preserves_head_coach_lock`.
+- [x] The migration is covered by the schema, migration and rehearsal suites the way
+      migration 0032 is: 36 tests in `schema`, 9 in `migrations` and 4 in
+      `rehearse-migration`, all passing on 2026-08-20 with `--exclude '**/.claude/**'`.
+- [x] The rehearsal reports every table it compares came back whole — the ten
+      `COMPARED_TABLES` names, not the whole record — run against a copy of the record
+      before anything touches production: 76 Gameweeks, 760 Fixtures, 593 Squad Changes
+      and 30 Head Coach Changes, every one back whole, on 2026-08-20.
+      `head_coach_changes` was outside that list until this slice — the list is now
+      guarded against a table younger than the copy, so a store can be named by the pass
+      that creates it rather than a pass later, and a misspelt name raises there instead
+      of being skipped into a green run that compared nothing.
 
 ## 4 — The incumbents are read off the page already archived
 

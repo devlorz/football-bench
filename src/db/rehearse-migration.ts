@@ -15,12 +15,19 @@ export const KEYED_TABLES = [
 ] as const;
 
 /**
- * Every table the rehearsal compares with itself. The seven above plus
- * `squad_changes`, which 0022 gave a Competition without rekeying and which
- * 0027 then took the primary key off — a table no pass may quietly lose rows
- * from is a table this list has to name, whoever rekeyed it.
+ * Every table the rehearsal compares with itself. The seven above plus the
+ * three no pass rekeyed: `squad_changes`, which 0022 gave a Competition
+ * without rekeying and which 0027 then took the primary key off, and the two
+ * Head Coach stores 0032 and 0033 added — a table no pass may quietly lose
+ * rows from is a table this list has to name, whoever rekeyed it.
+ *
+ * A table younger than the record being rehearsed is skipped rather than
+ * failing the run: this list names what to watch from now on, and a copy taken
+ * before the migration that created one has nothing to compare.
  */
-const COMPARED_TABLES = [...KEYED_TABLES, "squad_changes"] as const;
+const COMPARED_TABLES = [
+  ...KEYED_TABLES, "squad_changes", "head_coach_changes", "head_coaches"
+] as const;
 
 const RENAMED_TABLES = ["fixtures", "contexts", "predictions", "attempts"];
 
@@ -31,9 +38,19 @@ const quoted = (names: readonly string[]): string =>
  * Copies every row of the compared tables into a schema the migration does not
  * touch, so the record can be compared with itself afterwards.
  */
-const SNAPSHOT = "create schema before;\n" + COMPARED_TABLES
-  .map((table) => `create table before.${table} as select * from ${table};`)
-  .join("\n");
+const SNAPSHOT = `
+create schema before;
+do $$
+declare
+  target text;
+begin
+  foreach target in array array[${quoted(COMPARED_TABLES)}] loop
+    if to_regclass('public.' || target) is not null then
+      execute format('create table before.%1$I as select * from %1$I', target);
+    end if;
+  end loop;
+end $$;
+`;
 
 /**
  * Proves the pass moved the record rather than rewriting it: every row comes
@@ -78,6 +95,17 @@ declare
   mislabelled bigint;
 begin
   foreach target in array array[${quoted(COMPARED_TABLES)}] loop
+    -- This runs after the pass, so every name on the list must exist by now.
+    -- Without this the skip below would swallow a misspelt one: nothing to
+    -- snapshot, nothing to compare, and a green run that compared nothing --
+    -- the one outcome this harness must not be able to report.
+    if to_regclass('public.' || target) is null then
+      raise exception 'the rehearsal compares %, which the record has no such '
+        'table for', target;
+    end if;
+    -- Not in the copy, so the migration created it and there is no before.
+    continue when to_regclass('before.' || target) is null;
+
     select not exists (
       select 1 from information_schema.columns
        where table_schema = 'before'

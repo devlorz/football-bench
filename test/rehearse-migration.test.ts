@@ -56,7 +56,8 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0029_a_club_carries_its_own_code.sql",
       "0030_set_piece_and_penalty_duties_join_the_pool.sql",
       "0031_the_action_carries_a_required_rationale_back.sql",
-      "0032_head_coach_changes.sql"
+      "0032_head_coach_changes.sql",
+      "0033_the_head_coach_in_post.sql"
     ]);
     // The record the copy carried, not a shape asserted about the schema: an
     // operator reading a rehearsal needs to see that it ran over rows.
@@ -71,7 +72,12 @@ describe("rehearsing a migration against a copy of the record", () => {
       // Compared and counted even though 0022 never rekeyed it: 0027 takes its
       // primary key off, and a table no pass may lose rows from has to be one
       // the rehearsal is looking at.
-      squad_changes: 0
+      squad_changes: 0,
+      // Both younger than this copy, so this pass had nothing to compare them
+      // against and counted them empty. They are on the list for the passes
+      // after it.
+      head_coach_changes: 0,
+      head_coaches: 0
     });
 
     // And the source is untouched — it is a live record's stand-in, and a
@@ -119,9 +125,44 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0029_a_club_carries_its_own_code.sql",
       "0030_set_piece_and_penalty_duties_join_the_pool.sql",
       "0031_the_action_carries_a_required_rationale_back.sql",
-      "0032_head_coach_changes.sql"
+      "0032_head_coach_changes.sql",
+      "0033_the_head_coach_in_post.sql"
     ]);
     expect(rehearsal.rows).toMatchObject({ gameweeks: 1, squad_changes: 1 });
+  });
+
+  // The skip above is for a table younger than the copy, and a test that only
+  // ever skips proves the skip and nothing else: both Head Coach stores are
+  // younger than every copy the tests before this one take, so neither had ever
+  // been through the comparison the list adds them for. Seeded at 0032 so the
+  // Change store is in `before` and its row is actually compared.
+  test("compares a store the copied record already carries", async () => {
+    await applyRealMigrationsThrough(client, "0032_head_coach_changes.sql");
+    await client.query(
+      `insert into gameweeks (competition, season, gw, deadline_at)
+       values ('PL', '2026-27', 1, '2026-08-21T17:30:00Z');
+       insert into head_coach_changes (
+         competition, season, gw, club, direction, head_coach, manner,
+         dated_on, observed_at
+       ) values (
+         'PL', '2026-27', 1, 'Liverpool', 'out', 'Arne Slot', 'Sacked',
+         '2026-05-30', '2026-08-21T17:00:00Z'
+       )`
+    );
+
+    const rehearsal = await rehearseMigration({
+      sourceUrl: process.env.DATABASE_URL!,
+      connect
+    });
+
+    expect(rehearsal.applied).toEqual(["0033_the_head_coach_in_post.sql"]);
+    // Compared rather than skipped, and back whole: `verifyRelabelledAsPl`
+    // raises, so this row reaching the count is the comparison having run over
+    // it. The younger store is empty and skipped, as it must be.
+    expect(rehearsal.rows).toMatchObject({
+      head_coach_changes: 1,
+      head_coaches: 0
+    });
   });
 
   test("fails when the migration does not leave the record alone", async () => {

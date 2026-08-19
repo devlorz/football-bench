@@ -29,7 +29,7 @@ describe("the benchmark database", () => {
       `truncate
          predictions, contexts, fixtures, manager_states, attempts, scores,
          models, gameweeks, raw_snapshots, historical_matches, fpl_players,
-         fpl_player_points, squad_changes, head_coach_changes
+         fpl_player_points, squad_changes, head_coach_changes, head_coaches
        restart identity cascade`
     );
   });
@@ -99,6 +99,7 @@ describe("the benchmark database", () => {
       "fpl_runs",
       "gameweeks",
       "head_coach_changes",
+      "head_coaches",
       "historical_matches",
       "manager_states",
       "models",
@@ -512,6 +513,69 @@ describe("the benchmark database", () => {
           where season = '2026-27' and gw = 1`
       )).rejects.toMatchObject({
         constraint: "gameweek_deadline_preserves_head_coach_change_lock"
+      });
+    });
+  });
+
+  // Migration 0033. The incumbent is a state, not an event: no direction, no
+  // manner and no date. Its whole pre-Lock guarantee is `observed_at`, because
+  // the source is the article's present tense and carries no date of its own.
+  describe("a Head Coach in post", () => {
+    const incumbent = (
+      observedAt: string,
+      headCoach = "Arne Slot"
+    ): Promise<unknown> => client.query(
+      `insert into head_coaches (
+         competition, season, gw, club, head_coach, observed_at
+       ) values ('PL', '2026-27', 1, 'Liverpool', $1, $2)`,
+      [headCoach, observedAt]
+    );
+
+    test("is refused at or after its Gameweek deadline", async () => {
+      await storeGameweek();
+
+      await expect(incumbent("2026-08-21T17:30:00Z")).rejects.toMatchObject({
+        constraint: "head_coach_precedes_deadline"
+      });
+    });
+
+    // 0024's hazard, as the neighbouring table carries it: a row saying
+    // nothing about its Competition points at a real Premier League Gameweek
+    // and nothing downstream can catch it.
+    test("is refused when it does not name its Competition", async () => {
+      await storeGameweek();
+
+      await expect(client.query(
+        `insert into head_coaches (
+           season, gw, club, head_coach, observed_at
+         ) values (
+           '2026-27', 1, 'Liverpool', 'Arne Slot', '2026-08-21T17:00:00Z'
+         )`
+      )).rejects.toThrow("a Head Coach requires a Gameweek");
+    });
+
+    // Where the Change store keeps two rows for a club that changed twice,
+    // this one keeps exactly one: a club has a single Head Coach in a
+    // Gameweek, so a second name for the same club is a parse that went wrong
+    // rather than a second fact.
+    test("is the only one its club has in the Gameweek", async () => {
+      await storeGameweek();
+      await incumbent("2026-08-21T17:00:00Z");
+
+      await expect(incumbent("2026-08-21T17:00:00Z", "Xabi Alonso"))
+        .rejects.toMatchObject({ constraint: "head_coaches_identity" });
+    });
+
+    test("holds its Gameweek's deadline where it is", async () => {
+      await storeGameweek();
+      await incumbent("2026-08-21T17:00:00Z");
+
+      await expect(client.query(
+        `update gameweeks
+            set deadline_at = '2026-08-21T17:00:00Z'
+          where season = '2026-27' and gw = 1`
+      )).rejects.toMatchObject({
+        constraint: "gameweek_deadline_preserves_head_coach_lock"
       });
     });
   });
