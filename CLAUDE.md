@@ -137,3 +137,26 @@ rtk init --global       # Add RTK to ~/.claude/CLAUDE.md
 
 Overall average: **60-90% token reduction** on common development operations.
 <!-- /rtk-instructions -->
+
+# Paid model calls — ask first, every time
+
+**Never start a run that spends money on OpenRouter. Ask, then wait for an
+explicit yes.**
+
+This covers `npm run predict:preview` (the bench), `npm run predict`,
+`npm run predict:scheduled`, `npm run preflight`, `npm run exhibition:replay`,
+and anything else that reaches `https://openrouter.ai` with a real
+`OPENROUTER_API_KEY`.
+
+- A ticket, a spec or a slice that says "real calls" is **not** permission. It
+  describes the work; the spend is still the user's call.
+- A question about a run ("why did you stop?", "how much would it cost?") is
+  **not** permission either. Only an explicit instruction to run it is.
+- When asking, state seats × Fixtures, the resulting call count, and a rough
+  cost. Wait.
+- Killing a run mid-flight recovers nothing — the preview writes to a throwaway
+  database that is dropped with the process — so the decision has to happen
+  before the first call, not after.
+
+Runs that reach no model are free and need no permission: `npm run dry-run`
+replays archived answers, and `npm run context:show` only renders.
