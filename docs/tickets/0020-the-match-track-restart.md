@@ -544,11 +544,14 @@ make and this ticket declines the same way (its own Out of Scope: dashboard work
 the frozen block). A ticket of its own carries it, citing this slice's commit as the
 evidence that opened the question.
 
-**Boxes 1 and 2 are ticked here and nowhere else.** This work sits on
-`slice-4-flip`, off `main`, because slice 1's rule holds until the last kickoff has been
-scored: `main` is what `score.yml` checks out, and the constant on v2 with no v2 seat
-seeded would leave Gameweek 1 at five Fixtures forever. It lands after the completing
-run, not before. **Found by review**, along with three smaller things it was right about
+**Boxes 1 and 2 are ticked, and this must not be pushed.** `score.yml` checks out
+`origin/main`, not the working tree, and slice 1's rule holds until the last kickoff has
+been scored: the constant on v2 with no v2 seat seeded selects a version no row carries,
+and Gameweek 1 stays at five Fixtures forever. So the flip sits on `main` unpushed until
+the completing run has written every v1 seat's rows, and the push is the act that is
+ordered — not the commit. **Found by review**, which caught this as a commit on `main`
+before the run and was right about the order; what it read as already deployed was not,
+because `origin/main` stood seven commits behind. Right about three smaller things too
 — the claim that v1 was still unused, left standing in the pin's own comment one file
 over from the constants this change corrects; a `match-pd/2026-27-v2/` literal written
 three lines after the same change replaced a literal for turning every restart into a
