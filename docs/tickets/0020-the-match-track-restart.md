@@ -167,7 +167,7 @@ render it identically; every sentence the packet can now say is a test's expecte
       over the ordered outcomes — and a render test holds each verbatim.
 - [x] No coaching sentence enters; the additions are facts and the game's rule, nothing
       else (ADR-0018 unmoved).
-- [ ] The rendered packet is read by eye over production data for both Competitions —
+- [x] The rendered packet is read by eye over production data for both Competitions —
       the `context:show` discipline that found both of PD's earlier moves.
 
 ### The additions, rendered — recorded 2026-08-19
@@ -229,6 +229,61 @@ freezes. What to read for: that the base-rates line carries a real 380-match cou
 not an `unavailable` nobody intended, and that the xG lines are not `unavailable` across
 the board — spec 0020 asks for prior-Season Understat rows to be verified in production,
 and this is the read that verifies them.
+
+### The eye-read — recorded 2026-08-19
+
+Both packets were rendered against production and read. **The three additions render
+correctly in both Competitions**, and spec 0020's verify-early question is answered yes:
+the prior-Season Understat rows exist for both leagues.
+
+The base-rates line carries a real count in both, once per context, between the table
+and the club sections:
+
+> Prior-Season base rates (2025-26 Premier League, 380 matches): home wins 42.6%, draws
+> 27.4%, away wins 30.0%, 2.75 goals per match.
+
+> Prior-Season base rates (2025-26 La Liga, 380 matches): home wins 48.9%, draws 24.5%,
+> away wins 26.6%, 2.69 goals per match.
+
+The xG rates read real numbers for every club that spent the prior Season in the top
+flight — seventeen of La Liga's twenty in the Gameweek 2 packet, and Arsenal and
+Manchester United in the Premier League's — and `unavailable` at every venue for exactly
+the promoted clubs, which is Understat carrying no second division and not a fault:
+Málaga CF, RC Deportivo La Coruña and Real Racing Club de Santander from the Segunda
+División, Coventry City and Hull City from the Championship. One club renders the
+short-coverage sentence the both-or-nothing rule promises,
+`1.41-1.47 (over 37 of 38 matches) overall, 1.59-1.14 (over 18 of 19 matches) home`, and
+no venue anywhere reads `unavailable` next to a covered one. The two instruction
+sentences close every packet verbatim. No sentence needs to move, so slice 2's tests
+stand as committed.
+
+**What the read found instead is outside slice 2 and inside the gate.** La Liga's
+Gameweek 2 packet, rendered at its own Lock instant of 2026-08-20T17:30Z, states that no
+2026-27 result has been played:
+
+> La Liga table: no result has been played yet this Season.
+
+with `Current-Season overall: no matches played.` under all twenty-eight club sections
+and every form line stopping at 2026-05-23 — while slice 1's five settled Fixtures sit in
+the record above. The cause is one production variable: `FOOTBALL_DATA_SEASON` is
+`2025-26` while `SEASON` is `2026-27`, so `fetchFootballDataSeason` pulls
+`mmz4281/2526/*.csv` every day and no 2026-27 row ever reaches `historical_matches`. The
+upstream `mmz4281/2627/SP1.csv` does carry all five results, so nothing is missing at the
+source. Scoring is untouched — it reads `fixtures` for results and `historical_matches`
+only for the prior Season's Elo baseline — which is why slice 1's numbers are right while
+the packet's are blind.
+
+`requireCurrentSeasonMatchesAfterFirstDeadline` is the guard for exactly this, and it
+sleeps through it: it dates itself from the *Premier League's* Gameweek 1 deadline
+(2026-08-21T17:30Z) and asks `h.competition = 'PL'`, so it cannot fire until a day after
+PD's gate. Its own comment says each Competition needs its own, and that remains its own
+change rather than this ticket's.
+
+The fix before the gate is the variable, not code: set `FOOTBALL_DATA_SEASON` to
+`2026-27` and dispatch `fetch.yml`, which is due tonight for slice 1 anyway. The delete
+in `fetchFootballDataSeason` is scoped to the season it is storing, so the 2025-26 rows
+the base rates and the prior-Season lines are computed from are not touched by the flip.
+Both are the user's to run.
 
 ## 3 — The bench: the amended question against Gameweek 1's record
 
