@@ -13,6 +13,11 @@
 -- foreign keys, because none of them cascades and a blocked update would say
 -- "violates foreign key constraint" without saying which Season it protected.
 
+-- Stop at the first error rather than reporting a refusal and then a wall of
+-- "current transaction is aborted": the guard below is the point of the file
+-- and its message has to be the last thing on the screen.
+\set ON_ERROR_STOP on
+
 begin;
 
 do $$
