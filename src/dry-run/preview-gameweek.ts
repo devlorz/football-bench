@@ -141,9 +141,12 @@ export async function previewGameweek({
     [competition, season, gameweek]
   );
 
-  const usage = await target.query<{ tin: number; tout: number }>(
-    `select coalesce(sum(tokens_in), 0)::int as tin,
-            coalesce(sum(tokens_out), 0)::int as tout
+  const usage = await target.query<{
+    tokensIn: number;
+    tokensOut: number;
+  }>(
+    `select coalesce(sum(tokens_in), 0)::int as "tokensIn",
+            coalesce(sum(tokens_out), 0)::int as "tokensOut"
        from attempts where competition = $1 and season = $2`,
     [competition, season]
   );
@@ -152,8 +155,8 @@ export async function previewGameweek({
     contexts: contexts.rows,
     forecasts: forecasts.rows,
     gapAlert,
-    tokensIn: usage.rows[0]?.tin ?? 0,
-    tokensOut: usage.rows[0]?.tout ?? 0,
+    tokensIn: usage.rows[0]?.tokensIn ?? 0,
+    tokensOut: usage.rows[0]?.tokensOut ?? 0,
     elapsedMs
   };
 }

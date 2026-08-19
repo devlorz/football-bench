@@ -6,6 +6,7 @@ import {
   restrictToReadOnly
 } from "../dry-run/load-archive.js";
 import { previewGameweek } from "../dry-run/preview-gameweek.js";
+import { matchPromptOf } from "../predictions/openrouter-entrant.js";
 import { nodeHttpFetcher } from "../http.js";
 import { formatGapAlert } from "../predictions/gap-alert.js";
 import { readPreviewJobConfig } from "./config.js";
@@ -26,9 +27,17 @@ try {
   await archiveDatabase.end();
 }
 
+// The seats that will answer, not every seat the archive holds: the run
+// selects on the Competition's Prompt Version, so a roster of thirty across
+// three versions answers this Gameweek with ten, and a count of thirty would
+// describe a run that is not happening.
+const seats = archive.entrants.filter(({ role, prompt_version: version }) =>
+  role === "entrant" && version === matchPromptOf(config.competition).version
+).length;
+
 console.log(
   `Previewing ${config.competition} ${config.season} Gameweek ${config.gameweek} with `
-  + `${archive.entrants.filter(({ role }) => role === "entrant").length} Entrants. `
+  + `${seats} Entrants. `
   + "Real Entrant calls; a throwaway database; the Season's own Predictions "
   + "are untouched."
 );

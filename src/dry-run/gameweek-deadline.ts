@@ -10,8 +10,8 @@ type Database = Pick<Client, "query">;
  * already made this copy cost twice: `competition` reached every rehearsal
  * query in one edit, and two verbatim copies of the same three-line read is
  * two places for the next such column to be forgotten. The message names the
- * Competition because it is now a parameter — the archive answering for one
- * league and not another is the likeliest way this fails.
+ * Competition because it is now a parameter — an archive that answers for one
+ * Competition and not another is the likeliest way this read fails.
  */
 export async function readGameweekDeadline(
   database: Database,

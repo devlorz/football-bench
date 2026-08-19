@@ -103,14 +103,16 @@ describe("previewing a Gameweek with live Entrants", () => {
     // about, so nothing is rejected on fixture_id the way a replay would be.
     expect(result.gapAlert).toBeNull();
     expect(result.forecasts.length).toBe(asked.length);
-    expect(result.forecasts.length).toBe(
-      new Set(asked).size * archive.entrants.length
-    );
+    // The Gameweek's ten Fixtures, each asked of both seats, and the tokens the
+    // seeded response declares rather than a floor above zero.
+    expect(new Set(asked).size).toBe(10);
+    expect(result.forecasts.length).toBe(20);
     expect(result.forecasts[0]).toMatchObject({
       home: 0.5, draw: 0.3, away: 0.2,
       predictedHome: 2, predictedAway: 1, repairs: 0
     });
-    expect(result.tokensIn).toBeGreaterThan(0);
+    expect(result.tokensIn).toBe(1800 * 20);
+    expect(result.tokensOut).toBe(700 * 20);
   });
 
   test("previews the Competition it is given rather than the Premier League", async () => {
@@ -197,9 +199,13 @@ describe("previewing a Gameweek with live Entrants", () => {
       }
     });
 
-    const context = result.contexts[0];
-    expect(context?.body).toContain("Fixture ID:");
-    expect(context?.body).toContain("Historical context");
-    expect(context?.body).toContain("FPL-derived player context");
+    // Whole lines, the way every other test over this packet asserts it: a
+    // substring cannot tell a rendered section from a truncated one.
+    const lines = result.contexts[0]?.body.split("\n") ?? [];
+    expect(lines).toContain("Predict this Premier League Fixture.");
+    expect(lines).toContain(
+      "Historical context as of 2026-08-21T17:30:00.000Z"
+    );
+    expect(lines).toContain("FPL-derived player context");
   });
 });

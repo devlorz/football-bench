@@ -158,5 +158,5 @@ and anything else that reaches `https://openrouter.ai` with a real
   database that is dropped with the process — so the decision has to happen
   before the first call, not after.
 
-Runs that reach no model are free and need no permission: `npm run dry-run`
+Runs that reach no Base Model are free and need no permission: `npm run dry-run`
 replays archived answers, and `npm run context:show` only renders.

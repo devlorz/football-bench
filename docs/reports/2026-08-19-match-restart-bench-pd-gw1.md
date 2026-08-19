@@ -17,9 +17,14 @@ SEASON=2026-27 FOOTBALL_DATA_SEASON=2025-26 COMPETITION=PD GAMEWEEK=1 \
   npm run predict:preview
 ```
 
-- Instant: `deadline-6h`, six hours before Gameweek 1's own Lock at
-  `2026-08-15T16:00:00Z`, because a bench over a Gameweek already played would otherwise
-  answer after its Lock and be refused.
+- Instant: `deadline-6h`, six hours before the Lock the rehearsal derives,
+  `2026-08-15T16:00:00Z` — a bench over a Gameweek already played would otherwise answer
+  after its Lock and be refused. **This is an hour off production's clock.** Production
+  froze the deadline at 17:00Z and ran at 11:00Z; the rehearsal builds `gameweeks` from
+  the archive and re-derives 16:00Z from the first kickoff's ninety-minute lead, so the
+  bench ran at 10:00Z. Nothing in the packet moves across that hour — the Season's first
+  kickoff was 17:30Z, every source is deadline-bounded, and La Liga renders no FPL
+  section — but a repeat should pass `PREVIEW_AT=2026-08-15T11:00:00Z` and say so.
 - `FOOTBALL_DATA_SEASON=2025-26` is what production itself was running at that Lock. It
   is also required today: the archive holds a `football_data:2026-27:E0` snapshot whose
   body is football-data.co.uk's 300 page, and the replay fetcher answers 200 to

@@ -333,9 +333,12 @@ at all.)
 
 - [x] Gameweek 1's snapshots are verified to cover what the bench replays before the
       bench is attempted — a dry run replays bytes and invents none.
-- [x] The bench runs the amended builder over the same Fixtures at the same as-of instant
+- [ ] The bench runs the amended builder over the same Fixtures at the same as-of instant
       and touches no production table: the context identity, the restarted scoring and
-      ADR-0032's objection all forbid it, each independently.
+      ADR-0032's objection all forbid it, each independently. **Two of the three.** The
+      Fixtures are the same six and nothing was written to production; the instant is an
+      hour off production's, and production is read. Both deviations are measured below
+      rather than waved at.
 - [x] What is read from it is what ADR-0026's dry opening read: Repair and format
       failures, the incoherence rate under the new sentences, and whether the base-rates
       anchor is picked up at all — with RPS deltas at n=6 named as noise in the findings.
@@ -375,6 +378,25 @@ so the rehearsal is the more faithful for it. And the rehearsed packet reads
 `fetch:xg-history` backfill rather than the daily fetch the rehearsal replays. **The
 bench therefore tested the base-rates line and the two instruction sentences, and did not
 test the xG line** — which the eye-read above covered over production instead.
+
+**The instant is not production's, by an hour.** Box 2 asks for the same as-of instant
+and the bench did not have it. Production froze La Liga's Gameweek 1 at a deadline of
+2026-08-15T17:00:00Z and ran its main Predictions at `deadline-6h`, 11:00Z. The rehearsal
+builds its `gameweeks` table from the archive into an empty database, so it re-derives
+the deadline from the first kickoff's ninety-minute lead — Deportivo Alavés v Getafe CF
+at 17:30Z gives 16:00Z — and `deadline-6h` off that is 10:00Z. The frozen production
+deadline is never replayed, so no `PREVIEW_AT` alone would have fixed it; an absolute
+instant (`PREVIEW_AT=2026-08-15T11:00:00Z`, which `resolveDryRunInstant` accepts) would
+have matched production's clock while the packet stayed bounded by the re-derived
+16:00Z Lock.
+
+Nothing in the packet moves across that hour, and that is checkable rather than hopeful:
+every source the packet reads is bounded by the deadline, La Liga's first kickoff of the
+Season was 17:30Z so no result exists in the gap, the prior-Season rows and the xG rows
+predate both instants, Squad Changes are partitioned by Gameweek rather than by time, and
+La Liga renders no FPL section at all. The packet the bench sent is the packet 17:00Z
+would have produced; the *claim of identity* is what was wrong, not the bytes. Whoever
+repeats this bench should pass the absolute instant and say so.
 
 **Format failures are one seat's.** Gemini 3.1 Pro Preview failed the schema on four of
 its six Fixtures and reached the other two only after three Repairs each, which is the
