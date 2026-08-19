@@ -78,8 +78,8 @@ describe("rehearsing a migration against a copy of the record", () => {
     // exact accident this command exists to prevent.
     const source = await client.query<{ column_name: string }>(
       `select column_name from information_schema.columns
-        where table_name = 'fixtures' and column_name in
-          ('fpl_id', 'fixture_id', 'competition')`
+        where table_schema = 'public' and table_name = 'fixtures'
+          and column_name in ('fpl_id', 'fixture_id', 'competition')`
     );
     expect(source.rows).toEqual([{ column_name: "fpl_id" }]);
   });

@@ -33,7 +33,12 @@ describe("applying migrations", () => {
   });
 
   beforeEach(async () => {
-    await client.query("drop schema public cascade; create schema public");
+    await client.query(
+      // `before` too: the snapshot below leaves it on the shared database, and
+      // every later test file inherits it.
+      "drop schema if exists before cascade;"
+      + " drop schema public cascade; create schema public"
+    );
   });
 
   test("applies every pending migration in filename order", async () => {
