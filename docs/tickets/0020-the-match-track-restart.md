@@ -559,6 +559,21 @@ false failure; and a qualified id spelled `${seatPrefix}/${version.split("/")[1]
 which re-derives the version from its own pieces and drops a third segment in silence
 where `${version}/` is the same string and says so.
 
+**The slug seam had no restart id in it.** The last-segment read was written for
+`match-pd/2026-27-v2/claude-opus-5` and every assertion on it used a two-part id, which
+`split("/")[1]` answers correctly — the change had no test that failed without it. The
+Entrant-link suite now reads a three-segment id and crosses a link into a restarted
+La Liga, and both go red under the old reader. The restart's own seeding test asserts
+whole stored identities rather than ids and Base Models, because a door that copied the
+names and dropped the provider or the quantization pin would have passed it (story 14),
+and it builds its expected ids from `seatSlug` rather than spelling the prefix's length
+out a second time. **Found by review.**
+
+**The id qualification is box 3's work, landed under box 1's tick.** Not extra: the
+constant cannot move without it — the door would relabel the retired ten rather than
+seat ten new — so the two are one change or neither is safe. Box 3 stays open because
+what it asks for is the seeding *run*, against production, which has not happened.
+
 **Box 5 stays open on one clause.** The store-seeded-with-both-versions half is proven —
 the retired ten keep their ids and their version, the standing ten are new rows, and
 every seat-selecting query filters on the standing version already. The Exhibition clause

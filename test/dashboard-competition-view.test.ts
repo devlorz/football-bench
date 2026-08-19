@@ -181,13 +181,27 @@ describe("the Entrant a link names", () => {
   /** One Base Model, seated in both leagues. */
   const PREMIER_LEAGUE = ["match/claude-opus-5", "match/gpt-5"];
   const LA_LIGA = ["match-pd/claude-opus-5", "match-pd/gpt-5"];
+  /**
+   * La Liga's seats as the restart leaves them: a Competition whose plain ids
+   * belong to a retired version seats the standing roster under the Prompt
+   * Version's own segment (ADR-0042, `enterSeasonRoster`). Three segments, not
+   * two, and this is the shape a reader's link is answered from from Gameweek
+   * 2 on.
+   */
+  const LA_LIGA_RESTARTED = [
+    "match-pd/2026-27-v2/claude-opus-5", "match-pd/2026-27-v2/gpt-5"
+  ];
 
   test("is the seat's slug, which carries no Competition", () => {
     // A seat id is the Prompt Version's leading segment and the Base Model:
     // `match/` in the Premier League and `match-pd/` in La Liga
-    // (`seatPrefixOf`). Only the second half is the Entrant.
+    // (`seatPrefixOf`). Only the last segment is the Entrant -- a restart puts
+    // the version between the two and the Base Model is still the whole
+    // answer, which is what the prefix having no fixed length means.
     expect(entrantSlug("match/claude-opus-5")).toBe("claude-opus-5");
     expect(entrantSlug("match-pd/claude-opus-5")).toBe("claude-opus-5");
+    expect(entrantSlug("match-pd/2026-27-v2/claude-opus-5"))
+      .toBe("claude-opus-5");
   });
 
   test("survives the crossing from one Competition to the other", () => {
@@ -196,6 +210,15 @@ describe("the Entrant a link names", () => {
     expect(entrantOf("claude-opus-5", LA_LIGA)).toBe("match-pd/claude-opus-5");
     expect(entrantOf("claude-opus-5", PREMIER_LEAGUE))
       .toBe("match/claude-opus-5");
+
+    // And across the restart, which is the crossing a reader makes from
+    // Gameweek 2 on: the link they copied out of the Premier League carries
+    // the same slug, and La Liga's seats have grown a segment since.
+    expect(entrantOf("claude-opus-5", LA_LIGA_RESTARTED))
+      .toBe("match-pd/2026-27-v2/claude-opus-5");
+    expect(entrantOf("gpt-5", LA_LIGA_RESTARTED))
+      .toBe("match-pd/2026-27-v2/gpt-5");
+    expect(entrantOf("mistral-large-3", LA_LIGA_RESTARTED)).toBeNull();
   });
 
   test("selects nothing where the Competition has no such seat", () => {

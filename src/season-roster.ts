@@ -261,7 +261,7 @@ function identityOfSeat(seat: StoredSeat): Record<string, string | null> {
  * would be the first the other way. Merging is a move of that module into
  * `src/`, which is a decision of its own and not one spec 0017 makes.
  */
-function seatSlug(id: string): string {
+export function seatSlug(id: string): string {
   return id.slice(id.lastIndexOf("/") + 1);
 }
 

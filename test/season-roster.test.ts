@@ -7,7 +7,7 @@ import {
 } from "../src/predictions/openrouter-entrant.js";
 import {
   enterActiveCompetitionRosters, enterSeasonRoster, SEASON_ROSTER,
-  SEASON_ROSTER_SIZE, seatPrefixOf
+  SEASON_ROSTER_SIZE, seatPrefixOf, seatSlug
 } from "../src/season-roster.js";
 
 const { Client } = pg;
@@ -377,18 +377,29 @@ describe("entering the Season Roster", () => {
       );
 
       // And the standing ten are new rows under the version's own segment,
-      // seating the same Base Models: a re-seat, not a roster change (ADR-0034).
+      // seating the roster whole: a re-seat, not a roster change (ADR-0034).
       const standing = rows.filter(
         ({ prompt_version }) => prompt_version === matchPromptOf("PD").version
       );
       expect(standing.map(({ id }) => id).sort()).toEqual(
         SEASON_ROSTER
-          .map(({ id }) => `${matchPromptOf("PD").version}/${
-            id.slice("match/".length)}`)
+          .map(({ id }) => `${matchPromptOf("PD").version}/${seatSlug(id)}`)
           .sort()
       );
-      expect(standing.map(({ base_model }) => base_model).sort())
-        .toEqual(SEASON_ROSTER.map(({ baseModel }) => baseModel).sort());
+
+      // Whole identities and not the Base Model alone (story 14): a door that
+      // copied the names and dropped the provider or the quantization pin
+      // would seat ten rows with the right ids in front of Base Models the
+      // Season was never run with, and a count-and-id assertion would call it
+      // a re-seat.
+      const identity = ({ name, base_model, provider, quantization }: ModelRow):
+      string => JSON.stringify([name, base_model, provider, quantization]);
+      expect(standing.map(identity).sort()).toEqual(
+        SEASON_ROSTER
+          .map(({ name, baseModel, provider, quantization }) =>
+            JSON.stringify([name, baseModel, provider, quantization ?? null]))
+          .sort()
+      );
 
       // Re-entering is the operator running the door twice, which is how it is
       // run: the ids have to be the same answer both times or the second run
