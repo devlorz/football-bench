@@ -4,6 +4,7 @@ import type { GapAlert } from "../predictions/gap-alert.js";
 import { predictGameweek } from "../predictions/predict-gameweek.js";
 import type { DryRunArchive } from "./load-archive.js";
 import { prepareArchivedGameweek } from "./prepare-archived-gameweek.js";
+import { resolveDryRunInstant } from "./dry-run-clock.js";
 
 type Database = Pick<Client, "query">;
 
@@ -37,13 +38,25 @@ export interface PreviewResult {
 export interface PreviewGameweekOptions {
   target: Database;
   archive: DryRunArchive;
+  /**
+   * The Competition being previewed, whose seats answer and whose Fixtures are
+   * asked. Taken rather than assumed since La Liga: a bench over one
+   * Competition's Gameweek is the only reading the other cannot give.
+   */
+  competition: string;
   season: string;
   footballDataSeason: string;
   gameweek: number;
   apiKey: string;
   http: HttpFetcher;
   concurrency: number;
-  now: () => Date;
+  /**
+   * The instant to run at, dated from the Gameweek's own Lock exactly as the
+   * dry run dates it. The wall clock served while a preview only ever looked
+   * at a Gameweek still to come; a bench over one already played answers after
+   * its Lock, and an Entrant answering after its Lock is refused.
+   */
+  at: string;
 }
 
 /**
@@ -58,13 +71,14 @@ export interface PreviewGameweekOptions {
 export async function previewGameweek({
   target,
   archive,
+  competition,
   season,
   footballDataSeason,
   gameweek,
   apiKey,
   http,
   concurrency,
-  now
+  at
 }: PreviewGameweekOptions): Promise<PreviewResult> {
   await prepareArchivedGameweek({
     target,
@@ -73,16 +87,29 @@ export async function previewGameweek({
     footballDataSeason
   });
 
+  const deadlineResult = await target.query<{ deadline_at: Date }>(
+    `select deadline_at from gameweeks
+      where competition = $1 and season = $2 and gw = $3`,
+    [competition, season, gameweek]
+  );
+  const deadline = deadlineResult.rows[0]?.deadline_at;
+  if (deadline === undefined) {
+    throw new Error(
+      `The archive produced no Gameweek ${gameweek} for Season ${season}`
+    );
+  }
+  const instant = resolveDryRunInstant(at, deadline);
+
   const startedAt = Date.now();
   const gapAlert = await predictGameweek({
     database: target,
-    competition: "PL",
+    competition,
     season,
     gameweek,
     concurrency,
     apiKey,
     http,
-    now,
+    now: () => instant,
     trigger: "main"
   });
   const elapsedMs = Date.now() - startedAt;
@@ -100,9 +127,9 @@ export async function previewGameweek({
        from predictions p
        join fixtures f on f.season = p.season and f.fixture_id = p.fixture_id
        join models m on m.id = p.model_id
-      where p.season = $1
+      where p.competition = $1 and p.season = $2
       order by f.fixture_id, m.name`,
-    [season]
+    [competition, season]
   );
 
   const contexts = await target.query<PreviewContext>(
@@ -111,16 +138,17 @@ export async function previewGameweek({
             c.body
        from contexts c
        join fixtures f on f.season = c.season and f.fixture_id = c.fixture_id
-      where c.season = $1 and c.gw = $2 and c.track = 'match'
+      where c.competition = $1 and c.season = $2 and c.gw = $3
+        and c.track = 'match'
       order by c.fixture_id`,
-    [season, gameweek]
+    [competition, season, gameweek]
   );
 
   const usage = await target.query<{ tin: number; tout: number }>(
     `select coalesce(sum(tokens_in), 0)::int as tin,
             coalesce(sum(tokens_out), 0)::int as tout
-       from attempts where season = $1`,
-    [season]
+       from attempts where competition = $1 and season = $2`,
+    [competition, season]
   );
 
   return {

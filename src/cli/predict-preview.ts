@@ -13,6 +13,10 @@ import { readPreviewJobConfig } from "./config.js";
 const { Client } = pg;
 const config = readPreviewJobConfig(process.env);
 const showContexts = process.env.PREVIEW_SHOW_CONTEXTS === "true";
+// Defaulted like the dry run's, and for the same reason: a preview writes to a
+// database that exists for the run and is thrown away, so a wrong Competition
+// costs a rehearsal and nothing else. The archive has to hold its snapshots.
+const competition = process.env.COMPETITION?.trim() || "PL";
 
 const archiveDatabase = new Client({ connectionString: config.databaseUrl });
 await archiveDatabase.connect();
@@ -27,7 +31,7 @@ try {
 }
 
 console.log(
-  `Previewing ${config.season} Gameweek ${config.gameweek} with `
+  `Previewing ${competition} ${config.season} Gameweek ${config.gameweek} with `
   + `${archive.entrants.filter(({ role }) => role === "entrant").length} Entrants. `
   + "Real Entrant calls; a throwaway database; the Season's own Predictions "
   + "are untouched."
@@ -42,13 +46,14 @@ try {
   const result = await previewGameweek({
     target,
     archive,
+    competition,
     season: config.season,
     footballDataSeason: config.footballDataSeason,
     gameweek: config.gameweek,
     apiKey: config.openRouterApiKey,
     http: nodeHttpFetcher,
     concurrency: config.concurrency,
-    now: () => new Date()
+    at: config.at
   });
 
   if (showContexts) {

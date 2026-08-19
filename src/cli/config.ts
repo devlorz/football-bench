@@ -96,6 +96,7 @@ export interface PreviewJobConfig extends DailyFetchJobConfig {
   gameweek: number;
   concurrency: number;
   openRouterApiKey: string;
+  at: string;
 }
 
 export interface DryRunJobConfig extends DailyFetchJobConfig {
@@ -471,8 +472,9 @@ export function readPreflightJobConfig(
 
 /**
  * The preview calls the real roster, so it needs the key the prediction job
- * uses. It writes to a throwaway cluster, so it needs no instant: the run is
- * always before the Lock it builds for itself.
+ * uses, and the dry run's instant for the same reason the dry run has one: a
+ * bench over a Gameweek already played answers after its Lock unless the run
+ * is dated from the Lock itself.
  */
 export function readPreviewJobConfig(
   environment: NodeJS.ProcessEnv
@@ -486,11 +488,15 @@ export function readPreviewJobConfig(
     throw new Error("PREDICT_CONCURRENCY must be a positive integer");
   }
   const openRouterApiKey = required(environment, "OPENROUTER_API_KEY");
+  const at = environment.PREVIEW_AT?.trim() || "deadline-6h";
+  // Read now so an unusable instant fails before a cluster is built for it.
+  resolveDryRunInstant(at, new Date(0));
 
   return {
     ...dailyFetch,
     gameweek,
     concurrency,
-    openRouterApiKey
+    openRouterApiKey,
+    at
   };
 }

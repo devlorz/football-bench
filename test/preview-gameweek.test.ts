@@ -80,12 +80,13 @@ describe("previewing a Gameweek with live Entrants", () => {
     const result = await previewGameweek({
       target: client,
       archive,
+      competition: "PL",
       season: SEASON,
       footballDataSeason: FOOTBALL_DATA_SEASON,
       gameweek: GAMEWEEK,
       apiKey: "preview-key",
       concurrency: 4,
-      now: () => new Date("2026-08-21T11:30:00Z"),
+      at: "deadline-6h",
       http: async (url, options) => {
         const body = JSON.parse(options?.body ?? "{}") as {
           messages: CapturedTurn[];
@@ -112,16 +113,77 @@ describe("previewing a Gameweek with live Entrants", () => {
     expect(result.tokensIn).toBeGreaterThan(0);
   });
 
-  test("builds the Gameweek from the archive without reaching the network for data", async () => {
-    const result = await previewGameweek({
+  test("previews the Competition it is given rather than the Premier League", async () => {
+    // The bench (ticket 0020 slice 3) asks La Liga's Gameweek, and a preview
+    // that always previewed the Premier League could not answer it. A
+    // Competition whose Gameweeks this archive does not hold is the cheapest
+    // proof the parameter reaches the run at all: the same call for `PL` gets
+    // as far as the Entrants.
+    await expect(previewGameweek({
       target: client,
       archive,
+      competition: "PD",
       season: SEASON,
       footballDataSeason: FOOTBALL_DATA_SEASON,
       gameweek: GAMEWEEK,
       apiKey: "preview-key",
       concurrency: 1,
-      now: () => new Date("2026-08-21T11:30:00Z"),
+      at: "deadline-6h",
+      http: async () => { throw new Error("no call should be made"); }
+    })).rejects.toThrow("The archive produced no Gameweek 1 for Season 2026-27");
+  });
+
+  test("runs at an instant the Gameweek's own Lock dates, not at the wall clock", async () => {
+    // A bench over a Gameweek already played answers after its Lock, and an
+    // Entrant answering after its Lock is refused (ADR-0032's neighbour in
+    // attempt-match-calls). The instant is therefore derived from the deadline
+    // the way the dry run derives it, and the stored attempt says so.
+    await previewGameweek({
+      target: client,
+      archive,
+      competition: "PL",
+      season: SEASON,
+      footballDataSeason: FOOTBALL_DATA_SEASON,
+      gameweek: GAMEWEEK,
+      apiKey: "preview-key",
+      concurrency: 4,
+      at: "deadline-6h",
+      http: async (url, options) => {
+        const body = JSON.parse(options?.body ?? "{}") as {
+          messages: CapturedTurn[];
+        };
+        const fixtureId = Number(
+          /Fixture ID: (\d+)/.exec(firstMessageText(body.messages))?.[1] ?? 0
+        );
+        return { status: 200, body: liveResponse(fixtureId) };
+      }
+    });
+
+    const timing = await client.query<{ deadline: Date; started: Date }>(
+      `select g.deadline_at as deadline, min(a.attempted_at) as started
+         from gameweeks g, attempts a
+        where g.competition = 'PL' and g.season = $1 and g.gw = $2
+        group by g.deadline_at`,
+      [SEASON, GAMEWEEK]
+    );
+    const row = timing.rows[0];
+    expect(row).toBeDefined();
+    expect(row!.started.getTime()).toBe(
+      row!.deadline.getTime() - 6 * 60 * 60 * 1000
+    );
+  });
+
+  test("builds the Gameweek from the archive without reaching the network for data", async () => {
+    const result = await previewGameweek({
+      target: client,
+      archive,
+      competition: "PL",
+      season: SEASON,
+      footballDataSeason: FOOTBALL_DATA_SEASON,
+      gameweek: GAMEWEEK,
+      apiKey: "preview-key",
+      concurrency: 1,
+      at: "deadline-6h",
       // Only Entrant calls may leave. Anything else means the data layer went
       // live, when the archive is supposed to supply it.
       http: async (url) => {
