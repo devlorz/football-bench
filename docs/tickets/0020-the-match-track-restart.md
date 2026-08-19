@@ -474,9 +474,9 @@ gone.
 **Blocked by:** 2, 3, and the *completion* of 1 — the complete scoring run over all six
 Fixtures, which arrives with the last kickoff, not with the ticket's opening.
 
-- [ ] The constants move in one reviewed change: La Liga's version string to v2, both sha
+- [x] The constants move in one reviewed change: La Liga's version string to v2, both sha
       pins re-pinned from real renders of the amended template.
-- [ ] The constants' comment no longer claims the Premier League's version has been used;
+- [x] The constants' comment no longer claims the Premier League's version has been used;
       it records what ADR-0042 established instead.
 - [ ] La Liga's v2 seats are seeded through the same door production seats have always
       entered by — same Base Models, providers and quantization pins as v1's ten.
@@ -487,6 +487,53 @@ Fixtures, which arrives with the last kickoff, not with the ticket's opening.
       alerts and every roster read; v2 seats in; an Exhibition replay of Gameweek 1
       still resolving v1's stored contexts.
 - [ ] Prediction pre-flight passes for both Competitions on the restarted versions.
+
+### The seat id the restart could not have — recorded 2026-08-19
+
+The two sha pins were re-taken from rendered packets read before the values were
+written: both carry ADR-0043's three additions — the base-rates line, xG for and
+against per game on the Prior-Season line, and the two closing instruction sentences —
+and La Liga's carries neither an availability section (ADR-0037) nor an FPL block.
+`match/2026-27-v2` is `cdebf27b`; `match-pd/2026-27-v2` is `f54e7347`.
+
+Then the re-seat refused to be a constant move. `enterSeasonRoster` names a seat
+`<prefix>/<slug>` where the prefix is the Prompt Version's leading segment, so
+`match-pd/2026-27-v1` and `match-pd/2026-27-v2` want the same ten ids — and the write is
+`on conflict (id) do update set prompt_version = excluded.prompt_version`. Seeding v2
+through the door would not have created rows; it would have relabelled the ten rows La
+Liga's Gameweek 1 hangs off, and its sixty Predictions would have become Predictions of
+v2 seats. ADR-0042's "kept whole, not merged" and slice 5's frozen block both die there,
+silently, in a run that reports success. Spec 0020 says it plainly — "**New `models`
+rows** under `match-pd/2026-27-v2`" — and the code could not write one.
+
+So the seeding reads the record before it names a seat: where a plain id is already
+stored under another Prompt Version, the whole roster takes the version's own segment
+instead — `match-pd/2026-27-v2/claude-opus-5` — and the retired ten stand untouched.
+Read from the record rather than switched on the version string, because no version
+tells the two cases apart: `match/2026-27-v2` is the Premier League's first-used version
+and keeps its plain ids, `match-pd/2026-27-v2` follows a v1 that ran. `seatSlug` and the
+dashboard's `entrantSlug` now read the last segment rather than the second, which leaves
+every existing id and every `?entrant=` link answering exactly as before — a Base Model
+slug carries no slash, so the last one ends the prefix however long it is.
+
+The test seeds the ten v1 rows, runs the door, and asserts twenty rows: the retired ten
+at their own ids under v1, the standing ten new under v2 seating the same Base Models,
+and a second run of the door still twenty. It fails against the old naming with ten.
+
+**What the flip does not need.** Every seat-selecting query already filters
+`prompt_version = $n` against the standing version — `predict-gameweek.ts:156` and
+`:174`, `gap-alert.ts:164`, `score-match-gameweek.ts:1589`, and six reads in
+`dashboard/read-api.ts` — and `refuseARosterTheRecordDisagreesWith` reads by
+`MATCH_PROMPT_VERSIONS`, which the flip empties of v1. The v1 seats leave every run,
+alert and roster read by the constant moving, with no filter written for them.
+
+**Left standing, and named rather than fixed.** `replayMatchExhibition` loads its seat at
+`MATCH_PROMPT_VERSION` — the Premier League's — and takes no Competition, while its
+`settledGameweeks` selects contexts by season and track alone and so sweeps La Liga's
+Gameweek 1 in. That predates this slice and is not one of its boxes; box 5's Exhibition
+clause cannot be honestly ticked until it is settled. Contexts carry no Prompt Version
+at all (`migrations/0001_initial.sql`), so nothing about the flip makes a stored context
+unresolvable.
 
 ## 5 — The frozen block
 

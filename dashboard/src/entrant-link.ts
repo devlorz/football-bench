@@ -16,15 +16,19 @@
  * The part of a seat id that is not its Competition's prefix, which is what
  * `?entrant=` carries.
  *
- * A seat id is `<prefix>/<slug>` where the prefix is the Prompt Version's
- * leading segment — `match` for the Premier League and `match-pd` for La Liga
- * (`seatPrefixOf`) — so the slug is the Base Model, spelled the same in every
- * league. Writing the whole id would put the Competition in the query string
- * as well as in the path, and editing a link's `/pd/` to `/pl/` would then land
- * on a page with no seat by that name.
+ * A seat id is `<prefix>/<slug>`, or `<prefix>/<version>/<slug>` where a
+ * restart left the plain id to a retired version (ADR-0042). The prefix is the
+ * Prompt Version's leading segment — `match` for the Premier League and
+ * `match-pd` for La Liga (`seatPrefixOf`) — so the slug is the Base Model,
+ * spelled the same in every league and under every version. Writing the whole
+ * id would put the Competition in the query string as well as in the path, and
+ * editing a link's `/pd/` to `/pl/` would then land on a page with no seat by
+ * that name.
  *
- * An id with no prefix at all is its own slug, which is the same answer read
- * the same way: everything after a prefix that is not there is all of it.
+ * The last segment, not the second: a Base Model slug carries no slash, so the
+ * last one is the prefix's end however many segments the prefix has. An id
+ * with no prefix at all is its own slug, which is the same answer read the
+ * same way: everything after a prefix that is not there is all of it.
  *
  * `seatSlug` in `src/season-roster.ts` is this function, character for
  * character, and reads the same slug off the same ids. They stand apart
@@ -35,7 +39,7 @@
  * that is a decision of its own, not one spec 0017 makes.
  */
 export const entrantSlug = (id: string): string =>
-  id.slice(id.indexOf("/") + 1);
+  id.slice(id.lastIndexOf("/") + 1);
 
 /**
  * The seat a link names, resolved against the seats this Competition returned.

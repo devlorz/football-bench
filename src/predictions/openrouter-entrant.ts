@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const MATCH_PROMPT_VERSION = "match/2026-27-v2";
 export const MATCH_PROMPT_SHA256 =
-  "cb518985c6232420cc0a2abf3f4d05a6e988779a1d0871eac05af368e2b6fbbf";
+  "cdebf27b99633896af1b3284ccdeb96f0792c5970c36c19ef6b9f6ab51efb204";
 
 export interface MatchPrompt {
   /** The Prompt Version a Competition's seats are entered under. */
@@ -19,9 +19,11 @@ export interface MatchPrompt {
  * wording is shared; the Competition's name is the only thing that differs, so
  * no two leagues can drift into being asked different questions.
  *
- * The Premier League's two values are the constants above, unmoved and
- * unmovable: `match/2026-27-v2` has been used, and a used Prompt Version is
- * unamendable (ADR-0026). Every other Competition takes
+ * The Premier League's two values are the constants above. `match/2026-27-v2`
+ * was amended in place rather than frozen by use: ADR-0042 found no stored
+ * context under it, and ADR-0026's freeze binds at first use, so it stayed
+ * amendable until its first Lock, 2026-08-21T17:30Z, and is unamendable from
+ * there. Every other Competition is opened at
  * `match-<code, lowercased>/2026-27-v1`, and opening a league is one entry
  * here. One of six, though: this file, `DIVISIONS`, the division check
  * constraint, the Understat league and its club map, the transfer windows with
@@ -32,18 +34,17 @@ export interface MatchPrompt {
  *
  * The sha is over a fully rendered context, not over the template, because
  * that is the mechanism that already exists and what it is worth pinning is
- * the whole prompt's format. `PD`'s has moved twice, both before first use and
- * both legitimate for the reason ADR-0038 gives — the freeze binds at first
- * use, and nothing predicts under this version until ticket 8. It moved in
- * ticket 6, when La Liga got its divisions and the league table stopped
- * reading "unavailable", and again when its clubs got the names their stored
- * results are filed under: until then every La Liga club answered "team name
- * did not resolve against stored results" and the whole history section was
- * empty behind 842 rows that were sitting right there.
+ * the whole prompt's format. Both pins here were re-taken from real renders of
+ * the template ADR-0043 amended, read before they were written down — which is
+ * what `context:show` is for, and how every earlier move of `PD`'s sha was
+ * found.
  *
- * Both moves were found the same way, by rendering the packet and reading it,
- * which is what `context:show` is for and what ticket 8's first act should be.
- * From here it is as unmovable as the Premier League's.
+ * `PD` sits on `match-pd/2026-27-v2`. Its v1 was used — La Liga's Gameweek 1,
+ * six contexts and sixty Predictions — and so is unamendable and retired: the
+ * scorer selects by the version named here, so from this constant's move the
+ * v1 seats are out of every run, and Gameweek 1 is kept whole under its own
+ * label instead (ADR-0042). v2 is unused until La Liga's Gameweek 2 Lock and
+ * unamendable from it.
  */
 const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
   PL: {
@@ -52,9 +53,9 @@ const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
     competitionName: "Premier League"
   },
   PD: {
-    version: "match-pd/2026-27-v1",
+    version: "match-pd/2026-27-v2",
     sha256:
-      "19a13fd473140cfd52fed770e3c98ec0db86b6f7441fc1bfc95776ca2c0f8112",
+      "f54e73470037eab257bb7648eed4c9579a52ab46fba5f4239cc3d060a2a596ba",
     competitionName: "La Liga"
   }
 };

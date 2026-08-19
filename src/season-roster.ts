@@ -249,7 +249,10 @@ function identityOfSeat(seat: StoredSeat): Record<string, string | null> {
 }
 
 /**
- * Everything after the Competition prefix: `match-pd/kimi-k3` is `kimi-k3`.
+ * Everything after the Competition prefix: `match-pd/kimi-k3` is `kimi-k3`,
+ * and so is `match-pd/2026-27-v2/kimi-k3`, the shape a restart gives a seat
+ * whose plain id belongs to a retired version (ADR-0042). A Base Model slug
+ * carries no slash, so the last one ends the prefix however long it is.
  *
  * `entrantSlug` in `dashboard/src/entrant-link.ts` is this function again, for
  * the `?entrant=` a reader copies. The two stand apart because merging them
@@ -259,7 +262,7 @@ function identityOfSeat(seat: StoredSeat): Record<string, string | null> {
  * `src/`, which is a decision of its own and not one spec 0017 makes.
  */
 function seatSlug(id: string): string {
-  return id.slice(id.indexOf("/") + 1);
+  return id.slice(id.lastIndexOf("/") + 1);
 }
 
 /**
@@ -387,9 +390,33 @@ export async function enterSeasonRoster(
   // exactly where they are and puts the seat and its version under one name.
   // It is not a Track: a Track is `match` or `fpl` and nothing else
   // (CONTEXT.md), and ADR-0035 refused representing a Competition as one.
-  const seats = roster.map((entrant) => ({
+  const plain = roster.map((entrant) => ({
     ...entrant,
     id: entrant.id.replace(/^match\//, `${seatPrefix}/`)
+  }));
+
+  // A restarted Competition keeps its retired seats standing (ADR-0042): those
+  // rows hold the Predictions of every Gameweek asked under the old question,
+  // and this upsert would rewrite their `prompt_version` to the standing one
+  // and relabel the record. So a plain id already stored under another version
+  // is not taken -- the whole roster moves under the Prompt Version's own
+  // segment instead, `match-pd/2026-27-v2/claude-opus-5`, and the retired ten
+  // are left exactly as the Gameweek they played left them.
+  //
+  // Read from the record rather than switched on the version string, because
+  // no version tells the two cases apart: `match/2026-27-v2` is the Premier
+  // League's first-used version and keeps the plain ids, `match-pd/2026-27-v2`
+  // follows a v1 that ran. Whole roster and not seat by seat: ten seats under
+  // one version are one shape, and a half-qualified roster is a Competition
+  // whose seats no longer sort together.
+  const retired = await database.query<{ id: string }>(
+    `select id from models
+      where id = any($1) and prompt_version <> $2`,
+    [plain.map(({ id }) => id), version]
+  );
+  const seats = retired.rows.length === 0 ? plain : plain.map((entrant) => ({
+    ...entrant,
+    id: `${seatPrefix}/${version.split("/")[1]}/${seatSlug(entrant.id)}`
   }));
 
   await database.query("begin");

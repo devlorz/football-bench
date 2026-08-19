@@ -1,7 +1,10 @@
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
-import { MATCH_PROMPT_VERSION } from "../src/predictions/openrouter-entrant.js";
+import {
+  MATCH_PROMPT_VERSION,
+  matchPromptOf
+} from "../src/predictions/openrouter-entrant.js";
 import {
   enterActiveCompetitionRosters, enterSeasonRoster, SEASON_ROSTER,
   SEASON_ROSTER_SIZE, seatPrefixOf
@@ -320,8 +323,11 @@ describe("entering the Season Roster", () => {
         ]);
       }
       const baseModels = SEASON_ROSTER.map(({ baseModel }) => baseModel).sort();
+      // Read from the constants rather than spelled out: what this test is
+      // about is that each Competition seats under its own version, and a
+      // literal here turns every restart (ADR-0042) into a false failure.
       expect([...byVersion.keys()].sort())
-        .toEqual(["match-pd/2026-27-v1", MATCH_PROMPT_VERSION]);
+        .toEqual([matchPromptOf("PD").version, MATCH_PROMPT_VERSION].sort());
       for (const seated of byVersion.values()) {
         expect(seated.sort()).toEqual(baseModels);
       }
@@ -332,6 +338,62 @@ describe("entering the Season Roster", () => {
         .toHaveLength(SEASON_ROSTER_SIZE);
       expect(rows.map(({ id }) => id)).toContain("match/claude-opus-5");
       expect(rows.map(({ id }) => id)).toContain("match-pd/claude-opus-5");
+    });
+
+  // ADR-0042: La Liga's v1 ran a Gameweek, so its ten rows carry sixty
+  // Predictions and cannot be relabelled. The seeding door is the same one --
+  // what changes is that the ids it writes step aside.
+  test("seats a restarted Competition beside its retired seats, not over them",
+    async () => {
+      const retiredVersion = "match-pd/2026-27-v1";
+      for (const entrant of SEASON_ROSTER) {
+        await client.query(
+          `insert into models (
+             id, name, base_model, provider, quantization, prompt_version, role
+           ) values ($1, $2, $3, $4, $5, $6, 'entrant')`,
+          [
+            entrant.id.replace(/^match\//, "match-pd/"), entrant.name,
+            entrant.baseModel, entrant.provider, entrant.quantization,
+            retiredVersion
+          ]
+        );
+      }
+
+      await enterSeasonRoster(client, "PD", SEASON);
+
+      const rows = await entrants();
+      expect(rows).toHaveLength(SEASON_ROSTER_SIZE * 2);
+
+      // The retired ten stand exactly as the Gameweek they played left them:
+      // their ids are the ones the Predictions point at, and their version is
+      // still the retired one -- which is what the restart would have
+      // destroyed by upserting the standing version over them.
+      const retired = rows.filter(
+        ({ prompt_version }) => prompt_version === retiredVersion
+      );
+      expect(retired.map(({ id }) => id).sort()).toEqual(
+        SEASON_ROSTER
+          .map(({ id }) => id.replace(/^match\//, "match-pd/")).sort()
+      );
+
+      // And the standing ten are new rows under the version's own segment,
+      // seating the same Base Models: a re-seat, not a roster change (ADR-0034).
+      const standing = rows.filter(
+        ({ prompt_version }) => prompt_version === matchPromptOf("PD").version
+      );
+      expect(standing.map(({ id }) => id).sort()).toEqual(
+        SEASON_ROSTER
+          .map(({ id }) => `match-pd/2026-27-v2/${id.slice("match/".length)}`)
+          .sort()
+      );
+      expect(standing.map(({ base_model }) => base_model).sort())
+        .toEqual(SEASON_ROSTER.map(({ baseModel }) => baseModel).sort());
+
+      // Re-entering is the operator running the door twice, which is how it is
+      // run: the ids have to be the same answer both times or the second run
+      // seats a third set.
+      await enterSeasonRoster(client, "PD", SEASON);
+      expect(await entrants()).toHaveLength(SEASON_ROSTER_SIZE * 2);
     });
 
   test("seats every Competition the Season lists, read from the table",
