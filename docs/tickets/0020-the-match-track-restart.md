@@ -480,7 +480,7 @@ Fixtures, which arrives with the last kickoff, not with the ticket's opening.
       it records what ADR-0042 established instead.
 - [ ] La Liga's v2 seats are seeded through the same door production seats have always
       entered by — same Base Models, providers and quantization pins as v1's ten.
-- [ ] The roster window is exercised or explicitly declined: the GLM seat's 5.3 decision
+- [x] The roster window is exercised or explicitly declined: the GLM seat's 5.3 decision
       is made before the gate and recorded either way, because the window closes whether
       or not anyone chose.
 - [x] The coexistence suites prove the boundary the flip owns: v1 seats out of
@@ -635,9 +635,21 @@ of a swap or a defect, and which one it is depends on rows this repository canno
 2026-27 means the door is open and the FPL seat moves with it; any rows and the decision
 is between two Base Models under one Entrant name and leaving GLM 5.2 seated on both.
 
-Box 4 stays open on that answer. The decision it asks to be recorded is made for the
-Match track and is above; it is not made until it is made for both, because ADR-0034
-says the tracks move together.
+**The door was open, and the swap is made on both tracks.** The guard ran and did not
+fire: `fpl/glm-5.2` had walked no `predictions`, `manager_states`, `attempts`, `scores`
+or `contexts` row of 2026-27, so the FPL track had not started and ADR-0034's
+insert-only edge had not bound. `UPDATE 1`, and the ten seats at `fpl/2026-27-v2` now
+read `fpl/glm-5.3` — `z-ai/glm-5.3`, `z-ai/glm-5.3-20260816`, Z.AI at fp8, every other
+seat untouched. The window ADR-0042 reopened is used, once, for the one use it was
+expected to have.
+
+**Until `roster:enter` runs, the two tracks disagree, and that is the state to watch.**
+The FPL track is on GLM 5.3 in production; the Match track is on GLM 5.3 in the constant
+and still on GLM 5.2 in `models`. That is exactly the one-Entrant-name-over-two-Base-
+Models shape ADR-0034 refuses, held deliberately for a few hours because the Match seat
+cannot be re-seeded until slice 1's completing run has written Gameweek 1 under v1. It
+closes with the seeding run, which needs `match/glm-5.2` deleted first. If the flip is
+abandoned instead of landed, this is the row that has to go back.
 
 ## 5 — The frozen block
 
