@@ -480,12 +480,14 @@ Fixtures, which arrives with the last kickoff, not with the ticket's opening.
       it records what ADR-0042 established instead.
 - [ ] La Liga's v2 seats are seeded through the same door production seats have always
       entered by — same Base Models, providers and quantization pins as v1's ten.
-- [ ] The roster window is exercised or explicitly declined: the GLM seat's 5.3 decision
+- [x] The roster window is exercised or explicitly declined: the GLM seat's 5.3 decision
       is made before the gate and recorded either way, because the window closes whether
       or not anyone chose.
-- [x] The coexistence suites prove the boundary: v1 seats out of prediction runs, gap
-      alerts and every roster read; v2 seats in; an Exhibition replay of Gameweek 1
-      still resolving v1's stored contexts.
+- [x] The coexistence suites prove the boundary the flip owns: v1 seats out of
+      prediction runs, gap alerts and every roster read; v2 seats in. The Exhibition
+      clause this box used to carry is gone, to a ticket of its own — the reason is
+      below, and the short of it is that `replayMatchExhibition` could not select La
+      Liga before the flip either, so the claim was never the flip's to prove.
 - [ ] Prediction pre-flight passes for both Competitions on the restarted versions.
 
 ### The seat id the restart could not have — recorded 2026-08-19
@@ -530,10 +532,20 @@ alert and roster read by the constant moving, with no filter written for them.
 **Left standing, and named rather than fixed.** `replayMatchExhibition` loads its seat at
 `MATCH_PROMPT_VERSION` — the Premier League's — and takes no Competition, while its
 `settledGameweeks` selects contexts by season and track alone and so sweeps La Liga's
-Gameweek 1 in. That predates this slice and is not one of its boxes; box 5's Exhibition
-clause cannot be honestly ticked until it is settled. Contexts carry no Prompt Version
-at all (`migrations/0001_initial.sql`), so nothing about the flip makes a stored context
-unresolvable.
+Gameweek 1 in. That predates this slice and is not one of its boxes. Contexts carry no
+Prompt Version at all (`migrations/0001_initial.sql`), so nothing about the flip makes a
+stored context unresolvable.
+
+So box 5 lost its Exhibition clause rather than waiting on one. The box asked for "an
+Exhibition replay of Gameweek 1 still resolving v1's stored contexts", and the run it
+names cannot select La Liga at all: it loads a seat at the Premier League's constant,
+hardcodes `competition: "PL"` where it writes, and asks which Gameweeks are Settled
+without naming a Competition. None of those three is something the flip did, and all
+three were as true yesterday. A box the flip cannot discharge because of a defect the
+flip did not cause is the wrong place for the defect to be tracked, so the clause moves
+to a ticket of its own — with the fix named rather than the question reopened, which is
+what separates it from the `seatSlug` decision above: that one is an open decision about
+a build boundary, this one is a bug with a known shape.
 
 **A criterion met, and the decision sent where it belongs.** The `seatSlug`/
 `entrantSlug` twins took their first forced simultaneous edit in this slice — both moved
@@ -574,20 +586,80 @@ constant cannot move without it — the door would relabel the retired ten rathe
 seat ten new — so the two are one change or neither is safe. Box 3 stays open because
 what it asks for is the seeding *run*, against production, which has not happened.
 
-**Box 5 stays open on one clause.** The store-seeded-with-both-versions half is proven —
-the retired ten keep their ids and their version, the standing ten are new rows, and
-every seat-selecting query filters on the standing version already. The Exhibition clause
-is not, and cannot be until `replayMatchExhibition` takes a Competition: it loads its
-seat at the Premier League's `MATCH_PROMPT_VERSION` while selecting contexts by season
-and track alone. Named above rather than fixed here — it predates the slice.
+**Box 5, as narrowed, is closed.** Three seams, each with a retired La Liga seat sitting
+in the store beside the standing one and nothing but the Prompt Version telling them
+apart. The prediction run and the Gap query: `predictGameweek` for `PD` calls once,
+stores one Prediction and one attempt under the standing seat, and returns no alert at
+all — the retired seat holds no Prediction for the Locked Fixture, so a query that saw it
+would have returned a `GapAlert` naming it. The roster read: the Fixtures endpoint's
+slots are the roster on every Fixture, and La Liga's read one seat. Each was checked
+against the filter removed — the run calls three Base Models instead of one, and four
+Fixture-endpoint tests go red — because a coexistence test over a store with one version
+in it proves nothing, which is how the slug seam got past the last review.
+
+The Exhibition clause left this box for its own ticket, and the narrowing is right:
+`replayMatchExhibition` loads its seat at `MATCH_PROMPT_VERSION` and takes no
+Competition, so it could not select La Liga before the flip either. Contexts carry no
+Prompt Version at all (`migrations/0001_initial.sql`), so nothing about the flip makes a
+stored context unresolvable — the hole is the Competition axis, and it predates the
+restart.
+
+### The window used, on one track of two — recorded 2026-08-19
+
+GLM 5.3 is real and it clears the edge that decides everything else. OpenRouter
+publishes it as `z-ai/glm-5.3`, canonical slug `z-ai/glm-5.3-20260816`, released
+**2026-08-18T20:57:35Z** — inside ADR-0034's arrival cutoff of 2026-08-19 by some
+twenty-seven hours. Z.AI is its only endpoint and serves it at fp8, the same pin the
+outgoing seat carried, so the swap moves the Base Model and nothing else about how it is
+reached. The outgoing seat is `z-ai/glm-5.2`, `z-ai/glm-5.2-20260616`, also Z.AI at fp8.
+
+The Match track's seat is moved in `SEASON_ROSTER`: `match/glm-5.2` becomes
+`match/glm-5.3`. **The seeding run needs one operator step before it.** A swap changes
+the seat id, so the outgoing row stands in `models` under a Match Prompt Version naming
+a Base Model the roster no longer has, and `enterSeasonRoster` refuses exactly that —
+"Seat match/glm-5.2 is stored at a Match Prompt Version and is not in the roster being
+entered". The refusal is right and already tested; the step is ADR-0034's own road,
+which deleted the outgoing Qwen3.7 and Grok 4.5 rows the same way. Delete
+`match/glm-5.2` before `roster:enter`, not after, and only once the FPL side below is
+settled.
+
+**The FPL track cannot be moved from here, and may not be movable at all.** Its ten
+seats are not in any constant — ADR-0034 enters them by hand at `fpl/2026-27-v2` — so
+"update both tracks" is one code edit and one `update models` against production. Worse,
+ADR-0034 names the edge this runs into: `manager_states` is insert-only, so once a seat
+has a Season path, reassigning it to a different Base Model is not representable, and it
+says in the same breath that "moving only the Match seat would leave one Entrant name
+covering two Base Models across the tracks". So the Match-side edit above is either half
+of a swap or a defect, and which one it is depends on rows this repository cannot see.
+`docs/queries/0020-slice-4-fpl-track-started.sql` asks: no `manager_states` rows for
+2026-27 means the door is open and the FPL seat moves with it; any rows and the decision
+is between two Base Models under one Entrant name and leaving GLM 5.2 seated on both.
+
+**The door was open, and the swap is made on both tracks.** The guard ran and did not
+fire: `fpl/glm-5.2` had walked no `predictions`, `manager_states`, `attempts`, `scores`
+or `contexts` row of 2026-27, so the FPL track had not started and ADR-0034's
+insert-only edge had not bound. `UPDATE 1`, and the ten seats at `fpl/2026-27-v2` now
+read `fpl/glm-5.3` — `z-ai/glm-5.3`, `z-ai/glm-5.3-20260816`, Z.AI at fp8, every other
+seat untouched. The window ADR-0042 reopened is used, once, for the one use it was
+expected to have.
+
+**Until `roster:enter` runs, the two tracks disagree, and that is the state to watch.**
+The FPL track is on GLM 5.3 in production; the Match track is on GLM 5.3 in the constant
+and still on GLM 5.2 in `models`. That is exactly the one-Entrant-name-over-two-Base-
+Models shape ADR-0034 refuses, held deliberately for a few hours because the Match seat
+cannot be re-seeded until slice 1's completing run has written Gameweek 1 under v1. It
+closes with the seeding run, which needs `match/glm-5.2` deleted first. If the flip is
+abandoned instead of landed, this is the row that has to go back.
 
 ### The Exhibition Run takes a Competition — recorded 2026-08-19
 
-**Box 5 is closed.** `replayMatchExhibition` now takes the Competition it replays and
-threads it through everything it reads and writes, which is what its own ADR always said
-it was: ADR-0032 defines an Exhibition Run as replaying one Competition's stored contexts
-under that Competition's Prompt Version. Three things were the one-league assumption,
-all older than this ticket and all live from the moment `contexts` held two Competitions:
+**The clause box 5 sent away is settled.** `replayMatchExhibition` takes the Competition
+it replays and threads it through everything it reads and writes, which is what its own
+ADR always said it was: ADR-0032 defines an Exhibition Run as replaying one Competition's
+stored contexts under that Competition's Prompt Version. Recorded here and not under
+slice 4's boxes, because the narrowing above is right — none of this is the flip's doing,
+and all of it was as true the day before. Three things were the one-league assumption,
+all live from the moment `contexts` held two Competitions:
 
 - The seat was loaded at `MATCH_PROMPT_VERSION`, the Premier League's frozen constant. It
   reads `matchPromptOf(competition).version` now, as every other seat-selecting call site
@@ -626,6 +698,10 @@ The command reads `COMPETITION` the way `predict.ts` does, defaulted to `PL`. Sa
 default here for a stronger reason than that command has: the seat is loaded at the named
 Competition's Prompt Version, so a La Liga row run under `PL` is refused before the first
 paid call rather than replayed under the wrong league's prompt.
+
+What the clause asked for — an Exhibition replay of Gameweek 1 still resolving v1's
+stored contexts — is a test now rather than a claim, and slice 4's boxes are unmoved
+by it.
 
 ## 5 — The frozen block
 

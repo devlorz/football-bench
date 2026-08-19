@@ -137,11 +137,18 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModelClass: "Open-weight"
   },
   {
-    id: "match/glm-5.2", name: "GLM 5.2",
-    baseModel: "z-ai/glm-5.2", provider: "z-ai",
+    // The roster window ADR-0042 reopened, used once. GLM 5.3 was published
+    // 2026-08-18T20:57Z -- inside ADR-0034's arrival cutoff of 2026-08-19 by
+    // some twenty-seven hours, which is the edge that decides whether a Base
+    // Model may join a Season at all, and it is not a close call in the
+    // direction that matters. Z.AI is its only endpoint and serves it at the
+    // same fp8 the outgoing seat was pinned to, so the swap moves the Base
+    // Model and nothing else about how it is reached.
+    id: "match/glm-5.3", name: "GLM 5.3",
+    baseModel: "z-ai/glm-5.3", provider: "z-ai",
     quantization: "fp8",
-    canonicalSlug: "z-ai/glm-5.2-20260616",
-    catalogCheckedAt: "2026-08-15",
+    canonicalSlug: "z-ai/glm-5.3-20260816",
+    catalogCheckedAt: "2026-08-19",
     baseModelClass: "Open-weight"
   },
   {
