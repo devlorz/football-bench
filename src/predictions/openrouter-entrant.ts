@@ -12,7 +12,36 @@ export interface MatchPrompt {
   sha256: string;
   /** The template's only variable (ADR-0038). */
   competitionName: string;
+  /**
+   * The version this Competition restarted away from, on the Competitions that
+   * restarted, and absent on the ones that never did. A Competition has one at
+   * most: a version is retired by being replaced, and the replacement is
+   * `version` above.
+   */
+  retired?: RetiredGameweek;
 }
+
+/**
+ * A Prompt Version that was used, is unamendable, and no run will read again,
+ * together with the one Gameweek it owns whole (ADR-0042).
+ *
+ * A field on the Competition rather than a flag anywhere: whether a league has
+ * a retired Gameweek to show is answered by whether it has one, and the two
+ * values a block needs are the two this holds.
+ */
+export interface RetiredGameweek {
+  version: string;
+  gw: number;
+}
+
+/**
+ * The block's heading, frozen by ADR-0042 and built here because this is where
+ * both of its variables live. Nothing else in the repo may spell it: a label
+ * that names a version the read does not filter by is the one way this block
+ * can lie about which question was asked.
+ */
+export const retiredGameweekLabel = ({ version, gw }: RetiredGameweek): string =>
+  `Gameweek ${gw} — played under ${version}, before the restart`;
 
 /**
  * One template, one frozen Prompt Version per Competition (ADR-0038). The
@@ -56,7 +85,8 @@ const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
     version: "match-pd/2026-27-v2",
     sha256:
       "f54e73470037eab257bb7648eed4c9579a52ab46fba5f4239cc3d060a2a596ba",
-    competitionName: "La Liga"
+    competitionName: "La Liga",
+    retired: { version: "match-pd/2026-27-v1", gw: 1 }
   }
 };
 
@@ -82,6 +112,16 @@ export function matchPromptOf(competition: string): MatchPrompt {
     throw new Error(`Competition ${competition} has no frozen Prompt Version`);
   }
   return prompt;
+}
+
+/**
+ * The retired Gameweek of a Competition that has one, and null for a
+ * Competition that never restarted — which is every Competition but La Liga,
+ * and the reason the block is one league's and not a page shape every league
+ * carries empty.
+ */
+export function retiredPromptOf(competition: string): RetiredGameweek | null {
+  return matchPromptOf(competition).retired ?? null;
 }
 
 export interface MatchPromptFixture {

@@ -27,14 +27,25 @@ describe("the Match track's Competition routes", () => {
         params: { competition: "pl" },
         props: {
           competition: "PL", competitionName: "Premier League",
-          path: "/pl", api: "/api/pl"
+          path: "/pl", api: "/api/pl",
+          // Null, and a test rather than an assumption: the Premier League
+          // never used a version it has retired, so its page carries no frozen
+          // block at all. A label here would put one on it, and the block
+          // claims a Gameweek was played under a question nobody asked.
+          retiredLabel: null
         }
       },
       {
         params: { competition: "pd" },
         props: {
           competition: "PD", competitionName: "La Liga",
-          path: "/pd", api: "/api/pd"
+          path: "/pd", api: "/api/pd",
+          // The heading ADR-0042 froze, byte for byte. It names the retired
+          // version, which is what the block's read filters by, and the two
+          // may not drift: a label naming one version over figures read by
+          // another is the one lie this block can tell.
+          retiredLabel:
+            "Gameweek 1 — played under match-pd/2026-27-v1, before the restart"
         }
       }
     ]);

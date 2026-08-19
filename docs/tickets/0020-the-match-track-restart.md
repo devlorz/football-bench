@@ -712,19 +712,63 @@ contains nothing of it.
 
 **Blocked by:** 1, 4.
 
-- [ ] The block renders from stored scores only, under the exact label, listing every v1
+- [x] The block renders from stored scores only, under the exact label, listing every v1
       seat's Gameweek 1 numbers — no intervals, no Comparison Anchor, no season totals.
-- [ ] The block covers the six Fixtures Gameweek 1's Lock owned and says nothing of the
+- [x] The block covers the six Fixtures Gameweek 1's Lock owned and says nothing of the
       four the calendar moved — those are later Locks' Fixtures, asked under the
       restarted version, and a reader comparing the block against a ten-row fixture
       list must not read the difference as missing data.
-- [ ] Its read names the retired version explicitly and is the only read anywhere that
+- [x] Its read names the retired version explicitly and is the only read anywhere that
       does; every roster-shaped endpoint returns v2 seats alone, proven over a store
       seeded with both versions.
-- [ ] The Premier League's page carries no such block — it has no retired Gameweek — and
+- [x] The Premier League's page carries no such block — it has no retired Gameweek — and
       a test says so rather than assumes it.
-- [ ] Absent scores render as the block saying so, not guessing: the state means slice 1
+- [x] Absent scores render as the block saying so, not guessing: the state means slice 1
       was broken, and the page's honesty is the alarm.
+
+### Built ahead of both blockers — recorded 2026-08-19
+
+The block is code and proven over a seeded store; what waits on slices 1 and 4 is the
+data it reads, not the surface. Until the completing scoring run lands and the flip
+deploys, the deployed page draws its absent-scores sentence, which is the fifth box
+behaving rather than failing.
+
+**A retired Gameweek is a field on the Competition, not a flag anywhere.**
+`MATCH_PROMPTS.PD` carries `retired: { version: "match-pd/2026-27-v1", gw: 1 }` and `PL`
+carries nothing, so "does this league have a block" is answered by the same record that
+answers "which version does it run" — one home, and no page or endpoint holds a second
+spelling of a version. `retiredPromptOf` is the read; both boxes about the Premier League
+fall out of it returning null there.
+
+**The heading is built once, from where both of its variables live.**
+`retiredGameweekLabel` in `openrouter-entrant.ts` is the only place ADR-0042's sentence is
+spelled. It reaches the page through `competitionRoutes`, so the label is in the built
+HTML like every other thing on that page that is not a number — and a label naming a
+version the read does not filter by is the one lie this block can tell, which is why the
+two are built from one value.
+
+**`/api/{code}/retired` is the only read that names a retired version.** It filters
+`prompt_version` by the retired string and reads the *per-Gameweek* metrics at Gameweek 1;
+the Season-to-date rows are what a merge would look like, so the test writes one and
+proves it stays out. Served only where `retiredPromptOf` answers, so the Premier League
+gets the 404 every unserved path gets rather than an empty block claiming something was
+retired and scored nought. The body has five fields and the assertion pins the list: an
+interval or a Comparison Anchor would each have to be a sixth.
+
+**The Fixture count is `locked_in_gw` and not `gw`.** Six, over a seeded ten that were all
+scheduled into Gameweek 1 — which is the shape the real calendar left behind, and the
+only shape in which the box's failure is reachable. The page prints the count with the
+sentence that says where the other four went.
+
+**Absent scores are three em dashes and a sentence, never a nought.** The seats stay
+listed; the scorer writes nothing at all for a Gameweek it has not scored, and a nought
+would report that as a Gameweek every seat lost. A failed fetch gets its own line inside
+the block rather than the page's error line — the leaderboard above it may have arrived,
+and one unread block must not report the whole page as unread.
+
+**Not hidden until the fetch lands, unlike the three states above it.** Those are three
+readings of one body and only one may be shown; this is a block that either belongs on
+the page or was never built into it.
 
 ## 6 — Head Coach changes, racing the cutoff
 

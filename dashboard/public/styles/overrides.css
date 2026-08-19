@@ -239,6 +239,11 @@ html {
   color: color-mix(in srgb, var(--color-text) 60%, transparent);
 }
 .lbbody { border-top: 2px solid var(--color-divider); }
+/* The frozen block borrows the leaderboard's ruled list and drops its rank
+   column: it is a record of one Gameweek and not a ranking, so there is no
+   rank to give a column to. */
+.frozen .lbhead,
+.frozen .lbrow { grid-template-columns: 1fr 160px 160px 160px; }
 .lbrow {
   border-bottom: 2px solid var(--color-divider);
   padding: 14px 0;
@@ -646,6 +651,8 @@ html {
     grid-template-columns: 40px 1fr auto auto;
     column-gap: 14px;
   }
+  .frozen .lbhead,
+  .frozen .lbrow { grid-template-columns: 1fr auto auto auto; }
   .lbrow > .cell { padding-left: 0; text-align: right; }
   .lb-rank { font-size: 28px; }
   .lb-name { font-size: 16px; }

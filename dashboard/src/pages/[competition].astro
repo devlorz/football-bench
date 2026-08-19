@@ -15,7 +15,10 @@ export const getStaticPaths = competitionRoutes;
 // `competitionName` is the league under the name the packet an Entrant reads
 // names it. All three are the route's, spelled once in `competition-view.ts`,
 // and this page holds no second copy of any of them (ADR-0039).
-const { competition, competitionName, path, api } = Astro.props;
+// `retiredLabel` is the frozen block's heading on the Competition that
+// restarted and null on the ones that never did (ADR-0042), so it is what
+// decides whether this page carries a block at all.
+const { competition, competitionName, path, api, retiredLabel } = Astro.props;
 ---
 <Page
   title={`${competitionName} leaderboard — Football Bench, match track`}
@@ -178,6 +181,45 @@ const { competition, competitionName, path, api } = Astro.props;
     </div>
   </section>
 
+  {/* La Liga's Gameweek 1, played under the version the restart retired and
+      kept whole rather than merged (ADR-0042). Emitted only where there is a
+      retired Gameweek: the Premier League never used a version it has retired,
+      and a block on its page would claim otherwise.
+
+      Not hidden until the fetch lands, unlike the three states above. Those are
+      three readings of one body and only one may be shown; this is a block that
+      either belongs on the page or is not built into it, and its heading is the
+      build's. A reader sees what the block is before its figures arrive, which
+      is what the rest of this page does with everything that is not a number.
+
+      Below the ranking, and outside it: the leaderboard begins at Gameweek 2
+      and contains nothing of this, which is the separation the ADR asks for
+      read as a position on the page. */}
+  {retiredLabel !== null && (
+    <section class="frozen" id="frozen">
+      <div class="rankbar">
+        <h2>{retiredLabel}</h2>
+      </div>
+      <p class="muted" id="frozen-scope"></p>
+
+      <div class="lbbody" role="table" aria-label={retiredLabel}>
+        {/* No rank column, because this is not a ranking: one Gameweek
+            supports no claim, and a rank would make one. */}
+        <div class="lbhead" role="row">
+          <div role="columnheader">Base Model</div>
+          <div class="cell" role="columnheader">Match points</div>
+          <div class="cell" role="columnheader">Bet points</div>
+          <div class="cell" role="columnheader">RPS</div>
+        </div>
+        <div id="frozen-rows" role="rowgroup"></div>
+      </div>
+
+      <div class="qualifications">
+        <p id="frozen-note"></p>
+      </div>
+    </section>
+  )}
+
   {/* Inside the layout's document, not after it: a `<script>` written as a
       sibling of `<Page>` is emitted after `</html>`, which every browser
       repairs and no static artifact should need repairing.
@@ -187,7 +229,14 @@ const { competition, competitionName, path, api } = Astro.props;
       the same bytes without it -- the directive is written out because
       `astro check` asks for it in as many words, and a hint that never goes
       away is worse than an attribute that says something true. */}
-  <script is:inline define:vars={{ leaderboardUrl: `${api}/leaderboard` }}>
+  <script is:inline define:vars={{
+    leaderboardUrl: `${api}/leaderboard`,
+    // Null on a Competition with no retired Gameweek, which is the same
+    // decision the block's markup was emitted on and read from the same prop —
+    // so a page with no block cannot ask for one, and the endpoint that would
+    // answer it 404s anyway.
+    retiredUrl: retiredLabel === null ? null : `${api}/retired`
+  }}>
   (() => {
     const $ = (id) => document.getElementById(id);
     const text = (node, value) => { node.textContent = value; };
@@ -357,6 +406,69 @@ const { competition, competitionName, path, api } = Astro.props;
 
       if (state === "preseason") renderPreSeason();
       if (state === "ranking") renderRanking();
+    }
+
+    function renderFrozen(frozen) {
+      text($("frozen-scope"),
+        "n = " + frozen.fixtures + " fixtures \u2014 the ones Gameweek "
+        + frozen.gw + "'s Lock owned. Fixtures the calendar moved out of it "
+        + "lock into a later Gameweek and are asked there, under the restarted "
+        + "version.");
+
+      // A stored figure or an em dash, and never a nought: the scorer writes
+      // nothing at all for a Gameweek it has not scored, and a nought would
+      // report that as a Gameweek every seat lost.
+      const figure = (value, digits) =>
+        value === null ? "\u2014" : Number(value).toFixed(digits);
+
+      const rows = document.createDocumentFragment();
+      for (const entrant of frozen.entrants) {
+        const row = div("lbrow", undefined, "row");
+        const name = div("", undefined, "cell");
+        name.append(div("lb-name", entrant.name), div("lb-id", entrant.id));
+        for (const [value, digits] of [
+          [entrant.matchPoints, 0], [entrant.betPoints, 0], [entrant.rps, 3]
+        ]) {
+          const cell = div("cell", undefined, "cell");
+          cell.append(div("lb-value", figure(value, digits)));
+          row.append(cell);
+        }
+        row.prepend(name);
+        rows.append(row);
+      }
+      $("frozen-rows").replaceChildren(rows);
+
+      // The state where slice 1's scoring run never landed. It is said rather
+      // than drawn around: this Gameweek was played, so an empty block is a
+      // fault in the record and the page saying so is the only alarm a reader
+      // gets.
+      const scored = frozen.entrants
+        .some((entrant) => entrant.matchPoints !== null);
+      text($("frozen-note"), scored
+        ? "Read from the scores stored for that Gameweek, under the retired "
+          + "version named above. It is not merged into the ranking and carries "
+          + "no interval and no Comparison Anchor: one Gameweek supports "
+          + "neither."
+        : "This Gameweek was played and no scores are stored for it. The "
+          + "record is incomplete \u2014 nothing here is being estimated, and "
+          + "nothing is being retried.");
+    }
+
+    if (retiredUrl !== null) {
+      fetch(retiredUrl)
+        .then((response) => {
+          if (!response.ok) throw new Error(String(response.status));
+          return response.json();
+        })
+        .then(renderFrozen)
+        .catch(() => {
+          // Its own line and not the page's: the leaderboard above may have
+          // arrived, and one failed block must not report the whole page as
+          // unread. The heading stays, so what a reader is told is that this
+          // block could not be read rather than that it does not exist.
+          text($("frozen-note"),
+            "This block could not be read. Nothing is being retried.");
+        });
     }
 
     // A relative path: the Worker route claims `/api/*` on this hostname, so

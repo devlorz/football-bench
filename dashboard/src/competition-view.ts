@@ -1,5 +1,6 @@
 import {
-  MATCH_PROMPT_COMPETITIONS, matchPromptOf
+  MATCH_PROMPT_COMPETITIONS, matchPromptOf, retiredGameweekLabel,
+  retiredPromptOf
 } from "../../src/predictions/openrouter-entrant.js";
 
 /** The Match track's three pages, which are the three links in the chrome. */
@@ -38,6 +39,18 @@ export interface CompetitionRoute {
     path: string;
     /** The read API's prefix for this Competition; an endpoint hangs off it. */
     api: string;
+    /**
+     * The frozen block's heading, on the Competition that restarted, and null
+     * on every Competition that never did — which is what decides whether the
+     * page carries a block at all (ADR-0042).
+     *
+     * The heading and not the retired version: it is built here, at build time,
+     * from the one place both of its variables live, so the page holds no
+     * second spelling of a version and cannot label a block with one the read
+     * does not filter by. The Gameweek and its Fixture count are figures and
+     * arrive with the rest of them, from `/api/{code}/retired`.
+     */
+    retiredLabel: string | null;
   };
 }
 
@@ -77,13 +90,15 @@ export interface CompetitionRoute {
 export const competitionRoutes = (): CompetitionRoute[] =>
   MATCH_PROMPT_COMPETITIONS.map((competition) => {
     const segment = competition.toLowerCase();
+    const retired = retiredPromptOf(competition);
     return {
       params: { competition: segment },
       props: {
         competition,
         competitionName: matchPromptOf(competition).competitionName,
         path: `/${segment}`,
-        api: `/api/${segment}`
+        api: `/api/${segment}`,
+        retiredLabel: retired === null ? null : retiredGameweekLabel(retired)
       }
     };
   });

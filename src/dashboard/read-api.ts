@@ -11,11 +11,13 @@ import {
 } from "../fpl/demonstration-record.js";
 import type { ScoreDetail } from "../fpl/score-team-sheet.js";
 import {
-  MATCH_PROMPT_COMPETITIONS, matchPromptOf
+  MATCH_PROMPT_COMPETITIONS, matchPromptOf, retiredPromptOf,
+  type RetiredGameweek
 } from "../predictions/openrouter-entrant.js";
 import {
-  BET_POINTS_QUALIFICATION, BET_POINTS_SEASON_TO_DATE_METRIC,
-  GAP_RATE_SEASON_TO_DATE_METRIC, MATCH_POINTS_QUALIFICATION,
+  BET_POINTS_METRIC, BET_POINTS_QUALIFICATION,
+  BET_POINTS_SEASON_TO_DATE_METRIC, GAP_RATE_SEASON_TO_DATE_METRIC,
+  MATCH_POINTS_METRIC, MATCH_POINTS_QUALIFICATION,
   MATCH_POINTS_SEASON_TO_DATE_METRIC, RPS_METRIC,
   RPS_SEASON_TO_DATE_METRIC, type BetLeg
 } from "../predictions/score-match-gameweek.js";
@@ -2128,6 +2130,116 @@ async function fplEntrants(query: Query, season: string): Promise<Response> {
   return json(body, SCORED_CACHE);
 }
 
+/**
+ * One retired seat's Gameweek, which is three figures and nothing derived from
+ * them. Null is the state where slice 1's scoring run never landed, and it
+ * reaches the page as null so the page can say so: a nought here would report a
+ * Gameweek nobody scored as a Gameweek everybody lost.
+ */
+export interface RetiredGameweekEntrant {
+  id: string;
+  name: string;
+  matchPoints: number | null;
+  betPoints: number | null;
+  rps: number | null;
+}
+
+/**
+ * What `/api/{code}/retired` answers with: the one Gameweek a restarted
+ * Competition played under the version it retired (ADR-0042), read by that
+ * version's name.
+ *
+ * It is the only read anywhere that names a retired version. Every other
+ * roster-shaped endpoint filters by `matchPromptOf(competition).version`, so
+ * the retired seats left those bodies the moment the constant moved and this
+ * one is what keeps their Gameweek readable.
+ *
+ * No interval, no Comparison Anchor and no Season total, because one Gameweek
+ * supports none of them and a field here is what a merge would look like.
+ */
+export interface RetiredGameweekBody {
+  season: string;
+  /** The retired version itself, which the block's label names. */
+  promptVersion: string;
+  gw: number;
+  /**
+   * The Fixtures that Gameweek's Lock owned, which is the attribution the
+   * record has (ADR-0013) and not the count the calendar scheduled into it. A
+   * reader comparing this block against a Fixtures list must be able to read
+   * the difference as Fixtures asked in a later Gameweek under the restarted
+   * version, rather than as Fixtures the record lost.
+   */
+  fixtures: number;
+  entrants: RetiredGameweekEntrant[];
+}
+
+/**
+ * The retired Gameweek whole: every seat entered under the retired version,
+ * with the three per-Gameweek figures the scorer wrote for it before the flip.
+ *
+ * Left joins, so a seat with nothing stored is a listed seat with three nulls
+ * rather than a seat that vanished. The absent state is the alarm and the page
+ * prints it as one.
+ */
+async function retiredGameweek(
+  query: Query,
+  season: string,
+  competition: string,
+  retired: RetiredGameweek
+): Promise<Response> {
+  const rows = await query(
+    `select m.id, m.name,
+            points.value as match_points,
+            bets.value as bet_points,
+            rps.value as rps
+       from models m
+       left join scores points
+         on points.model_id = m.id and points.competition = $7
+        and points.season = $1
+        and points.track = 'match' and points.gw = $2
+        and points.metric = $3
+       left join scores bets
+         on bets.model_id = m.id and bets.competition = $7
+        and bets.season = $1
+        and bets.track = 'match' and bets.gw = $2 and bets.metric = $4
+       left join scores rps
+         on rps.model_id = m.id and rps.competition = $7
+        and rps.season = $1
+        and rps.track = 'match' and rps.gw = $2 and rps.metric = $5
+      where m.role = 'entrant' and m.prompt_version = $6
+      order by m.id`,
+    [
+      season, retired.gw, MATCH_POINTS_METRIC, BET_POINTS_METRIC, RPS_METRIC,
+      retired.version, competition
+    ]
+  );
+
+  // `locked_in_gw` and not `gw`: the Gameweek a Fixture was scheduled into is
+  // the source's, and the Gameweek whose Lock owned it is the record's
+  // (ADR-0013, ADR-0015). The four Fixtures the calendar moved out of this one
+  // were scheduled here and belong to a later Lock, so they are counted there.
+  const [owned] = await query(
+    `select count(*) as owned from fixtures
+      where competition = $3 and season = $1 and locked_in_gw = $2`,
+    [season, retired.gw, competition]
+  );
+
+  const body: RetiredGameweekBody = {
+    season,
+    promptVersion: retired.version,
+    gw: retired.gw,
+    fixtures: Number(owned?.owned ?? 0),
+    entrants: rows.map((row) => ({
+      id: String(row.id),
+      name: String(row.name),
+      matchPoints: numberOrNull(row.match_points),
+      betPoints: numberOrNull(row.bet_points),
+      rps: numberOrNull(row.rps)
+    }))
+  };
+  return json(body, SCORED_CACHE);
+}
+
 function json(body: unknown, edgeCache: string): Response {
   return new Response(JSON.stringify(body), {
     headers: {
@@ -2187,6 +2299,15 @@ export async function handleDashboardRequest(
     }
     if (endpoint === "entrants") {
       return await entrants(query, season, competition);
+    }
+    // Served only where there is a retired Gameweek to serve. A Competition
+    // that never restarted has no block on its page and no body for one to be
+    // built from, and an empty body would be a claim that something was retired
+    // and scored nought — so it falls through to the 404 every other unserved
+    // path gets.
+    const retired = retiredPromptOf(competition);
+    if (endpoint === "retired" && retired !== null) {
+      return await retiredGameweek(query, season, competition, retired);
     }
   }
 
