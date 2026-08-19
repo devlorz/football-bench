@@ -62,6 +62,14 @@ export function cellSource(cell: string): string {
     .replace(/\{\{flagg?\s*icon\|[^}]*\}\}/gi, "")
     .replace(/\{\{#invoke:flag\|[^}]*\}\}/gi, "")
     .replace(/\{\{flagg?\|[^}]*\}\}/gi, "")
+    // {{nobreak|...}} keeps a La Liga personnel cell on one line and says
+    // nothing about the name inside it; the Premier League never writes it.
+    // It runs after the flag templates because it is what those cells wrap.
+    // Its content may hold no template of its own: `[^}]*` crosses `{` freely
+    // and stops at the first `}`, so a wrapper round anything an earlier
+    // replace has not already taken out mispairs its braces and leaves raw
+    // wikitext inside a Head Coach's name. Today only the flags are wrapped.
+    .replace(/\{\{nobreak\|([^}]*)\}\}/gi, "$1")
     // {{sortname|Jan Paul|van Hecke|dab=footballer}} -- named parameters are
     // disambiguation for the link target and are never part of the name.
     .replace(/\{\{sortname\|([^}]*)\}\}/gi, (_, parameters: string) =>

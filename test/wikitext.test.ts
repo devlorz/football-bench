@@ -8,9 +8,11 @@ import {
 
 /**
  * The reading these helpers do is shared by two pipelines whose pages have
- * different habits, and the second one widened three of them: the attribute
+ * different habits, and the second one widened four of them: the attribute
  * regex now takes several attributes and unquoted values, a bare leading pipe
- * is stripped, and three flag templates are recognised where one was.
+ * is stripped, three flag templates are recognised where one was, and
+ * `{{nobreak}}` -- the wrapper La Liga puts round its personnel cells and the
+ * Premier League never writes -- comes off too.
  *
  * Every widening is pinned here, and so is the boundary each stops at. The
  * squad-changes suite proves the transfer lists still read the same, but it
@@ -78,6 +80,42 @@ describe("reading a wikitext cell", () => {
       .toBe("Arne Slot");
     expect(cellText("{{#invoke:flag|icon|GER}} [[Marco Rose]]"))
       .toBe("Marco Rose");
+  });
+
+  /**
+   * `{{nobreak}}` keeps a La Liga personnel cell on one line. It says nothing
+   * about the name inside it, and the Premier League tables never write it --
+   * so it is stripped, including where it wraps a flag template.
+   */
+  test("takes out the wrapper that keeps a cell on one line", () => {
+    expect(cellText("{{nobreak|Alav\u00e9s}}")).toBe("Alav\u00e9s");
+    expect(cellText("{{nobreak|{{flagicon|ESP}} [[Quique S\u00e1nchez Flores]]}}"))
+      .toBe("Quique S\u00e1nchez Flores");
+    expect(cellSource("{{nobreak|[[Castore]]}}")).toBe("[[Castore]]");
+    expect(clubLink("{{nobreak|[[Nike, Inc.|Nike]]}}")).toEqual({
+      article: "Nike, Inc.",
+      text: "Nike"
+    });
+  });
+
+  /**
+   * The boundary this widening must not cross, in the manner of
+   * `Sacked|and rehired`: text that only looks like the wrapper is a
+   * reader's text, and eating it would shorten a cell for nothing.
+   */
+  test("leaves text that merely looks like that wrapper whole", () => {
+    expect(cellText("nobreak|and rehired")).toBe("nobreak|and rehired");
+    expect(cellText("{{nobreak|unclosed")).toBe("{{nobreak|unclosed");
+  });
+
+  /**
+   * Two wrappers in one cell, which a greedy content class would read as one
+   * and swallow whole. The pair above cannot catch that -- neither of them
+   * closes a wrapper at all -- and this is the shape that does.
+   */
+  test("unwraps two of that wrapper in one cell rather than one long one", () => {
+    expect(cellText("{{nobreak|[[Alav\u00e9s]]}} v {{nobreak|[[Getafe]]}}"))
+      .toBe("Alav\u00e9s v Getafe");
   });
 
   test("takes out a citation, whether or not it closes", () => {

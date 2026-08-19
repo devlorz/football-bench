@@ -56,16 +56,30 @@ which reads the same module, is proven unmoved by the widening.
 
 **Blocked by:** None — can start immediately, in parallel with 1.
 
-- [ ] `{{nobreak}}` is stripped wherever the reader strips the wrappers it already knows,
-      including nested inside the flag templates it already handles.
-- [ ] The widening is pinned by assertions of its own beside the shapes already pinned —
+- [x] `{{nobreak}}` is stripped wherever the reader strips the wrappers it already knows,
+      including where it wraps one of the flag templates it already handles — the
+      direction La Liga writes, `{{nobreak|{{flagicon|ESP}} …}}`. Flags come off first
+      because `[^}]*` dies on the inner brace.
+- [x] The widening is pinned by assertions of its own beside the shapes already pinned —
       the discipline the first extraction's review established, after that widening
       shipped pinned by nothing and survived on luck.
-- [ ] An edge where the wrapper must **not** eat text is pinned too, in the manner of the
+- [x] An edge where the wrapper must **not** eat text is pinned too, in the manner of the
       existing `Sacked|and rehired` case: text that merely looks like a wrapper survives
       whole.
-- [ ] Both Squad Changes suites pass unchanged, run and reported rather than assumed.
-- [ ] The Head Coach Change suites pass unchanged.
+- [x] Both Squad Changes suites pass unchanged, run and reported rather than assumed:
+      `fetch-squad-changes` and `build-squad-changes-context`, 36 tests, all passing on
+      2026-08-20 with `--exclude '**/.claude/**'`.
+- [x] The Head Coach Change suites pass unchanged: `fetch-head-coach-changes`,
+      `build-head-coach-changes-context` and `wikitext`, 44 tests, same run and the
+      same exclude. A first count of 134 included copies under `.claude/worktrees`
+      that the root config globs in; 36 and 44 are this branch's own.
+
+Known and deliberately not reached here, because slice 4 is what brings a real table to
+test them against: the redirects `{{nobr}}` and `{{nowrap}}` name the same template —
+La Liga writes one and four of them, the Premier League nineteen, none of the Premier
+League's inside "Personnel and kits" — and a `{{nobreak}}` wrapping any template the
+replaces above it do not remove, `{{sortname}}` today, mispairs its braces and leaves raw
+wikitext in a name. Every one of the 97 wrapped cells in either article is a flag.
 
 ## 3 — A store for who is in post
 
