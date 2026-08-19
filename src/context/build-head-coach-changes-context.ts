@@ -96,10 +96,21 @@ function changeText(change: HeadCoachChangeRow): string {
 }
 
 /**
- * A club's two lines, and nothing at all for a club that kept its Head Coach.
- * The absence of the event is the fact (ADR-0044), so an unchanged club costs
- * no line and a club that has not filled its vacancy yet costs one.
+ * A club's lines, and nothing at all for a club that kept its Head Coach. The
+ * absence of the event is the fact (ADR-0044), so an unchanged club costs no
+ * line and a club that has not filled its vacancy yet costs one.
+ *
+ * Arrivals before Departures, which is the Squad Changes section's order and
+ * not this data's natural one -- a seat is vacated before it is filled, and
+ * the two lines read backwards from that. The section is asked to render in
+ * that section's manner, and a reader moving down a packet meets `In` first
+ * everywhere or nowhere.
  */
+const DIRECTIONS = [
+  { direction: "in", label: "In" },
+  { direction: "out", label: "Out" }
+] as const;
+
 function clubSection(club: string, changes: HeadCoachChangeRow[]): string[] {
   const clubChanges = changes.filter((change) => change.club === club);
   if (clubChanges.length === 0) {
@@ -108,13 +119,11 @@ function clubSection(club: string, changes: HeadCoachChangeRow[]): string[] {
   return [
     "",
     club,
-    ...(["out", "in"] as const).flatMap((direction) => {
+    ...DIRECTIONS.flatMap(({ direction, label }) => {
       const line = orderChangesForDisplay(
         clubChanges.filter((change) => change.direction === direction)
       ).map(changeText);
-      return line.length === 0
-        ? []
-        : [`${direction === "out" ? "Out" : "In"}: ${line.join(", ")}`];
+      return line.length === 0 ? [] : [`${label}: ${line.join(", ")}`];
     })
   ];
 }
@@ -142,16 +151,14 @@ export function buildHeadCoachChangesContext(
       + "this Gameweek."
     ].join("\n");
   }
+  // A partition that landed and holds neither of these two clubs leaves the
+  // heading with nothing under it, and that is the section working: absence of
+  // the event is the fact (ADR-0044), and a sentence saying so would be a
+  // third state neither the ADR nor the section's own rule has.
   const changes = boundedByDeadline(options.changes, options.deadline);
-  const clubs = [
+  return [
+    heading,
     ...clubSection(options.homeTeam, changes),
     ...clubSection(options.awayTeam, changes)
-  ];
-  // The partition landed and neither of these two clubs is in it. Stated in
-  // one line rather than left to the section's silence, because a reader
-  // cannot tell an absent section from a section about nobody.
-  return clubs.length === 0
-    ? [heading, "", "Neither club has changed Head Coach this Season."]
-      .join("\n")
-    : [heading, ...clubs].join("\n");
+  ].join("\n");
 }

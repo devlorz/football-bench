@@ -195,11 +195,21 @@ describe("parsing a season article's Head Coach changes", () => {
       "!Date of vacancy\n!Manner of departure"
     );
 
+    // Named, not merely typed: the message an operator is paged with has to
+    // say which page moved, and every issue this parser raises is prefixed
+    // with the source it was reading.
     expect(() => parseHeadCoachChanges(
       "wikipedia:head-coach-changes:2026-27-premier-league",
       reordered,
       pinnedClubs()
     )).toThrow(HeadCoachSourceValidationError);
+    expect(() => parseHeadCoachChanges(
+      "wikipedia:head-coach-changes:2026-27-premier-league",
+      reordered,
+      pinnedClubs()
+    )).toThrow(
+      /^wikipedia:head-coach-changes:2026-27-premier-league\.[^:]+: expected the columns/
+    );
   });
 
   test("refuses a row that no longer fills its columns", async () => {
@@ -424,6 +434,48 @@ describe("fetching a Season's Head Coach changes", () => {
         { competition: "PD", head_coach: "José Mourinho" }
       ]);
     });
+
+  /**
+   * The refusal proved where the spec puts it. The parser's own cases above
+   * are the shapes; this is that a moved shape reaches the fetch as a failure
+   * naming the page, with the bytes archived and the partition untouched --
+   * the fetch does not degrade drift into a quiet empty Gameweek.
+   */
+  test("refuses a moved shape at the fetch, with the source named", async () => {
+    await storeSeason();
+    await fetchHeadCoachChanges({
+      database: client,
+      competition: "PL",
+      season: "2026-27",
+      http: pageFetcher().http,
+      now: () => new Date("2026-08-19T09:00:00Z")
+    });
+    const moved = page.replace(
+      "!Manner of departure\n!Date of vacancy",
+      "!Date of vacancy\n!Manner of departure"
+    );
+
+    await expect(fetchHeadCoachChanges({
+      database: client,
+      competition: "PL",
+      season: "2026-27",
+      http: pageFetcher(moved).http,
+      now: () => new Date("2026-08-20T09:00:00Z")
+    })).rejects.toThrow(
+      /^wikipedia:head-coach-changes:2026-27-premier-league\./
+    );
+
+    // The bytes that failed are evidence, and the Gameweek that was already
+    // read keeps every row of it.
+    const archived = await client.query(
+      "select count(*)::int as rows from raw_snapshots"
+    );
+    expect(archived.rows).toEqual([{ rows: 2 }]);
+    const stored = await client.query(
+      "select count(*)::int as rows from head_coach_changes where gw = 1"
+    );
+    expect(stored.rows).toEqual([{ rows: 18 }]);
+  });
 
   test("a Season with no article listed reaches no source at all", async () => {
     await client.query(

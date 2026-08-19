@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const MATCH_PROMPT_VERSION = "match/2026-27-v2";
 export const MATCH_PROMPT_SHA256 =
-  "dc2ed52eb8fad16c3382d3ebb18f9d859d05305a2147cc9c77d7c21f4d2d2d67";
+  "c80fb3609e05e0abd562062fabe8214e0ca4b7b5d94aff02b051e6b6ab1d7291";
 
 export interface MatchPrompt {
   /** The Prompt Version a Competition's seats are entered under. */
@@ -103,7 +103,7 @@ const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
   PD: {
     version: "match-pd/2026-27-v2",
     sha256:
-      "ba4d797ff28e530f348f6ccb9a1e4ccdba109ccc7520dd0d73385f5ea26d237d",
+      "3a0fb89d6e334f96340ae49cafa7142487de21c17880fb6977f59706ef05b05c",
     competitionName: "La Liga",
     retired: { version: "match-pd/2026-27-v1", gw: 1 }
   }

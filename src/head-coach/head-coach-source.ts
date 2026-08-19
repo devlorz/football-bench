@@ -1,6 +1,6 @@
 /**
  * Where a Competition's Head Coach changes are published, per Season
- * (ADR-0044): English Wikipedia's season article, whose managerial-changes
+ * (ADR-0044): English Wikipedia's season article, whose Head Coach changes
  * table is the events table the packet renders.
  *
  * Keyed by Season as well as by Competition, which is the difference from

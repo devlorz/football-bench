@@ -71,8 +71,9 @@ const INCOMING = 5;
 const APPOINTMENT = 6;
 
 /**
- * The table under the article's managerial-changes heading, from its opening
- * `{|` to its closing `|}`, with the citations taken out first.
+ * The Head Coach changes table, from its opening `{|` to its closing `|}`,
+ * with the citations taken out first. The heading it sits under is the
+ * article's own word for it, quoted in `SECTION_HEADING` above.
  *
  * The citations come out before anything is split because they are not merely
  * noise here: a `{{cite}}` runs to several lines on both pages and its
@@ -85,7 +86,7 @@ const APPOINTMENT = 6;
  * it, because the two articles write it differently today and neither is more
  * correct.
  */
-function managerialChangesTable(source: string, wikitext: string): string {
+function headCoachChangesTable(source: string, wikitext: string): string {
   const withoutCitations = wikitext
     .replace(/<ref[^>]*\/>/g, "")
     .replace(/<ref[\s\S]*?<\/ref>/g, "")
@@ -163,11 +164,8 @@ function rowspanOf(cell: string): number {
  * of the two articles writes `!rowspan=2|Date of vacancy` in a header that has
  * only one row, and carrying it would refuse a page that renders correctly.
  */
-function filledRows(
-  source: string,
-  rows: string[][],
-  issues: HeadCoachSourceIssue[]
-): string[][] {
+function filledRows(source: string, rows: string[][]): string[][] {
+  const issues: HeadCoachSourceIssue[] = [];
   const carried = new Map<number, { cell: string; remaining: number }>();
   const filled: string[][] = [];
   for (const [index, cells] of rows.entries()) {
@@ -270,7 +268,7 @@ export function parseHeadCoachChanges(
   const issues: HeadCoachSourceIssue[] = [];
   const changes: HeadCoachChange[] = [];
   const { header, rows } = tableLines(
-    managerialChangesTable(source, wikitext)
+    headCoachChangesTable(source, wikitext)
   );
 
   const labels = header.map(cellText);
@@ -283,7 +281,7 @@ export function parseHeadCoachChanges(
     }]);
   }
 
-  for (const [index, row] of filledRows(source, rows, issues).entries()) {
+  for (const [index, row] of filledRows(source, rows).entries()) {
     const club = resolveClub(row[CLUB] as string, pinned);
     if (club === undefined) {
       issues.push({

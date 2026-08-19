@@ -26,13 +26,20 @@ export function parseDate(value: string): string | undefined {
 }
 
 /**
- * A cell's leading HTML attributes and the pipe that ends them, in the four
+ * A cell's leading HTML attributes and the pipe that ends them, in the three
  * shapes these pages write them: `rowspan="9" |`, the unquoted `rowspan=2|`
- * the Spanish tables prefer, the hyphenated `data-sort-value="Iraola, Andoni"|`
- * every sortable name column carries, and the empty one a line opening `||`
- * leaves behind. Nothing else may be stripped: a bare pipe is an attribute
- * separator to MediaWiki wherever it appears, but a prefix that is not
- * attribute-shaped is text, and eating it would silently shorten a name.
+ * the Spanish tables prefer, and the hyphenated
+ * `data-sort-value="Iraola, Andoni"|` every sortable name column carries.
+ *
+ * The second alternative is the empty attribute list a line opening `||`
+ * leaves in front of its content, which MediaWiki reads as a cell with no
+ * attributes. It is not cell recovery: a row splitter that takes one cell per
+ * line hands the whole of `||x` over as a single cell, and this is only what
+ * takes the stray pipe off the front of it.
+ *
+ * Nothing else may be stripped. A bare pipe is an attribute separator to
+ * MediaWiki wherever it appears, but a prefix that is not attribute-shaped is
+ * text, and eating it would silently shorten a name.
  */
 const CELL_ATTRIBUTES = /^\s*(?:[a-z-]+\s*=\s*(?:"[^"]*"|[^\s|]*)\s*)+\||^\s*\|/i;
 
@@ -52,7 +59,7 @@ export function cellSource(cell: string): string {
     // part of it: `{{flag|ENG}}`, `{{flagicon|ESP}}`, `{{Flag icon|The
     // Netherlands}}` and the module call `{{#invoke:flag|icon|GER}}` all
     // appear, sometimes three of them in one column.
-    .replace(/\{\{(?:#invoke:)?flagg?\s*icon\|[^}]*\}\}/gi, "")
+    .replace(/\{\{flagg?\s*icon\|[^}]*\}\}/gi, "")
     .replace(/\{\{#invoke:flag\|[^}]*\}\}/gi, "")
     .replace(/\{\{flagg?\|[^}]*\}\}/gi, "")
     // {{sortname|Jan Paul|van Hecke|dab=footballer}} -- named parameters are

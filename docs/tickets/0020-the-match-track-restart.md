@@ -885,7 +885,10 @@ receive it.
 - [ ] Both sha pins are re-pinned from real renders carrying the section, before the
       gate.
 - [ ] If the cutoff passes first: the slice is closed as deferred with a line saying so,
-      and no other slice reopens.
+      and no other slice reopens. **N/A** — the cutoff did not pass first, the
+      pipeline landed, and nothing was deferred. The evidence that would close this box
+      lives in a branch that did not happen; it is left open rather than ticked, on the
+      same terms as slice 3's ship-or-freeze box.
 
 ### What the five boxes landed — recorded 2026-08-19
 
@@ -938,9 +941,59 @@ table, the section, the source string, the error classes, the module. The page's
 in one constant each, to detect their movement and for nothing else. Pinning the labels is
 what makes a reordered table a refusal rather than a page of confidently transposed names.
 
+**Two rows lose the pairing, and that is the trade.** A club that changes Head Coach
+twice in one Season renders as `In: C, D` and `Out: A, B`, and nothing in those two lines
+says C replaced A. The identity index expects that club — the date is in the key for it —
+so this is a real limit and not an impossible one. It is accepted because the alternative
+costs more: one row holding both halves would have to publish an appointment the Entrant
+could not know of, or drop a vacancy it certainly could, at every deadline falling between
+the two dates. Worth revisiting only if a Season actually produces the case.
+
 **Box 6 is still open, and the pins have moved once already.** Adding a section changes
 every rendered packet, so both shas had to move for the suite to be honest about what the
 template now says. They are taken from the test's own render, which is not what box 6
 asks for: it wants them re-pinned from real renders before the gate, and that is still to
 do.
 
+### What the review asked for and got — recorded 2026-08-19
+
+**`managerialChangesTable` was the slice's own word for its own idea.** Box 5 does not
+reach the constants quoting the page's `Managerial changes` heading and its
+`Outgoing manager` labels — those are the source's words, quoted to detect their movement,
+and each carries the doc block saying so. It does reach a function name, which is the
+repo's concept and not Wikipedia's: `headCoachChangesTable` now, and box 5's claim is true
+as written rather than nearly.
+
+**The shared module had no test of its own.** The extraction was proven by the
+squad-changes suite passing unchanged over 108 cases — which is evidence the transfer
+lists still read the same, not evidence the three widenings are what they say. Those bytes
+happen to contain none of the widened shapes: the Spanish transfer list's nine
+`{{flagicon}}` all sit outside `{{fs player}}`, so the new branch never fires there.
+`test/wikitext.test.ts` pins each widening and the boundary it stops at, including that a
+prefix which is not attribute-shaped is left where it is.
+
+**A comment described a behaviour the code does not have.** `CELL_ATTRIBUTES` claimed to
+handle the empty attribute list `||` leaves; it does, but the doc block read as though the
+branch recovered a lost cell. It does not — a per-line splitter hands `||x` over as one
+cell, and the branch only takes the stray pipe off its front.
+
+**One dead branch removed.** `(?:#invoke:)?` in the flag-icon regex matched
+`{{#invoke:flagicon`, which no page writes; the module call `{{#invoke:flag|icon|GER}}` is
+the next regex's. `filledRows` also stopped borrowing the caller's issue list to throw
+from.
+
+**The third state came out.** `Neither club has changed Head Coach this Season.` was a
+sentence for a case ADR-0044 answers differently: the absence of the event *is* the fact,
+so a partition holding neither club leaves the heading with nothing under it. Kept: the
+empty-partition status line, which says a fetch did not land and has the Squad Changes
+precedent behind it.
+
+**Arrivals now render before Departures.** A seat is vacated before it is filled, so
+`Out` first is this data's own order — but the box asks for the Squad Changes section's
+manner, and that section reads `In` then `Out`. A reader moving down a packet meets `In`
+first everywhere or nowhere.
+
+**"With the source named" is asserted now, and at the seam the spec names.** The parser
+cases proved the shapes and only that a typed error was thrown. The message is pinned to
+the source prefix, and a moved shape is proven to reach *the fetch* as a failure naming
+the page, with the bytes archived and the already-read Gameweek keeping all eighteen rows.

@@ -52,12 +52,12 @@ describe("the Head Coach changes section", () => {
       "Head Coach changes this Season:",
       "",
       "Liverpool",
-      "Out: Arne Slot (sacked, 30 May 2026)",
       "In: Andoni Iraola (4 Jun 2026)",
+      "Out: Arne Slot (sacked, 30 May 2026)",
       "",
       "Everton",
-      "Out: A Departed Coach (end of contract, 2 Jun 2026)",
-      "In: An Arrived Coach (7 Jul 2026)"
+      "In: An Arrived Coach (7 Jul 2026)",
+      "Out: A Departed Coach (end of contract, 2 Jun 2026)"
     ].join("\n"));
   });
 
@@ -147,14 +147,16 @@ describe("the Head Coach changes section", () => {
     ].join("\n"));
   });
 
-  test("states that neither club changed, over a partition that did land", () => {
+  /**
+   * A partition that landed and holds neither of these two clubs leaves the
+   * heading with nothing under it, and that is the rule working rather than
+   * the section failing: the absence of the event is the fact (ADR-0044). A
+   * sentence saying so would be a third state the section does not have.
+   */
+  test("leaves the heading alone when neither club changed", () => {
     expect(build([
       change({ club: "Arsenal", head_coach: "Somebody Else" })
-    ])).toBe([
-      "Head Coach changes this Season:",
-      "",
-      "Neither club has changed Head Coach this Season."
-    ].join("\n"));
+    ])).toBe("Head Coach changes this Season:");
   });
 
   test("is absent for a Season whose article is not listed", () => {
