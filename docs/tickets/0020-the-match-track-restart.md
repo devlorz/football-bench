@@ -285,6 +285,40 @@ in `fetchFootballDataSeason` is scoped to the season it is storing, so the 2025-
 the base rates and the prior-Season lines are computed from are not touched by the flip.
 Both are the user's to run.
 
+### The variable, flipped — recorded 2026-08-19
+
+`FOOTBALL_DATA_SEASON` was set to `2026-27` and `fetch.yml` dispatched. La Liga's five
+results reached `historical_matches` and the Gameweek 2 packet now opens on them:
+
+> La Liga table (results through 2026-08-17):
+> 1. Alaves — Pld 1, W 1, D 0, L 0, GF 3, GA 0, Pts 3
+> ...
+
+with `Current-Season overall: 1 played, 0W 0D 1L, GF 1, GA 2, shots 6-13, on target 3-4,
+xG 1.91-2.02.` under the clubs that played, the venue splits agreeing, and the
+2026-27 result heading each form line with its xG joined. The Premier League's packet is
+unchanged — its 2025-26 rows were never in the flip's path, the delete being scoped to
+the Season being stored — and its table still says no result has been played, which is
+true until 2026-08-21.
+
+**The run still exited non-zero, for a new and self-healing reason.**
+`mmz4281/2627/E0.csv` does not exist yet: football-data.co.uk answers `HTTP 300 Multiple
+Choices` offering EC, E3, E2 and E1, because the Premier League has not kicked off. The
+English file appears once it has, so the daily fetch stays red until 2026-08-22 or so and
+then goes green with nothing done to it. Nothing is lost meanwhile: Competitions are
+walked in code order, PD is stored before PL is attempted, and each failure is collected
+rather than thrown.
+
+That the run threw a single `FootballDataSourceHttpError` rather than an `AggregateError`
+also settles the older alarm: **La Liga's Understat xG failure did not recur**, and the
+2026-27 xG joined to the form lines above is that fetch's own output. Understat's
+`getLeagueData/La_liga/2026` reads clean at source too — 380 dates, five results, all
+twenty names resolving.
+
+For tonight: the completing run's fetch will exit non-zero on E0 whatever else it does.
+Read the stored result for Club Atlético de Madrid v Málaga CF, not the exit code, before
+dispatching `score.yml`.
+
 ## 3 — The bench: the amended question against Gameweek 1's record
 
 **What to build:** The amendment's first contact with real Base Models happens off the
