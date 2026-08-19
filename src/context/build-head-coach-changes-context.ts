@@ -140,24 +140,24 @@ export function buildHeadCoachChangesContext(
   if (headCoachSource(options.competition, options.season) === undefined) {
     return undefined;
   }
-  const heading = "Head Coach changes this Season:";
-  // An empty partition is a fetch that did not land, not a league where nobody
-  // moved: a stated absence, and never a blocked Prediction (spec 0012).
-  if (options.changes.length === 0) {
-    return [
-      heading,
-      "",
-      "Head Coach change data status: no Head Coach change data stored for "
-      + "this Gameweek."
-    ].join("\n");
-  }
-  // A partition that landed and holds neither of these two clubs leaves the
-  // heading with nothing under it, and that is the section working: absence of
-  // the event is the fact (ADR-0044), and a sentence saying so would be a
-  // third state neither the ADR nor the section's own rule has.
+  // An empty partition renders as the heading with nothing under it, and so
+  // does a Season in which nobody has changed Head Coach yet. They are one
+  // sentence here on purpose.
+  //
+  // The Squad Change section says "no Squad Change data stored" over an empty
+  // partition, and that line was copied here first. It is wrong on this
+  // source: a transfer window's page always lists moves, so an empty Squad
+  // Change partition really is a fetch that did not land, while a
+  // managerial-changes table with no rows in it is an ordinary August in a
+  // league where every club kept its Head Coach. Distinguishing the two would
+  // need the store to record that a fetch ran, which it does not, and until
+  // it does the honest reading is ADR-0044's: absence of the event is the
+  // fact, for a club and for a league alike. Stating a Gap that is not one is
+  // the worse error of the two -- it is a sentence about our pipeline in a
+  // packet that is supposed to be about football.
   const changes = boundedByDeadline(options.changes, options.deadline);
   return [
-    heading,
+    "Head Coach changes this Season:",
     ...clubSection(options.homeTeam, changes),
     ...clubSection(options.awayTeam, changes)
   ].join("\n");

@@ -372,6 +372,37 @@ describe("the daily fetch", () => {
     }]);
   });
 
+  test("stores the upcoming Gameweek's Head Coach changes", async () => {
+    const responses = await sourceResponses();
+
+    const result = await runDailyFetch({
+      database: client,
+      season: "2026-27",
+      footballDataSeason: "2025-26",
+      footballDataOrgToken: null,
+      now: () => new Date("2026-08-21T17:00:00.000Z"),
+      http: async (url) => ({
+        status: 200,
+        body: responses.get(url) ?? ""
+      })
+    });
+
+    // The composition, not the fetch: that the daily job walks the listed
+    // Competitions into this source too, reports the Premier League's outcome
+    // in the shape the workflow reads, and leaves rows behind.
+    expect(result.headCoachChanges)
+      .toMatchObject({ stored: true, gameweek: 1, changes: 18 });
+    const arrival = await client.query(
+      `select head_coach, manner
+         from head_coach_changes
+        where season = '2026-27' and gw = 1
+          and club = 'Liverpool' and direction = 'in'`
+    );
+    expect(arrival.rows).toEqual([
+      { head_coach: "Andoni Iraola", manner: null }
+    ]);
+  });
+
   test("stores the upcoming Gameweek's Squad Changes while the section renders", async () => {
     const responses = await sourceResponses();
 

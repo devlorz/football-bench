@@ -135,16 +135,15 @@ describe("the Head Coach changes section", () => {
   });
 
   /**
-   * An empty partition is a fetch that did not land, not a league where
-   * nobody moved -- and the two must not read alike.
+   * A league where nobody has changed Head Coach yet renders as the heading
+   * and nothing under it, exactly as a Fixture between two unchanged clubs
+   * does. The Squad Change section's "no data stored" line was copied here
+   * first and is wrong on this source: a transfer window's page always lists
+   * moves, so an empty partition there really is a fetch that did not land,
+   * while a managerial-changes table with no rows is an ordinary August.
    */
-  test("states the absence of a stored partition", () => {
-    expect(build([])).toBe([
-      "Head Coach changes this Season:",
-      "",
-      "Head Coach change data status: no Head Coach change data stored for "
-      + "this Gameweek."
-    ].join("\n"));
+  test("says nothing at all over a Season nobody has changed", () => {
+    expect(build([])).toBe("Head Coach changes this Season:");
   });
 
   /**

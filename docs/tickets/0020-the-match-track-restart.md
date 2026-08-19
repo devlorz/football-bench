@@ -892,10 +892,12 @@ receive it.
 
 ### What the five boxes landed — recorded 2026-08-19
 
-**Box 1, the read the race turned on.** Both articles answered 200 on 2026-08-19 and both
-carry a `===Managerial changes===` table: nine rows for the Premier League, six for La
-Liga. Both are pinned as fixtures and both parse, which is the box — a source that failed
-its first read would have lost on the spot.
+**Box 1, the read the race turned on.** Both articles answered 200 to a live request on
+2026-08-19 and both carry a `===Managerial changes===` table: nine rows for the Premier
+League, six for La Liga. That request is process evidence and is not in the suite — what
+the suite holds is those bytes, pinned by digest, parsing into the events asserted below.
+The box asks whether the source could be read before the pipeline was committed to, and
+the answer is on this line rather than in a test.
 
 **The two tables share a heading and nothing else.** England quotes its attributes and
 spans one column; Spain writes `rowspan=2` bare and spans three at once, so a row can
@@ -997,3 +999,44 @@ first everywhere or nowhere.
 cases proved the shapes and only that a typed error was thrown. The message is pinned to
 the source prefix, and a moved shape is proven to reach *the fetch* as a failure naming
 the page, with the bytes archived and the already-read Gameweek keeping all eighteen rows.
+
+### The second review, and the one real bug in it — recorded 2026-08-19
+
+Reviewed against `430ed4f` alone, so five of its findings had already been answered by
+`cb2c1ea`: the function name, the source-named assertion, the fetch-seam refusal, the
+third rendered state, and box 5's claim. What follows is what was still live.
+
+**A fetch that lands on a table with no rows read as a fetch that never happened.** The
+worst of the two, and the section had it backwards. `changes.length === 0` rendered "no
+Head Coach change data stored for this Gameweek", copied from the Squad Change section
+where it is right: a transfer window's page always lists moves, so an empty partition
+there really is a fetch that did not land. A managerial-changes table with no rows in it
+is an ordinary August in a league where every club kept its Head Coach. Distinguishing the
+two would need the store to record that a fetch ran, which it does not — and until it
+does, ADR-0044's reading is the honest one for a league exactly as for a club: absence of
+the event is the fact. The line is gone. Stating a Gap that is not one is the worse of the
+two errors, because it is a sentence about this pipeline inside a packet that is supposed
+to be about football.
+
+**The club resolver had no rule where its two identities disagreed.** It returned the
+first club matching *either* the linked article or the displayed name, walking the roster
+once — so a row displaying `Real Madrid` over a link to Rayo Vallecano resolved to
+whichever of the two the roster listed first. Articles are now checked before any name,
+which is the rule that was always meant: the link decides, and the displayed name is only
+what is left when the link is somebody else's spelling of the same club. Covered by a
+misdirected row built from the real page.
+
+**The daily fetch's composition was unasserted.** `fetchHeadCoachChanges` had a suite;
+`runDailyFetch` walking the listed Competitions into it, reporting the Premier League's
+outcome in the shape the workflow reads, and leaving rows behind, had nothing. It has one
+now.
+
+**Held: the deadline bound is a day, not an instant.** A row dated the deadline's own day
+can only be in the store because the trigger let it in, and the trigger requires
+`observed_at` before the Lock instant — so the page had already published that date before
+the Lock, and an Entrant could have read it. Excluding the day would drop facts that were
+genuinely knowable to protect against a case the store already refuses.
+
+**Held: the duplicated request header, date helper and per-Competition try/catch.** Two
+copies each, no forced simultaneous edit, and the daily fetch's Premier-League-first shape
+is a contract with the workflow that reads its result. Extract at the third.

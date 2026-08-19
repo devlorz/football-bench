@@ -349,10 +349,10 @@ describe("predicting a Gameweek", () => {
       "",
       "Squad change data status: no Squad Change data stored for this Gameweek.",
       "",
+      // Nothing under the heading: a Gameweek with no stored Head Coach
+      // change and a Season in which nobody changed read alike, and the
+      // section says the second rather than reporting a Gap.
       "Head Coach changes this Season:",
-      "",
-      "Head Coach change data status: no Head Coach change data stored for "
-      + "this Gameweek.",
       "",
       "Return only JSON with fixture_id, probs (H, D, A), score (home, away), and rationale.",
       "The first character must be { and the last character must be }.",
@@ -462,7 +462,7 @@ describe("predicting a Gameweek", () => {
       track: "match",
       fixture_id: 1,
       body: context,
-      hash: "c8643e0c4d9501e40c8aa0fa56ddb48e38c7220b25a84c5844cb8a6591f02a79",
+      hash: "dc25a8843fb3b537edfbecff4f43e1cc9730aaf1097c016f434bd98df0c33845",
       model_id: "entrant/v1",
       probs: { H: 0.6003600360036003, D: 0.23982398239823982, A: 0.15981598159815982 },
       pred_home: 2,

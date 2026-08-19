@@ -227,6 +227,36 @@ describe("parsing a season article's Head Coach changes", () => {
     )).toThrow(/reads as 7 of 7 columns from 3 cells|columns/);
   });
 
+  /**
+   * The Team column holds nothing but the Competition's own clubs, so a cell
+   * is read by either identity the pin carries -- this article links
+   * `[[Real Madrid CF|Real Madrid]]` where the transfer list the map was
+   * built from links `[[Real Madrid]]`. The link still decides where the two
+   * disagree, or a row displaying one club over a link to another would
+   * resolve to whichever the roster listed first.
+   */
+  test("lets the link decide a row that displays another club's name",
+    async () => {
+      // The Team cell of the table's own Real Madrid row. The article names
+      // that club in three other tables, and the first of them is not this
+      // one.
+      const misdirected = (await spanishArticle()).replace(
+        "|[[Real Madrid CF|Real Madrid]]\n|{{flagicon|ESP}} [[Álvaro Arbeloa]]",
+        "|[[Rayo Vallecano|Real Madrid]]\n|{{flagicon|ESP}} [[Álvaro Arbeloa]]"
+      );
+
+      const changes = parseHeadCoachChanges(
+        "wikipedia:head-coach-changes:2026-27-la-liga",
+        misdirected,
+        pinnedClubs("PD", SPANISH_CLUBS)
+      );
+
+      expect(changesFor(changes, "Real Madrid CF")).toEqual([]);
+      expect(changesFor(changes, "Rayo Vallecano de Madrid")).toContainEqual(
+        ["in", "José Mourinho", null, "2026-06-13"]
+      );
+    });
+
   test("refuses a club the Competition's roster does not carry", async () => {
     // The Team cell of the table's own Fulham row, which the article names in
     // half a dozen other places this must not touch.

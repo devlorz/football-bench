@@ -227,8 +227,19 @@ function resolveClub(
   pinned: PinnedClubs
 ): string | undefined {
   const link = clubLink(cell);
-  for (const [club, { article, name }] of pinned) {
-    if (article === link.article || name === link.text) {
+  // Every article before any displayed name, and not the first of either to
+  // match. A cell displaying one club while linking another is the ambiguous
+  // case, and the link is what decides it -- a row reading `Real Madrid` over
+  // a link to Rayo Vallecano is about Rayo Vallecano. Taken in one pass, that
+  // row would resolve to whichever of the two the roster happened to list
+  // first, which is not a rule at all.
+  for (const [club, { article }] of pinned) {
+    if (article === link.article) {
+      return club;
+    }
+  }
+  for (const [club, { name }] of pinned) {
+    if (name === link.text) {
       return club;
     }
   }
