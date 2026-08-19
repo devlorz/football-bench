@@ -331,18 +331,92 @@ not skill.
 Fixtures serve it as well as six, and what the bench chiefly measures reads no result
 at all.)
 
-- [ ] Gameweek 1's snapshots are verified to cover what the bench replays before the
+- [x] Gameweek 1's snapshots are verified to cover what the bench replays before the
       bench is attempted — a dry run replays bytes and invents none.
-- [ ] The bench runs the amended builder over the same Fixtures at the same as-of instant
+- [x] The bench runs the amended builder over the same Fixtures at the same as-of instant
       and touches no production table: the context identity, the restarted scoring and
       ADR-0032's objection all forbid it, each independently.
-- [ ] What is read from it is what ADR-0026's dry opening read: Repair and format
+- [x] What is read from it is what ADR-0026's dry opening read: Repair and format
       failures, the incoherence rate under the new sentences, and whether the base-rates
       anchor is picked up at all — with RPS deltas at n=6 named as noise in the findings.
-- [ ] The findings are written into this ticket, and any sentence they move is moved in
+- [x] The findings are written into this ticket, and any sentence they move is moved in
       slice 2's tests before the flip.
-- [ ] The bench gates nothing: if the clock runs short, ship-or-freeze applies and the
+- [x] The bench gates nothing: if the clock runs short, ship-or-freeze applies and the
       flip proceeds without it, recorded as skipped.
+
+### The bench, run — recorded 2026-08-19
+
+The amended template was put to the real roster over La Liga's Gameweek 1 through
+`predict:preview`, dated six hours before that Gameweek's own Lock, against a throwaway
+cluster built from the archive. Fifty forecasts, ten Gaps, 342 seconds, 115,630 tokens in
+and 115,579 out. Nothing was written to the record: the preview's database is created for
+the run and dropped with it.
+
+**Two things had to move before the bench could be attempted**, both recorded in the
+commits rather than here: `previewGameweek` named `PL` as a literal and ran at the wall
+clock, so La Liga's Gameweek 1 would have answered after its own Lock and returned sixty
+deadline misses rather than fifty forecasts.
+
+**The archive covers the replay, with one hole.** `npm run dry-run` over PD Gameweek 1
+builds six contexts for exactly the six Fixtures the Lock owned and reports
+`Gaps: 60 (expected 60)` — the archive answers for every source the packet reads. Two
+conditions on that. It must run with `FOOTBALL_DATA_SEASON=2025-26`, because since this
+morning's flip the archive holds a `football_data:2026-27:E0` snapshot whose body is the
+300 page, and the replay fetcher answers 200 to everything it holds, so the HTML reaches
+the CSV parser; 2025-26 is also what production itself was running at Gameweek 1's Lock,
+so the rehearsal is the more faithful for it. And the rehearsed packet reads
+`xG unavailable` on every line: the prior Season's xG arrives through the one-off
+`fetch:xg-history` backfill rather than the daily fetch the rehearsal replays. **The
+bench therefore tested the base-rates line and the two instruction sentences, and did not
+test the xG line** — which the eye-read above covered over production instead.
+
+**Format failures are one seat's.** Gemini 3.1 Pro Preview failed the schema on four of
+its six Fixtures and reached the other two only after three Repairs each, which is the
+ceiling. Every other seat answered every Fixture with no Repair at all. The remaining six
+Gaps are timeouts and not format: DeepSeek V4 Pro three, Qwen3.8 Max two, Kimi K3 one.
+
+**The incoherence is not new, and its shape is.** Counted by the scorer's own rule — the
+likeliest outcome by `probs` against the outcome the Predicted Score implies — the bench
+runs 17 incoherent of 50 (34%) against the record's 18 of 60 (30%) under v1. At this n
+the difference is noise. What is not noise is what changed underneath it:
+
+| | v1, the record | The bench, amended |
+| --- | --- | --- |
+| Draw scorelines | 23 of 60 | 17 of 50 |
+| Draw ranked likeliest | 5 | **0** |
+| Highest draw probability anywhere | 0.380 | 0.300 |
+
+Every incoherent forecast in the bench is the same forecast: a 1-1 scoreline with Home
+ranked top. No seat ranked the draw first even once, where v1 did five times.
+**The amendment's own sentence and the Coherence metric now point in opposite
+directions** — `score is the exact final scoreline you judge most likely — not expected
+goals rounded` invites exactly the 1-1-under-a-Home-lean answer that Coherence counts as
+incoherent, and the sentence beside it naming RPS pushes the probabilities toward the
+distribution rather than toward the scoreline. This is a question about a metric, not a
+defect in a rendered sentence, so **no sentence moves and slice 2's tests stand**. It
+belongs to whoever reads Coherence after the restart, and is recorded here rather than
+acted on before the gate.
+
+**The base-rates anchor is picked up.** The roster's mean forecast moved toward the line
+the packet now states, on both halves that matter:
+
+| | Home | Draw | Away |
+| --- | --- | --- | --- |
+| Base rates, as rendered | 0.489 | 0.245 | 0.266 |
+| v1, the record | 0.434 | 0.281 | 0.286 |
+| The bench, amended | 0.458 | 0.259 | 0.283 |
+
+Total absolute distance from the stated rates falls from 0.111 to 0.062. The per-Fixture
+spread across seats is narrow throughout, 0.07 to 0.15 on the home probability. Six
+Fixtures and one run of each is far too little to call this an effect rather than a
+coincidence, and it is recorded as what it is: consistent with the anchor being read, and
+not proof of it.
+
+**RPS deltas are not reported at all.** At n=6 they would be noise, ADR-0026's dry
+opening said so, and the bench was not scored.
+
+The comparison is reproducible from `docs/queries/0020-slice-3-v1-coherence.sql`, which
+counts the record's sixty Predictions by the scorer's rule.
 
 ## 4 — The flip and the re-seat
 
