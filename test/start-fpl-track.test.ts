@@ -771,10 +771,10 @@ describe("starting the FPL track for all ten Entrants", () => {
 
       // The seats that left keep their rows. A withdrawal is a date, not a
       // deletion, because their attempts and contexts point at them.
-      const seated = await client.query<{ n: number }>(
+      const withdrawn = await client.query<{ n: number }>(
         "select count(*)::int as n from models where withdrawn_at is not null"
       );
-      expect(seated.rows[0]!.n).toBe(left.length);
+      expect(withdrawn.rows[0]!.n).toBe(left.length);
     });
 
   test("refuses a database in which nobody has left the track yet", async () => {

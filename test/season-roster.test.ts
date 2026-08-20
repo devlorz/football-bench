@@ -551,7 +551,9 @@ describe("entering the FPL track's Season Roster", () => {
           const left = FPL_WITHDRAWALS.find((row) => row.id === seat);
           return [
             seat,
-            left === undefined ? null : new Date(left.at).toISOString()
+            left === undefined
+              ? null
+              : new Date(left.withdrawnAt).toISOString()
           ];
         }))
       );

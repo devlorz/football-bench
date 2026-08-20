@@ -11,14 +11,17 @@ the first Lock, and until 2026-08-21T17:30Z there is no FPL Season to remove any
 Three runs, `FPL_CONCURRENCY` at its default of ten each time. Seven seats hold a legal
 opening on record; these three do not:
 
-| Seat | Run 1 (18:22Z) | Run 2 (18:53Z) | Run 3 (19:02Z) | Run 4, alone (19:23Z) |
+| Seat | Run 1 (18:22Z) | Run 2 (18:53Z) | Run 3 (19:02Z) | Run 4, alone (19:14Z) |
 |---|---|---|---|---|
 | `fpl/glm-5.3` | timeout, 300,008 ms | timeout, 300,013 ms | timeout, 600,011 ms | timeout, 600,017 ms |
 | `fpl/qwen3.8-max` | timeout, 300,005 ms | timeout, 300,005 ms | timeout, 599,994 ms | **legal, 358,189 ms** |
 | `fpl/minimax-m3` | length, 16,000 out | length, 32,000 out | length, 32,000 out | length, 32,000 out |
 
 Runs 1 and 2 ran a five-minute call window, runs 3 and 4 a ten-minute one; runs 1 to 3 went
-out ten seats wide and run 4 one seat at a time.
+out ten seats wide and run 4 one seat at a time. The times above are when each run began.
+`attempts.attempted_at` records when a call *landed*, which for run 4's sequential seats
+reads 19:23:59, 19:27:06 and 19:33:05 — GLM's ten minutes, then MiniMax's three, then
+Qwen's six, back to back and in that order.
 
 Two different failures. GLM and Qwen return nothing at all — no usage, no body, our own
 abort — through a five-minute window and then a ten-minute one, against a prompt the seats
@@ -115,14 +118,16 @@ this ADR sets at **seven**.
 
 ## Considered options
 
-- **`FPL_CONCURRENCY=1`, and it has not been tried.** All three runs went out ten-wide,
-  and `readScheduledFplJobConfig`'s own comment records that "every one of ticket 0023's
-  timeout Gaps came from a ten-wide burst and none from pre-flight, which calls one seat at
-  a time." That is the lever aimed exactly at GLM's and Qwen's failure and nobody has pulled
-  it; it costs thirty minutes against a decision that cannot be undone this Season. This ADR
-  is therefore written to be read narrowly: **if a one-at-a-time run opens GLM and Qwen, the
-  withdrawal is MiniMax's alone and the table above becomes the record of why the other two
-  looked broken.** Nothing here is a finding about a Base Model that was never asked
+- **`FPL_CONCURRENCY=1`, which this decision waited for and which was then run.** The
+  first three runs all went out ten-wide, and `readScheduledFplJobConfig`'s own comment
+  records that "every one of ticket 0023's timeout Gaps came from a ten-wide burst and none
+  from pre-flight, which calls one seat at a time" — the lever aimed exactly at GLM's and
+  Qwen's failure, costing half an hour against a decision that cannot be undone this Season.
+  It was pulled before anything was withdrawn, and the section above records what it
+  returned: Qwen opened, GLM did not, MiniMax was never a timeout to begin with. The
+  narrowing this ADR offered itself was honoured for the seat it applied to and did not
+  change the count, because Qwen leaves on wall clock rather than on the failure the burst
+  had been producing. Nothing here is a finding about a Base Model that was never asked
   politely.
 - **Raising the output ceiling again** was rejected by ticket 0026's own sentence, on two
   data points that show MiniMax spending whatever it is given rather than needing a

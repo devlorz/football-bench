@@ -25,8 +25,11 @@ which it is.
       and the run does not start until they say yes. Killing it mid-flight recovers
       nothing, so the decision happens before the first call.
 - [x] The opening runs with FPL concurrency at one, against the same Gameweek and the same
-      frozen Prompt Version as the three refusals. Run on 2026-08-20; the same three seats
-      produced no legal opening.
+      frozen Prompt Version as the three refusals. Run on 2026-08-20, and it did not repeat
+      them: **Qwen3.8 Max opened**, in 358,189 ms, having refused three times ten seats
+      wide. GLM 5.3 and MiniMax M3 produced no legal opening, as before. The withdrawal
+      list stayed at three all the same, because Qwen leaves on wall clock and not on the
+      failure this run was testing for — a different ground, recorded as one in ADR-0047.
 - [x] Each of the three failing seats has its outcome recorded — a legal opening, a
       timeout with its window, or a ceiling spent on reasoning with its token counts. Qwen
       opened at 358,189 ms called alone; GLM timed out at the full 600,017 ms; MiniMax spent

@@ -41,7 +41,8 @@ export const SEASON_ROSTER_SIZE = 10;
  * about one track's row.
  */
 /**
- * `at` is a UTC instant rather than a calendar date, because `withdrawn_at` is
+ * `withdrawnAt` is a UTC instant rather than a calendar date, because the
+ * column is
  * a `timestamptz`: a bare date is read in whatever timezone the session holds,
  * and this record dated three departures to the 19th when written from Bangkok.
  * The instant is when the fourth opening's last attempt landed, which is when
@@ -49,41 +50,31 @@ export const SEASON_ROSTER_SIZE = 10;
  */
 export const FPL_WITHDRAWALS: readonly {
   id: string;
-  at: string;
+  withdrawnAt: string;
   ground: string;
 }[] = [
   {
     id: "fpl/glm-5.3",
-    at: "2026-08-20T19:33:06Z",
+    withdrawnAt: "2026-08-20T19:33:06Z",
     ground: "No legal opening in four attempts, and never measured: its four "
       + "figures are 300,008ms, 300,013ms, 600,011ms and 600,017ms, every one "
       + "of them the call window it was given rather than its own time."
   },
   {
     id: "fpl/minimax-m3",
-    at: "2026-08-20T19:33:06Z",
+    withdrawnAt: "2026-08-20T19:33:06Z",
     ground: "No legal opening in four attempts. It answered inside the clock "
       + "every time and spent the whole output ceiling on reasoning — 16,000 "
       + "of 16,000, then 32,000 of 32,000 twice — returning no content."
   },
   {
     id: "fpl/qwen3.8-max",
-    at: "2026-08-20T19:33:06Z",
+    withdrawnAt: "2026-08-20T19:33:06Z",
     ground: "Opened legally in 358,189ms when called alone, after three "
       + "refusals ten seats wide. Withdrawn on wall clock rather than on "
       + "capability: six minutes for one seat's opening is too much of a Lock."
   }
 ];
-
-/**
- * What the FPL track opens with: the Season Roster less the seats that left it.
- *
- * Derived rather than written, so that the day a fourth seat is withdrawn — or
- * a third turns out to have been withdrawn on a measurement that moved — the
- * guard cannot be left describing a roster that does not exist.
- */
-export const FPL_ROSTER_SIZE =
-  SEASON_ROSTER_SIZE - FPL_WITHDRAWALS.length;
 
 /**
  * What a `models` row is for, as its check constraint admits (migrations 0001
@@ -250,6 +241,21 @@ export const SEASON_ROSTER: readonly Entrant[] = [
     baseModelClass: "Open-weight"
   }
 ];
+
+/**
+ * What the FPL track opens with: the Season Roster less the seats that left it.
+ *
+ * Derived rather than written, so that the day a fourth seat is withdrawn — or
+ * a third turns out to have been withdrawn on a measurement that moved — the
+ * guard cannot be left describing a roster that does not exist.
+ *
+ * From `SEASON_ROSTER` itself and not from `SEASON_ROSTER_SIZE`: the FPL door
+ * seats one row per entry of that list, so the list's length is what the track
+ * actually holds. The constant is a separate literal, and a roster that gained
+ * a Base Model without it would leave this guard expecting a seat short.
+ */
+export const FPL_ROSTER_SIZE =
+  SEASON_ROSTER.length - FPL_WITHDRAWALS.length;
 
 /**
  * The prefix a Competition's seat ids take, read off the Prompt Version its
@@ -629,11 +635,11 @@ export async function enterFplRoster(
   // `is null` in the predicate is what makes a second run a no-op instead of a
   // re-dating: the date on record is when the seat left, not when the door last
   // ran.
-  for (const { id, at } of FPL_WITHDRAWALS) {
+  for (const { id, withdrawnAt } of FPL_WITHDRAWALS) {
     await database.query(
       `update models set withdrawn_at = $2::timestamptz
         where id = $1 and prompt_version = $3 and withdrawn_at is null`,
-      [id, at, FPL_PROMPT_VERSION]
+      [id, withdrawnAt, FPL_PROMPT_VERSION]
     );
   }
 

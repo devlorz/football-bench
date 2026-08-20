@@ -7,12 +7,19 @@ Entrant's Squad or none, so none of these runs stored a Manager State.
 
 ## The four runs
 
-| Run | Started | Call window | Concurrency | Seats called |
+| Run | First call landed | Call window | Concurrency | Seats called |
 | --- | --- | ---: | ---: | ---: |
 | 1 | 18:22Z | 300,000 ms | 10 | 10 |
 | 2 | 18:53Z | 300,000 ms | 10 | 4 |
 | 3 | 19:02Z | 600,000 ms | 10 | 4 |
 | 4 | 19:23Z | 600,000 ms | **1** | 3 |
+
+The column is when each run's *first* call landed, not when the run began:
+`attempts.attempted_at` is stamped the moment a response arrives. It matters for run 4
+alone, where the seats went out one after another — GLM's abort at 19:23:59 after ten
+minutes, MiniMax at 19:27:06 after three, Qwen at 19:33:05 after six. That run started
+around 19:14Z and the list stopped changing at 19:33:05.573Z, which is the instant the
+withdrawals are dated to.
 
 Runs 2 to 4 called fewer seats because a seat with a legal opening on record is replayed
 from `attempts.raw_response` rather than asked again (ADR-0025). Six seats opened in run 1
