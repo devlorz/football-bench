@@ -24,7 +24,7 @@ import {
   loadStartingGameweek,
   storeManagerState
 } from "./manager-state-store.js";
-import { SEASON_ROSTER_SIZE } from "../season-roster.js";
+import { FPL_ROSTER_SIZE } from "../season-roster.js";
 import { eachBounded } from "../bounded-concurrency.js";
 
 type Database = Pick<Client, "query">;
@@ -39,6 +39,19 @@ export interface StartFplTrackOptions {
   apiKey: string;
   /** How long one Entrant call may take (spec 0010). */
   entrantCallTimeoutMs: number;
+  /**
+   * How many seats the opening expects to find, defaulting to the FPL track's
+   * Season Roster.
+   *
+   * An option because the rehearsal seats ten *behavioural* seats — idle,
+   * trader, wildcard, free hit, bench boost, triple captain, repaired, rolled
+   * over, three at the back, faller — under this same Prompt Version in a
+   * throwaway database and then calls this function. A rehearsal seat is a
+   * behaviour, not a Base Model, so a guard hard-wired to the Season's number
+   * would either refuse the rehearsal or cost it three of the behaviours it
+   * exists to prove (ADR-0047).
+   */
+  expectedSeats?: number;
   http: HttpFetcher;
   now: () => Date;
 }
@@ -155,6 +168,7 @@ export async function startFplTrack({
   concurrency,
   apiKey,
   entrantCallTimeoutMs,
+  expectedSeats = FPL_ROSTER_SIZE,
   http,
   now
 }: StartFplTrackOptions): Promise<FplTrackOpening> {
@@ -177,9 +191,14 @@ export async function startFplTrack({
     await loadLockedGameweek(database, season, gameweek);
 
   const entrantResult = await database.query<GameweekCaller>(
+    // `withdrawn_at is null` is the FPL track's roster (ADR-0047): a seat that
+    // left keeps its row, its attempts and its contexts, and is not asked to
+    // open a Squad. The match track's reads carry no such filter, because the
+    // same Base Model holds a different row there and did not leave it.
     `select id, base_model, provider, quantization, role
        from models
       where role = 'entrant' and prompt_version = $1
+        and withdrawn_at is null
       order by id`,
     [FPL_PROMPT_VERSION]
   );
@@ -199,15 +218,15 @@ export async function startFplTrack({
       );
     }
   }
-  // And there are as many of them as the Season has Entrants. `missing` is
-  // measured against the roster that was queried, so a roster of the wrong
-  // size reports nobody missing and starts a Season that is not the one
-  // ADR-0034 describes — with no way back, because `manager_states` is
+  // And there are as many of them as this track expects. `missing` is measured
+  // against the roster that was queried, so a roster of the wrong size reports
+  // nobody missing and starts a Season that is not the one ADR-0034 and
+  // ADR-0047 describe — with no way back, because `manager_states` is
   // insert-only. Both questions are asked before the first call, so a roster
   // problem is never discovered next to a Lock.
-  if (entrants.length !== SEASON_ROSTER_SIZE) {
+  if (entrants.length !== expectedSeats) {
     throw new Error(
-      `the FPL track needs ${SEASON_ROSTER_SIZE} seats at Prompt Version `
+      `the FPL track needs ${expectedSeats} seats at Prompt Version `
       + `${FPL_PROMPT_VERSION}, but ${entrants.length} are configured`
     );
   }

@@ -1,0 +1,25 @@
+-- When a seat leaves a track's Season Roster, and null for every seat that
+-- stands (ADR-0047).
+--
+-- A removal that must not delete. The only removal this project had performed
+-- before deleted the rows, and ADR-0034 could delete because "no stored fact
+-- yet references" them. These rows are referenced: `attempts` and `contexts`
+-- both carry `model_id references models(id)`, and both hold the calls the
+-- withdrawal decision is read from -- four refusals of an opening, with the
+-- windows and the token counts that say which seat failed how. A delete would
+-- be refused by those keys or, forced through, would destroy the evidence for
+-- the decision that did the deleting.
+--
+-- So the row stays, keeps its id, its Base Model, its attempts and its
+-- contexts, and gains the date it left. "It left" and "it was never here"
+-- become different facts, which is what a reader of a Season path needs.
+--
+-- Nullable with no default and no backfill: a null is a seat that stands, and
+-- there is no earlier departure to date. The FPL track's roster reads filter on
+-- it; the match track's do not, because a track's withdrawal is a fact about
+-- that track's row and one Base Model holds a different row per track.
+--
+-- No constraint tying it to `role = 'entrant'`. It means "this seat left its
+-- track's Season Roster", a Reference Line has no roster to leave, and a guard
+-- for a state nobody can reach is one nothing has seen bite.
+alter table models add column withdrawn_at timestamptz;

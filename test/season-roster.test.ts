@@ -7,6 +7,7 @@ import {
 } from "../src/predictions/openrouter-entrant.js";
 import {
   enterActiveCompetitionRosters, enterFplRoster, enterSeasonRoster,
+  FPL_ROSTER_SIZE, FPL_WITHDRAWALS,
   SEASON_ROSTER, SEASON_ROSTER_SIZE, seatPrefixOf, seatSlug
 } from "../src/season-roster.js";
 import {
@@ -27,6 +28,7 @@ interface ModelRow {
   role: string;
   config: Record<string, unknown>;
   created_at: Date;
+  withdrawn_at: Date | null;
 }
 
 describe("entering the Season Roster", () => {
@@ -528,5 +530,104 @@ describe("entering the FPL track's Season Roster", () => {
         + `closed at the Season's first Lock: base_model z-ai/glm-5.2 -> `
         + `${seat?.baseModel} (ADR-0034)`
       );
+    });
+
+  const withdrawalOf = async (): Promise<Record<string, string | null>> =>
+    Object.fromEntries((await fplSeats()).map((row) => [
+      row.id,
+      row.withdrawn_at === null ? null : row.withdrawn_at.toISOString()
+    ]));
+
+  test("seats every Base Model and dates the ones that left the track",
+    async () => {
+      await enterFplRoster(client, SEASON);
+
+      // Every seat of the Season Roster is still a row: a withdrawal keeps the
+      // Base Model in the record and takes it off the roster (ADR-0047).
+      expect((await fplSeats())).toHaveLength(SEASON_ROSTER_SIZE);
+      expect(await withdrawalOf()).toEqual(
+        Object.fromEntries(SEASON_ROSTER.map(({ id }) => {
+          const seat = `fpl/${seatSlug(id)}`;
+          const left = FPL_WITHDRAWALS.find((row) => row.id === seat);
+          return [
+            seat,
+            left === undefined ? null : new Date(left.at).toISOString()
+          ];
+        }))
+      );
+      expect(
+        (await fplSeats()).filter((row) => row.withdrawn_at === null)
+      ).toHaveLength(FPL_ROSTER_SIZE);
+    });
+
+  test("leaves a withdrawal where it is when the door runs again", async () => {
+    await enterFplRoster(client, SEASON);
+    const dated = await withdrawalOf();
+    // A date that moved would say the seat left the day the door last ran,
+    // which is a different fact from the one the record is for.
+    await client.query(
+      "update models set withdrawn_at = $1 where id = $2",
+      ["2026-08-19T00:00:00Z", FPL_WITHDRAWALS[0]?.id ?? ""]
+    );
+
+    await enterFplRoster(client, SEASON);
+
+    expect(await withdrawalOf()).toEqual({
+      ...dated,
+      [FPL_WITHDRAWALS[0]?.id ?? ""]: "2026-08-19T00:00:00.000Z"
+    });
+  });
+
+  test("leaves a withdrawn seat's attempts and contexts where they are",
+    async () => {
+      // The foreign keys are the whole reason this is a date and not a delete:
+      // `attempts` and `contexts` hold the calls the withdrawal is read from.
+      const id = FPL_WITHDRAWALS[0]?.id ?? "";
+      await enterFplRoster(client, SEASON);
+      await client.query(
+        `insert into gameweeks (competition, season, gw, deadline_at)
+         values ('PL', $1, 1, '2026-08-21T17:30:00Z')`,
+        [SEASON]
+      );
+      await client.query(
+        `insert into attempts (
+           model_id, season, gw, track, trigger, attempt_no, ok, attempted_at
+         ) values ($1, $2, 1, 'fpl', 'main', 0, false, now())`,
+        [id, SEASON]
+      );
+      await client.query(
+        `insert into contexts (season, gw, track, model_id, hash, body)
+         values ($1, 1, 'fpl', $2, 'hash', 'body')`,
+        [SEASON, id]
+      );
+
+      await enterFplRoster(client, SEASON);
+
+      expect((await client.query(
+        "select count(*)::int as n from attempts where model_id = $1", [id]
+      )).rows[0].n).toBe(1);
+      expect((await client.query(
+        "select count(*)::int as n from contexts where model_id = $1", [id]
+      )).rows[0].n).toBe(1);
+      expect((await client.query(
+        "select count(*)::int as n from models where id = $1", [id]
+      )).rows[0].n).toBe(1);
+    });
+
+  test("leaves every match seat standing, withdrawn Base Models included",
+    async () => {
+      // A withdrawal is a fact about one track's row. The same Base Models
+      // predict Fixtures on the match track and did not leave it (ADR-0047).
+      await enterSeasonRoster(client, "PL", SEASON);
+      await enterFplRoster(client, SEASON);
+
+      const matchSeats = await client.query<ModelRow>(
+        `select * from models
+          where role = 'entrant' and prompt_version = $1 order by id`,
+        [MATCH_PROMPT_VERSION]
+      );
+      expect(matchSeats.rows).toHaveLength(SEASON_ROSTER_SIZE);
+      expect(matchSeats.rows.every((row) => row.withdrawn_at === null))
+        .toBe(true);
     });
 });

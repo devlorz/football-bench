@@ -161,6 +161,8 @@ export async function runFplRehearsal({
     season,
     gameweek: OPENING_GAMEWEEK,
     concurrency,
+    // The rehearsal's behaviours, not the Season's Base Models (ADR-0047).
+    expectedSeats: SEATS.length,
     apiKey: "rehearsal",
     entrantCallTimeoutMs: DEFAULT_HTTP_TIMEOUT_MS,
     http: createRehearsalFetcher({

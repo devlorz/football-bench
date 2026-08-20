@@ -3,7 +3,7 @@ import { DEFAULT_HTTP_TIMEOUT_MS } from "../http.js";
 import {
   DEFAULT_ENTRANT_CALL_TIMEOUT_MS
 } from "../predictions/openrouter-entrant.js";
-import { SEASON_ROSTER_SIZE } from "../season-roster.js";
+import { FPL_ROSTER_SIZE, SEASON_ROSTER_SIZE } from "../season-roster.js";
 import {
   parseAttemptTrigger,
   type AttemptTrigger
@@ -333,7 +333,10 @@ export function readScheduledFplJobConfig(
   return readScheduledJobConfig(
     environment,
     "FPL_CONCURRENCY",
-    SEASON_ROSTER_SIZE,
+    // The FPL track's own size, not the match track's (ADR-0047). The default
+    // means "the whole track at once", and since three seats left, ten is not
+    // what the whole track is.
+    FPL_ROSTER_SIZE,
     DEFAULT_HTTP_TIMEOUT_MS
   );
 }

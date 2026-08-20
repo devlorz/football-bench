@@ -8,7 +8,7 @@ import {
   parseFplTrackContextPool
 } from "../src/context/build-fpl-track-context.js";
 import { GAMEWEEK_RULES } from "../src/fpl/apply-gameweek-action.js";
-import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
+import { FPL_ROSTER_SIZE } from "../src/season-roster.js";
 import { DEFAULT_HTTP_TIMEOUT_MS, type HttpFetcher } from "../src/http.js";
 import { FPL_POOL, lockPool } from "./fpl-pool-fixture.js";
 import { BASE_MODELS, seatId } from "./fpl-seat-fixture.js";
@@ -186,6 +186,7 @@ describe("starting the FPL track for all ten Entrants", () => {
     perEntrant = {},
     beforeCall,
     entrantCallTimeoutMs = DEFAULT_HTTP_TIMEOUT_MS,
+    expectedSeats = BASE_MODELS.length,
     http,
     now
   }: {
@@ -196,6 +197,7 @@ describe("starting the FPL track for all ten Entrants", () => {
     perEntrant?: Readonly<Record<string, string[]>>;
     beforeCall?: () => Promise<void>;
     entrantCallTimeoutMs?: number;
+    expectedSeats?: number | null;
     http?: HttpFetcher;
     now?: () => Date;
   } = {}): Promise<{
@@ -217,7 +219,11 @@ describe("starting the FPL track for all ten Entrants", () => {
       apiKey: "test-key",
       now: now ?? (() => new Date(at)),
       http: http ?? scriptedHttp,
-      entrantCallTimeoutMs
+      entrantCallTimeoutMs,
+      // This suite seats its own Base Models rather than the Season's, so it
+      // states its own expected size for the same reason the rehearsal does
+      // (ADR-0047). The default is covered by its own case below.
+      ...expectedSeats === null ? {} : { expectedSeats }
     });
     return { opening, calls: script.calls };
   }
@@ -740,10 +746,51 @@ describe("starting the FPL track for all ten Entrants", () => {
     );
   });
 
+  test("asks the seats that stand and not the ones that left the track",
+    async () => {
+      // The withdrawal filter and the default guard together (ADR-0047): three
+      // seats dated, seven standing, and the opening proceeds against the FPL
+      // track's own expected size without being told what it is.
+      const left = BASE_MODELS.slice(0, BASE_MODELS.length - FPL_ROSTER_SIZE);
+      await client.query(
+        "update models set withdrawn_at = now() where id = any($1)",
+        [left.map((baseModel) => seatId(baseModel))]
+      );
+
+      const { opening, calls } = await open({ expectedSeats: null });
+
+      expect(opening).toEqual({ gameweek: 1, missing: [] });
+      expect(calls).toHaveLength(FPL_ROSTER_SIZE);
+      const states = await client.query<{ model_id: string }>(
+        "select model_id from manager_states order by model_id"
+      );
+      expect(states.rows.map(({ model_id: id }) => id)).toEqual(
+        BASE_MODELS.slice(BASE_MODELS.length - FPL_ROSTER_SIZE)
+          .map((baseModel) => seatId(baseModel)).sort()
+      );
+
+      // The seats that left keep their rows. A withdrawal is a date, not a
+      // deletion, because their attempts and contexts point at them.
+      const seated = await client.query<{ n: number }>(
+        "select count(*)::int as n from models where withdrawn_at is not null"
+      );
+      expect(seated.rows[0]!.n).toBe(left.length);
+    });
+
+  test("refuses a database in which nobody has left the track yet", async () => {
+    // The state production is in until the entry door runs: every seat still
+    // standing, which is a roster of ten where the Season's is seven. The
+    // refusal names both numbers so the operator reads what to fix.
+    await expect(open({ expectedSeats: null })).rejects.toThrow(
+      `the FPL track needs ${FPL_ROSTER_SIZE} seats at Prompt Version `
+      + `${FPL_PROMPT_VERSION}, but ${BASE_MODELS.length} are configured`
+    );
+  });
+
   test.for([
     { what: "no seats at all", seats: 0 },
-    { what: "one seat short", seats: 9 },
-    { what: "one seat too many", seats: 11 }
+    { what: "one seat short", seats: BASE_MODELS.length - 1 },
+    { what: "one seat too many", seats: BASE_MODELS.length + 1 }
   ])("refuses to start a roster of $what", async ({ seats }) => {
     // `missing` is measured against the roster that was queried, so a roster
     // of the wrong size reports nobody missing and starts a Season that is not
@@ -767,7 +814,7 @@ describe("starting the FPL track for all ten Entrants", () => {
         return { status: 200, body: openRouterBody(LEGAL_ACTION) };
       }
     })).rejects.toThrow(
-      `the FPL track needs ${SEASON_ROSTER_SIZE} seats at Prompt Version `
+      `the FPL track needs ${BASE_MODELS.length} seats at Prompt Version `
       + `${FPL_PROMPT_VERSION}, but ${seats} are configured`
     );
 

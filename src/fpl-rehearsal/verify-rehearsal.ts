@@ -12,7 +12,6 @@ import {
   VIOLATION_PROFILE_SEASON_TO_DATE_METRIC
 } from "../fpl/demonstration-record.js";
 import { emptyRepairDistribution } from "../repairs.js";
-import { SEASON_ROSTER_SIZE } from "../season-roster.js";
 import type { FplRehearsalReport } from "./rehearsal-report.js";
 import {
   OPENING_GAMEWEEK,
@@ -48,12 +47,16 @@ export function verifyFplRehearsal(
 ): FplRehearsalVerdict {
   const playedGameweeks = REHEARSED_GAMEWEEKS.length;
   const expected: FplRehearsalExpectation = {
-    entrants: SEASON_ROSTER_SIZE,
+    // The rehearsal's own seat script, not the Season Roster (ADR-0047). A
+    // rehearsal seat is a behaviour — idle, trader, wildcard and the rest — and
+    // the two numbers were only ever equal by accident; the FPL track losing
+    // three Base Models is what made the accident visible.
+    entrants: SEATS.length,
     gameweeks: playedGameweeks,
     // Every measure the record is made of, for every Entrant, for every
     // Gameweek that settled.
     metricRows:
-      SEASON_ROSTER_SIZE * playedGameweeks * FPL_DEMONSTRATION_METRICS.length
+      SEATS.length * playedGameweeks * FPL_DEMONSTRATION_METRICS.length
   };
   const observed: FplRehearsalExpectation = {
     entrants: report.entrants.length,

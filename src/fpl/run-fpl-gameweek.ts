@@ -94,9 +94,15 @@ export async function runFplGameweek({
 
   // Who is on the Season's path: whoever holds a Manager State at the Gameweek
   // the track started at. Read from the opening rather than from `models`,
-  // because the opening committed all ten or none and is therefore the record
-  // of which ten. A seat added to `models` afterwards never opened, has
+  // because the opening committed every seat or none and is therefore the
+  // record of which. A seat added to `models` afterwards never opened, has
   // nothing standing, and is not one of them.
+  //
+  // Deliberately carries no `withdrawn_at` filter, alone among the FPL reads
+  // (ADR-0047). A withdrawn seat never opened, so it is not in this list
+  // already: filtering here would state the same fact twice, in a second place
+  // then free to disagree with the first. The structural check that requires
+  // the filter everywhere else names this read as its one exception.
   const roster = await loadStartedRoster(database, season, startedAt);
   const entrantResult = await database.query<GameweekCaller>(
     `select id, base_model, provider, quantization, role

@@ -57,7 +57,8 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0030_set_piece_and_penalty_duties_join_the_pool.sql",
       "0031_the_action_carries_a_required_rationale_back.sql",
       "0032_head_coach_changes.sql",
-      "0033_the_head_coach_in_post.sql"
+      "0033_the_head_coach_in_post.sql",
+      "0034_a_seat_leaves_a_track_without_leaving_the_record.sql"
     ]);
     // The record the copy carried, not a shape asserted about the schema: an
     // operator reading a rehearsal needs to see that it ran over rows.
@@ -126,7 +127,8 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0030_set_piece_and_penalty_duties_join_the_pool.sql",
       "0031_the_action_carries_a_required_rationale_back.sql",
       "0032_head_coach_changes.sql",
-      "0033_the_head_coach_in_post.sql"
+      "0033_the_head_coach_in_post.sql",
+      "0034_a_seat_leaves_a_track_without_leaving_the_record.sql"
     ]);
     expect(rehearsal.rows).toMatchObject({ gameweeks: 1, squad_changes: 1 });
   });
@@ -155,7 +157,10 @@ describe("rehearsing a migration against a copy of the record", () => {
       connect
     });
 
-    expect(rehearsal.applied).toEqual(["0033_the_head_coach_in_post.sql"]);
+    expect(rehearsal.applied).toEqual([
+      "0033_the_head_coach_in_post.sql",
+      "0034_a_seat_leaves_a_track_without_leaving_the_record.sql"
+    ]);
     // Compared rather than skipped, and back whole: `verifyRelabelledAsPl`
     // raises, so this row reaching the count is the comparison having run over
     // it. The younger store is empty and skipped, as it must be.

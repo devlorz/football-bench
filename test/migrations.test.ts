@@ -133,6 +133,28 @@ describe("applying migrations", () => {
     expect(unprotected.rows).toEqual([]);
   });
 
+  test("gives a seat a nullable departure with no default", async () => {
+    // A withdrawal is a date on the row, not a deletion (ADR-0047), and the
+    // absence of a default is what makes null mean "this seat stands" rather
+    // than "nobody filled this in".
+    await applyMigrations(client);
+
+    const column = await client.query<{
+      is_nullable: string;
+      column_default: string | null;
+      data_type: string;
+    }>(
+      `select is_nullable, column_default, data_type
+         from information_schema.columns
+        where table_name = 'models' and column_name = 'withdrawn_at'`
+    );
+    expect(column.rows).toEqual([{
+      is_nullable: "YES",
+      column_default: null,
+      data_type: "timestamp with time zone"
+    }]);
+  });
+
   test("refuses an FPL context that cannot name the Entrant it was built for", async () => {
     await applyRealMigrationsThrough(client, "0012_record_gameweek_hits.sql");
 
@@ -215,7 +237,8 @@ describe("applying migrations", () => {
       "0030_set_piece_and_penalty_duties_join_the_pool.sql",
       "0031_the_action_carries_a_required_rationale_back.sql",
       "0032_head_coach_changes.sql",
-      "0033_the_head_coach_in_post.sql"
+      "0033_the_head_coach_in_post.sql",
+      "0034_a_seat_leaves_a_track_without_leaving_the_record.sql"
     ]);
 
     // Relabelled, not rewritten: every row of every rekeyed table comes back
@@ -300,7 +323,8 @@ describe("applying migrations", () => {
       "0030_set_piece_and_penalty_duties_join_the_pool.sql",
       "0031_the_action_carries_a_required_rationale_back.sql",
       "0032_head_coach_changes.sql",
-      "0033_the_head_coach_in_post.sql"
+      "0033_the_head_coach_in_post.sql",
+      "0034_a_seat_leaves_a_track_without_leaving_the_record.sql"
     ]);
     const backfill = await client.query<{
       observed_at: Date;

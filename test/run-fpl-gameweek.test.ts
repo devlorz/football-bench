@@ -4,7 +4,6 @@ import { insertExhibition, resetSchema } from "./schema-fixture.js";
 import { runFplGameweek } from "../src/fpl/run-fpl-gameweek.js";
 import { startFplTrack } from "../src/fpl/start-fpl-track.js";
 import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
-import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
 import { DEFAULT_HTTP_TIMEOUT_MS, type HttpFetcher } from "../src/http.js";
 import { FPL_POOL, lockPool } from "./fpl-pool-fixture.js";
 import { BASE_MODELS, seatId } from "./fpl-seat-fixture.js";
@@ -161,6 +160,9 @@ describe("running a Gameweek for the whole FPL roster", () => {
       gameweek,
       concurrency: 3,
       apiKey: "test-key",
+      // This suite seats its own Base Models rather than the Season's, so it
+      // states its own expected size (ADR-0047).
+      expectedSeats: BASE_MODELS.length,
       entrantCallTimeoutMs: DEFAULT_HTTP_TIMEOUT_MS,
       now: () => new Date("2026-08-21T11:30:00Z"),
       http: script.http
@@ -270,7 +272,7 @@ describe("running a Gameweek for the whole FPL roster", () => {
          (select count(*)::int from attempts where gw = 2) as attempts`
     );
     expect(rows.rows).toEqual([
-      { states: SEASON_ROSTER_SIZE, attempts: SEASON_ROSTER_SIZE }
+      { states: BASE_MODELS.length, attempts: BASE_MODELS.length }
     ]);
   });
 
@@ -329,7 +331,7 @@ describe("running a Gameweek for the whole FPL roster", () => {
         group by error_kind`
     );
     expect(late.rows)
-      .toEqual([{ error_kind: "deadline", count: SEASON_ROSTER_SIZE }]);
+      .toEqual([{ error_kind: "deadline", count: BASE_MODELS.length }]);
   });
 
   test("carries a silent Entrant forward without back-filling its Gameweek", async () => {

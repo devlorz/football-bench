@@ -10,6 +10,7 @@ import { runDailyFetch } from "../src/fetch/daily-fetch.js";
 import { readFplRehearsalReport } from "../src/fpl-rehearsal/rehearsal-report.js";
 import { runFplGameweek } from "../src/fpl/run-fpl-gameweek.js";
 import { startFplTrack } from "../src/fpl/start-fpl-track.js";
+import { SEATS } from "../src/fpl-rehearsal/rehearsal-seats.js";
 import { createRehearsalFetcher } from "../src/fpl-rehearsal/rehearsal-fetcher.js";
 import { rehearsedBootstrap } from "../src/fpl-rehearsal/rehearsed-bootstrap.js";
 import { rehearsedPoints } from "../src/fpl-rehearsal/rehearsed-points.js";
@@ -149,6 +150,8 @@ describe("rehearsing the FPL track over archived Gameweeks", () => {
       gameweek: 1,
       concurrency: 3,
       apiKey: "rehearsal",
+      // Ten behavioural seats, not the Season's Base Models (ADR-0047).
+      expectedSeats: SEATS.length,
       entrantCallTimeoutMs: DEFAULT_HTTP_TIMEOUT_MS,
       http: createRehearsalFetcher({ season: SEASON, snapshots, answer }),
       now: () => new Date("2026-08-21T11:30:00Z")
@@ -195,6 +198,8 @@ describe("rehearsing the FPL track over archived Gameweeks", () => {
       gameweek: 1,
       concurrency: 3,
       apiKey: "rehearsal",
+      // Ten behavioural seats, not the Season's Base Models (ADR-0047).
+      expectedSeats: SEATS.length,
       entrantCallTimeoutMs: DEFAULT_HTTP_TIMEOUT_MS,
       http: createRehearsalFetcher({
         season: SEASON,
@@ -223,6 +228,8 @@ describe("rehearsing the FPL track over archived Gameweeks", () => {
       gameweek: 1,
       concurrency: 3,
       apiKey: "rehearsal",
+      // Ten behavioural seats, not the Season's Base Models (ADR-0047).
+      expectedSeats: SEATS.length,
       entrantCallTimeoutMs: DEFAULT_HTTP_TIMEOUT_MS,
       http: createRehearsalFetcher({
         season: SEASON,

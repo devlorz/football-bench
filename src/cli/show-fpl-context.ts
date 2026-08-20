@@ -31,8 +31,12 @@ try {
     await loadLockedGameweek(database, config.season, config.gameweek);
 
   const seats = await database.query<{ id: string }>(
+    // The same roster the run will call, withdrawal filter included
+    // (ADR-0047): a free look that showed a seat the Lock will not ask is a
+    // free look at the wrong thing.
     `select id from models
       where role = 'entrant' and prompt_version = $1
+        and withdrawn_at is null
       order by id`,
     [FPL_PROMPT_VERSION]
   );

@@ -17,8 +17,73 @@ type Database = Pick<PgClient, "query">;
  * nine comparisons against the leader, and the FPL track's demonstration of
  * one season path per Base Model. A track that quietly started nine would
  * produce all of those numbers and none of them would mean what they say.
+ *
+ * The match track's size, since ADR-0047. It was both tracks' until three Base
+ * Models left the FPL track on the evening before the Season's first Lock; the
+ * FPL track's own is `FPL_ROSTER_SIZE` below, and a new call site has to say
+ * which of the two it means rather than inheriting the old assumption that one
+ * number served the record.
  */
 export const SEASON_ROSTER_SIZE = 10;
+
+/**
+ * The seats that left the FPL track's Season Roster, and the whole of where
+ * their ids appear: the entry door stamps from this list, the opening's guard
+ * is sized from it, and the tests read it rather than restating it.
+ *
+ * Each carries the ground it left on, because they are not the same ground and
+ * a list that flattened them would be a false finding about a Base Model
+ * (ADR-0047). Two of these seats never produced a legal opening in four
+ * attempts. The third produced one and was judged too slow to carry, which is a
+ * decision about wall clock and not about what the Base Model can do.
+ *
+ * The match track keeps all ten of these Base Models. A withdrawal is a fact
+ * about one track's row.
+ */
+/**
+ * `at` is a UTC instant rather than a calendar date, because `withdrawn_at` is
+ * a `timestamptz`: a bare date is read in whatever timezone the session holds,
+ * and this record dated three departures to the 19th when written from Bangkok.
+ * The instant is when the fourth opening's last attempt landed, which is when
+ * the list stopped changing.
+ */
+export const FPL_WITHDRAWALS: readonly {
+  id: string;
+  at: string;
+  ground: string;
+}[] = [
+  {
+    id: "fpl/glm-5.3",
+    at: "2026-08-20T19:33:06Z",
+    ground: "No legal opening in four attempts, and never measured: its four "
+      + "figures are 300,008ms, 300,013ms, 600,011ms and 600,017ms, every one "
+      + "of them the call window it was given rather than its own time."
+  },
+  {
+    id: "fpl/minimax-m3",
+    at: "2026-08-20T19:33:06Z",
+    ground: "No legal opening in four attempts. It answered inside the clock "
+      + "every time and spent the whole output ceiling on reasoning — 16,000 "
+      + "of 16,000, then 32,000 of 32,000 twice — returning no content."
+  },
+  {
+    id: "fpl/qwen3.8-max",
+    at: "2026-08-20T19:33:06Z",
+    ground: "Opened legally in 358,189ms when called alone, after three "
+      + "refusals ten seats wide. Withdrawn on wall clock rather than on "
+      + "capability: six minutes for one seat's opening is too much of a Lock."
+  }
+];
+
+/**
+ * What the FPL track opens with: the Season Roster less the seats that left it.
+ *
+ * Derived rather than written, so that the day a fourth seat is withdrawn — or
+ * a third turns out to have been withdrawn on a measurement that moved — the
+ * guard cannot be left describing a roster that does not exist.
+ */
+export const FPL_ROSTER_SIZE =
+  SEASON_ROSTER_SIZE - FPL_WITHDRAWALS.length;
 
 /**
  * What a `models` row is for, as its check constraint admits (migrations 0001
@@ -553,6 +618,24 @@ export async function enterFplRoster(
     id: `fpl/${seatSlug(entrant.id)}`
   }));
   await upsertSeats(database, seats, FPL_PROMPT_VERSION);
+
+  // The withdrawal is stamped here rather than in the migration, because this
+  // door is what a fresh database and production both walk: a data statement in
+  // 0034 would date the departure on whichever of them ran it and leave the
+  // other's rows standing. Written after the upsert, which never mentions the
+  // column, so a re-seat cannot reinstate a Base Model the Season removed
+  // (ADR-0047).
+  //
+  // `is null` in the predicate is what makes a second run a no-op instead of a
+  // re-dating: the date on record is when the seat left, not when the door last
+  // ran.
+  for (const { id, at } of FPL_WITHDRAWALS) {
+    await database.query(
+      `update models set withdrawn_at = $2::timestamptz
+        where id = $1 and prompt_version = $3 and withdrawn_at is null`,
+      [id, at, FPL_PROMPT_VERSION]
+    );
+  }
 
   return seats.map(({ id }) => id);
 }

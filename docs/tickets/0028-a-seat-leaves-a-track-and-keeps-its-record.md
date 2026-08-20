@@ -21,44 +21,47 @@ So the row stays and gains a date, and the reads learn to skip it — on the FPL
 because a track's withdrawal is a fact about that track's row and the two tracks seat
 different rows for one Base Model.
 
-- [ ] A migration adds a nullable withdrawal timestamp to `models`. No default, no
+- [x] A migration adds a nullable withdrawal timestamp to `models`. No default, no
       backfill, and no constraint tying it to the Entrant role — a Reference Line has no
       roster to leave, and a guard for a state nobody can reach is one nothing has ever
       seen bite. Its comment carries ADR-0047's reason for not deleting.
-- [ ] The roster module names the withdrawn seat ids in exactly one place, each with the
+- [x] The roster module names the withdrawn seat ids in exactly one place, each with the
       date it left and a one-line reading of why, in the voice the roster's own entries
       carry.
-- [ ] The FPL track's expected roster size is **derived** — the roster's length less the
+- [x] The FPL track's expected roster size is **derived** — the roster's length less the
       withdrawal list's — and never written as a literal, so the gate's outcome cannot
       leave the guard describing a roster that does not exist.
-- [ ] The Match track's size constant keeps its number and its doc comment says which
+- [x] The Match track's size constant keeps its number and its doc comment says which
       track it now speaks for, pointing at the FPL one.
-- [ ] The FPL entry door stamps the date onto the withdrawn seats after seating the
+- [x] The FPL entry door stamps the date onto the withdrawn seats after seating the
       roster, and leaves every standing seat's null. Running it twice neither clears a date
       nor moves it.
-- [ ] The shared seat upsert never mentions the column, which is what makes a re-run of
+- [x] The shared seat upsert never mentions the column, which is what makes a re-run of
       either door incapable of reinstating a withdrawn Base Model.
-- [ ] The opening's Entrant read skips withdrawn seats, and its count guard is measured
+- [x] The opening's Entrant read skips withdrawn seats, and its count guard is measured
       against the FPL expected size. The refusal names the size expected and the size found.
-- [ ] The guard takes its expected size as an option. The FPL rehearsal seats ten
+- [x] The guard takes its expected size as an option. The FPL rehearsal seats ten
       *behavioural* seats under the FPL Prompt Version and then calls the opening, so a
       guard hard-wired to the Season's size would break the rehearsal or cost it three of
       the behaviours it exists to prove. The rehearsal passes its own seat count.
-- [ ] The rehearsal's verifier counts its seat script rather than the Season Roster — which
+- [x] The rehearsal's verifier counts its seat script rather than the Season Roster — which
       is what it always meant, a rehearsal seat being a behaviour and not a Base Model.
-- [ ] The context renderer shows exactly the seats the run will call, so what the operator
+- [x] The context renderer shows exactly the seats the run will call, so what the operator
       reads before a Lock is what the run reads.
-- [ ] The FPL job's default concurrency follows the FPL track's expected size. It stays a
+- [x] The FPL job's default concurrency follows the FPL track's expected size. It stays a
       default; the environment override is the lever ticket 0027 turns on.
-- [ ] The Gameweek run's Entrant read is **not** filtered, and says why inline: it reads by
+- [x] The Gameweek run's Entrant read is **not** filtered, and says why inline: it reads by
       id from the started-roster record, which is already the record of which seats hold a
       Season path, and a filter there would state the same fact twice in a place then free
       to disagree with itself.
-- [ ] No `models` row, attempt or context is deleted.
-- [ ] CONTEXT.md's Season Roster entry — already written and uncommitted — ships in this
-      commit: a roster per track, the withdrawal field named, and a seat playing every
-      Gameweek of its track's Season or not being on that track's roster at all.
-- [ ] Tests at the existing seams: the FPL door leaves standing seats null and withdrawn
+- [x] No `models` row, attempt or context is deleted.
+- [x] CONTEXT.md's Season Roster entry ships with the decision: a roster per track, the
+      withdrawal field named, and a seat playing every Gameweek of its track's Season or not
+      being on that track's roster at all. **Deviation, recorded rather than hidden:** it
+      shipped one commit early, in the ADR-and-spec commit, because it was written and
+      staged before this ticket started. Same branch, one commit apart, and the schema it
+      names arrives here.
+- [x] Tests at the existing seams: the FPL door leaves standing seats null and withdrawn
       seats dated; a second run changes nothing; a withdrawn seat carrying an attempt row
       and a context row still carries both and still has its `models` row; the Match door
       leaves all ten Match seats null, including the Base Models withdrawn from the other
@@ -69,6 +72,20 @@ different rows for one Base Model.
       settled-player-points suite and the Gameweek-run suite — seed their own seats and
       never reach the guard, so they are unaffected; checked, and written here so the next
       reader does not re-derive it.
+
+**Two things the work turned up that the ticket did not predict.**
+
+The withdrawal date was first written `$2::date` into a `timestamptz` column, which Postgres
+read in the session's timezone: three seats that left on the 20th were dated the 19th from
+Bangkok. The door's own new test caught it before anything reached production. The list now
+carries a UTC instant — the moment the fourth opening's last attempt landed — and the column
+comment says why a bare date is not enough.
+
+The rehearsal was not the only suite coupled to the Season's size by accident. The
+Gameweek-run suite counted its own seeded seats through `SEASON_ROSTER_SIZE` twice, and the
+start-track suite drove the guard with it; both seat their own Base Models and now say so.
+That is the same accident ADR-0047 exposed in the rehearsal verifier, three call sites
+wider than the ticket expected.
 
 ## Not in this ticket
 
