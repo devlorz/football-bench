@@ -11,11 +11,14 @@ the first Lock, and until 2026-08-21T17:30Z there is no FPL Season to remove any
 Three runs, `FPL_CONCURRENCY` at its default of ten each time. Seven seats hold a legal
 opening on record; these three do not:
 
-| Seat | Run 1 (18:22Z) | Run 2 (18:53Z) | Run 3 (19:02Z) |
-|---|---|---|---|
-| `fpl/glm-5.3` | timeout, 300,008 ms | timeout, 300,013 ms | timeout, 600,011 ms |
-| `fpl/qwen3.8-max` | timeout, 300,005 ms | timeout, 300,005 ms | timeout, 599,994 ms |
-| `fpl/minimax-m3` | length, 16,000 out | length, 32,000 out | length, 32,000 out |
+| Seat | Run 1 (18:22Z) | Run 2 (18:53Z) | Run 3 (19:02Z) | Run 4, alone (19:23Z) |
+|---|---|---|---|---|
+| `fpl/glm-5.3` | timeout, 300,008 ms | timeout, 300,013 ms | timeout, 600,011 ms | timeout, 600,017 ms |
+| `fpl/qwen3.8-max` | timeout, 300,005 ms | timeout, 300,005 ms | timeout, 599,994 ms | **legal, 358,189 ms** |
+| `fpl/minimax-m3` | length, 16,000 out | length, 32,000 out | length, 32,000 out | length, 32,000 out |
+
+Runs 1 and 2 ran a five-minute call window, runs 3 and 4 a ten-minute one; runs 1 to 3 went
+out ten seats wide and run 4 one seat at a time.
 
 Two different failures. GLM and Qwen return nothing at all — no usage, no body, our own
 abort — through a five-minute window and then a ten-minute one, against a prompt the seats
@@ -25,6 +28,45 @@ spends every output token it is given on reasoning: 16,000 of 16,000, then 32,00
 ceiling on the first of those and wrote the reading of a second: "a seat that spent 16,000
 without finishing may spend 32,000 without finishing... a finding about the seat rather
 than a number to raise." This is that second.
+
+## The gate was run, and it settled the list at three
+
+A fourth opening went out on 2026-08-20 with `FPL_CONCURRENCY=1` — one seat called at a
+time, the lever this ADR was written to wait for. It changed one of the three outcomes, and
+the changed one is why this section is written rather than a number being edited.
+
+**`fpl/qwen3.8-max` answered.** Called alone inside the same ten-minute window that had cut
+it off ten seats wide, it produced a legal opening action in 358,189 ms — 22,098 tokens in,
+12,340 out. Three refusals had made it look like a seat that could not open a Squad; it is a
+seat that takes about six minutes to open one and had never been given six uncontended
+minutes. The lever this ADR was written to wait for did exactly what the record predicted it
+might.
+
+**It leaves the roster anyway, and on a different ground from the other two.** Six minutes
+for one seat's opening, against a Lock that must fit ten seats and their Repairs, is a cost
+the operator judged not worth carrying for a Season — a decision about wall clock, not about
+whether the Base Model can play. The distinction is recorded because this project exists to
+measure Base Models: `fpl/glm-5.3` and `fpl/minimax-m3` leave having produced no legal
+opening in four attempts, and `fpl/qwen3.8-max` leaves having produced one. Nothing in the
+record should later be read as this ADR finding that Qwen3.8 Max cannot play FPL. It can. It
+is slow, and slow lost.
+
+**`fpl/glm-5.3` remains unmeasured rather than measured.** Its four figures are 300,008,
+300,013, 600,011 and 600,017 — every one of them the ceiling that was set, none of them the
+seat's own time. The project has met this before: the completion-token report of the same
+day refused to argue from maxima "because every maximum in the record sat at the ceiling and
+no percentile could be read from a censored top." What is known about this seat is that it
+did not finish inside ten uncontended minutes, which is enough to withdraw it and not enough
+to say what it needs.
+
+The record already held the corroboration, on the other track. The latency report of
+2026-08-20 measured every seat under the five-minute window and found GLM 5.3 and Qwen3.8
+Max alone against the ceiling — means of 216s and 171s with maxima sitting exactly at
+300,000ms — while every seat that opened the FPL track in one go ran at 100s or below on
+the same window. Those measurements were taken on Match prompts, a fraction of the FPL
+prompt's size. The two seats that were already the slowest in the roster on the small prompt
+are the two the large one costs a Season: one that never finished, and one that finished six
+minutes late.
 
 ## The two rosters diverge, and the vocabulary has to admit it
 

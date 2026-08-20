@@ -21,17 +21,23 @@ silent seats produce a legal opening, the withdrawal is the reasoning seat's alo
 FPL roster stands at nine. Every other decision downstream is written to be indifferent to
 which it is.
 
-- [ ] Seats × Fixtures, the resulting call count and a rough cost are stated to the user,
+- [x] Seats × Fixtures, the resulting call count and a rough cost are stated to the user,
       and the run does not start until they say yes. Killing it mid-flight recovers
       nothing, so the decision happens before the first call.
-- [ ] The opening runs with FPL concurrency at one, against the same Gameweek and the same
-      frozen Prompt Version as the three refusals.
-- [ ] Each of the three failing seats has its outcome recorded — a legal opening, a
-      timeout with its window, or a ceiling spent on reasoning with its token counts.
-- [ ] The withdrawal list is settled and written into ADR-0047, either confirming three
-      seats or narrowing it to one, with the run that settled it named.
-- [ ] The run is reported under `docs/reports` in the shape the roster pre-flight reports
-      take, so the next reader finds the measurement beside the decision.
+- [x] The opening runs with FPL concurrency at one, against the same Gameweek and the same
+      frozen Prompt Version as the three refusals. Run on 2026-08-20; the same three seats
+      produced no legal opening.
+- [x] Each of the three failing seats has its outcome recorded — a legal opening, a
+      timeout with its window, or a ceiling spent on reasoning with its token counts. Qwen
+      opened at 358,189 ms called alone; GLM timed out at the full 600,017 ms; MiniMax spent
+      32,000 of 32,000 on reasoning at 187,049 ms.
+- [x] The withdrawal list is settled and written into ADR-0047, either confirming three
+      seats or narrowing it to one, with the run that settled it named. **Three**, and the
+      ADR now carries the one-at-a-time run and the prior latency report that agrees with
+      it.
+- [x] The run is reported under `docs/reports` in the shape the roster pre-flight reports
+      take, so the next reader finds the measurement beside the decision —
+      `2026-08-20-the-fpl-opening-called-one-seat-at-a-time.md`.
 
 ## Not in this ticket
 
