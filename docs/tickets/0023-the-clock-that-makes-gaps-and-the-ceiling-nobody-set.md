@@ -79,29 +79,72 @@ close to the real cost rather than to the model's maximum.
 
 **Blocked by:** None — independent of slice 1.
 
-- [ ] `openRouterRequest` sends no `max_tokens`. The body carries `model`, `messages`,
-      `provider` and `stream` and nothing else, so OpenRouter must price the request
+- [x] `openRouterRequest` sends no `max_tokens`. The body carried `model`, `messages`,
+      `provider` and `stream` and nothing else, so OpenRouter had to price the request
       against whatever output ceiling the Base Model allows — tens of thousands of tokens
       for the reasoning seats — and refuse when the balance cannot cover that ceiling.
-      The call it refuses would have cost about two cents.
-- [ ] **This is what the 402s were, and the ledger says so.** On 2026-08-20 the Premier
+      The call it refuses would have cost about two cents. It now carries
+      `max_tokens: ENTRANT_MAX_OUTPUT_TOKENS`, on the one path all three tracks send
+      through: Match, pre-flight and FPL.
+- [x] **This is what the 402s were, and the ledger says so.** On 2026-08-20 the Premier
       League run took `OpenRouter returned HTTP 402` on 16 calls. The account was not
       empty: the day's activity export bills $0.1571 for pre-flight, $2.9959 for La Liga's
       Gameweek 2 and $1.5589 for this run, and those subtract from $6.32 to $6.16 to
       $3.17 to **$1.61** — matching every balance screenshot taken along the way, with
       $1.61 still there when the refusals happened.
-- [ ] The seats it refused are the expensive ones, which is the signature: Gemini 3.1 Pro
+- [x] The seats it refused are the expensive ones, which is the signature: Gemini 3.1 Pro
       Preview, Kimi K3, GPT-5.6 Sol Pro and Claude Opus 5 took all sixteen, while MiniMax
       M3 and Muse Spark took none. A ceiling-priced estimate scales with the seat's output
       price, so the dearest seats fail first as the balance falls.
-- [ ] A cap is chosen from what the responses actually use rather than from a round
+- [x] A cap is chosen from what the responses actually use rather than from a round
       number, and it does not truncate a legitimate answer: the JSON is small but the
-      reasoning seats spend heavily before it. The 2026-08-20 export has the completion
-      and reasoning token counts per call to choose from.
-- [ ] Cost becomes predictable as a consequence, which is the second reason to do it: a
-      request with a stated ceiling can be priced before it is sent, and a pre-run check
-      can then refuse a Gameweek the balance cannot finish instead of discovering it two
-      thirds of the way through.
+      reasoning seats spend heavily before it. `ENTRANT_MAX_OUTPUT_TOKENS` is 16,000,
+      against a longest finished completion of 6,138 (DeepSeek V4 Pro) across the day's
+      248 generations — and chosen above that record rather than off it, because the
+      cancelled calls were cut mid-answer by the same two-minute clock slice 1 removed:
+      GLM 5.3 was cancelled at 5,509 tokens, longer than the 5,235 of anything it was
+      ever allowed to finish. `tokens_completion` contains `tokens_reasoning` rather than
+      sitting beside it, so nothing is added to it: over the 183 rows carrying both, the
+      difference runs 11 to 458 tokens on a mean of 259 — one Prediction and its
+      rationale, not a second quantity of thinking. Per-seat counts, the arithmetic
+      closing them against the day's 248 generations, the four seats the 402s fell on and
+      the ledger are in
+      [the completion-token report](../reports/2026-08-20-completion-tokens-per-seat.md),
+      because the export itself is a download and is not held here. The number is
+      provisional and says so at the reader: under a five-minute window the next run's
+      calls finish where these were cut, and the first uncensored maxima arrive with it.
+      Tests pin 16,000 on the wire — the literal, not the constant read back at itself —
+      and that it clears the longest answer any seat has been seen to finish
+      (`test/openrouter-entrant.test.ts`).
+- [x] **And a ceiling that does cut an answer says so, rather than being recorded as the
+      seat's failure.** The box above claims the cap does not truncate a legitimate
+      answer; nothing enforced that claim, and its failure mode was invisible — a
+      fragment is not JSON, so it would have landed as a `schema` Gap indistinguishable
+      from a Base Model that cannot hold the shape, which is the opposite diagnosis with
+      the opposite fix. `parseOpenRouterResponse` now reads `finish_reason`, and all
+      three paths that send through the shared builder — Match, FPL and pre-flight —
+      record `TRUNCATED_AT_CEILING` instead of judging the fragment. The Match and FPL
+      paths stop rather than Repair, because a Repair is cut at the same ceiling.
+      `test/predict-gameweek.test.ts` pins the detail, the kind and that no second call
+      is made.
+
+**Moved out of this slice while writing it:** a pre-run check that refuses a Gameweek the
+balance cannot finish. It was written here as a consequence of naming the ceiling — a
+request with a stated ceiling can be priced before it is sent — but it is a second piece
+of work needing a credits read and a per-seat price table, and none of that belongs to a
+field on a request body. It is
+[ticket 0024](0024-a-run-that-knows-what-it-will-cost-before-it-starts.md), unstarted, and
+this slice does not claim it.
+
+**Landed 2026-08-20.** Suites re-run for this slice: every test file importing
+`openrouter-entrant`, `attempt-match-calls`, `predict-gameweek`, `preflight-base-models`
+or `ask-for-gameweek-action`, which is the whole reach of a field on the shared request
+builder — **28 files, 425 tests**, run as
+`vitest run --exclude '**/.claude/**' <files>`; the exclude is needed because a run from
+the repository root otherwise globs the checked-out worktrees under `.claude/` and fails
+on their missing dashboard dependencies rather than on anything here.
+`tsc --noEmit` clean, `git diff --check` clean. The full suite was not run; it exceeds
+five minutes.
 
 ### The accounting gap, measured and much smaller than it looked
 
@@ -128,4 +171,6 @@ shrinks it further by producing fewer abandoned calls.
 
 Retrying Gaps that have passed their Lock — a Gap is never back-filled. Changing what
 counts as a Repair. The FPL track's own timeout behaviour beyond making the window
-reachable per call. Any change to the scheduler's cadence or to `predict.yml`.
+reachable per call. Any change to the scheduler's cadence or to `predict.yml`. Pricing a
+Gameweek against the balance before it starts, which slice 2 makes possible and
+[ticket 0024](0024-a-run-that-knows-what-it-will-cost-before-it-starts.md) carries.

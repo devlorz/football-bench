@@ -3,6 +3,7 @@ import { errorText } from "../error-text.js";
 import type { HttpFetcher, HttpResponse } from "../http.js";
 import {
   openRouterRequest,
+  TRUNCATED_AT_CEILING,
   parseOpenRouterResponse,
   type OpenRouterMessage
 } from "../predictions/openrouter-entrant.js";
@@ -350,6 +351,23 @@ export async function askForGameweekAction({
         resolvedModel: parsed?.resolvedModel ?? null,
         tokensIn: parsed?.tokensIn ?? null,
         tokensOut: parsed?.tokensOut ?? null,
+        latencyMs: elapsed(startedAt, receivedAt),
+        attemptedAt: receivedAt
+      });
+      return { kind: "silent" };
+    }
+    // A fragment is not an action, and a Repair asked of one would be cut at
+    // the same ceiling. The Gameweek stops here as it does for any answer the
+    // Entrant did not get to make.
+    if (parsed.finishReason === "length") {
+      await recordAttempt(database, trigger, {
+        ...blankAttempt(caller.id, season, gameweek, attemptNo),
+        failure: { kind: "provider", reason: TRUNCATED_AT_CEILING },
+        rawResponse: response.body,
+        resolvedProvider: parsed.resolvedProvider,
+        resolvedModel: parsed.resolvedModel,
+        tokensIn: parsed.tokensIn,
+        tokensOut: parsed.tokensOut,
         latencyMs: elapsed(startedAt, receivedAt),
         attemptedAt: receivedAt
       });

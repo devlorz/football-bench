@@ -5,6 +5,7 @@ import { MAX_REPAIRS } from "../repairs.js";
 import {
   openRouterRequest,
   parseOpenRouterResponse,
+  TRUNCATED_AT_CEILING,
   type OpenRouterMessage
 } from "./openrouter-entrant.js";
 import {
@@ -450,6 +451,26 @@ export async function attemptMatchCalls({
               resolvedModel: parsedResponse?.resolvedModel ?? null,
               tokensIn: parsedResponse?.tokensIn ?? null,
               tokensOut: parsedResponse?.tokensOut ?? null,
+              attemptedAt: completedAt
+            }
+          });
+          break;
+        }
+        // Before the answer is judged, because a fragment cannot be judged and
+        // must not be Repaired: the Repair would be cut at the same ceiling.
+        if (parsedResponse.finishReason === "length") {
+          await persistProviderFailure({
+            call,
+            attemptNo,
+            kind: "provider",
+            detail: TRUNCATED_AT_CEILING,
+            telemetry: {
+              latencyMs: elapsedMilliseconds(startedAt, completedAt),
+              rawResponse: response.body,
+              resolvedProvider: parsedResponse.resolvedProvider,
+              resolvedModel: parsedResponse.resolvedModel,
+              tokensIn: parsedResponse.tokensIn,
+              tokensOut: parsedResponse.tokensOut,
               attemptedAt: completedAt
             }
           });

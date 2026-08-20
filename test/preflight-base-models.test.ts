@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
-  DEFAULT_ENTRANT_CALL_TIMEOUT_MS
+  DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
+  ENTRANT_MAX_OUTPUT_TOKENS
 } from "../src/predictions/openrouter-entrant.js";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -368,7 +369,8 @@ describe("pre-flight for the Base Model roster", () => {
           allow_fallbacks: false,
           quantizations: ["fp8"]
         },
-        stream: false
+        stream: false,
+        max_tokens: ENTRANT_MAX_OUTPUT_TOKENS
       }),
       // The window the run itself gives this seat: a check that cut a seat
       // off earlier than the run does would certify the wrong thing.

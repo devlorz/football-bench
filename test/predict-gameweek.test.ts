@@ -5,7 +5,9 @@ import type { HttpRequest } from "../src/http.js";
 import { predictGameweek } from "../src/predictions/predict-gameweek.js";
 import {
   DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
-  matchPromptOf
+  ENTRANT_MAX_OUTPUT_TOKENS,
+  matchPromptOf,
+  TRUNCATED_AT_CEILING
 } from "../src/predictions/openrouter-entrant.js";
 import {
   firstMessageText,
@@ -451,7 +453,8 @@ describe("predicting a Gameweek", () => {
           order: ["openai"],
           allow_fallbacks: false
         },
-        stream: false
+        stream: false,
+        max_tokens: ENTRANT_MAX_OUTPUT_TOKENS
       }),
       // Unset by the caller, so the call goes out under the measured window
       // rather than the shared fetcher's general-purpose one.
@@ -1030,6 +1033,50 @@ describe("predicting a Gameweek", () => {
       tokens_out: 0
     }]);
   });
+
+  // The ceiling stops an answer mid-sentence, and the fragment left behind is
+  // not JSON. Recorded as the seat's own schema failure it would be
+  // indistinguishable from a Base Model that cannot hold the shape -- and the
+  // two have opposite fixes.
+  test("a call cut off at the output ceiling says so, and is not Repaired",
+    async () => {
+      let calls = 0;
+      await predictGameweek({
+        competition: "PL",
+        database: client,
+        season: "2026-27",
+        gameweek: 1,
+        concurrency: 1,
+        apiKey: "test-key",
+        entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
+        now: () => new Date("2026-08-21T17:29:00Z"),
+        http: async () => {
+          calls += 1;
+          return {
+            status: 200,
+            body: JSON.stringify({
+              choices: [{
+                message: { content: '{"fixture_id": 1, "probs": {"H": 0.5' },
+                finish_reason: "length"
+              }],
+              usage: { prompt_tokens: 83, completion_tokens: 16_000 }
+            })
+          };
+        }
+      });
+
+      const attempt = await client.query(
+        "select ok, error_kind, error_detail, tokens_out from attempts"
+      );
+      expect(attempt.rows).toEqual([{
+        ok: false,
+        error_kind: "provider",
+        error_detail: TRUNCATED_AT_CEILING,
+        tokens_out: 16_000
+      }]);
+      // A Repair would be cut at the same ceiling.
+      expect(calls).toBe(1);
+    });
 
   test("a Manual fill at the exact deadline writes nothing and is logged", async () => {
     await client.query(

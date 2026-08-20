@@ -5,6 +5,7 @@ import type { HttpFetcher } from "../http.js";
 import {
   matchPromptOf,
   openRouterRequest,
+  TRUNCATED_AT_CEILING,
   parseOpenRouterResponse,
   type MatchPromptFixture
 } from "../predictions/openrouter-entrant.js";
@@ -218,6 +219,20 @@ async function callBaseModel(options: {
         "OpenRouter returned no message content.",
         routingDetail
       ),
+      resolvedProvider,
+      resolvedModel,
+      rawBody: body
+    };
+  }
+  // Still `unparseable` — a fragment is unparseable — but the detail says the
+  // ceiling did it, so a seat is never certified as failing on an answer the
+  // check cut short.
+  if (parsed.finishReason === "length") {
+    return {
+      modelId: model.id,
+      baseModel: model.base_model,
+      status: "unparseable",
+      detail: joinDetails(TRUNCATED_AT_CEILING, routingDetail),
       resolvedProvider,
       resolvedModel,
       rawBody: body

@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
 import { describe, expect, test } from "vitest";
 import {
+  ENTRANT_MAX_OUTPUT_TOKENS,
   MATCH_PROMPT_COMPETITIONS,
   MATCH_PROMPT_SHA256,
   matchContext,
-  matchPromptOf
+  matchPromptOf,
+  openRouterRequest
 } from "../src/predictions/openrouter-entrant.js";
 import { divisionsOf } from "../src/football-data/divisions.js";
 import {
@@ -305,5 +307,30 @@ describe("the Match Prompt Version", () => {
   test("refuses a Competition with no frozen Prompt Version", () => {
     expect(() => matchContext(FIXTURE, "", "SA"))
       .toThrow("Competition SA has no frozen Prompt Version");
+  });
+});
+
+describe("what a call says it will pay for", () => {
+  const bodyOf = (): { max_tokens?: number } =>
+    JSON.parse(openRouterRequest(
+      "key",
+      { baseModel: "deepseek/v4-pro", provider: "DeepSeek", quantization: null },
+      "Who wins?"
+    ).body!) as { max_tokens?: number };
+
+  // The literal, not the constant: a request whose ceiling moved is a request
+  // priced differently by the provider, and it should not move without this
+  // line and the report behind it moving too.
+  test("names 16,000 output tokens on the wire, so the provider prices the "
+    + "request by that rather than by the Base Model's own maximum", () => {
+    expect(bodyOf().max_tokens).toBe(16_000);
+    expect(ENTRANT_MAX_OUTPUT_TOKENS).toBe(16_000);
+  });
+
+  // The 402s came from a ceiling nobody set; a ceiling set too low truncates a
+  // legitimate answer instead, which is the same Gap by another route. 6,138 is
+  // the longest completion any seat finished on 2026-08-20 (report of that day).
+  test("clears the longest answer any seat has been seen to finish", () => {
+    expect(ENTRANT_MAX_OUTPUT_TOKENS).toBeGreaterThan(6_138);
   });
 });

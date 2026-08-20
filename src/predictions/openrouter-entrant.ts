@@ -263,6 +263,53 @@ function withCacheBreakpoint(
  */
 export const DEFAULT_ENTRANT_CALL_TIMEOUT_MS = 300_000;
 
+/**
+ * The largest answer a seat is paid to write.
+ *
+ * A request that names no ceiling is priced by OpenRouter against whatever
+ * output ceiling the Base Model allows, and refused when the balance cannot
+ * cover that ceiling rather than the call. That is what the sixteen HTTP 402s
+ * on the Premier League's Gameweek 1 were, with $1.61 still in the account and
+ * each refused call worth about two cents.
+ *
+ * 16,000 is roughly two and a half times the longest completion any seat has
+ * been watched finish — 6,138 — and deliberately not read off that number,
+ * because the calls cancelled at the old two-minute clock were cut mid-answer
+ * and their counts are floors rather than lengths. The per-seat record, the
+ * arithmetic that ties it to the day's 248 generations, and the one call that
+ * proves the cut all live in
+ * `docs/reports/2026-08-20-completion-tokens-per-seat.md` rather than being
+ * retold here. The number is provisional against the first run whose maxima
+ * are not censored, which the five-minute window makes possible.
+ *
+ * Those counts are `tokens_completion`, which contains `tokens_reasoning`
+ * rather than sitting beside it: across the 183 rows carrying both, the
+ * difference runs 11 to 458 tokens on a mean of 259 — the size of a Prediction
+ * and its rationale, not a second quantity of thinking that would need adding.
+ *
+ * The FPL track sends through here too and this record does not cover it —
+ * only the Match shape was measured. It rides the same ceiling rather than a
+ * second unmeasured number. An answer this ceiling cuts is recorded against
+ * `TRUNCATED_AT_CEILING` on every path, never as the seat's own failure.
+ */
+export const ENTRANT_MAX_OUTPUT_TOKENS = 16_000;
+
+/**
+ * What a call says when `ENTRANT_MAX_OUTPUT_TOKENS` is what ended it.
+ *
+ * A ceiling that cuts an answer mid-sentence produces text that is not JSON,
+ * and every path here would otherwise record that as the seat having answered
+ * badly — indistinguishable in the record from a Base Model that genuinely
+ * cannot hold the schema. The two have opposite fixes: one raises the number
+ * above, the other is the seat's own result. So a call the provider reports as
+ * `finish_reason: "length"` is recorded against this sentence rather than
+ * against whatever the fragment failed to parse as.
+ */
+export const TRUNCATED_AT_CEILING = "The answer was cut off at the "
+  + `${ENTRANT_MAX_OUTPUT_TOKENS}-token output ceiling (finish_reason: length),`
+  + " so this is where the ceiling stopped the seat rather than how the seat"
+  + " answered.";
+
 export function openRouterRequest(
   apiKey: string,
   entrant: OpenRouterEntrant,
@@ -291,7 +338,8 @@ export function openRouterRequest(
           : messagesOrInitialPrompt
       ),
       provider,
-      stream: false
+      stream: false,
+      max_tokens: ENTRANT_MAX_OUTPUT_TOKENS
     })
   };
 }
@@ -301,7 +349,8 @@ const openRouterResponseSchema = z.looseObject({
     message: z.looseObject({
       content: z.string().nullable(),
       refusal: z.string().min(1).nullable().optional()
-    })
+    }),
+    finish_reason: z.string().min(1).nullable().optional()
   })).min(1),
   openrouter_metadata: z.looseObject({
     endpoints: z.looseObject({
@@ -321,6 +370,8 @@ const openRouterResponseSchema = z.looseObject({
 export interface ParsedOpenRouterResponse {
   content: string | null;
   refusal: string | null;
+  /** `"length"` when the ceiling stopped the answer — see `truncatedAtCeiling`. */
+  finishReason: string | null;
   resolvedProvider: string | null;
   resolvedModel: string | null;
   tokensIn: number | null;
@@ -350,6 +401,7 @@ export function parseOpenRouterResponse(
   return {
     content: choice.message.content,
     refusal: choice.message.refusal ?? null,
+    finishReason: choice.finish_reason ?? null,
     resolvedProvider: selectedEndpoint?.provider ?? null,
     resolvedModel: selectedEndpoint?.model ?? null,
     tokensIn: parsed.data.usage?.prompt_tokens ?? null,
