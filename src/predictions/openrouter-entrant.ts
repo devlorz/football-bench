@@ -287,12 +287,25 @@ export const DEFAULT_ENTRANT_CALL_TIMEOUT_MS = 300_000;
  * difference runs 11 to 458 tokens on a mean of 259 — the size of a Prediction
  * and its rationale, not a second quantity of thinking that would need adding.
  *
- * The FPL track sends through here too and this record does not cover it —
- * only the Match shape was measured. It rides the same ceiling rather than a
- * second unmeasured number. An answer this ceiling cuts is recorded against
- * `TRUNCATED_AT_CEILING` on every path, never as the seat's own failure.
+ * The FPL track sent through here unmeasured, and the Season's first opening
+ * measured it: `fpl/minimax-m3` read a 29,031-token FPL prompt on 2026-08-20
+ * and returned `finish_reason: "length"` with completion 16,000 of which
+ * reasoning was 16,000 — the whole ceiling spent thinking, `content` null, two
+ * and a half cents for an empty answer. Not an answer cut mid-sentence: a seat
+ * that never reached the sentence. The Match measurement above could not have
+ * predicted it, because a Match prompt is a fraction of this one and its
+ * reasoning ran 11 to 458 tokens past the content rather than swallowing it.
+ *
+ * So the ceiling doubles to 32,000, which is the run this comment called for —
+ * "provisional against the first run whose maxima are not censored" — reading
+ * back. It is still a ceiling and still provisional: a seat that spent 16,000
+ * without finishing may spend 32,000 without finishing, and the next run whose
+ * maxima are not censored is what tells us. An answer this ceiling cuts is
+ * recorded against `TRUNCATED_AT_CEILING`, never as the seat's own failure —
+ * except where the ceiling takes the content with it, which ticket 0026
+ * records as the one path that still misreports it.
  */
-export const ENTRANT_MAX_OUTPUT_TOKENS = 16_000;
+export const ENTRANT_MAX_OUTPUT_TOKENS = 32_000;
 
 /**
  * What a call says when `ENTRANT_MAX_OUTPUT_TOKENS` is what ended it.

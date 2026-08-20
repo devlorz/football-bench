@@ -321,10 +321,10 @@ describe("what a call says it will pay for", () => {
   // The literal, not the constant: a request whose ceiling moved is a request
   // priced differently by the provider, and it should not move without this
   // line and the report behind it moving too.
-  test("names 16,000 output tokens on the wire, so the provider prices the "
+  test("names 32,000 output tokens on the wire, so the provider prices the "
     + "request by that rather than by the Base Model's own maximum", () => {
-    expect(bodyOf().max_tokens).toBe(16_000);
-    expect(ENTRANT_MAX_OUTPUT_TOKENS).toBe(16_000);
+    expect(bodyOf().max_tokens).toBe(32_000);
+    expect(ENTRANT_MAX_OUTPUT_TOKENS).toBe(32_000);
   });
 
   // The 402s came from a ceiling nobody set; a ceiling set too low truncates a
