@@ -1,0 +1,54 @@
+name: Dashboard deploy
+
+on:
+  # By hand only, and deliberately -- see docs/tickets/0022-the-dashboard-has-no-deploy-path.md.
+  # A push to main deploying by itself would race the operator's local deploy,
+  # whose only mutex is a tag lease this workflow would also be taking, and it
+  # would put an unattended change on the one live surface the Locks do not
+  # cover. Add the `push` trigger the day local deploys stop.
+  workflow_dispatch:
+
+# The deploy script moves the `deployed` tag and publishes it, which is the
+# durable record of what the edge is running -- the recovery in
+# docs/runbooks/dashboard-deploy.md reads it and trusts it.
+permissions:
+  contents: write
+
+# Two deploys of this repository must not overlap: `wrangler deploy` uploads a
+# whole Worker, so the second to finish wins whatever the first shipped.
+concurrency:
+  group: dashboard-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # `DATABASE_URL` is deliberately *not* here: it is a Worker secret held by
+      # Cloudflare, and `[secrets] required` in wrangler.toml makes every deploy
+      # inherit it -- or fail naming it, if it is ever missing.
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      # Optional: wrangler infers the account when the token reaches exactly
+      # one, and ignores this when it is empty. Set the variable if it ever
+      # reaches more than one.
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      # The tag is worth nothing on a runner that is about to be destroyed.
+      PUSH_TAG: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            dashboard/package-lock.json
+      - run: npm ci
+      # The dashboard is its own package, and the deploy builds it rather than
+      # installing it.
+      - run: npm --prefix dashboard ci
+      # Builds `dashboard/dist` first, then deploys -- a stale `dist` deploys
+      # silently, so the order is the point. The script is the authority; every
+      # invariant it holds is written down in it.
+      - run: ./scripts/deploy-dashboard.sh

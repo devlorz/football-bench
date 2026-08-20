@@ -67,6 +67,13 @@ should collide.
 Until the branch is pushed at all, `PUSH_TAG` has nothing to publish to and the
 tag is local, like the commits.
 
+**The same script also runs in CI**, dispatched by hand from
+[the Dashboard deploy workflow](../../.github/workflows/deploy-dashboard.yml)
+once the branch is pushed. It runs with `PUSH_TAG=1`, so the tag is published
+from there too. It is dispatch-only and not push-triggered, because the race
+above is not locked; the reasoning is in
+[ticket 0022](../tickets/0022-the-dashboard-has-no-deploy-path.md).
+
 There is no preview step, deliberately. `preview_urls = false` is set, because a
 Worker version preview holds the same secrets as production and would answer a
 public URL with production data. Look at changes locally against the seeded
