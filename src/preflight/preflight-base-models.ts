@@ -3,7 +3,7 @@ import type { Client } from "pg";
 import { errorText } from "../error-text.js";
 import type { HttpFetcher } from "../http.js";
 import {
-  MATCH_PROMPT_VERSION,
+  matchPromptOf,
   openRouterRequest,
   parseOpenRouterResponse,
   type MatchPromptFixture
@@ -71,6 +71,15 @@ export type PreflightTarget =
 
 export type PreflightBaseModelsOptions = {
   database: Database;
+  /**
+   * Which Competition is being probed, and so which seats are called and which
+   * league's data the packet is built from. Required rather than defaulted
+   * here — the CLI's reader is where an operator's absent variable becomes
+   * `PL` — because a Fixture id is unique only within a Competition (migration
+   * 0022), and a literal league here would let the Premier League's seats
+   * answer a La Liga pre-flight without a single query failing.
+   */
+  competition: string;
   season: string;
   fixtureId: number;
   apiKey: string;
@@ -237,6 +246,7 @@ async function callBaseModel(options: {
 
 export async function preflightBaseModels({
   database,
+  competition,
   season,
   fixtureId,
   expectedEntrantCount,
@@ -259,15 +269,18 @@ export async function preflightBaseModels({
     );
   }
 
+  const promptVersion = matchPromptOf(competition).version;
   const fixtureResult = await database.query<FixtureRow>(
     `select fixture_id, gw, home_team, away_team, kickoff_at
        from fixtures
-      where season = $1 and fixture_id = $2`,
-    [season, fixtureId]
+      where competition = $1 and season = $2 and fixture_id = $3`,
+    [competition, season, fixtureId]
   );
   const fixture = fixtureResult.rows[0];
   if (fixture === undefined) {
-    throw new Error(`Fixture ${fixtureId} does not exist in Season ${season}`);
+    throw new Error(
+      `Fixture ${fixtureId} does not exist in ${competition} Season ${season}`
+    );
   }
 
   // Either the roster, or the one Exhibition the operator aimed this at. The
@@ -276,24 +289,24 @@ export async function preflightBaseModels({
   let checked: CalledRow[];
   if (exhibitionModelId !== undefined) {
     checked = [
-      await loadExhibition(database, exhibitionModelId, MATCH_PROMPT_VERSION)
+      await loadExhibition(database, exhibitionModelId, promptVersion)
     ];
   } else {
-    // The Match track's seats, told from the FPL track's by Prompt Version:
-    // both mark a competitor with `role = 'entrant'` in the same table. The
-    // count is still checked, and against the same number as before, so a
+    // The Match track's seats, told from the FPL track's — and from another
+    // Competition's — by Prompt Version: all three mark a competitor with
+    // `role = 'entrant'` in the same table. The count is still checked, so a
     // roster short of a Base Model is still refused before the first call.
     const entrants = await database.query<CalledRow>(
       `select id, base_model, provider, quantization, prompt_version, role
          from models
         where role = 'entrant' and prompt_version = $1
         order by id`,
-      [MATCH_PROMPT_VERSION]
+      [promptVersion]
     );
     if (entrants.rows.length !== expectedEntrantCount) {
       throw new Error(
         `Pre-flight requires exactly ${expectedEntrantCount} Entrants at `
-        + `Prompt Version ${MATCH_PROMPT_VERSION}; `
+        + `Prompt Version ${promptVersion}; `
         + `found ${entrants.rows.length}`
       );
     }
@@ -302,7 +315,7 @@ export async function preflightBaseModels({
 
   const contextData = await loadMatchContextData(
     database,
-    "PL",
+    competition,
     season,
     fixture.gw
   );
