@@ -14,6 +14,7 @@ import {
   parseHeadCoachChanges,
   HeadCoachSourceValidationError
 } from "./parse-head-coach-changes.js";
+import { parseHeadCoaches } from "./parse-head-coaches.js";
 
 type Database = Pick<Client, "query">;
 
@@ -133,6 +134,10 @@ export async function fetchHeadCoachChanges({
   }
 
   const changes = parseHeadCoachChanges(source, response.body, pinned);
+  // The same bytes, read a second time: who is in post is a state the record
+  // holds beside the changes that explain it (ADR-0045), and both come off one
+  // request.
+  const inPost = parseHeadCoaches(source, response.body, pinned);
 
   await database.query("begin");
   try {
@@ -143,6 +148,19 @@ export async function fetchHeadCoachChanges({
         where competition = $1 and season = $2 and gw = $3`,
       [competition, season, gameweek]
     );
+    await database.query(
+      `delete from head_coaches
+        where competition = $1 and season = $2 and gw = $3`,
+      [competition, season, gameweek]
+    );
+    for (const { club, headCoach } of inPost) {
+      await database.query(
+        `insert into head_coaches (
+           competition, season, gw, club, head_coach, observed_at
+         ) values ($1, $2, $3, $4, $5, $6)`,
+        [competition, season, gameweek, club, headCoach, observedAt]
+      );
+    }
     for (const change of changes) {
       await database.query(
         `insert into head_coach_changes (

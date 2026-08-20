@@ -71,9 +71,9 @@ const INCOMING = 5;
 const APPOINTMENT = 6;
 
 /**
- * The Head Coach changes table, from its opening `{|` to its closing `|}`,
- * with the citations taken out first. The heading it sits under is the
- * article's own word for it, quoted in `SECTION_HEADING` above.
+ * A section's table, from its opening `{|` to its closing `|}`, with the
+ * citations taken out first. The heading is the article's own word for the
+ * section, quoted by the caller and never translated.
  *
  * The citations come out before anything is split because they are not merely
  * noise here: a `{{cite}}` runs to several lines on both pages and its
@@ -82,33 +82,54 @@ const APPOINTMENT = 6;
  * multi-line citation would arrive one cell too wide and every column after it
  * would be somebody else's.
  *
- * The heading is matched at any depth and with or without the spaces around
- * it, because the two articles write it differently today and neither is more
- * correct.
+ * A heading is matched at any depth and with or without the spaces around it,
+ * because the two articles write it differently today and neither is more
+ * correct. More than one heading is the same reason carried further: the two
+ * articles keep their personnel table under different words. They are tried in
+ * order and each one is the article's own, never a pattern of ours, so
+ * whichever refusal an operator is paged with names a heading they can find on
+ * the page.
  */
-function headCoachChangesTable(source: string, wikitext: string): string {
+export interface SectionTable {
+  /** The article's own heading, as it was found. */
+  heading: string;
+  /** The table under it, `{|` to `|}`. */
+  wikitable: string;
+}
+
+export function sectionTable(
+  source: string,
+  headings: string[],
+  wikitext: string
+): SectionTable {
   const withoutCitations = wikitext
     .replace(/<ref[^>]*\/>/g, "")
     .replace(/<ref[\s\S]*?<\/ref>/g, "")
     .replace(/<!--[\s\S]*?-->/g, "");
-  const heading = new RegExp(
-    `^={2,4}\\s*${SECTION_HEADING}\\s*={2,4}\\s*$`, "m"
-  ).exec(withoutCitations);
-  const headingAt = heading?.index ?? -1;
-  const opensAt = headingAt < 0
-    ? -1
-    : withoutCitations.indexOf("{|", headingAt);
-  const closesAt = opensAt < 0 ? -1 : withoutCitations.indexOf("\n|}", opensAt);
-  if (closesAt < 0) {
-    throw new HeadCoachSourceValidationError(source, [{
-      field: SECTION_HEADING,
-      detail: "expected a wikitable under this heading"
-    }]);
+  for (const heading of headings) {
+    const found = new RegExp(
+      `^={2,4}\\s*${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`
+      + "\\s*={2,4}\\s*$",
+      "m"
+    ).exec(withoutCitations);
+    const headingAt = found?.index ?? -1;
+    const opensAt = headingAt < 0
+      ? -1
+      : withoutCitations.indexOf("{|", headingAt);
+    const closesAt = opensAt < 0
+      ? -1
+      : withoutCitations.indexOf("\n|}", opensAt);
+    if (closesAt >= 0) {
+      return { heading, wikitable: withoutCitations.slice(opensAt, closesAt) };
+    }
   }
-  return withoutCitations.slice(opensAt, closesAt);
+  throw new HeadCoachSourceValidationError(source, [{
+    field: headings.join(" or "),
+    detail: "expected a wikitable under this heading"
+  }]);
 }
 
-interface TableLines {
+export interface TableLines {
   header: string[];
   rows: string[][];
 }
@@ -119,7 +140,7 @@ interface TableLines {
  * opening with neither continues the cell above it, which is how a name
  * wrapped over two lines stays one name.
  */
-function tableLines(wikitable: string): TableLines {
+export function tableLines(wikitable: string): TableLines {
   const header: string[] = [];
   const rows: string[][] = [];
   let current: string[] | undefined;
@@ -222,7 +243,7 @@ function filledRows(source: string, rows: string[][]): string[][] {
  * Competition's own clubs, so a cell resolving to neither identity is drift
  * and is refused by name.
  */
-function resolveClub(
+export function resolveClub(
   cell: string,
   pinned: PinnedClubs
 ): string | undefined {
@@ -279,7 +300,7 @@ export function parseHeadCoachChanges(
   const issues: HeadCoachSourceIssue[] = [];
   const changes: HeadCoachChange[] = [];
   const { header, rows } = tableLines(
-    headCoachChangesTable(source, wikitext)
+    sectionTable(source, [SECTION_HEADING], wikitext).wikitable
   );
 
   const labels = header.map(cellText);

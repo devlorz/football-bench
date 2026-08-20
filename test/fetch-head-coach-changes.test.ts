@@ -297,7 +297,8 @@ describe("fetching a Season's Head Coach changes", () => {
 
   beforeEach(async () => {
     await client.query(
-      "truncate head_coach_changes, fixtures, gameweeks, raw_snapshots "
+      "truncate head_coaches, head_coach_changes, fixtures, gameweeks, "
+      + "raw_snapshots "
       + "restart identity cascade"
     );
   });
@@ -416,6 +417,74 @@ describe("fetching a Season's Head Coach changes", () => {
     ]);
   });
 
+  test("stores every club's Head Coach in the same Gameweek's partition",
+    async () => {
+      await storeSeason();
+
+      await fetchHeadCoachChanges({
+        database: client,
+        competition: "PL",
+        season: "2026-27",
+        http: pageFetcher().http,
+        now: () => new Date("2026-08-19T09:00:00Z")
+      });
+
+      // Twenty, from the personnel table, where the changes table names ten
+      // clubs: an incumbent is a state every club has, not an event.
+      const stored = await client.query<{ rows: number }>(
+        "select count(*)::int as rows from head_coaches where gw = 1"
+      );
+      expect(stored.rows).toEqual([{ rows: 20 }]);
+      const liverpool = await client.query(
+        `select gw, head_coach, observed_at
+           from head_coaches
+          where competition = 'PL' and club = 'Liverpool'`
+      );
+      expect(liverpool.rows).toEqual([{
+        gw: 1,
+        head_coach: "Andoni Iraola",
+        observed_at: new Date("2026-08-19T09:00:00Z")
+      }]);
+    });
+
+  test("one Competition's fetch cannot empty another's partition",
+    async () => {
+      await storeSeason();
+      await storeSeason("PD", SPANISH_CLUBS);
+      await fetchHeadCoachChanges({
+        database: client,
+        competition: "PL",
+        season: "2026-27",
+        http: pageFetcher().http,
+        now: () => new Date("2026-08-19T09:00:00Z")
+      });
+
+      await fetchHeadCoachChanges({
+        database: client,
+        competition: "PD",
+        season: "2026-27",
+        http: pageFetcher(await spanishArticle()).http,
+        now: () => new Date("2026-08-19T09:00:00Z")
+      });
+
+      const byCompetition = await client.query(
+        `select competition, count(*)::int as rows
+           from head_coaches
+          where gw = 1
+          group by competition
+          order by competition`
+      );
+      expect(byCompetition.rows).toEqual([
+        { competition: "PD", rows: 20 },
+        { competition: "PL", rows: 20 }
+      ]);
+      const madrid = await client.query(
+        `select head_coach from head_coaches
+          where competition = 'PD' and club = 'Real Madrid CF'`
+      );
+      expect(madrid.rows).toEqual([{ head_coach: "José Mourinho" }]);
+    });
+
   test("archives an unusable response before refusing it", async () => {
     await storeSeason();
     const http = async () => ({ status: 404, body: "not found" });
@@ -506,6 +575,109 @@ describe("fetching a Season's Head Coach changes", () => {
     );
     expect(stored.rows).toEqual([{ rows: 18 }]);
   });
+
+  test("re-fetching a Gameweek replaces the Head Coaches it already stored",
+    async () => {
+      await storeSeason();
+      await fetchHeadCoachChanges({
+        database: client,
+        competition: "PL",
+        season: "2026-27",
+        http: pageFetcher().http,
+        now: () => new Date("2026-08-19T09:00:00Z")
+      });
+
+      // The same Gameweek, the same day, the article since edited. The
+      // partition is replaced rather than added to -- without the delete this
+      // is a second row for Arsenal and the unique index refuses it.
+      const edited = page.replace("[[Mikel Arteta]]", "[[Nobody Atall]]");
+      await fetchHeadCoachChanges({
+        database: client,
+        competition: "PL",
+        season: "2026-27",
+        http: pageFetcher(edited).http,
+        now: () => new Date("2026-08-19T15:00:00Z")
+      });
+
+      const stored = await client.query(
+        `select head_coach from head_coaches
+          where competition = 'PL' and gw = 1 and club = 'Arsenal'`
+      );
+      expect(stored.rows).toEqual([{ head_coach: "Nobody Atall" }]);
+      const rows = await client.query(
+        "select count(*)::int as rows from head_coaches where gw = 1"
+      );
+      expect(rows.rows).toEqual([{ rows: 20 }]);
+    });
+
+  /**
+   * The gate on a club is the Season's roster, not the identity map: `pinned`
+   * is built from the Fixtures already stored, and the personnel table names
+   * all twenty clubs where the changes table names only the ten that changed.
+   * So a Competition whose Fixtures are still arriving now fails a fetch that
+   * used to succeed, and it fails whole -- both parsers run before the
+   * transaction opens, so the Changes that would have been stored are not.
+   * Refusing is the ticket's rule; that it now takes the Changes with it is
+   * the part worth pinning.
+   */
+  test("a roster missing a club refuses the fetch and stores nothing",
+    async () => {
+      // Arsenal kept its Head Coach, so it is in the personnel table and in
+      // no row of the changes table: before this slice the same fetch stored
+      // all eighteen Changes.
+      await storeSeason("PL", CLUBS.filter((club) => club !== "Arsenal"));
+
+      await expect(fetchHeadCoachChanges({
+        database: client,
+        competition: "PL",
+        season: "2026-27",
+        http: pageFetcher().http,
+        now: () => new Date("2026-08-19T09:00:00Z")
+      })).rejects.toThrow(/unknown club spelling Arsenal/);
+
+      const stored = await client.query(
+        `select
+           (select count(*)::int from head_coaches) as coaches,
+           (select count(*)::int from head_coach_changes) as changes,
+           (select count(*)::int from raw_snapshots) as archived`
+      );
+      expect(stored.rows).toEqual([{ coaches: 0, changes: 0, archived: 1 }]);
+    });
+
+  /**
+   * The same refusal for the other table on the same page. The Change table
+   * moving is proved above; the personnel table moving has to reach the fetch
+   * the same way, or a page that still lists its changes could quietly stop
+   * naming anybody in post.
+   */
+  test("refuses a moved personnel table at the fetch, partition intact",
+    async () => {
+      await storeSeason();
+      await fetchHeadCoachChanges({
+        database: client,
+        competition: "PL",
+        season: "2026-27",
+        http: pageFetcher().http,
+        now: () => new Date("2026-08-19T09:00:00Z")
+      });
+      const moved = page.replace("!Manager\n!Captain", "!Captain\n!Manager");
+
+      await expect(fetchHeadCoachChanges({
+        database: client,
+        competition: "PL",
+        season: "2026-27",
+        http: pageFetcher(moved).http,
+        now: () => new Date("2026-08-20T09:00:00Z")
+      })).rejects.toThrow(
+        /^wikipedia:head-coach-changes:2026-27-premier-league\.Personnel and /
+      );
+
+      const stored = await client.query(
+        `select count(*)::int as rows from head_coaches
+          where gw = 1 and head_coach = 'Mikel Arteta'`
+      );
+      expect(stored.rows).toEqual([{ rows: 1 }]);
+    });
 
   test("a Season with no article listed reaches no source at all", async () => {
     await client.query(

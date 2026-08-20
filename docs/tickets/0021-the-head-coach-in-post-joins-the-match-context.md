@@ -81,6 +81,10 @@ League's inside "Personnel and kits" — and a `{{nobreak}}` wrapping any templa
 replaces above it do not remove, `{{sortname}}` today, mispairs its braces and leaves raw
 wikitext in a name. Every one of the 97 wrapped cells in either article is a flag.
 
+Slice 4 read both personnel tables and needed none of them: neither `{{nobr}}`,
+`{{nowrap}}` nor `{{sortname}}` appears inside either table, so the reader is still
+unwidened and these stay deferred with no slice yet asking for them.
+
 ## 3 — A store for who is in post
 
 **What to build:** The record can hold each club's Head Coach for a Gameweek, with the
@@ -119,21 +123,56 @@ fetch — the fact that overturned ADR-0044's rejection.
 
 **Blocked by:** 2, 3.
 
-- [ ] Both articles' per-club tables are found and parsed: the Premier League's under
+- [x] Both articles' per-club tables are found and parsed: the Premier League's under
       "Personnel and kits", La Liga's under "Personnel and sponsorship", twenty clubs each,
-      from the archived bytes rather than a live page.
-- [ ] Only the club and the Head Coach are taken. The captain, the kit manufacturer and
-      the sponsors are in the same rows and none of them is read.
-- [ ] A table whose header moved refuses with the source named, exactly as the Change
+      from the archived bytes rather than a live page. Both headings are quoted whole and
+      tried in order, since neither wording is more correct and a refusal has to name a
+      heading that is on the page; the table finder the Change parser already had is now
+      `sectionTable`, which takes the headings it is looking for and returns the one it
+      found, so every refusal below is filed under the article's own word.
+- [x] Only the club and the Head Coach are taken. The captain, the kit manufacturer and
+      the sponsors are in the same rows and none of them is read — asserted as the two
+      keys a parsed row has, so a third cannot be added without the test saying so.
+- [x] A table whose header moved refuses with the source named, exactly as the Change
       parser does — a reordered column must stop the parse rather than file a captain as a
-      Head Coach.
-- [ ] A club that does not resolve through the existing identity map stops the parse. The
-      map was built against the Change tables and has only ever been asked about clubs
-      that changed, so every club in both personnel tables is exercised.
-- [ ] Rows land in the rendering Gameweek's partition, scoped by Competition so one
-      league's fetch cannot empty another's.
-- [ ] The source's word "Manager" is quoted only where the header is being matched;
-      everything this slice names is Head Coach.
+      Head Coach. Only the leading `Team` and `Manager` are pinned, because the two
+      articles part company after them and name their sponsor columns differently; a row
+      that is not the header's width is refused separately, so an inserted column is a
+      refusal rather than a shifted read. Neither article spans a cell in this table, which
+      is why the Change parser's `rowspan` carrying is not reused here; a cell that starts
+      spanning leaves the row below it short, and a test pins that as a refusal rather than
+      a row read one column out of step.
+- [x] A club that does not resolve stops the parse. Both suites assert the twenty
+      resolved clubs against the Competition's whole roster, and La Liga's Team cells
+      carry no link at all — `{{nobreak|Alavés}}` resolves by displayed name alone. All
+      forty clubs resolve against the identity map as it already stood, with nothing added
+      to it, although that map was built against the Change tables and had only ever been
+      asked about clubs that changed.
+- [x] The gate on a club is the **Season's roster**, not the identity map, and that is a
+      widening of what the shipped half needs: `pinned` is built from the Fixtures already
+      stored, the personnel table names all twenty clubs where the changes table names
+      only the ten that changed, and both parsers run before the transaction opens. So a
+      Competition whose Fixtures are still arriving now fails whole — the Changes that
+      would have been stored are not — where before this slice it stored them. Refusing is
+      this ticket's rule and stands; a test pins the fetch failing whole and naming the
+      club, so the mode is recorded rather than discovered in an incident. A full schedule
+      gives every club a home Fixture, which is why it has not been seen.
+- [x] Rows land in the rendering Gameweek's partition, scoped by Competition so one
+      league's fetch cannot empty another's, written in the same transaction as the
+      Changes and by the same delete-then-insert over the partition. Both halves of that
+      are proved at the seam and not only in the parser: a re-fetch of the same Gameweek
+      replaces the twenty rows it already stored — mutation-checked, the suite goes red
+      with the `delete` taken out — and a personnel table whose header moved is refused
+      with the source named, leaving the Gameweek already stored whole.
+- [x] The source's word "Manager" is quoted only where the header is being matched;
+      everything this slice names is Head Coach, the column index included — a review of
+      the first draft caught a `MANAGER` constant that is now `HEAD_COACH`.
+- [x] The suites pass, run and reported rather than assumed, on 2026-08-20 with
+      `--exclude '**/.claude/**'`, counted per file so the total can be checked back:
+      `parse-head-coaches` 9 and `fetch-head-coach-changes` 22, with `wikitext` 18,
+      `daily-fetch` 9, `fetch-squad-changes` 25, `build-squad-changes-context` 11 and
+      `build-head-coach-changes-context` 9 unmoved beside them — 7 files, 103 tests, all
+      passing.
 
 ## 5 — One section, the incumbent and what changed
 
