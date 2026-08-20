@@ -40,14 +40,20 @@ _Avoid_: baseline as a competitor (a Reference Line never competes)
 
 **Season Roster**:
 The Entrants included in Season-wide comparisons. One per track and, on the match track,
-per Competition: every `models` row with `role = 'entrant'` carrying that Prompt Version,
-since a seat is entered for a track and a Competition while every seat holds the same role.
-The roster itself is one roster — what multiplies is seats, not Entrants, and every
+per Competition: every `models` row with `role = 'entrant'` and no `withdrawn_at`, carrying
+that Prompt Version, since a seat is entered for a track and a Competition while every seat
+holds the same role.
+A track's roster is its own: the two tracks seated the same Base Models on the 2026-27
+Season's first day and no longer do (ADR-0047), so a count read off one track says nothing
+about the other. What multiplies within a track is seats, not Entrants, and every
 Competition seats the roster that stood at the first Lock of the Season's standing Prompt
 Versions, however late it opens (ADR-0034, ADR-0038; a restart that retires a version
 reopens the window until the restarted versions' first Lock, ADR-0042). No exclusion
-within a track is representable.
-Removing an Entrant would require a new recorded decision, ADR and storage representation.
+within a track is representable: a seat plays every Gameweek of its track's Season or is
+not on that track's roster at all.
+Removing an Entrant requires a new recorded decision, an ADR and a storage representation —
+`models.withdrawn_at`, which dates the departure and leaves the row, its attempts and its
+contexts where they are (ADR-0047).
 
 **Exhibition Run**:
 A retrospective run of a Base Model that arrived after the Season began: it is shown the
