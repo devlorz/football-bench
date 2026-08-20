@@ -423,6 +423,35 @@ describe("the FPL Entrant-record endpoint", () => {
       await driver.end();
     }
   });
+
+  test("names only the seats that still hold a place on the track", async () => {
+    // A withdrawn seat holds no Season path (ADR-0047). Listed, it would read
+    // as a Base Model that played the Season and finished last rather than one
+    // that never started it. Both of this endpoint's reads have to agree — the
+    // Manager State replay and the name list — or an Entrant is named with no
+    // path or walks a path with no name.
+    const left = (await entrants()).entrants.slice(0, 2).map(({ id }) => id);
+    await writer.query(
+      "update models set withdrawn_at = now() where id = any($1)", [left]
+    );
+    try {
+      const body = await entrants();
+
+      expect(body.entrants.map(({ id }) => id))
+        .toEqual(expect.not.arrayContaining(left));
+      expect(body.entrants).toHaveLength(9 - left.length);
+      // Every seat that remains still carries its whole record: the filter
+      // removed Entrants, not Gameweeks.
+      for (const entrant of body.entrants) {
+        expect(entrant.gameweeks.length).toBeGreaterThan(0);
+      }
+    } finally {
+      await writer.query(
+        "update models set withdrawn_at = null where id = any($1)", [left]
+      );
+    }
+  });
+
 });
 
 /**

@@ -391,6 +391,28 @@ describe("the FPL squads endpoint", () => {
       await driver.end();
     }
   });
+
+  test("shows the Squads of the seats that still hold a place", async () => {
+    // The same filter the leaderboard carries (ADR-0047): a withdrawn seat has
+    // no Squad standing, and the page would render it as an Entrant with none.
+    const before = await squads();
+    const left = before.entrants.slice(0, 2).map(({ id }) => id);
+    await writer.query(
+      "update models set withdrawn_at = now() where id = any($1)", [left]
+    );
+    try {
+      const body = await squads();
+
+      expect(body.entrants.map(({ id }) => id))
+        .toEqual(expect.not.arrayContaining(left));
+      expect(body.entrants).toHaveLength(before.entrants.length - left.length);
+    } finally {
+      await writer.query(
+        "update models set withdrawn_at = null where id = any($1)", [left]
+      );
+    }
+  });
+
 });
 
 /**

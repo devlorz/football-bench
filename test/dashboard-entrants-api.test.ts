@@ -373,6 +373,28 @@ describe("the Entrant record endpoint on the design's Season", () => {
     );
     expect(response.headers.get("cache-control")).toBe("no-cache");
   });
+
+  test("keeps a Base Model that left the other track", async () => {
+    // The withdrawal filter belongs to the FPL track's reads and to no others
+    // (ADR-0047). A seat is entered per track, so one Base Model holds two
+    // rows, and leaving one track says nothing about the other. This is the
+    // assertion that catches a filter applied one table too widely: the same
+    // Base Models are withdrawn from the FPL track in production.
+    const before = await entrants();
+    const [first] = before.entrants;
+    await writer.query(
+      "update models set withdrawn_at = now() where id like 'fpl/%'"
+    );
+    try {
+      const body = await entrants();
+
+      expect(body.entrants).toHaveLength(before.entrants.length);
+      expect(body.entrants[0]?.id).toBe(first?.id);
+    } finally {
+      await writer.query("update models set withdrawn_at = null");
+    }
+  });
+
 });
 
 describe("the Entrant record endpoint with a Gameweek wholly Gapped", () => {

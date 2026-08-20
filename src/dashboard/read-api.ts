@@ -1340,7 +1340,14 @@ async function fplLeaderboard(query: Query, season: string): Promise<Response> {
             and season = $1 and gw <= $2
           order by gw desc limit 1
        ) state on true
+      -- The FPL track's roster as it stands, not every seat that ever held
+      -- one (ADR-0047). A withdrawn seat holds no Season path, and a page that
+      -- listed it would show a Base Model on nought points as though it had
+      -- played and lost. Its rows stay in the record; this is a page, not the
+      -- record. The match track's reads carry no such filter, and the same Base
+      -- Model appears there because it did not leave that track.
       where m.role = 'entrant' and m.prompt_version = $4
+        and m.withdrawn_at is null
       order by m.id`,
     [season, throughGw, FPL_POINTS_METRIC, FPL_PROMPT_VERSION]
   );
@@ -1679,7 +1686,9 @@ async function fplSquads(query: Query, season: string): Promise<Response> {
             and error_kind = any(string_to_array($6, ','))
           order by attempted_at desc, attempt_no desc limit 1
        ) refused on true
+      -- The roster as it stands (ADR-0047), as the leaderboard reads it.
       where m.role = 'entrant' and m.prompt_version = $5
+        and m.withdrawn_at is null
       order by m.id`,
     [
       season, gw, FPL_POINTS_METRIC, FPL_POINTS_SEASON_TO_DATE_METRIC,
@@ -1998,6 +2007,8 @@ async function fplEntrants(query: Query, season: string): Promise<Response> {
        join models m on m.id = s.model_id
       where s.competition = 'PL' and s.season = $1 and s.gw <= $2
         and m.role = 'entrant' and m.prompt_version = $3
+        -- The roster as it stands (ADR-0047).
+        and m.withdrawn_at is null
       order by s.model_id, s.gw`,
     [season, throughGw, FPL_PROMPT_VERSION]
   );
@@ -2005,6 +2016,10 @@ async function fplEntrants(query: Query, season: string): Promise<Response> {
   const rows = await query(
     `select id, name, base_model from models
       where role = 'entrant' and prompt_version = $1
+        -- The roster as it stands (ADR-0047), as the replay above reads it: the
+        -- two must agree or an Entrant is named with no path or walks a path
+        -- with no name.
+        and withdrawn_at is null
       order by id`,
     [FPL_PROMPT_VERSION]
   );
