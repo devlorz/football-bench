@@ -1,4 +1,5 @@
 import type { Client as PgClient } from "pg";
+import { FPL_PROMPT_VERSION } from "./context/build-fpl-track-context.js";
 import {
   MATCH_PROMPT_VERSIONS,
   matchPromptOf
@@ -237,6 +238,7 @@ function identityOfEntrant(entrant: Entrant): Record<string, string | null> {
 
 interface StoredSeat {
   id: string;
+  prompt_version: string;
   name: string;
   base_model: string;
   provider: string;
@@ -298,17 +300,24 @@ export function seatSlug(id: string): string {
  * Every Competition's seats are read, not this Competition's: the ten are one
  * roster across the leagues (ADR-0038), so the Premier League's stored seats
  * are the record La Liga's are checked against.
+ *
+ * Which Prompt Versions those are is the caller's, because a track's seats are
+ * the record only of that track: the FPL door reads the FPL seats, whose ids
+ * no Competition prefixes, and reading the match track's there would check a
+ * roster against rows its own upsert never touches.
  */
 async function refuseARosterTheRecordDisagreesWith(
   database: Database,
-  roster: readonly Entrant[]
+  roster: readonly Entrant[],
+  versions: readonly string[]
 ): Promise<void> {
   const stored = await database.query<StoredSeat>(
-    `select id, name, base_model, provider, quantization, config
+    `select id, prompt_version, name, base_model, provider, quantization,
+            config
        from models
       where role = 'entrant' and prompt_version = any($1)
       order by id`,
-    [MATCH_PROMPT_VERSIONS]
+    [versions]
   );
   const bySlug = new Map(
     roster.map((entrant) => [seatSlug(entrant.id), entrant])
@@ -317,7 +326,8 @@ async function refuseARosterTheRecordDisagreesWith(
     const entrant = bySlug.get(seatSlug(seat.id));
     if (entrant === undefined) {
       throw new Error(
-        `Seat ${seat.id} is stored at a Match Prompt Version and is not in `
+        `Seat ${seat.id} is stored at Prompt Version `
+        + `${seat.prompt_version} and is not in `
         + `the roster being entered; the Season Roster closed at the Season's `
         + `first Lock (ADR-0034)`
       );
@@ -341,10 +351,6 @@ async function refuseARosterTheRecordDisagreesWith(
 /**
  * Upserts the ten Entrant rows for `competition`'s Prompt Version, and nothing
  * else — no Fixtures, no Predictions.
- *
- * `config` is merged rather than replaced: these rows were hand-entered, so
- * the table may carry a key this module has never heard of, and a re-entry
- * that dropped it would destroy the only copy.
  *
  * `roster` defaults to the roster of record and exists so that the guard below
  * can be walked into. A guard that only the constant beside it can reach is a
@@ -397,7 +403,9 @@ export async function enterSeasonRoster(
     );
   }
 
-  await refuseARosterTheRecordDisagreesWith(database, roster);
+  await refuseARosterTheRecordDisagreesWith(
+    database, roster, MATCH_PROMPT_VERSIONS
+  );
 
   // A seat is a `models` row and `id` is its primary key, so ten seats per
   // Competition need ten ids per Competition. The Prompt Version's leading
@@ -441,6 +449,29 @@ export async function enterSeasonRoster(
     id: `${version}/${seatSlug(entrant.id)}`
   }));
 
+  await upsertSeats(database, seats, version);
+
+  return seats.map(({ id }) => id);
+}
+
+/**
+ * The write both doors are: a `models` row per seat under one Prompt Version,
+ * in one transaction, so a roster half-entered is a roster not entered.
+ *
+ * One copy rather than one per track, because what a seat's row holds is a
+ * decision about seats and not about the track it plays in — a column added to
+ * it is added to all twenty at once, and two upserts would be two places to
+ * add it and one place to forget.
+ *
+ * `config` is merged rather than replaced: these rows were hand-entered, so
+ * the table may carry a key this module has never heard of, and a re-entry
+ * that dropped it would destroy the only copy.
+ */
+async function upsertSeats(
+  database: Database,
+  seats: readonly Entrant[],
+  version: string
+): Promise<void> {
   await database.query("begin");
   try {
     for (const entrant of seats) {
@@ -477,6 +508,51 @@ export async function enterSeasonRoster(
     await database.query("rollback");
     throw error;
   }
+}
+
+/**
+ * Upserts the FPL track's ten seats — `fpl/kimi-k3` beside the match track's
+ * `match/kimi-k3`, one per Base Model of the Season Roster — and nothing else.
+ *
+ * No Competition, because the FPL track has none: an Entrant runs one squad
+ * down one Season path (ADR-0003), so the track segment is the whole of a
+ * seat's id prefix and `FPL_PROMPT_VERSION` is the whole of what makes the
+ * seat this Season's.
+ *
+ * Deliberately not `enterSeasonRoster` with an FPL Prompt Version. That door
+ * builds its ids out of the version's leading segment, so an `fpl/` version
+ * handed to it would write these same ten ids while carrying the match track's
+ * Competition rules — which is the refusal in `seatPrefixOf`, and this is the
+ * door it refuses on behalf of.
+ */
+export async function enterFplRoster(
+  database: Database,
+  season: string
+): Promise<readonly string[]> {
+  // The half of `seatPrefixOf` that still applies: the track segment is this
+  // module's own constant and cannot be wrong, but the Season is read from the
+  // environment, and a door run under next Season's SEASON would otherwise
+  // seat this Season's roster under this Season's version and report success.
+  const [, seasonSegment = ""] = FPL_PROMPT_VERSION.split("/");
+  if (!seasonSegment.startsWith(`${season}-`)) {
+    throw new Error(
+      `SEASON ${season} does not own Prompt Version ${FPL_PROMPT_VERSION}`
+    );
+  }
+
+  // The same guard the match door runs, against the FPL track's own stored
+  // seats (ADR-0034): these rows are what `manager_states` point at, and that
+  // table is insert-only, so a seat re-entered as a different Base Model would
+  // relabel a Season path already played with no way back.
+  await refuseARosterTheRecordDisagreesWith(
+    database, SEASON_ROSTER, [FPL_PROMPT_VERSION]
+  );
+
+  const seats = SEASON_ROSTER.map((entrant) => ({
+    ...entrant,
+    id: `fpl/${seatSlug(entrant.id)}`
+  }));
+  await upsertSeats(database, seats, FPL_PROMPT_VERSION);
 
   return seats.map(({ id }) => id);
 }

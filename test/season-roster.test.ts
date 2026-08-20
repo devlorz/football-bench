@@ -6,9 +6,12 @@ import {
   matchPromptOf
 } from "../src/predictions/openrouter-entrant.js";
 import {
-  enterActiveCompetitionRosters, enterSeasonRoster, SEASON_ROSTER,
-  SEASON_ROSTER_SIZE, seatPrefixOf, seatSlug
+  enterActiveCompetitionRosters, enterFplRoster, enterSeasonRoster,
+  SEASON_ROSTER, SEASON_ROSTER_SIZE, seatPrefixOf, seatSlug
 } from "../src/season-roster.js";
+import {
+  FPL_PROMPT_VERSION
+} from "../src/context/build-fpl-track-context.js";
 
 const { Client } = pg;
 
@@ -252,8 +255,8 @@ describe("entering the Season Roster", () => {
       );
 
       await expect(enterSeasonRoster(client, "PD", SEASON)).rejects.toThrow(
-        "Seat match/late-arrival is stored at a Match Prompt Version and is "
-        + "not in the roster being entered"
+        "Seat match/late-arrival is stored at Prompt Version "
+        + "match/2026-27-v2 and is not in the roster being entered"
       );
     });
 
@@ -422,5 +425,108 @@ describe("entering the Season Roster", () => {
 
       expect(entered).toHaveLength(SEASON_ROSTER_SIZE * 2);
       expect(await entrants()).toHaveLength(SEASON_ROSTER_SIZE * 2);
+    });
+});
+
+describe("entering the FPL track's Season Roster", () => {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+
+  beforeAll(async () => {
+    await client.connect();
+    await resetSchema(client);
+
+    return async () => {
+      await client.end();
+    };
+  });
+
+  beforeEach(async () => {
+    await client.query("truncate models restart identity cascade");
+  });
+
+  const fplSeats = async (): Promise<ModelRow[]> => (
+    await client.query<ModelRow>(
+      `select * from models
+        where role = 'entrant' and prompt_version = $1
+        order by id`,
+      [FPL_PROMPT_VERSION]
+    )
+  ).rows;
+
+  test("writes one seat per Base Model of the roster, named for the match seat",
+    async () => {
+      const entered = await enterFplRoster(client, SEASON);
+
+      // The whole roster as one value: a track is ten seats or it is not this
+      // Season's, and `startFplTrack` refuses anything else.
+      expect(entered).toEqual(
+        SEASON_ROSTER.map(({ id }) => `fpl/${seatSlug(id)}`)
+      );
+      expect((await fplSeats()).map((row) => [
+        row.id, row.name, row.base_model, row.provider, row.quantization,
+        row.config.baseModelClass, row.config.canonical_slug,
+        row.config.catalog_checked_at
+      ])).toEqual(
+        SEASON_ROSTER
+          .map((entrant) => [
+            `fpl/${seatSlug(entrant.id)}`, entrant.name, entrant.baseModel,
+            entrant.provider, entrant.quantization, entrant.baseModelClass,
+            entrant.canonicalSlug, entrant.catalogCheckedAt
+          ])
+          .sort((left, right) => String(left[0]).localeCompare(String(right[0])))
+      );
+    });
+
+  test("re-entering seats the same ten, not a second ten", async () => {
+    await enterFplRoster(client, SEASON);
+    await enterFplRoster(client, SEASON);
+
+    expect((await fplSeats()).map(({ id }) => id)).toEqual(
+      SEASON_ROSTER
+        .map(({ id }) => `fpl/${seatSlug(id)}`)
+        .sort((left, right) => left.localeCompare(right))
+    );
+  });
+
+  test("leaves the match track's seats where they are, and is left alone",
+    async () => {
+      await enterSeasonRoster(client, "PL", SEASON);
+      await enterFplRoster(client, SEASON);
+
+      // The two tracks are twenty rows, not ten written twice: the doors share
+      // a roster and no id, which is the whole reason the FPL one exists
+      // rather than an `fpl/` Prompt Version being handed to the match door.
+      const rows = await client.query<ModelRow>(
+        "select id, prompt_version from models where role = 'entrant'"
+      );
+      expect(rows.rows).toHaveLength(SEASON_ROSTER_SIZE * 2);
+      expect(new Set(rows.rows.map(({ prompt_version }) => prompt_version)))
+        .toEqual(new Set([MATCH_PROMPT_VERSION, FPL_PROMPT_VERSION]));
+    });
+
+  test("refuses a Season that does not own the FPL Prompt Version", async () => {
+    await expect(enterFplRoster(client, "2027-28")).rejects
+      .toThrow(`SEASON 2027-28 does not own Prompt Version ${FPL_PROMPT_VERSION}`);
+    expect(await fplSeats()).toEqual([]);
+  });
+
+  test("refuses to re-enter a seat the record holds as another Base Model",
+    async () => {
+      // The Season Roster closed at the first Lock (ADR-0034), and an FPL seat
+      // is what an insert-only `manager_states` points at: relabelling one
+      // rewrites a Season path already played.
+      await enterFplRoster(client, SEASON);
+      const [seat] = SEASON_ROSTER;
+      const id = `fpl/${seatSlug(seat?.id ?? "")}`;
+      await client.query(
+        "update models set base_model = $1 where id = $2",
+        ["z-ai/glm-5.2", id]
+      );
+
+      await expect(enterFplRoster(client, SEASON)).rejects.toThrow(
+        `Seat ${id} is stored as a different Base Model and the Season Roster `
+        + `closed at the Season's first Lock: base_model z-ai/glm-5.2 -> `
+        + `${seat?.baseModel} (ADR-0034)`
+      );
     });
 });
