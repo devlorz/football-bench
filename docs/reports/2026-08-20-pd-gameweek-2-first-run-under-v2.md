@@ -54,6 +54,48 @@ results' spelling against football-data.org's, which predates all of this.
 
 ## After the run
 
-To be filled from `usage.cost` rather than estimated, in the shape the Gameweek 1 price
-report used: total spend, calls, Repairs, per-seat breakdown, and the balance the panel
-shows afterwards.
+**$2.9246 over 161 calls, 116 Predictions of 140, 14 contexts stored.** The estimate
+carried in was $2.60 to $2.90, so the bill landed two cents over its top — close enough
+that the per-Fixture unit measured on Gameweek 1 survives the packet having grown.
+
+| Seat | Calls | Answered | Cost | Mean latency |
+| --- | ---: | ---: | ---: | ---: |
+| Gemini 3.1 Pro Preview | 34 | 12 | $0.7963 | 16.0s |
+| GPT-5.6 Sol Pro | 14 | 14 | $0.5105 | 17.9s |
+| Kimi K3 | 14 | 10 | $0.4123 | 87.1s |
+| Claude Opus 5 | 14 | 14 | $0.3149 | 8.2s |
+| Muse Spark 1.2 | 14 | 12 | $0.2286 | 20.7s |
+| Grok 4.6 | 15 | 11 | $0.2137 | 66.6s |
+| GLM 5.3 | 14 | 14 | $0.1940 | 63.5s |
+| Qwen3.8 Max | 14 | 11 | $0.1808 | 86.1s |
+| DeepSeek V4 Pro | 14 | 4 | $0.0459 | 100.5s |
+| MiniMax M3 | 14 | 14 | $0.0276 | 14.5s |
+
+**GLM 5.3 answered all fourteen.** The seat that replaced the delisted 5.2 and had never
+been called before this morning's pre-flight took every Fixture without a Repair, at
+$0.1940 — a little dearer than 5.2's Gameweek 1 rate and still the third cheapest seat.
+
+### The 24 Gaps, and why twenty of them are one story
+
+- **timeout, 20** — DeepSeek V4 Pro, Grok 4.6, Kimi K3 and Qwen3.8 Max, over twelve
+  Fixtures. The latency column is the finding: those four are the four slowest seats at
+  67 to 101 seconds mean, where every seat that answered everything sits between 8 and
+  21. They are not failing to answer, they are answering too slowly for the window while
+  140 calls go out at once. All four passed pre-flight this morning one call at a time.
+- **schema, 2** — Gemini 3.1 Pro Preview, the same seat and the same failure the bench
+  saw a day earlier. Its 34 calls for 12 Predictions is a Repair rate no other seat comes
+  near, and it is why it tops the bill while answering less than everybody.
+- **rate_limit, 2** — Muse Spark 1.2, the same upstream shared-pool limit pre-flight hit
+  this morning and a direct probe found cleared. It returns under load.
+
+Nothing here was left to chance: `storeContext` conflicts do nothing and read the stored
+row back, so the scheduled run at 11:30Z retries the 24 outstanding pairs against the
+contexts already frozen rather than writing new ones, and the fill run at 15:30Z is a
+second net before the 17:30Z Lock. Re-running by hand would have paid for what the cron
+does for free.
+
+**A note for whoever reads the Gameweek's numbers.** Four of the ten seats are slow
+enough that a burst of 140 calls costs them Predictions, while one is Repair-hungry
+enough to spend the most and answer least. Neither is a fact about forecasting, and both
+would read as one if the Gap rate were taken for a skill measure — which is exactly what
+the Gap rate is recorded separately to prevent.
