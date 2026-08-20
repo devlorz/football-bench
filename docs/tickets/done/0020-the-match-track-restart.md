@@ -500,7 +500,11 @@ Fixtures, which arrives with the last kickoff, not with the ticket's opening.
       and it cost nothing because no response came back. It is left as it fell rather
       than re-run, because the command calls all ten and a second pass would spend the
       whole $0.157 to retry one seat; the prediction run carries three Repairs where
-      pre-flight carries none, so the same seat has cover this probe did not.
+      pre-flight carries none, so the same seat has cover this probe did not. Confirmed
+      later the same day: one call straight at `meta/muse-spark-1.2` came back
+      `finish_reason: "stop"` from Meta, so the limit had cleared and the reading above
+      is evidence rather than inference — for the price of a few tokens instead of a
+      second $0.157.
       "Both Competitions" the run could not do at all: `preflightBaseModels` loads its
       context with `"PL"` as a literal and takes no Competition. That is a defect of the
       pre-flight, not of the restart, and it has a ticket of its own.
