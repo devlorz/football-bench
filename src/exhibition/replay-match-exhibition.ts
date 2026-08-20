@@ -33,6 +33,7 @@ export interface ReplayMatchExhibitionOptions {
   /** The `models` row to replay; everything else about it is read from it. */
   exhibitionModelId: string;
   concurrency: number;
+  entrantCallTimeoutMs: number;
   apiKey: string;
   http: HttpFetcher;
   now: () => Date;
@@ -200,6 +201,7 @@ async function replayCoveredGameweeks({
   season,
   exhibitionModelId,
   concurrency,
+  entrantCallTimeoutMs,
   apiKey,
   http,
   now
@@ -240,6 +242,7 @@ async function replayCoveredGameweeks({
       gameweek,
       concurrency,
       apiKey,
+      entrantCallTimeoutMs,
       http,
       now,
       // An Exhibition Run is operator-triggered and nothing about it recurs,

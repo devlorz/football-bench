@@ -83,6 +83,7 @@ export type PreflightBaseModelsOptions = {
   season: string;
   fixtureId: number;
   apiKey: string;
+  entrantCallTimeoutMs: number;
   http: HttpFetcher;
 } & PreflightTarget;
 
@@ -129,9 +130,12 @@ async function callBaseModel(options: {
   fixture: FixtureRow;
   contextData: MatchContextData;
   apiKey: string;
+  entrantCallTimeoutMs: number;
   http: HttpFetcher;
 }): Promise<PreflightResult> {
-  const { database, model, fixture, contextData, apiKey, http } = options;
+  const {
+    database, model, fixture, contextData, apiKey, entrantCallTimeoutMs, http
+  } = options;
   const request = openRouterRequest(
     apiKey,
     {
@@ -142,6 +146,9 @@ async function callBaseModel(options: {
     buildMatchContext(fixture, contextData)
   );
   const { url, ...requestOptions } = request;
+  // The window the real run gives this seat, so a seat that clears the check
+  // is a seat the run can use — and one that fails it failed on its answer.
+  requestOptions.timeoutMs = entrantCallTimeoutMs;
 
   let status: number;
   let body: string;
@@ -252,6 +259,7 @@ export async function preflightBaseModels({
   expectedEntrantCount,
   exhibitionModelId,
   apiKey,
+  entrantCallTimeoutMs,
   http
 }: PreflightBaseModelsOptions): Promise<PreflightReport> {
   // The union says one target or the other, and this says it again at the
@@ -327,6 +335,7 @@ export async function preflightBaseModels({
       fixture,
       contextData,
       apiKey,
+      entrantCallTimeoutMs,
       http
     }));
   }

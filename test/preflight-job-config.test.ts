@@ -1,4 +1,7 @@
 import { describe, expect, test } from "vitest";
+import {
+  DEFAULT_ENTRANT_CALL_TIMEOUT_MS
+} from "../src/predictions/openrouter-entrant.js";
 import { readPreflightJobConfig } from "../src/cli/config.js";
 
 describe("the pre-flight job configuration", () => {
@@ -15,6 +18,7 @@ describe("the pre-flight job configuration", () => {
       season: "2026-27",
       fixtureId: 42,
       expectedEntrantCount: 9,
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       openRouterApiKey: "secret-from-environment"
     });
 
@@ -57,6 +61,7 @@ describe("the pre-flight job configuration", () => {
       season: "2026-27",
       fixtureId: 42,
       expectedEntrantCount: 10,
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       openRouterApiKey: "secret-from-environment"
     });
 
@@ -86,6 +91,7 @@ describe("the pre-flight job configuration", () => {
       season: "2026-27",
       fixtureId: 42,
       exhibitionModelId: "exhibition/late",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       openRouterApiKey: "secret-from-environment"
     });
 
@@ -108,5 +114,18 @@ describe("the pre-flight job configuration", () => {
     })).toThrow(
       "EXHIBITION_MODEL_ID and EXPECTED_ENTRANT_COUNT cannot both be set"
     );
+  });
+
+  test("the check takes the same window as the run it clears", () => {
+    // Pre-flight decides whether a seat is usable. Cutting it off at a window
+    // narrower than the run's would fail a seat the run can use (ticket 0023).
+    expect(readPreflightJobConfig({
+      DATABASE_URL: "postgresql://localhost/benchmark",
+      SEASON: "2026-27",
+      FIXTURE_ID: "42",
+      EXPECTED_ENTRANT_COUNT: "9",
+      ENTRANT_CALL_TIMEOUT_MS: "600000",
+      OPENROUTER_API_KEY: "secret-from-environment"
+    })).toMatchObject({ entrantCallTimeoutMs: 600_000 });
   });
 });

@@ -1,4 +1,7 @@
 import pg from "pg";
+import {
+  DEFAULT_ENTRANT_CALL_TIMEOUT_MS
+} from "../src/predictions/openrouter-entrant.js";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { fetchFplGameweek } from "../src/fpl/fetch-gameweek.js";
 import { runScheduledPredictions } from "../src/predictions/run-scheduled-predictions.js";
@@ -85,6 +88,7 @@ describe("scheduled Prediction runs", () => {
       season: "2026-27",
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => now,
       http: async () => ({
         status: 200,
@@ -123,6 +127,7 @@ describe("scheduled Prediction runs", () => {
       season: "2026-27",
       concurrency: 2,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-21T11:30:00Z"),
       http: async (_url, options) => {
         const request = JSON.parse(options?.body ?? "{}") as {
@@ -159,6 +164,7 @@ describe("scheduled Prediction runs", () => {
       season: "2026-27",
       concurrency: 2,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => fillNow,
       http: async (_url, options) => {
         const request = JSON.parse(options?.body ?? "{}") as {
@@ -201,6 +207,7 @@ describe("scheduled Prediction runs", () => {
       season: "2026-27",
       concurrency: 2,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => fillNow,
       http: async () => {
         repeatedCalls += 1;
@@ -234,6 +241,7 @@ describe("scheduled Prediction runs", () => {
       season: "2026-27",
       concurrency: 2,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => {
         const instant = clock.shift();
         if (instant === undefined) {
@@ -297,6 +305,7 @@ describe("scheduled Prediction runs", () => {
       season: "2026-27",
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-21T15:30:00Z"),
       http: async () => ({ status: 503, body: "provider unavailable" }),
       onCompletedRun: (run) => {
@@ -327,6 +336,7 @@ describe("scheduled Prediction runs", () => {
       season: "2026-27",
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => observedAt,
       http: async () => ({
         status: 200,

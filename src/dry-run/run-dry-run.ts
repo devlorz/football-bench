@@ -1,4 +1,7 @@
 import type { Client } from "pg";
+import {
+  DEFAULT_ENTRANT_CALL_TIMEOUT_MS
+} from "../predictions/openrouter-entrant.js";
 import type { GapAlert } from "../predictions/gap-alert.js";
 import { predictGameweek } from "../predictions/predict-gameweek.js";
 import { matchPromptOf } from "../predictions/openrouter-entrant.js";
@@ -141,6 +144,10 @@ export async function runDryRun({
       gameweek,
       concurrency,
       apiKey: "dry-run",
+      // A dry run answers itself from the archive, so no call leaves the
+      // process and the window is a formality — it takes the Match track's
+      // so the two paths cannot read differently.
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       http,
       now: () => instant,
       trigger

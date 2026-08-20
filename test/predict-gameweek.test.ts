@@ -4,6 +4,7 @@ import { insertExhibition, resetSchema } from "./schema-fixture.js";
 import type { HttpRequest } from "../src/http.js";
 import { predictGameweek } from "../src/predictions/predict-gameweek.js";
 import {
+  DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
   matchPromptOf
 } from "../src/predictions/openrouter-entrant.js";
 import {
@@ -108,6 +109,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async (_url, options) => {
         const request = JSON.parse(options?.body ?? "{}") as {
@@ -189,6 +191,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async (_url, options) => {
         const request = JSON.parse(options?.body ?? "{}") as {
@@ -263,6 +266,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async (_url, options) => {
         const request = JSON.parse(options?.body ?? "{}") as {
@@ -375,6 +379,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => {
         const instant = clock.shift();
         if (instant === undefined) {
@@ -447,7 +452,10 @@ describe("predicting a Gameweek", () => {
           allow_fallbacks: false
         },
         stream: false
-      })
+      }),
+      // Unset by the caller, so the call goes out under the measured window
+      // rather than the shared fetcher's general-purpose one.
+      timeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS
     }]);
 
     const stored = await client.query(
@@ -554,6 +562,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 2,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-28T17:29:00Z"),
       http: async () => {
         calls += 1;
@@ -639,6 +648,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 2,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-28T17:29:00Z"),
       http: async () => {
         calls += 1;
@@ -665,6 +675,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       trigger: "fill",
       now: () => new Date("2026-08-21T15:30:00Z"),
       http: async () => {
@@ -701,6 +712,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       trigger: "manual",
       now: () => new Date("2026-08-21T16:00:00Z"),
       http: async (_url, options) => {
@@ -756,6 +768,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 0,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async () => {
         calls += 1;
@@ -811,6 +824,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 4,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async (_url, options) => {
         const body = JSON.parse(options?.body ?? "{}") as {
@@ -927,6 +941,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async () => ({
         status: 200,
@@ -974,6 +989,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async () => ({
         status: 200,
@@ -1031,6 +1047,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       trigger: "manual",
       now: () => new Date("2026-08-21T17:30:00Z"),
       http: async () => ({
@@ -1092,6 +1109,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => {
         const instant = clock.shift();
         if (instant === undefined) {
@@ -1143,6 +1161,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async () => ({
         status: 200,
@@ -1228,6 +1247,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => {
         const instant = clock.shift();
         if (instant === undefined) {
@@ -1350,6 +1370,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 2,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async (_url, options) => {
         called.push((JSON.parse(options?.body ?? "{}") as {
@@ -1430,6 +1451,7 @@ describe("predicting a Gameweek", () => {
         gameweek: 1,
         concurrency: 2,
         apiKey: "test-key",
+        entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
         now: () => new Date("2026-08-21T17:29:00Z"),
         http: async (_url, options) => {
           called.push((JSON.parse(options?.body ?? "{}") as {
@@ -1494,6 +1516,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 2,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async (_url, options) => {
         called.push((JSON.parse(options?.body ?? "{}") as {
@@ -1542,6 +1565,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async () => {
         calls += 1;
@@ -1560,6 +1584,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async () => {
         calls += 1;
@@ -1611,6 +1636,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async () => ({
         status: 503,
@@ -1649,6 +1675,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async () => ({
         status: 429,
@@ -1667,6 +1694,10 @@ describe("predicting a Gameweek", () => {
   });
 
   test("records a signalled HTTP timeout separately", async () => {
+    // A seat the client stopped listening to is a timeout Gap and nothing
+    // else, and the window it was given is the one that reached the call —
+    // the classification has to survive the window moving.
+    const windows: (number | undefined)[] = [];
     await predictGameweek({
       competition: "PL",
       database: client,
@@ -1674,13 +1705,17 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: 420_000,
       now: () => new Date("2026-08-21T17:29:00Z"),
-      http: async () => {
+      http: async (_url, options) => {
+        windows.push(options?.timeoutMs);
         const error = new Error("request timed out");
         error.name = "TimeoutError";
         throw error;
       }
     });
+
+    expect(windows).toEqual([420_000]);
 
     const attempt = await client.query(
       "select ok, error_kind, error_detail from attempts"
@@ -1700,6 +1735,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async () => ({
         status: 200,
@@ -1737,6 +1773,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-21T17:29:00Z"),
       http: async () => {
         calls += 1;
@@ -1841,6 +1878,7 @@ describe("predicting a Gameweek", () => {
       gameweek: 1,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-08-21T17:29:00Z"),
       http
     };
@@ -1901,6 +1939,7 @@ describe("predicting a Gameweek", () => {
         gameweek: 1,
         concurrency: 1,
         apiKey: "test-key",
+        entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
         now: () => new Date("2026-08-21T17:29:00Z"),
         http: async () => {
           calls += 1;

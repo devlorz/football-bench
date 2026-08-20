@@ -16,17 +16,17 @@ const { Client } = pg;
  * record they walk — so a second command would be a second place to learn that
  * an Exhibition Run exists.
  */
-const track = readExhibitionTrack(process.env);
-const config = track === "fpl"
-  ? readFplExhibitionJobConfig(process.env)
-  : readExhibitionJobConfig(process.env);
+const config = readExhibitionTrack(process.env) === "fpl"
+  ? { track: "fpl" as const, ...readFplExhibitionJobConfig(process.env) }
+  : { track: "match" as const, ...readExhibitionJobConfig(process.env) };
 const database = new Client({ connectionString: config.databaseUrl });
 
 await database.connect();
 try {
-  // The call timeout is the FPL track's alone (spec 0010), so it is also what
-  // tells the two configurations apart without a second reading of `TRACK`.
-  if ("entrantCallTimeoutMs" in config) {
+  // The track travels with the configuration rather than being read off the
+  // shape of it: the call timeout used to tell the two apart, and ticket 0023
+  // gave it to both tracks.
+  if (config.track === "fpl") {
     const gameweeks = await replayFplExhibition({
       database,
       season: config.season,
@@ -57,6 +57,7 @@ try {
       exhibitionModelId: config.exhibitionModelId,
       concurrency: config.concurrency,
       apiKey: config.openRouterApiKey,
+      entrantCallTimeoutMs: config.entrantCallTimeoutMs,
       http: nodeHttpFetcher,
       now: () => new Date()
     });

@@ -31,6 +31,7 @@ export interface PredictGameweekOptions {
   gameweek: number;
   concurrency: number;
   apiKey: string;
+  entrantCallTimeoutMs: number;
   http: HttpFetcher;
   now: () => Date;
   trigger?: AttemptTrigger;
@@ -135,6 +136,7 @@ export async function predictGameweek({
   gameweek,
   concurrency,
   apiKey,
+  entrantCallTimeoutMs,
   http,
   now,
   trigger = "main"
@@ -241,6 +243,7 @@ export async function predictGameweek({
     gameweek,
     concurrency,
     apiKey,
+    entrantCallTimeoutMs,
     http,
     now,
     trigger,

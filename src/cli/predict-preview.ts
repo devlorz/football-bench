@@ -58,6 +58,7 @@ try {
     apiKey: config.openRouterApiKey,
     http: nodeHttpFetcher,
     concurrency: config.concurrency,
+    entrantCallTimeoutMs: config.entrantCallTimeoutMs,
     at: config.at
   });
 

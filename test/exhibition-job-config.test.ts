@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
+  DEFAULT_ENTRANT_CALL_TIMEOUT_MS
+} from "../src/predictions/openrouter-entrant.js";
+import {
   readExhibitionJobConfig,
   readExhibitionTrack,
   readFplExhibitionJobConfig
@@ -18,6 +21,7 @@ describe("the Exhibition replay job configuration", () => {
       season: "2026-27",
       exhibitionModelId: "exhibition/late",
       concurrency: 4,
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       openRouterApiKey: "secret-from-environment"
     });
   });
@@ -31,10 +35,10 @@ describe("the Exhibition replay job configuration", () => {
       .toThrow("TRACK must be match or fpl");
   });
 
-  test("takes a call timeout for the FPL track and no concurrency", () => {
+  test("takes no concurrency on the FPL track", () => {
     // A season path is replayed in order, so there is never a second call to
-    // bound — and the FPL prompt is the one that needs a timeout of its own
-    // (spec 0010).
+    // bound. Both tracks carry a call timeout since ticket 0023; only the
+    // Match one's default moved, so this track's stays where it was.
     expect(readFplExhibitionJobConfig({
       DATABASE_URL: "postgresql://localhost/benchmark",
       SEASON: "2026-27",
@@ -48,6 +52,13 @@ describe("the Exhibition replay job configuration", () => {
       entrantCallTimeoutMs: 600000,
       openRouterApiKey: "secret-from-environment"
     });
+
+    expect(readFplExhibitionJobConfig({
+      DATABASE_URL: "postgresql://localhost/benchmark",
+      SEASON: "2026-27",
+      EXHIBITION_MODEL_ID: "exhibition/late",
+      OPENROUTER_API_KEY: "secret-from-environment"
+    })).toMatchObject({ entrantCallTimeoutMs: 120_000 });
   });
 
   test("refuses a replay with no model id, and takes no Gameweek", () => {

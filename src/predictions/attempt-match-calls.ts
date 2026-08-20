@@ -45,6 +45,9 @@ export interface AttemptMatchCallsOptions {
   gameweek: number;
   concurrency: number;
   apiKey: string;
+  /** How long one Entrant may think here. Stated by every caller: a window
+   * that defaults quietly is a window some path never reaches. */
+  entrantCallTimeoutMs: number;
   http: HttpFetcher;
   now: () => Date;
   trigger: AttemptTrigger;
@@ -317,6 +320,7 @@ export async function attemptMatchCalls({
   gameweek,
   concurrency,
   apiKey,
+  entrantCallTimeoutMs,
   http,
   now,
   trigger,
@@ -384,6 +388,7 @@ export async function attemptMatchCalls({
           messages
         );
         const { url, ...requestOptions } = request;
+        requestOptions.timeoutMs = entrantCallTimeoutMs;
         let response: HttpResponse;
         let completedAt: Date;
         try {

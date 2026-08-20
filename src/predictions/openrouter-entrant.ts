@@ -234,6 +234,35 @@ function withCacheBreakpoint(
   ];
 }
 
+/**
+ * How long an Entrant may think before the client stops listening.
+ *
+ * Read off the record rather than rounded, and the record is unusually plain
+ * about it. Over the two Gameweeks run by hand on 2026-08-20 — La Liga's
+ * Gameweek 2 and the Premier League's Gameweek 1, the first asked under the
+ * restarted Prompt Versions — five seats Gapped 37 times between them, and
+ * every one of the five has a maximum latency between 120,005ms and 120,020ms:
+ * DeepSeek V4 Pro 16 Gaps on a 101.6s mean, Qwen3.8 Max 9 on 93.1s, Kimi K3 5
+ * on 73.9s, GLM 5.3 4 on 73.4s, Grok 4.6 3 on 59.6s. The five seats that never
+ * Gapped top out at 28,785ms — Claude Opus 5 means 6.2s, GPT-5.6 Sol Pro 14.5s,
+ * Gemini 3.1 Pro Preview 15.2s.
+ *
+ * Ninety-one seconds separate the two groups with nothing in between, and a
+ * maximum that clears the ceiling by fifteen milliseconds is the ceiling being
+ * hit rather than a distribution ending. So the true tail is longer than
+ * anything here was allowed to measure, and the means are the only honest
+ * anchor there is. Five minutes is roughly three times the slowest of them,
+ * which leaves room for a tail nobody has seen while still failing a seat that
+ * has genuinely stopped answering.
+ *
+ * This benchmark exists to compare Base Models that think for different
+ * lengths, so a window is a claim about how long thinking may take. Stated per
+ * call (`ENTRANT_CALL_TIMEOUT_MS`) rather than defaulted globally, because the
+ * FPL prompt sits far above the Match one (spec 0010) and only the Match shape
+ * was measured here — which is why the FPL track keeps its own default.
+ */
+export const DEFAULT_ENTRANT_CALL_TIMEOUT_MS = 300_000;
+
 export function openRouterRequest(
   apiKey: string,
   entrant: OpenRouterEntrant,

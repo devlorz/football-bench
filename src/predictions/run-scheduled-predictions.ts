@@ -22,6 +22,7 @@ export interface RunScheduledPredictionsOptions {
   season: string;
   concurrency: number;
   apiKey: string;
+  entrantCallTimeoutMs: number;
   http: HttpFetcher;
   now: () => Date;
   onCompletedRun?: (run: CompletedPredictionRun) => void;
@@ -41,6 +42,7 @@ export async function runScheduledPredictions({
   season,
   concurrency,
   apiKey,
+  entrantCallTimeoutMs,
   http,
   now,
   onCompletedRun
@@ -109,6 +111,7 @@ export async function runScheduledPredictions({
           gameweek: run.gw,
           concurrency,
           apiKey,
+          entrantCallTimeoutMs,
           http,
           now,
           trigger: run.trigger

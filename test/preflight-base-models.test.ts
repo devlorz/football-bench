@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import {
+  DEFAULT_ENTRANT_CALL_TIMEOUT_MS
+} from "../src/predictions/openrouter-entrant.js";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
@@ -307,6 +310,7 @@ describe("pre-flight for the Base Model roster", () => {
       fixtureId: 1,
       expectedEntrantCount: 9,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       http: async (url, options) => {
         requests.push({ url, ...options! });
         const request = JSON.parse(options?.body ?? "{}") as { model?: string };
@@ -365,7 +369,10 @@ describe("pre-flight for the Base Model roster", () => {
           quantizations: ["fp8"]
         },
         stream: false
-      })
+      }),
+      // The window the run itself gives this seat: a check that cut a seat
+      // off earlier than the run does would certify the wrong thing.
+      timeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS
     });
     expect(report).toEqual({
       ok: true,
@@ -420,6 +427,7 @@ describe("pre-flight for the Base Model roster", () => {
       fixtureId: 1,
       expectedEntrantCount: 9,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       http: async () => {
         calls += 1;
         if (calls === 1) {
@@ -477,6 +485,7 @@ describe("pre-flight for the Base Model roster", () => {
       fixtureId: 1,
       expectedEntrantCount: 9,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       http: async (_url, options) => {
         const request = JSON.parse(options?.body ?? "{}") as { model: string };
         const body = `{"model":${JSON.stringify(request.model)},"choices":[{"message":{"content":"{\\"fixture_id\\":1,\\"probs\\":{\\"H\\":0.6,\\"D\\":0.24,\\"A\\":0.16},\\"score\\":{\\"home\\":2,\\"away\\":1},\\"rationale\\":\\"Observed spacing is load-bearing.\\"}"}}],"openrouter_metadata":{"endpoints":{"available":[{"provider":"Observed Provider","selected":true}]}}}`;
@@ -528,6 +537,7 @@ describe("pre-flight for the Base Model roster", () => {
       fixtureId: 1,
       expectedEntrantCount: 9,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       http: async () => ({ status: 200, body })
     });
 
@@ -577,6 +587,7 @@ describe("pre-flight for the Base Model roster", () => {
       fixtureId: 1,
       expectedEntrantCount: 9,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       http: async () => {
         calls += 1;
         if (calls === 1) {
@@ -671,6 +682,7 @@ describe("pre-flight for the Base Model roster", () => {
       fixtureId: 1,
       expectedEntrantCount: 10,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       http: async () => {
         calls += 1;
         throw new Error("HTTP must not run");
@@ -704,6 +716,7 @@ describe("pre-flight for the Base Model roster", () => {
       fixtureId: 1,
       expectedEntrantCount: 10,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       http: async () => {
         calls += 1;
         throw new Error("HTTP must not run");
@@ -720,6 +733,7 @@ describe("pre-flight for the Base Model roster", () => {
       fixtureId: 1,
       expectedEntrantCount: 10,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       http: async (_url, options) => {
         const request = JSON.parse(options?.body ?? "{}") as { model: string };
         return {
@@ -786,6 +800,7 @@ describe("pre-flight for the Base Model roster", () => {
       fixtureId: 1,
       expectedEntrantCount: 9,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       http: async () => {
         calls += 1;
         throw new Error("HTTP must not run");
@@ -819,6 +834,7 @@ describe("pre-flight for the Base Model roster", () => {
       fixtureId: 1,
       expectedEntrantCount: 9,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       http: async (_url, options) => {
         const request = JSON.parse(options?.body ?? "{}") as { model: string };
         called.push(request.model);
@@ -872,6 +888,7 @@ describe("pre-flight for the Base Model roster", () => {
       fixtureId: 1,
       exhibitionModelId: "exhibition/late",
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       http: async (url, options) => {
         requests.push({ url, ...options! });
         return {
@@ -941,6 +958,7 @@ describe("pre-flight for the Base Model roster", () => {
         fixtureId: 1,
         exhibitionModelId,
         apiKey: "test-key",
+        entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
         http: async () => {
           calls += 1;
           throw new Error("HTTP must not run");
@@ -976,6 +994,7 @@ describe("pre-flight for the Base Model roster", () => {
       fixtureId: 1,
       exhibitionModelId: "exhibition/fpl",
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       http: async () => {
         calls += 1;
         throw new Error("HTTP must not run");
@@ -999,6 +1018,7 @@ describe("pre-flight for the Base Model roster", () => {
       season: "2026-27",
       fixtureId: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       http
     };
 
@@ -1034,6 +1054,7 @@ describe("pre-flight for the Base Model roster", () => {
       fixtureId: 1,
       expectedEntrantCount: 9,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       http: async (_url, options) => {
         const request = JSON.parse(options?.body ?? "{}") as { model: string };
         called.push(request.model);
@@ -1086,6 +1107,7 @@ describe("pre-flight for the Base Model roster", () => {
       fixtureId: 1,
       expectedEntrantCount: 9,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       http: async () => ({ status: 200, body: observedBody })
     });
 
@@ -1196,6 +1218,7 @@ describe("pre-flight for the Base Model roster", () => {
       fixtureId: 1,
       expectedEntrantCount: 10,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       http: answering(called, sent)
     });
 
@@ -1235,6 +1258,7 @@ describe("pre-flight for the Base Model roster", () => {
       fixtureId: 1,
       expectedEntrantCount: 9,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       http: answering(called, sent)
     });
 

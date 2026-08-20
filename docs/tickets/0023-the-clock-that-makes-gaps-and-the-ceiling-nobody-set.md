@@ -2,7 +2,7 @@
 
 Two slices from one afternoon. On 2026-08-20 the match track's first two Gameweeks under
 the restarted Prompt Versions were run by hand, and between them produced 53 Gaps that
-were nothing to do with the Base Models: 37 from a two-minute client timeout that four
+were nothing to do with the Base Models: 37 from a two-minute client timeout that five
 seats cannot beat, and 16 from an HTTP 402 refusing calls the account had the money for.
 
 They look like one story and are two. The timeout is ours, set to a round number in a
@@ -32,25 +32,44 @@ listening.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] The client timeout is set from measurement, not from the round number it is now.
-      `DEFAULT_HTTP_TIMEOUT_MS` is 120,000, and the four seats that Gap on it have mean
-      latencies of 68 to 85 seconds with a **maximum of exactly 120 seconds** — the
-      signature of a ceiling being hit rather than a distribution ending. Over the two
-      runs: DeepSeek V4 Pro 17 timeouts at 85.2s mean, Qwen3.8 Max 9 at 75.9s, Kimi K3 6
-      at 68.3s. Claude Opus 5 means 6.2s and Gemini 16.0s, and neither has ever timed out.
-- [ ] The number is justified where it is set, against the latency the record holds. A
-      timeout is a claim about how long thinking may take, and this benchmark exists to
-      compare Base Models that think for different lengths.
-- [ ] Whatever the new window is, it is reachable per call rather than only global: the
-      match path and the FPL path have different shapes, and spec 0010 puts the FPL
-      context far above the match one.
-- [ ] `PREDICT_CONCURRENCY` is considered in the same change. It defaults to
-      `SEASON_ROSTER_SIZE`, so ten calls are in flight at once and the four slow seats are
-      slowest when the burst is widest — every one of their timeouts came from a
-      ten-wide run, and none from pre-flight, which calls one seat at a time.
-- [ ] A test pins that a call abandoned by the client is recorded as a timeout Gap and
-      not as anything else — the classification is right today and must survive the
-      window moving.
+- [x] The client timeout is set from measurement, not from the round number it is now.
+      `DEFAULT_ENTRANT_CALL_TIMEOUT_MS` is 300,000 — roughly three times the 101.6s mean
+      of the slowest seat, chosen off the means because a maximum that clears 120,000ms by
+      fifteen milliseconds is a censored distribution and no percentile can be read from
+      it. Counted over the two runs this ticket is about, La Liga's Gameweek 2 and the
+      Premier League's Gameweek 1: DeepSeek V4 Pro 16 Gaps on a 101.6s mean, Qwen3.8 Max 9
+      on 93.1s, Kimi K3 5 on 73.9s, GLM 5.3 4 on 73.4s, Grok 4.6 3 on 59.6s — 37, and five
+      seats rather than the four this ticket first said. The five that never Gapped top
+      out at 28,785ms, ninety-one seconds below the ceiling with nothing in between.
+      `DEFAULT_HTTP_TIMEOUT_MS` stays 120,000 for data fetches, which are not thinking.
+- [x] The number is justified where it is set — the constant in
+      `src/predictions/openrouter-entrant.ts` carries the per-seat counts and means, names
+      the seats that never reach a ceiling, and says why the mean is the only anchor the
+      censored record offers.
+- [x] Reachable per call on both paths, and stated by every caller rather than defaulted:
+      `entrantCallTimeoutMs` is a required option on `predictGameweek`,
+      `attemptMatchCalls`, `runScheduledPredictions`, `replayMatchExhibition` and
+      `preflightBaseModels`, read from `ENTRANT_CALL_TIMEOUT_MS` by the scheduled, manual,
+      preview and pre-flight configurations. An optional one was tried first and left four
+      paths — pre-flight above all — silently on the old ceiling.
+      **The FPL track keeps its 120,000ms default**: only the Match shape was measured,
+      and this ticket excludes changing FPL timeout behaviour beyond reachability.
+- [x] `PREDICT_CONCURRENCY` is considered and left at `SEASON_ROSTER_SIZE`, with the
+      reasoning recorded at the reader: every timeout Gap came from a ten-wide burst and
+      none from pre-flight's one-at-a-time calls, and the wider window is not free wall
+      clock — a stuck seat now holds its worker for five minutes, so this is the number to
+      lower if a run starts approaching its Lock.
+- [x] A test pins that a call abandoned by the client is recorded as a timeout Gap and
+      nothing else, and that the window it was given is the one that reached the call —
+      `test/predict-gameweek.test.ts` asserts `error_kind: "timeout"` alongside the
+      captured `timeoutMs`, so the classification survives the window moving.
+
+**Landed 2026-08-20.** Suites re-run for this slice: `predict-gameweek`,
+`preflight-base-models`, `preview-gameweek`, `run-scheduled-predictions`,
+`replay-match-exhibition`, `competition-coexistence`, `run-dry-run`, `predict-job-config`,
+`fpl-job-config`, `exhibition-job-config`, `preflight-job-config`, `preview-job-config`
+and `http` — 44 files, 318 tests. `tsc --noEmit` clean.
+The full suite was not run; it exceeds five minutes.
 
 ## 2 — A ceiling nobody set, refused against a balance that was never empty
 

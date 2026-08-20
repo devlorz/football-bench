@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import {
+  DEFAULT_ENTRANT_CALL_TIMEOUT_MS
+} from "../src/predictions/openrouter-entrant.js";
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { insertExhibition, resetSchema } from "./schema-fixture.js";
@@ -186,6 +189,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
       exhibitionModelId: "exhibition/late",
       concurrency: 2,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => RAN_AT,
       http: async (_url, options) => {
         const fixtureId = requestedFixtureId(options?.body ?? "{}");
@@ -272,6 +276,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
       exhibitionModelId: "exhibition-pd/late",
       concurrency: 2,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => RAN_AT,
       http: async (_url, options) => {
         const fixtureId = requestedFixtureId(options?.body ?? "{}");
@@ -346,6 +351,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
       exhibitionModelId: "exhibition/late",
       concurrency: 2,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => RAN_AT,
       http: async (_url, options) => {
         const fixtureId = requestedFixtureId(options?.body ?? "{}");
@@ -377,6 +383,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
       exhibitionModelId: "exhibition/late",
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => RAN_AT,
       http: async (_url, options) => {
         request = JSON.parse(options?.body ?? "{}") as Record<string, unknown>;
@@ -408,6 +415,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
       exhibitionModelId: "exhibition/fpl",
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => RAN_AT,
       http: async () => {
         throw new Error("a refused replay calls nothing");
@@ -433,6 +441,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
       exhibitionModelId: "exhibition/late",
       concurrency: 2,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => RAN_AT,
       http: async (_url, options) => {
         activeCalls += 1;
@@ -462,6 +471,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
       exhibitionModelId: "exhibition/late",
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => RAN_AT,
       http: async (_url, options) => ({
         status: 200,
@@ -505,6 +515,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
       exhibitionModelId: "exhibition/late",
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => RAN_AT,
       http: async (_url, options) => {
         const fixtureId = requestedFixtureId(options?.body ?? "{}");
@@ -557,6 +568,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
       exhibitionModelId: "exhibition/late",
       concurrency: 2,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => RAN_AT,
       http: refusing
     });
@@ -587,6 +599,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
       exhibitionModelId: "exhibition/late",
       concurrency: 2,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => new Date("2026-10-02T12:00:00Z"),
       http: async (url, options) => {
         secondRunCalls += 1;
@@ -640,6 +653,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
       exhibitionModelId: "exhibition/late",
       concurrency: 2,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => RAN_AT,
       http: async (_url, options) => {
         const fixtureId = requestedFixtureId(options?.body ?? "{}");
@@ -683,6 +697,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
       exhibitionModelId: "exhibition/late",
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => RAN_AT,
       http: async (_url, options) => {
         const fixtureId = requestedFixtureId(options?.body ?? "{}");
@@ -737,6 +752,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
       exhibitionModelId: "exhibition/late",
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => RAN_AT,
       http: async (_url, options) => {
         const fixtureId = requestedFixtureId(options?.body ?? "{}");
@@ -762,6 +778,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
         exhibitionModelId: "exhibition/late",
         concurrency: 1,
         apiKey: "test-key",
+        entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
         now: () => RAN_AT,
         http: async (_url, options) => {
           calls += 1;
@@ -797,6 +814,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
       exhibitionModelId,
       concurrency: 1,
       apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       now: () => RAN_AT,
       http: async () => {
         throw new Error("a refused replay calls nothing");

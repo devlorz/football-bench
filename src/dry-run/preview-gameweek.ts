@@ -51,6 +51,7 @@ export interface PreviewGameweekOptions {
   apiKey: string;
   http: HttpFetcher;
   concurrency: number;
+  entrantCallTimeoutMs: number;
   /**
    * The instant to run at, dated from the Gameweek's own Lock exactly as the
    * dry run dates it. The wall clock served while a preview only ever looked
@@ -79,6 +80,7 @@ export async function previewGameweek({
   apiKey,
   http,
   concurrency,
+  entrantCallTimeoutMs,
   at
 }: PreviewGameweekOptions): Promise<PreviewResult> {
   await prepareArchivedGameweek({
@@ -101,6 +103,7 @@ export async function previewGameweek({
     gameweek,
     concurrency,
     apiKey,
+    entrantCallTimeoutMs,
     http,
     now: () => instant,
     trigger: "main"

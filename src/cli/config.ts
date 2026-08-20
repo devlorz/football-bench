@@ -1,5 +1,8 @@
 import { resolveDryRunInstant } from "../dry-run/dry-run-clock.js";
 import { DEFAULT_HTTP_TIMEOUT_MS } from "../http.js";
+import {
+  DEFAULT_ENTRANT_CALL_TIMEOUT_MS
+} from "../predictions/openrouter-entrant.js";
 import { SEASON_ROSTER_SIZE } from "../season-roster.js";
 import {
   parseAttemptTrigger,
@@ -61,6 +64,7 @@ export interface ScheduledEntrantJobConfig {
   databaseUrl: string;
   season: string;
   concurrency: number;
+  entrantCallTimeoutMs: number;
   openRouterApiKey: string;
 }
 
@@ -79,14 +83,14 @@ export interface PredictJobConfig extends ScheduledEntrantJobConfig {
 }
 
 /**
- * What both FPL jobs read. The timeout knob is the FPL track's alone: its
- * opening prompt is the one reasoning models chew on for minutes, and the
- * Match track's per-Fixture prompts have never approached the ceiling
- * (spec 0010).
+ * What both FPL jobs read, which is now the shape every job calling Entrants
+ * reads. The timeout knob was the FPL track's alone on the premise that the
+ * Match track's per-Fixture prompts never approached the ceiling; ticket 0023
+ * measured 32 Match Gaps at exactly that ceiling, so the knob has moved up to
+ * the config both tracks share. The FPL track keeps its own default there —
+ * only the Match window was measured, and the FPL prompt is a different shape.
  */
-export interface ScheduledFplJobConfig extends ScheduledEntrantJobConfig {
-  entrantCallTimeoutMs: number;
-}
+export type ScheduledFplJobConfig = ScheduledEntrantJobConfig;
 
 export interface FplStartJobConfig extends ScheduledFplJobConfig {
   gameweek: number;
@@ -96,6 +100,7 @@ export interface PreviewJobConfig extends DailyFetchJobConfig {
   competition: string;
   gameweek: number;
   concurrency: number;
+  entrantCallTimeoutMs: number;
   openRouterApiKey: string;
   at: string;
 }
@@ -111,16 +116,17 @@ export interface DryRunJobConfig extends DailyFetchJobConfig {
  * which Gameweeks to cover. The run resolves the Settled ones itself (ADR-0032),
  * so there is no Gameweek here to disagree with the record.
  *
- * The four fields it shares with `ScheduledEntrantJobConfig` are written out
+ * The five fields it shares with `ScheduledEntrantJobConfig` are written out
  * rather than inherited from it. They are read by the same function, because
  * they are the same variables — but an Exhibition Run is not an Entrant's job
  * and nothing scheduled runs it, so the name would have said two false things
- * to save four lines.
+ * to save five lines.
  */
 export interface ExhibitionJobConfig {
   databaseUrl: string;
   season: string;
   concurrency: number;
+  entrantCallTimeoutMs: number;
   openRouterApiKey: string;
   exhibitionModelId: string;
 }
@@ -138,6 +144,7 @@ export type PreflightJobConfig = {
   competition: string;
   season: string;
   fixtureId: number;
+  entrantCallTimeoutMs: number;
   openRouterApiKey: string;
 } & PreflightTarget;
 
@@ -250,16 +257,20 @@ function readPositiveInteger(
 /**
  * Reads a `ScheduledEntrantJobConfig` for whichever track asks for one.
  *
- * The concurrency variable is a parameter because the two must stay separate:
+ * The concurrency variable and the call timeout's default are parameters
+ * because the two tracks must stay separate on both:
  * the tracks share a deadline (ADR-0006) and nothing else, and the FPL prompt
  * is several times the Match prompt's size, so one number for both would tie
- * two costs that have no reason to move together. It is the only thing that
- * differs, which is why everything else is read once here.
+ * two costs that have no reason to move together. Ticket 0023 measured a window
+ * for the Match track's shape and for no other, so the FPL default stays where
+ * it was. The variables they name are shared; the numbers behind them are not,
+ * which is why everything else is read once here.
  */
 function readScheduledJobConfig(
   environment: NodeJS.ProcessEnv,
   concurrencyVariable: string,
-  concurrencyDefault: number
+  concurrencyDefault: number,
+  entrantCallTimeoutDefault: number
 ): ScheduledEntrantJobConfig {
   const concurrency = readPositiveInteger(
     environment,
@@ -271,17 +282,38 @@ function readScheduledJobConfig(
     databaseUrl: required(environment, "DATABASE_URL"),
     season: requiredSeason(environment),
     concurrency,
+    entrantCallTimeoutMs: readPositiveInteger(
+      environment,
+      "ENTRANT_CALL_TIMEOUT_MS",
+      entrantCallTimeoutDefault
+    ),
     openRouterApiKey: required(environment, "OPENROUTER_API_KEY")
   };
 }
 
+/**
+ * The default stays the whole roster, and the wider window is the reason to
+ * watch it rather than the reason not to. Every one of ticket 0023's timeout
+ * Gaps came from a ten-wide burst and none from pre-flight, which calls one
+ * seat at a time — the slow seats are slowest when the burst is widest.
+ *
+ * The window is not free wall clock: a hung seat now holds its worker for five
+ * minutes rather than two, so a Gameweek's worst case grows with it — ten
+ * rounds of four attempts at the full window is hours, against a fill run that
+ * leads the Lock by two. Nothing has been measured near that, because a seat
+ * that answers at 85 seconds returns at 85 seconds whatever the ceiling is;
+ * what grows is the cost of a seat that has genuinely stopped. If a run starts
+ * approaching its Lock, this is the number to lower — the window buys seats
+ * that think, and this bounds how many can be stuck at once.
+ */
 export function readScheduledPredictJobConfig(
   environment: NodeJS.ProcessEnv
 ): ScheduledPredictJobConfig {
   return readScheduledJobConfig(
     environment,
     "PREDICT_CONCURRENCY",
-    SEASON_ROSTER_SIZE
+    SEASON_ROSTER_SIZE,
+    DEFAULT_ENTRANT_CALL_TIMEOUT_MS
   );
 }
 
@@ -289,26 +321,21 @@ export function readScheduledPredictJobConfig(
  * The FPL action run's configuration, which resolves its Gameweek from the
  * stored deadlines exactly as the scheduled Prediction run does.
  *
- * Its own concurrency knob rather than `PREDICT_CONCURRENCY`. The two runs
- * share a deadline (ADR-0006) and are scheduled apart on purpose, and the FPL
- * prompt is several times the Match prompt's size — one number for both would
- * tie two costs that have no reason to move together.
+ * Its own concurrency knob rather than `PREDICT_CONCURRENCY`, and its own
+ * timeout default rather than the Match track's. The two runs share a deadline
+ * (ADR-0006) and are scheduled apart on purpose, and the FPL prompt is several
+ * times the Match prompt's size — one number for either would tie two costs
+ * that have no reason to move together.
  */
 export function readScheduledFplJobConfig(
   environment: NodeJS.ProcessEnv
 ): ScheduledFplJobConfig {
-  return {
-    ...readScheduledJobConfig(
-      environment,
-      "FPL_CONCURRENCY",
-      SEASON_ROSTER_SIZE
-    ),
-    entrantCallTimeoutMs: readPositiveInteger(
-      environment,
-      "ENTRANT_CALL_TIMEOUT_MS",
-      DEFAULT_HTTP_TIMEOUT_MS
-    )
-  };
+  return readScheduledJobConfig(
+    environment,
+    "FPL_CONCURRENCY",
+    SEASON_ROSTER_SIZE,
+    DEFAULT_HTTP_TIMEOUT_MS
+  );
 }
 
 /**
@@ -402,11 +429,12 @@ export function readExhibitionTrack(
 }
 
 /**
- * The same four variables the Match track reads, with the call timeout that
- * track's prompt needs (spec 0010) in place of the concurrency bound: a season
- * path is replayed in order, each Gameweek's context carrying the Squad the one
- * before it left, so there is never a second call to bound. Read through the
- * Match reader rather than beside it, so the four they share cannot drift.
+ * The same variables the Match track reads, less the concurrency bound: a
+ * season path is replayed in order, each Gameweek's context carrying the Squad
+ * the one before it left, so there is never a second call to bound. Read
+ * through the Match reader rather than beside it, so what they share cannot
+ * drift — except the call timeout's default, which is re-read here because
+ * this track's window was never the one ticket 0023 measured (spec 0010).
  */
 export function readFplExhibitionJobConfig(
   environment: NodeJS.ProcessEnv
@@ -444,6 +472,13 @@ export function readPreflightJobConfig(
   const competition = readCompetition(environment);
   const season = requiredSeason(environment);
   const fixtureId = Number(required(environment, "FIXTURE_ID"));
+  // The same window the run it clears the way for uses. A check that cuts a
+  // seat off at two minutes cannot certify a seat the run allows five.
+  const entrantCallTimeoutMs = readPositiveInteger(
+    environment,
+    "ENTRANT_CALL_TIMEOUT_MS",
+    DEFAULT_ENTRANT_CALL_TIMEOUT_MS
+  );
   const openRouterApiKey = required(environment, "OPENROUTER_API_KEY");
   // One Exhibition, or the roster — never both, because an Exhibition is not
   // on the roster and there is nothing for a count to mean beside it. Refused
@@ -468,6 +503,7 @@ export function readPreflightJobConfig(
       season,
       fixtureId,
       exhibitionModelId,
+      entrantCallTimeoutMs,
       openRouterApiKey
     };
   }
@@ -485,6 +521,7 @@ export function readPreflightJobConfig(
     season,
     fixtureId,
     expectedEntrantCount,
+    entrantCallTimeoutMs,
     openRouterApiKey
   };
 }
@@ -520,6 +557,15 @@ export function readPreviewJobConfig(
     competition,
     gameweek,
     concurrency,
+    // The bench calls the same seats the Match track does, so it takes the
+    // same window and the same knob. It is the one path here that spends real
+    // money, which makes it the last place a call should be cut short by a
+    // number nobody could reach.
+    entrantCallTimeoutMs: readPositiveInteger(
+      environment,
+      "ENTRANT_CALL_TIMEOUT_MS",
+      DEFAULT_ENTRANT_CALL_TIMEOUT_MS
+    ),
     openRouterApiKey,
     at
   };

@@ -72,7 +72,8 @@ describe("the FPL job configuration", () => {
       ENTRANT_CALL_TIMEOUT_MS: "600000"
     })).toMatchObject({ entrantCallTimeoutMs: 600_000 });
 
-    // Unset is today's two minutes, so no caller of the shared fetcher moves.
+    // Unset is still this track's two minutes: ticket 0023 measured the Match
+    // track's window and gave the Match track's default that number alone.
     expect(readFplStartJobConfig(environment))
       .toMatchObject({ entrantCallTimeoutMs: 120_000 });
 

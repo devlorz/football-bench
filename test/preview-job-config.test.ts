@@ -1,4 +1,7 @@
 import { describe, expect, test } from "vitest";
+import {
+  DEFAULT_ENTRANT_CALL_TIMEOUT_MS
+} from "../src/predictions/openrouter-entrant.js";
 import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
 import { readPreviewJobConfig } from "../src/cli/config.js";
 
@@ -21,6 +24,7 @@ describe("the preview job configuration", () => {
       gameweek: 1,
       at: "deadline-6h",
       concurrency: SEASON_ROSTER_SIZE,
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       openRouterApiKey: "preview-key"
     });
   });
@@ -49,5 +53,14 @@ describe("the preview job configuration", () => {
     expect(() => readPreviewJobConfig({
       ...environment, OPENROUTER_API_KEY: ""
     })).toThrow(/OPENROUTER_API_KEY is required/);
+  });
+
+  test("the bench takes the Entrant call's window from the same knob", () => {
+    // The one path here that spends real money, so it is the last place a
+    // seat should be cut off by a number nobody could reach (ticket 0023).
+    expect(readPreviewJobConfig({
+      ...environment,
+      ENTRANT_CALL_TIMEOUT_MS: "600000"
+    })).toMatchObject({ entrantCallTimeoutMs: 600_000 });
   });
 });

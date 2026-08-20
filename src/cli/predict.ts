@@ -27,6 +27,7 @@ try {
     gameweek: config.gameweek,
     concurrency: config.concurrency,
     apiKey: config.openRouterApiKey,
+    entrantCallTimeoutMs: config.entrantCallTimeoutMs,
     http: nodeHttpFetcher,
     now: () => new Date(),
     trigger: config.trigger

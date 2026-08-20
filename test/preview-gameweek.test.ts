@@ -1,4 +1,7 @@
 import pg from "pg";
+import {
+  DEFAULT_ENTRANT_CALL_TIMEOUT_MS
+} from "../src/predictions/openrouter-entrant.js";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import type { DryRunArchive } from "../src/dry-run/load-archive.js";
 import { previewGameweek } from "../src/dry-run/preview-gameweek.js";
@@ -85,6 +88,7 @@ describe("previewing a Gameweek with live Entrants", () => {
       footballDataSeason: FOOTBALL_DATA_SEASON,
       gameweek: GAMEWEEK,
       apiKey: "preview-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       concurrency: 4,
       at: "deadline-6h",
       http: async (url, options) => {
@@ -129,6 +133,7 @@ describe("previewing a Gameweek with live Entrants", () => {
       footballDataSeason: FOOTBALL_DATA_SEASON,
       gameweek: GAMEWEEK,
       apiKey: "preview-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       concurrency: 1,
       at: "deadline-6h",
       http: async () => { throw new Error("no call should be made"); }
@@ -148,6 +153,7 @@ describe("previewing a Gameweek with live Entrants", () => {
       footballDataSeason: FOOTBALL_DATA_SEASON,
       gameweek: GAMEWEEK,
       apiKey: "preview-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       concurrency: 4,
       at: "deadline-6h",
       http: async (url, options) => {
@@ -187,6 +193,7 @@ describe("previewing a Gameweek with live Entrants", () => {
       footballDataSeason: FOOTBALL_DATA_SEASON,
       gameweek: GAMEWEEK,
       apiKey: "preview-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
       concurrency: 1,
       at: "deadline-6h",
       // Only Entrant calls may leave. Anything else means the data layer went
