@@ -224,15 +224,22 @@ instead of two.
       it would under a `toContain`. `predict-gameweek` holds the
       packet where nothing is stored and both clubs announce the Gap; `preflight` holds
       the packet where both are named and one has Changes.
-- [ ] Both sha pins are re-taken from real renders carrying the section. **Not done, and
-      not doable from here:** production has no `head_coaches` — migration 0033 is merged
-      and unapplied, so `context:show` against it fails on `relation "head_coaches" does
-      not exist` rather than rendering the section. The pins moved to the test's own
-      render, as ticket 0020's slice 6 left them: `match/2026-27-v2` is `4e3d03b3` and
-      `match-pd/2026-27-v2` is `44df40bd`. What closes this box is the same act that
-      closes 0020's box 6 — 0033 applied to production and a fetch landed, then both pins
-      re-taken from a rendered packet read by eye. That is an act against the record and
-      ADR-0018 keeps it out of a code slice.
+- [x] Both sha pins stand against a real render carrying the section, read on
+      2026-08-20 with migration 0033 applied to production and a fetch landed. **The box
+      asked for something that cannot happen, and the measurement is what showed it.**
+      A pin is the suite's render by construction: the checksum tests hash
+      `buildMatchContext` over the suite's own Fixture and Competition data, so a number
+      lifted from a production packet — other clubs, other results — fails them on the
+      next run. Measured through the same code path `predictGameweek` hashes with: the
+      Premier League's live packet is `f61c8fb4` against the pinned `4e3d03b3`, La Liga's
+      `94deaa1c` against `44df40bd`, and no builder change can bring either pair
+      together. What a real render is for is reading, which is how both of `PD`'s earlier
+      sha moves were found — an empty history section, a league table reading
+      `unavailable` — each fix moving the builder, the builder moving the suite's render,
+      the render moving the pin. So the numbers did not move here and should not have:
+      both Competitions rendered with every club naming its Head Coach and no packet
+      carrying the unavailable line, and that reading is what the pins now stand on.
+      Ticket 0020's box 6 closed on the same act and carries the same note.
 
 ### What slice 5 landed — recorded 2026-08-20
 

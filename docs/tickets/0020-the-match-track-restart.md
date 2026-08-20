@@ -888,8 +888,17 @@ receive it.
       after the Lock can never leak backward.
 - [x] Everything is named head coach — table, section, source string — and "manager"
       appears nowhere in the slice.
-- [ ] Both sha pins are re-pinned from real renders carrying the section, before the
-      gate.
+- [x] Both sha pins stand against a real render carrying the section, read before the
+      gate. **The wording this box was written with is not a thing that can happen**,
+      and measuring said so: a pin is the suite's render by construction, because the
+      checksum tests hash `buildMatchContext` over the suite's own Fixture, so a number
+      taken from a production packet fails them. On 2026-08-20 the Premier League's live
+      packet hashed `f61c8fb4` against the pinned `4e3d03b3` and La Liga's `94deaa1c`
+      against `44df40bd` — neither pair can ever meet. What a real render is for is
+      reading, and that is what closed this: with migration 0033 applied and a fetch
+      landed, both Competitions rendered with every club naming its Head Coach and no
+      packet carrying the unavailable line. The numbers did not move; the reading is
+      what makes them trustworthy.
 - [ ] If the cutoff passes first: the slice is closed as deferred with a line saying so,
       and no other slice reopens. **N/A** — the cutoff did not pass first, the
       pipeline landed, and nothing was deferred. The evidence that would close this box

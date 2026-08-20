@@ -82,15 +82,24 @@ export const RETIRED_GAMEWEEK_CAVEAT =
  *
  * The sha is over a fully rendered context, not over the template, because
  * that is the mechanism that already exists and what it is worth pinning is
- * the whole prompt's format. Both pins here are taken from the suite's own
- * render, not from a real one: the Head Coach section they now carry needs
- * migration 0033, which production does not have, so `context:show` cannot
- * render a packet containing it. Re-taking them from a real render — which is
- * what `context:show` is for, and how every earlier move of `PD`'s sha was
- * found — waits on that migration reaching production, and is ticket 0021's
- * slice 5 box and ticket 0020's box 6, both still open. So ADR-0045 is landed
- * in code and not yet closed: its "both sha pins move whenever it lands, and
- * they are re-taken from real renders" is the half still outstanding.
+ * the whole prompt's format. Both pins are the suite's render and can be
+ * nothing else: the checksum tests hash `buildMatchContext` over the suite's
+ * own Fixture and its own Competition data, so a pin taken from a production
+ * packet — different clubs, different results — would fail them on the next
+ * run. Measured rather than assumed on 2026-08-20: the Premier League's first
+ * live packet hashes `f61c8fb4` against this file's `4e3d03b3`, La Liga's
+ * `94deaa1c` against `44df40bd`, and neither pair can ever meet.
+ *
+ * What a real render is for is reading, not hashing. `context:show` renders
+ * the packet production will send and an operator reads it; that is how both
+ * of `PD`'s earlier moves were *found* — an empty history section behind 842
+ * stored rows, and a league table reading `unavailable` — and each fix moved
+ * the builder, which moved the suite's render, which moved the pin. The
+ * reading is what makes a pin trustworthy; the number was always the suite's.
+ * ADR-0045's "re-taken from real renders" is that reading, done on
+ * 2026-08-20 over both Competitions with migration 0033 applied and a fetch
+ * landed: every club named its Head Coach and no packet carried the
+ * unavailable line.
  *
  * `PD` sits on `match-pd/2026-27-v2`. Its v1 was used — La Liga's Gameweek 1,
  * six contexts and sixty Predictions — and so is unamendable and retired: the
