@@ -5,6 +5,7 @@ import {
   cellText,
   clubLink,
   parseDate,
+  withoutCitations,
   type ClubLink
 } from "../wikipedia/wikitext.js";
 
@@ -253,9 +254,13 @@ function parseTables(
   const changes: SquadChange[] = [];
   const clubs = clubIndex(pinned);
   const linked = new Set<string>();
+  // Before the table is cut out and long before it is split into cells: a
+  // citation wrapped mid-parameter carries a line opening `|url=` that
+  // `tableRows` would otherwise count as a cell of its own.
+  const page = withoutCitations(wikitext);
 
   for (const spec of TABLES) {
-    const rows = tableRows(wikitableUnder(source, wikitext, spec.heading));
+    const rows = tableRows(wikitableUnder(source, page, spec.heading));
     for (const [index, cells] of rows.entries()) {
       const movingFrom = clubLink(cells[spec.movingFrom] as string);
       const movingTo = clubLink(cells[spec.movingTo] as string);
@@ -265,6 +270,17 @@ function parseTables(
 
       const date = cellText(cells[0] as string);
       const datedOn = parseDate(date);
+      // A row this cannot date refuses the whole page, on the same terms the
+      // Head Coach table does and deliberately not softened because this table
+      // is long enough that one skipped row would not be missed. That length
+      // is the argument for refusing, not against it: nobody reads 320 rows to
+      // notice four are gone. The one time this fired -- a citation wrapped
+      // mid-parameter on 2026-08-19, which `withoutCitations` now takes out
+      // before the split -- every one of the four rows was correct on the page
+      // and the parser was wrong about them, so skipping would have dropped
+      // four real moves, one of them a Chelsea Signing, under a fetch that
+      // reported success. The refusal cost a day of staleness and named the
+      // bug; skipping would have cost the Signing and named nothing.
       if (datedOn === undefined) {
         issues.push({
           field: `${spec.heading}.${index}.date`,

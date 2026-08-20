@@ -9,6 +9,32 @@
  * that is a different test from "these look alike".
  */
 
+/**
+ * A page with its citations and its editorial comments taken out, which is the
+ * first thing done to either article's wikitext and always before it is split.
+ *
+ * Not merely noise removal. A `{{cite}}` runs to several lines on both pages
+ * and its continuation lines begin with `|url=`, which is indistinguishable
+ * from a new cell to anything reading a wikitable line by line. MediaWiki
+ * expands the template before it reads the table and so renders such a row
+ * correctly; a line splitter that does not know templates from cells sees the
+ * row one cell too wide, and every column after it is somebody else's. The
+ * season articles have carried multi-line citations from the start, and on
+ * 2026-08-19 the English transfer list grew its first -- a `{{Cite web}}`
+ * wrapped mid-parameter on the Alfie Osbourne row -- which put a player's name
+ * where the date column belongs and, through the date `rowspan` under it, on
+ * the three rows below as well.
+ *
+ * `|}` and `|-` can appear inside a citation for the same reason, so this runs
+ * before the table is even cut out of the page rather than after.
+ */
+export function withoutCitations(wikitext: string): string {
+  return wikitext
+    .replace(/<ref[^>]*\/>/g, "")
+    .replace(/<ref[\s\S]*?<\/ref>/g, "")
+    .replace(/<!--[\s\S]*?-->/g, "");
+}
+
 const MONTHS = [
   "january", "february", "march", "april", "may", "june",
   "july", "august", "september", "october", "november", "december"

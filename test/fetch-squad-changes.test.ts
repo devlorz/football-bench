@@ -37,12 +37,16 @@ const CLUBS = [
 ];
 
 /**
- * The real page, fetched on 2026-08-12 and pinned: the parser is proved
+ * The real page, fetched on 2026-08-20 and pinned: the parser is proved
  * against the format Wikipedia publishes rather than the one we remember it
  * publishing. Re-pinning this digest means re-reading the assertions below.
+ *
+ * Re-pinned from 2026-08-12 when the page grew its first citation wrapped
+ * mid-parameter, which the fetch refused. The point of a pinned page is that
+ * it is the one production reads, so it moves when production's does.
  */
 const SUMMER_PAGE_SHA256 =
-  "6eba252a5c89f5ff4f6db4b3b6863d44bd07a40643149164104dbd4513b2d803";
+  "7e451a305c1f7b5bdd8b944414c5f2c85c55cf7553423958fecd6932a49ba20d";
 
 async function summerPage(): Promise<string> {
   const body = await archivedBody("wikipedia-transfers-summer-2026.txt.gz");
@@ -102,6 +106,9 @@ describe("parsing a window's Wikipedia transfer list", () => {
       ["2026-07-20", "Tynan Thompson", "Manchester United", "£8m", false],
       ["2026-07-22", "Will Lankshear", "Middlesbrough", "£10m", false],
       ["2026-08-10", "Manor Solomon", "West Ham United", "£5m", false],
+      ["2026-08-15", "Ashley Phillips", "Middlesbrough", "Undisclosed", false],
+      ["2026-08-15", "Cristian Romero", "Atlético Madrid", "£34.2m", false],
+      ["2026-08-15", "Djed Spence", "Inter Milan", "£25.6m", false],
       ["2026-07-08", "Radu Drăgușin", "Fiorentina", null, true],
       ["2026-07-11", "Yusuf Akhamrich", "Leyton Orient", null, true],
       ["2026-08-07", "Reiss-Alexander Russell-Denny", "Bristol Rovers", null, true]
@@ -137,7 +144,7 @@ describe("parsing a window's Wikipedia transfer list", () => {
       );
 
       expect(movement(changes, "Spurs", "in")).toHaveLength(6);
-      expect(movement(changes, "Spurs", "out")).toHaveLength(11);
+      expect(movement(changes, "Spurs", "out")).toHaveLength(14);
     }
   });
 
@@ -177,6 +184,39 @@ describe("parsing a window's Wikipedia transfer list", () => {
     )).toThrow(
       /displays Tottenham Hotspur but links to /
     );
+  });
+
+  test("reads a row whose citation wraps mid-parameter", async () => {
+    // The page files nine moves under 19 August 2026 through one `rowspan`,
+    // and the sixth of them cites a source whose `{{Cite web}}` wraps onto a
+    // second line opening `|url=`. MediaWiki expands the template before it
+    // reads the table and renders the row correctly; a reader taking one cell
+    // per line counts that continuation as a cell of its own, which makes the
+    // row measure a full width, hands the player's name to the date column,
+    // and carries that name down every row the `rowspan` still covers.
+    const changes = parseSquadChanges(
+      "wikipedia:squad-changes:summer-2026",
+      await summerPage(),
+      pinnedClubs(),
+      "tables"
+    );
+
+    expect(changes
+      .filter(({ datedOn }) => datedOn === "2026-08-19")
+      .map(({ club, direction, player }) => [club, direction, player]))
+      .toEqual([
+        ["Fulham", "out", "Harvey Araujo"],
+        ["Coventry City", "in", "Sidiki Cherif"],
+        ["Leeds", "in", "Nico Elvedi"],
+        ["Chelsea", "in", "Alfie Osbourne"],
+        ["Man City", "out", "Tijjani Reijnders"],
+        ["Aston Villa", "in", "Matteo Ruggeri"],
+        ["Aston Villa", "in", "Zion Suzuki"],
+        ["Leeds", "out", "Sebastiaan Bornauw"],
+        ["Aston Villa", "out", "Kosta Nedeljković"],
+        ["Leeds", "out", "Joël Piroe"],
+        ["Chelsea", "out", "Reggie Walsh"]
+      ]);
   });
 
   test("skips a move touching none of the twenty clubs", async () => {

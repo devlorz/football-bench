@@ -1,5 +1,10 @@
 import type { WikipediaClub } from "../squad-changes/club-identity.js";
-import { cellText, clubLink, parseDate } from "../wikipedia/wikitext.js";
+import {
+  cellText,
+  clubLink,
+  parseDate,
+  withoutCitations
+} from "../wikipedia/wikitext.js";
 
 /**
  * One club's side of one Head Coach change (ADR-0044): a Departure carries who
@@ -75,12 +80,9 @@ const APPOINTMENT = 6;
  * citations taken out first. The heading is the article's own word for the
  * section, quoted by the caller and never translated.
  *
- * The citations come out before anything is split because they are not merely
- * noise here: a `{{cite}}` runs to several lines on both pages and its
- * continuation lines begin with `|url=`, which is indistinguishable from a new
- * cell to anything reading this table line by line. A row carrying a
- * multi-line citation would arrive one cell too wide and every column after it
- * would be somebody else's.
+ * The citations come out before anything is split, for the reason
+ * `withoutCitations` carries: they are not merely noise to a reader that takes
+ * one cell per line.
  *
  * A heading is matched at any depth and with or without the spaces around it,
  * because the two articles write it differently today and neither is more
@@ -102,25 +104,22 @@ export function sectionTable(
   headings: string[],
   wikitext: string
 ): SectionTable {
-  const withoutCitations = wikitext
-    .replace(/<ref[^>]*\/>/g, "")
-    .replace(/<ref[\s\S]*?<\/ref>/g, "")
-    .replace(/<!--[\s\S]*?-->/g, "");
+  const page = withoutCitations(wikitext);
   for (const heading of headings) {
     const found = new RegExp(
       `^={2,4}\\s*${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`
       + "\\s*={2,4}\\s*$",
       "m"
-    ).exec(withoutCitations);
+    ).exec(page);
     const headingAt = found?.index ?? -1;
     const opensAt = headingAt < 0
       ? -1
-      : withoutCitations.indexOf("{|", headingAt);
+      : page.indexOf("{|", headingAt);
     const closesAt = opensAt < 0
       ? -1
-      : withoutCitations.indexOf("\n|}", opensAt);
+      : page.indexOf("\n|}", opensAt);
     if (closesAt >= 0) {
-      return { heading, wikitable: withoutCitations.slice(opensAt, closesAt) };
+      return { heading, wikitable: page.slice(opensAt, closesAt) };
     }
   }
   throw new HeadCoachSourceValidationError(source, [{
