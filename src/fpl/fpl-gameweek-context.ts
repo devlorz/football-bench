@@ -189,7 +189,7 @@ interface FixtureRow {
 }
 
 /**
- * The Fixtures of this Gameweek and the five after it, ordered as the section
+ * The Fixtures of this Gameweek and the ten after it, ordered as the section
  * renders them. `gw` is read rather than `locked_in_gw`, which is the Match
  * track's record of where a Prediction was priced: a Fixture FPL has moved to
  * another Gameweek belongs to the Gameweek it has moved to, and the fetch

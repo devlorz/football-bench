@@ -331,7 +331,7 @@ describe("starting the FPL track for all ten Entrants", () => {
       "Premier League table: no result has been played yet this Season."
     );
     expect(context!.body).toContain(
-      "Fixtures, this Gameweek and the five ahead:\n"
+      "Fixtures, this Gameweek and the ten ahead:\n"
       + "Gameweek 1\n"
       + "- Arsenal v Chelsea | 2026-08-22\n"
       + "Gameweek 2\n"

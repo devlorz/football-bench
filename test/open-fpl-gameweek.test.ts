@@ -1146,9 +1146,9 @@ describe("opening the FPL track for a Gameweek", () => {
   });
 
   /**
-   * One Fixture in every Gameweek from 1 to 8, so both edges of the window a
+   * One Fixture in every Gameweek from 1 to 13, so both edges of the window a
    * Gameweek 2 context reads are real rows: Gameweek 1 is behind it, and
-   * Gameweek 8 is one past the fifth Gameweek ahead of it.
+   * Gameweek 13 is one past the tenth Gameweek ahead of it.
    *
    * Gameweek 2's pair is stored latest kickoff first, so the order the section
    * renders in is the schedule's rather than the order the table was filled in.
@@ -1162,16 +1162,21 @@ describe("opening the FPL track for a Gameweek", () => {
     { fplId: 106, gw: 5, home: "Arsenal", away: "Fulham", at: "2026-10-03T14:00:00Z" },
     { fplId: 107, gw: 6, home: "Chelsea", away: "Everton", at: "2026-10-10T14:00:00Z" },
     { fplId: 108, gw: 7, home: "Everton", away: "Arsenal", at: "2026-10-17T14:00:00Z" },
-    { fplId: 109, gw: 8, home: "Fulham", away: "Chelsea", at: "2026-10-24T14:00:00Z" }
+    { fplId: 109, gw: 8, home: "Fulham", away: "Chelsea", at: "2026-10-24T14:00:00Z" },
+    { fplId: 110, gw: 9, home: "Arsenal", away: "Everton", at: "2026-10-31T14:00:00Z" },
+    { fplId: 111, gw: 10, home: "Brentford", away: "Fulham", at: "2026-11-07T14:00:00Z" },
+    { fplId: 112, gw: 11, home: "Chelsea", away: "Arsenal", at: "2026-11-21T14:00:00Z" },
+    { fplId: 113, gw: 12, home: "Everton", away: "Brentford", at: "2026-11-28T14:00:00Z" },
+    { fplId: 114, gw: 13, home: "Fulham", away: "Everton", at: "2026-12-05T14:00:00Z" }
   ];
 
-  /** Gameweeks 3 to 8 scheduled, and the Fixtures above stored against them. */
+  /** Gameweeks 3 to 13 scheduled, and the Fixtures above stored against them. */
   async function seedSchedule(): Promise<void> {
     await client.query(
       `insert into gameweeks (season, gw, deadline_at)
        select '2026-27', gw,
               timestamptz '2026-08-28T17:30:00Z' + (gw * interval '7 days')
-         from generate_series(3, 8) as gw
+         from generate_series(3, 13) as gw
        on conflict do nothing`
     );
     for (const fixture of SCHEDULED_FIXTURES) {
@@ -1184,7 +1189,7 @@ describe("opening the FPL track for a Gameweek", () => {
     }
   }
 
-  test("carries this Gameweek and the five ahead on the body it stores", async () => {
+  test("carries this Gameweek and the ten ahead on the body it stores", async () => {
     await seedSchedule();
     await seedStandingManagerState();
     await play({ responses: [STAND_PAT] });
@@ -1197,7 +1202,7 @@ describe("opening the FPL track for a Gameweek", () => {
       createHash("sha256").update(body).digest("hex")
     );
     expect(body).toContain([
-      "Fixtures, this Gameweek and the five ahead:",
+      "Fixtures, this Gameweek and the ten ahead:",
       "Gameweek 2",
       "- Chelsea v Brentford | 2026-08-29",
       "- Everton v Fulham | 2026-08-30",
@@ -1210,12 +1215,22 @@ describe("opening the FPL track for a Gameweek", () => {
       "Gameweek 6",
       "- Chelsea v Everton | 2026-10-10",
       "Gameweek 7",
-      "- Everton v Arsenal | 2026-10-17"
+      "- Everton v Arsenal | 2026-10-17",
+      "Gameweek 8",
+      "- Fulham v Chelsea | 2026-10-24",
+      "Gameweek 9",
+      "- Arsenal v Everton | 2026-10-31",
+      "Gameweek 10",
+      "- Brentford v Fulham | 2026-11-07",
+      "Gameweek 11",
+      "- Chelsea v Arsenal | 2026-11-21",
+      "Gameweek 12",
+      "- Everton v Brentford | 2026-11-28"
     ].join("\n"));
     // The window's two edges, named by the one thing each Fixture holds alone:
-    // Gameweek 1 is played and gone, and Gameweek 8 is a Gameweek too far.
+    // Gameweek 1 is played and gone, and Gameweek 13 is a Gameweek too far.
     expect(body).not.toContain("2026-08-22");
-    expect(body).not.toContain("2026-10-24");
+    expect(body).not.toContain("2026-12-05");
   });
 
   test("leaves an Unscheduled Fixture out, and the Blank unremarked", async () => {
@@ -1237,7 +1252,7 @@ describe("opening the FPL track for a Gameweek", () => {
       createHash("sha256").update(body).digest("hex")
     );
     expect(body).toContain([
-      "Fixtures, this Gameweek and the five ahead:",
+      "Fixtures, this Gameweek and the ten ahead:",
       "Gameweek 2",
       "- Everton v Fulham | 2026-08-30",
       "Gameweek 3",
@@ -1402,8 +1417,8 @@ describe("opening the FPL track for a Gameweek", () => {
   });
 
   test("shows what is left of the window at the calendar's end", async () => {
-    // Gameweek 7 with a calendar that ends at 8: the five Gameweeks ahead are
-    // one Gameweek and then nothing, and the section is simply shorter. A
+    // Gameweek 7 with a calendar that ends at 13: the ten Gameweeks ahead are
+    // six Gameweeks and then nothing, and the section is simply shorter. A
     // window that announced its own truncation would be inventing a fact about
     // the season that the schedule already states by stopping.
     await seedSchedule();
@@ -1419,11 +1434,21 @@ describe("opening the FPL track for a Gameweek", () => {
       "select body from contexts where gw = 7 and track = 'fpl'"
     );
     expect(stored.rows[0]!.body).toContain([
-      "Fixtures, this Gameweek and the five ahead:",
+      "Fixtures, this Gameweek and the ten ahead:",
       "Gameweek 7",
       "- Everton v Arsenal | 2026-10-17",
       "Gameweek 8",
       "- Fulham v Chelsea | 2026-10-24",
+      "Gameweek 9",
+      "- Arsenal v Everton | 2026-10-31",
+      "Gameweek 10",
+      "- Brentford v Fulham | 2026-11-07",
+      "Gameweek 11",
+      "- Chelsea v Arsenal | 2026-11-21",
+      "Gameweek 12",
+      "- Everton v Brentford | 2026-11-28",
+      "Gameweek 13",
+      "- Fulham v Everton | 2026-12-05",
       ""
     ].join("\n"));
   });
@@ -1724,7 +1749,7 @@ describe("opening the FPL track for a Gameweek", () => {
     );
     // Each section, by the line only it carries.
     expect(body).toContain(
-      "Fixtures, this Gameweek and the five ahead:\n"
+      "Fixtures, this Gameweek and the ten ahead:\n"
       + "Gameweek 8\n"
       + "- Fulham v Chelsea | 2026-10-24"
     );
