@@ -43,24 +43,45 @@ twenty-seven milliseconds, the same signature the old record showed at 120,005 t
 120,020ms. Three of the five Gaps left on the Premier League's Gameweek 1 are these two
 seats hitting the new wall.
 
-So 300,000ms is better and not yet right. It cut timeouts from 37 across two runs to 3,
-and left the two slowest seats still truncated. Whether the next number is 600,000ms or
-whether a seat that thinks for ten minutes is a seat the schedule cannot carry is a
-decision for whoever reads this, not one this report makes: the `fill` trigger runs two
-hours before a Lock, and a window is only free until it starts costing Gameweeks.
+**Then a retry cleared all three.** The same five pairs were asked again half an hour
+later and every timeout answered — GLM 5.3 and Qwen3.8 Max both landed inside the window
+they had just overrun. So the two seats sit *at* the boundary rather than beyond it: their
+slowest calls fall on either side of five minutes depending on the run, which is a
+different finding from a seat that reliably needs more.
+
+That weakens the case for moving the number again. 300,000ms took timeouts from 37 across
+two runs to zero across both Gameweeks, and the maxima that cleared it did so by nine and
+twenty-seven milliseconds rather than by minutes. Whether a wider window would buy
+anything, or whether a seat that thinks for five minutes is already at the edge of what
+the schedule can carry, is a decision for whoever reads this rather than one this report
+makes: the `fill` trigger runs two hours before a Lock, and a window is only free until it
+starts costing Gameweeks.
 
 ## What it bought
 
 | | Before | After |
 | --- | ---: | ---: |
 | La Liga Gameweek 2 | 116 / 140 | **139 / 140** |
-| Premier League Gameweek 1 | 63 / 100 | **95 / 100** |
-| Timeout Gaps across both | 37 | **3** |
+| Premier League Gameweek 1 | 63 / 100 | **99 / 100** |
+| Timeout Gaps across both | 37 | **0** |
 
-The one Gap left on La Liga is Gemini 3.1 Pro Preview failing the Prediction schema after
-three Repairs, which is an Entrant's own failure and the kind of Gap the record exists to
-hold. The five on the Premier League are the two seats above, two schema failures, and
-two `unexpected response shape` — none of them a clock we set.
+One Gap is left in each Gameweek, and neither is a clock we set. La Liga's is Gemini 3.1
+Pro Preview failing the Prediction schema after three Repairs, an Entrant's own failure and
+the kind of Gap the record exists to hold.
+
+The Premier League's is the more interesting one, and it only became visible because the
+window widened. DeepSeek V4 Pro on Fixture 9, routed to Novita, was cut at **120,002ms** on
+the first pass and recorded as a timeout. Given five minutes it ran to **195,092ms** and
+then to **209,712ms** on the retry, finished on its own both times, and returned a body of
+nothing but blank lines — no JSON, no error, no refusal. The parser calls that an
+unexpected response shape, which is exactly what it is.
+
+**The old ceiling was hiding this failure, not preventing it.** A timeout said we stopped
+listening; what the seat was going to do at the end of those three and a half minutes was
+unknowable. Widening the window did not make the call succeed — it made the failure
+legible, and a Gap that names what the provider actually returned is worth more than one
+that names our own impatience. That is the whole of what slice 1 set out to do, arriving
+in a form nobody predicted.
 
 Not covered here: `ENTRANT_MAX_OUTPUT_TOKENS`, whose own censored maxima are in
 [the completion-token report](2026-08-20-completion-tokens-per-seat.md) and which is
