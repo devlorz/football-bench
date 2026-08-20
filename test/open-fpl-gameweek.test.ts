@@ -1235,8 +1235,8 @@ describe("opening the FPL track for a Gameweek", () => {
 
   test("leaves an Unscheduled Fixture out, and the Blank unremarked", async () => {
     await seedSchedule();
-    // Chelsea v Brentford withdrawn from Gameweek 2's calendar. Chelsea's
-    // other Fixture is in Gameweek 6, so Gameweek 2 is a Blank for it and the
+    // Chelsea v Brentford withdrawn from Gameweek 2's calendar. Chelsea plays
+    // again in Gameweeks 6 and 11, so Gameweek 2 is a Blank for it and the
     // section has one club fewer rather than one row of nothing.
     await client.query(
       "update fixtures set unscheduled = true where fixture_id = 103"
@@ -1256,7 +1256,26 @@ describe("opening the FPL track for a Gameweek", () => {
       "Gameweek 2",
       "- Everton v Fulham | 2026-08-30",
       "Gameweek 3",
-      "- Fulham v Arsenal | 2026-09-19"
+      "- Fulham v Arsenal | 2026-09-19",
+      "Gameweek 4",
+      "- Brentford v Everton | 2026-09-26",
+      "Gameweek 5",
+      "- Arsenal v Fulham | 2026-10-03",
+      "Gameweek 6",
+      "- Chelsea v Everton | 2026-10-10",
+      "Gameweek 7",
+      "- Everton v Arsenal | 2026-10-17",
+      "Gameweek 8",
+      "- Fulham v Chelsea | 2026-10-24",
+      "Gameweek 9",
+      "- Arsenal v Everton | 2026-10-31",
+      "Gameweek 10",
+      "- Brentford v Fulham | 2026-11-07",
+      "Gameweek 11",
+      "- Chelsea v Arsenal | 2026-11-21",
+      "Gameweek 12",
+      "- Everton v Brentford | 2026-11-28",
+      ""
     ].join("\n"));
     // Absence is the whole statement: the match is gone from the list and
     // nothing anywhere says why (ADR 0021).

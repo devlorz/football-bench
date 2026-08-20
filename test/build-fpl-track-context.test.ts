@@ -446,15 +446,13 @@ describe("The Chips the FPL context reports", () => {
 });
 
 describe("The Fixtures the FPL context lists", () => {
-  test("groups a schedule short of the window, home side first", () => {
+  test("groups raw Fixture lines under their Gameweeks, home side first", () => {
     // A Double is Chelsea twice in Gameweek 9 and a Blank is Chelsea nowhere in
     // Gameweek 10 — repetition and absence, with nothing said about either.
     //
-    // Six Gameweeks against a window of eleven, so this is also the season's-end
-    // case: a schedule the calendar has run out of renders as itself and says
-    // nothing about being short. That, and the heading as a whole line, is all
-    // this seam proves about the window — the window is the query's, and the
-    // Gameweek loop proves it over Postgres.
+    // Six Gameweeks against a window of eleven, so this is the season's-end case
+    // too: a short schedule renders as itself and says nothing about being short.
+    // The window's own length is the query's, and is proved over Postgres.
     expect(sectionShown(context({ schedule: SCHEDULE }), "Fixtures")).toEqual([
       "Fixtures, this Gameweek and the ten ahead:",
       "Gameweek 8",

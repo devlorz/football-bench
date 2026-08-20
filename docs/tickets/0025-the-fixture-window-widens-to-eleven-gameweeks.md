@@ -77,10 +77,15 @@ if it is not ready it is not worth a delayed Lock.
       would pass for any value and prove nothing about the window an Entrant sees.
 - [x] The existing Unscheduled and Blank cases still pass, their assertions extended to the
       wider window and their statements unchanged: the withdrawn Fixture is absent and
-      nothing anywhere says why (ADR-0024, ADR-0018).
+      nothing anywhere says why (ADR-0024, ADR-0018). The Unscheduled case reads the whole
+      window, Gameweeks 2 through 12, so the eight Gameweeks the widening added are asserted
+      rather than merely present.
 - [x] `npm run context:show:fpl` against production renders eleven Gameweeks under the new
       heading. It calls no Base Model and costs nothing, and it is the only step here that
-      reads the real calendar rather than a seeded one.
+      reads the real calendar rather than a seeded one. Run for Gameweek 1 of 2026-27: the
+      section opens "Fixtures, this Gameweek and the ten ahead:" and carries eleven Gameweek
+      headings, 1 through 11. The script reads `SEASON` and `GAMEWEEK` from the environment
+      and does not load `.env` itself.
 - [ ] `fpl:rehearse` green over the amended template, and the pre-cron checklist walked,
       before the Lock's cron takes over. The gate is a test result rather than an intention.
       `fpl:rehearse` is green (exit 0, ten Entrants over three Gameweeks, 240 metric rows).

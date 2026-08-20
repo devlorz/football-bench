@@ -56,7 +56,9 @@ there; the window is a `between` in one query, driven by the same constant.
   after merge stops being a record. Its rejection of a longer horizon stands as what was
   decided then; this ADR is what supersedes it, and the reason is written above rather than
   edited into the older document. Spec 0006's six-Gameweek sentences are superseded the same
-  way rather than rewritten.
+  way rather than rewritten, and so is spec 0009's story 6, which restates the section's
+  shape as "six Gameweeks, kickoff order, home side first" — the count moves to eleven and
+  the rest of that sentence stands.
 - **The whole remaining season** stays rejected, as in ADR-0021. At Gameweek 1 that is 380
   Fixture lines, most of them describing a squad the Entrant will have turned over twice
   before they are played, and the horizon shrinks every week — a section whose size is an
