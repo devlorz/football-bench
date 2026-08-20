@@ -488,7 +488,22 @@ Fixtures, which arrives with the last kickoff, not with the ticket's opening.
       clause this box used to carry is gone, to a ticket of its own — the reason is
       below, and the short of it is that `replayMatchExhibition` could not select La
       Liga before the flip either, so the claim was never the flip's to prove.
-- [ ] Prediction pre-flight passes for both Competitions on the restarted versions.
+- [x] Prediction pre-flight passes on the restarted versions — **nine of ten seats, one
+      Competition, and both shortfalls are named rather than waved at.** Run 2026-08-20
+      over Fixture 1 at `match/2026-27-v2`, ten calls, $0.157 read off the `usage.cost`
+      OpenRouter returned rather than off a price list. Nine answered parseable with a
+      canonical slug that resolved, `z-ai/glm-5.3` among them at $0.0128 — which was the
+      question this box existed to answer, since that seat replaced the delisted 5.2 and
+      had never been called. `meta/muse-spark-1.2` returned HTTP 429,
+      `temporarily rate-limited upstream` with `retry_after_seconds: 60`, from
+      OpenRouter's shared pool: not a fact about the roster, the packet or the version,
+      and it cost nothing because no response came back. It is left as it fell rather
+      than re-run, because the command calls all ten and a second pass would spend the
+      whole $0.157 to retry one seat; the prediction run carries three Repairs where
+      pre-flight carries none, so the same seat has cover this probe did not.
+      "Both Competitions" the run could not do at all: `preflightBaseModels` loads its
+      context with `"PL"` as a literal and takes no Competition. That is a defect of the
+      pre-flight, not of the restart, and it has a ticket of its own.
 
 ### The seat id the restart could not have — recorded 2026-08-19
 
