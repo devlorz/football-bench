@@ -6,6 +6,7 @@ import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { insertExhibition, resetSchema } from "./schema-fixture.js";
 import type { HttpRequest } from "../src/http.js";
 import { preflightBaseModels } from "../src/preflight/preflight-base-models.js";
+import { matchPromptOf } from "../src/predictions/openrouter-entrant.js";
 import {
   firstMessageText,
   type CapturedTurn
@@ -26,6 +27,68 @@ const openRouterResponseUrl = new URL(
 function seat(index: number): string {
   return String(index).padStart(2, "0");
 }
+
+/**
+ * The whole La Liga packet, which is the point of the assertion rather than
+ * a substring of it: every league-shaped line here — the competition named in
+ * the opening instruction, the table, the base rates, the two clubs and their
+ * Head Coaches — is a place the Premier League's own rows in the same tables
+ * would have read instead.
+ */
+const LA_LIGA_PACKET = [
+  "Predict this La Liga Fixture.",
+  "",
+  "Fixture ID: 1",
+  "Home: Sevilla",
+  "Away: Rayo Vallecano",
+  "Kick-off: 2026-08-28T19:00:00.000Z",
+  "",
+  "Historical context as of 2026-08-28T15:30:00.000Z",
+  "",
+  "La Liga table: no result has been played yet this Season.",
+  "",
+  "Prior-Season base rates (2025-26 La Liga, 1 match): home wins 100.0%, draws 0.0%, away wins 0.0%, 1.00 goals per match.",
+  "",
+  "Sevilla",
+  "Prior-Season final position: 1st in 2025-26 La Liga; promoted: no.",
+  "Prior-Season points per game: 3.00 overall, 3.00 home, unavailable away; xG for and against per game unavailable overall, unavailable home, unavailable away.",
+  "Current-Season overall: no matches played.",
+  "Current-Season home split: no home matches played.",
+  "Current-Season away split: no away matches played.",
+  "Last five matches played:",
+  "- 2025-26 La Liga | 2026-05-01 | Sevilla 1-0 Rayo Vallecano | W | xG unavailable",
+  "",
+  "Rayo Vallecano",
+  "Prior-Season final position: 2nd in 2025-26 La Liga; promoted: no.",
+  "Prior-Season points per game: 0.00 overall, unavailable home, 0.00 away; xG for and against per game unavailable overall, unavailable home, unavailable away.",
+  "Current-Season overall: no matches played.",
+  "Current-Season home split: no home matches played.",
+  "Current-Season away split: no away matches played.",
+  "Last five matches played:",
+  "- 2025-26 La Liga | 2026-05-01 | Sevilla 1-0 Rayo Vallecano | L | xG unavailable",
+  "",
+  "Head-to-head history:",
+  "- 2025-26 La Liga | 2026-05-01 | Sevilla 1-0 Rayo Vallecano",
+  "",
+  "Squad changes since 2 Feb 2026:",
+  "",
+  "Squad change data status: no Squad Change data stored for this Gameweek.",
+  "",
+  "Head Coach and changes this Season:",
+  "",
+  "Sevilla",
+  "Head Coach: Un Entrenador",
+  "",
+  "Rayo Vallecano",
+  "Head Coach: Otro Entrenador",
+  "",
+  "Return only JSON with fixture_id, probs (H, D, A), score (home, away), and rationale.",
+  "The first character must be { and the last character must be }.",
+  "Do not use Markdown or wrap the JSON in code fences.",
+  "Probabilities must each be between 0 and 1 and sum to 1. Goals must be non-negative integers.",
+  "score is the exact final scoreline you judge most likely \u2014 not expected goals rounded.",
+  "Probabilities are scored with the ranked probability score over the ordered outcomes Home, Draw, Away; lower is better."
+].join("\n");
 
 describe("pre-flight for the Base Model roster", () => {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
@@ -239,6 +302,7 @@ describe("pre-flight for the Base Model roster", () => {
 
     const report = await preflightBaseModels({
       database: client,
+      competition: "PL",
       season: "2026-27",
       fixtureId: 1,
       expectedEntrantCount: 9,
@@ -351,6 +415,7 @@ describe("pre-flight for the Base Model roster", () => {
 
     const report = await preflightBaseModels({
       database: client,
+      competition: "PL",
       season: "2026-27",
       fixtureId: 1,
       expectedEntrantCount: 9,
@@ -407,6 +472,7 @@ describe("pre-flight for the Base Model roster", () => {
 
     await preflightBaseModels({
       database: client,
+      competition: "PL",
       season: "2026-27",
       fixtureId: 1,
       expectedEntrantCount: 9,
@@ -457,6 +523,7 @@ describe("pre-flight for the Base Model roster", () => {
 
     const report = await preflightBaseModels({
       database: client,
+      competition: "PL",
       season: "2026-27",
       fixtureId: 1,
       expectedEntrantCount: 9,
@@ -505,6 +572,7 @@ describe("pre-flight for the Base Model roster", () => {
 
     const report = await preflightBaseModels({
       database: client,
+      competition: "PL",
       season: "2026-27",
       fixtureId: 1,
       expectedEntrantCount: 9,
@@ -598,6 +666,7 @@ describe("pre-flight for the Base Model roster", () => {
 
     await expect(preflightBaseModels({
       database: client,
+      competition: "PL",
       season: "2026-27",
       fixtureId: 1,
       expectedEntrantCount: 10,
@@ -630,6 +699,7 @@ describe("pre-flight for the Base Model roster", () => {
     let calls = 0;
     const runExpectingTen = () => preflightBaseModels({
       database: client,
+      competition: "PL",
       season: "2026-27",
       fixtureId: 1,
       expectedEntrantCount: 10,
@@ -645,6 +715,7 @@ describe("pre-flight for the Base Model roster", () => {
     await addEntrant(10);
     const finished = await preflightBaseModels({
       database: client,
+      competition: "PL",
       season: "2026-27",
       fixtureId: 1,
       expectedEntrantCount: 10,
@@ -710,6 +781,7 @@ describe("pre-flight for the Base Model roster", () => {
     // what catches it either way, and catches it before the first call.
     await expect(preflightBaseModels({
       database: client,
+      competition: "PL",
       season: "2026-27",
       fixtureId: 1,
       expectedEntrantCount: 9,
@@ -742,6 +814,7 @@ describe("pre-flight for the Base Model roster", () => {
 
     const report = await preflightBaseModels({
       database: client,
+      competition: "PL",
       season: "2026-27",
       fixtureId: 1,
       expectedEntrantCount: 9,
@@ -794,6 +867,7 @@ describe("pre-flight for the Base Model roster", () => {
 
     const report = await preflightBaseModels({
       database: client,
+      competition: "PL",
       season: "2026-27",
       fixtureId: 1,
       exhibitionModelId: "exhibition/late",
@@ -862,6 +936,7 @@ describe("pre-flight for the Base Model roster", () => {
     const target = async (exhibitionModelId: string) =>
       preflightBaseModels({
         database: client,
+        competition: "PL",
         season: "2026-27",
         fixtureId: 1,
         exhibitionModelId,
@@ -896,6 +971,7 @@ describe("pre-flight for the Base Model roster", () => {
 
     await expect(preflightBaseModels({
       database: client,
+      competition: "PL",
       season: "2026-27",
       fixtureId: 1,
       exhibitionModelId: "exhibition/fpl",
@@ -919,6 +995,7 @@ describe("pre-flight for the Base Model roster", () => {
     };
     const shared = {
       database: client,
+      competition: "PL",
       season: "2026-27",
       fixtureId: 1,
       apiKey: "test-key",
@@ -952,6 +1029,7 @@ describe("pre-flight for the Base Model roster", () => {
 
     const report = await preflightBaseModels({
       database: client,
+      competition: "PL",
       season: "2026-27",
       fixtureId: 1,
       expectedEntrantCount: 9,
@@ -1003,6 +1081,7 @@ describe("pre-flight for the Base Model roster", () => {
 
     const report = await preflightBaseModels({
       database: client,
+      competition: "PL",
       season: "2026-27",
       fixtureId: 1,
       expectedEntrantCount: 9,
@@ -1019,5 +1098,158 @@ describe("pre-flight for the Base Model roster", () => {
       resolvedModel: "openai/gpt-5.6-sol-pro-20260709",
       rawBody: null
     });
+  });
+
+  /**
+   * La Liga's own Gameweek 2 — the first the restarted `match-pd/2026-27-v2`
+   * seats can be Locked at — under the Fixture id the Premier League's own
+   * Gameweek 1 already occupies. A Fixture id is unique only within a
+   * Competition (migration 0022), so the collision is the point: a lookup
+   * without a `competition` predicate reads Arsenal against Coventry City.
+   */
+  const seedLaLiga = async (): Promise<void> => {
+    await client.query(
+      `insert into gameweeks (competition, season, gw, deadline_at)
+       values ('PD', '2026-27', 2, '2026-08-28T15:30:00Z');
+       insert into fixtures (
+         competition, season, fixture_id, gw, home_team, away_team, kickoff_at
+       ) values (
+         'PD', '2026-27', 1, 2, 'Sevilla', 'Rayo Vallecano',
+         '2026-08-28T19:00:00Z'
+       );
+       insert into historical_matches (
+         competition, season, division, played_on, home_team, away_team,
+         home_goals, away_goals
+       ) values (
+         'PD', '2025-26', 'La Liga', '2026-05-01T00:00:00Z',
+         'Sevilla', 'Rayo Vallecano', 1, 0
+       );
+       insert into head_coaches (
+         competition, season, gw, club, head_coach, observed_at
+       ) values
+         ('PD', '2026-27', 2, 'Sevilla', 'Un Entrenador',
+          '2026-08-28T15:00:00Z'),
+         ('PD', '2026-27', 2, 'Rayo Vallecano', 'Otro Entrenador',
+          '2026-08-28T15:00:00Z')`
+    );
+    for (let index = 1; index <= 10; index += 1) {
+      await client.query(
+        `insert into models (
+           id, name, base_model, provider, quantization, prompt_version, role
+         ) values ($1, $2, $3, $4, null, $5, 'entrant')`,
+        [
+          `entrant-pd/${seat(index)}`,
+          `Spanish Entrant ${index}`,
+          `vendor/spanish-model-${index}`,
+          `provider-pd-${index}`,
+          matchPromptOf("PD").version
+        ]
+      );
+    }
+  };
+
+  /** Answers whatever was asked, so a run is bounded by the roster alone. */
+  const answering = (called: string[], sent: string[]) =>
+    async (_url: string, options?: { body?: string }) => {
+      const request = JSON.parse(options?.body ?? "{}") as {
+        model: string;
+        messages: CapturedTurn[];
+      };
+      called.push(request.model);
+      sent.push(firstMessageText(request.messages));
+      return {
+        status: 200,
+        body: JSON.stringify({
+          model: request.model,
+          openrouter_metadata: {
+            endpoints: {
+              available: [{
+                provider: `Resolved ${request.model}`,
+                model: request.model,
+                selected: true
+              }]
+            }
+          },
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                fixture_id: 1,
+                probs: { H: 0.6, D: 0.24, A: 0.16 },
+                score: { home: 2, away: 1 },
+                rationale: "Pre-flight answer."
+              })
+            }
+          }]
+        })
+      };
+    };
+
+  test("pre-flights La Liga's own seats on a La Liga Fixture", async () => {
+    await seedLaLiga();
+    const called: string[] = [];
+    const sent: string[] = [];
+
+    const report = await preflightBaseModels({
+      database: client,
+      competition: "PD",
+      season: "2026-27",
+      fixtureId: 1,
+      expectedEntrantCount: 10,
+      apiKey: "test-key",
+      http: answering(called, sent)
+    });
+
+    // The ten restarted Spanish seats, and not one of the nine Premier League
+    // Entrants sitting in the same table at the same role.
+    expect(called).toEqual(
+      Array.from({ length: 10 }, (_u, n) => `vendor/spanish-model-${n + 1}`)
+    );
+    expect(report.results.map(({ modelId }) => modelId)).toEqual(
+      Array.from({ length: 10 }, (_u, n) => `entrant-pd/${seat(n + 1)}`)
+    );
+    expect(report.fixture).toEqual({
+      season: "2026-27",
+      fplId: 1,
+      gameweek: 2,
+      homeTeam: "Sevilla",
+      awayTeam: "Rayo Vallecano",
+      kickoffAt: "2026-08-28T19:00:00.000Z"
+    });
+    expect(report.ok).toBe(true);
+    // One packet, La Liga's, built from La Liga's Gameweek 2 deadline: the
+    // Premier League's Arsenal history and Head Coaches are in the same tables
+    // and none of it reaches this prompt.
+    expect(new Set(sent).size).toBe(1);
+    expect(sent[0]).toBe(LA_LIGA_PACKET);
+  });
+
+  test("a Premier League pre-flight is unchanged with La Liga seated beside it", async () => {
+    await seedLaLiga();
+    const called: string[] = [];
+    const sent: string[] = [];
+
+    const report = await preflightBaseModels({
+      database: client,
+      competition: "PL",
+      season: "2026-27",
+      fixtureId: 1,
+      expectedEntrantCount: 9,
+      apiKey: "test-key",
+      http: answering(called, sent)
+    });
+
+    expect(called).toEqual(
+      Array.from({ length: 9 }, (_u, n) => `vendor/base-model-${n + 1}`)
+    );
+    expect(report.fixture).toEqual({
+      season: "2026-27",
+      fplId: 1,
+      gameweek: 1,
+      homeTeam: "Arsenal",
+      awayTeam: "Coventry City",
+      kickoffAt: "2026-08-21T19:00:00.000Z"
+    });
+    expect(report.ok).toBe(true);
+    expect(sent[0]).toContain("Predict this Premier League Fixture.");
   });
 });

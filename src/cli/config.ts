@@ -135,6 +135,7 @@ export interface FplExhibitionJobConfig {
 
 export type PreflightJobConfig = {
   databaseUrl: string;
+  competition: string;
   season: string;
   fixtureId: number;
   openRouterApiKey: string;
@@ -422,10 +423,25 @@ export function readFplExhibitionJobConfig(
   };
 }
 
+/**
+ * Which Competition a job runs for, defaulted to the Premier League it ran for
+ * alone. Shaped and checked here rather than in a CLI, so one job has one place
+ * its input is read, and a code that is not one fails before a database is
+ * opened or a Base Model is called.
+ */
+function readCompetition(environment: NodeJS.ProcessEnv): string {
+  const competition = environment.COMPETITION?.trim().toUpperCase() || "PL";
+  if (!/^[A-Z]{2,3}$/.test(competition)) {
+    throw new Error("COMPETITION must be a Competition code such as PL or PD");
+  }
+  return competition;
+}
+
 export function readPreflightJobConfig(
   environment: NodeJS.ProcessEnv
 ): PreflightJobConfig {
   const databaseUrl = required(environment, "DATABASE_URL");
+  const competition = readCompetition(environment);
   const season = requiredSeason(environment);
   const fixtureId = Number(required(environment, "FIXTURE_ID"));
   const openRouterApiKey = required(environment, "OPENROUTER_API_KEY");
@@ -448,6 +464,7 @@ export function readPreflightJobConfig(
   if (exhibitionModelId !== null) {
     return {
       databaseUrl,
+      competition,
       season,
       fixtureId,
       exhibitionModelId,
@@ -464,6 +481,7 @@ export function readPreflightJobConfig(
 
   return {
     databaseUrl,
+    competition,
     season,
     fixtureId,
     expectedEntrantCount,
@@ -491,12 +509,8 @@ export function readPreviewJobConfig(
   const openRouterApiKey = required(environment, "OPENROUTER_API_KEY");
   // Defaulted rather than required, because a preview writes to a database
   // that exists for the run and is thrown away: a wrong Competition costs a
-  // rehearsal and nothing else. Read here rather than in the CLI so one job has
-  // one place its input is read and shaped, the way every other field is.
-  const competition = environment.COMPETITION?.trim().toUpperCase() || "PL";
-  if (!/^[A-Z]{2,3}$/.test(competition)) {
-    throw new Error("COMPETITION must be a Competition code such as PL or PD");
-  }
+  // rehearsal and nothing else.
+  const competition = readCompetition(environment);
   const at = environment.PREVIEW_AT?.trim() || "deadline-6h";
   // Read now so an unusable instant fails before a cluster is built for it.
   resolveDryRunInstant(at, new Date(0));
