@@ -433,7 +433,14 @@ scoreline. ADR-0043 accepted that Coherence changes meaning and expected the rat
 improve; what this run shows is the meaning changing without the improvement. That is a
 question about a metric and its decision, not a defect in a rendered sentence, so **no
 sentence moves and slice 2's tests stand** — which is also what box 4 asks. It is
-recorded here for whoever reads Coherence after the restart rather than acted on before
+confirmed on the record the next day, and by a wider margin than this bench could
+claim: La Liga's Gameweek 2 ran 27 incoherent of 116 (23%), and every one of the 27 is a
+1-1 while every one of the 27 1-1s is incoherent — the two sets identical, no exception
+either way, across ten Base Models and fourteen Fixtures. The rate fell this time where
+the bench's rose, so the percentage has now moved both ways across three readings and
+carries nothing; the shape underneath has not varied at all.
+[The reading is written up separately](../../reports/2026-08-20-coherence-under-the-restarted-version.md).
+It is recorded for whoever reads Coherence after the restart rather than acted on before
 the gate.
 
 **The base-rates anchor is picked up.** The roster's mean forecast moved toward the line
