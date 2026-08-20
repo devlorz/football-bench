@@ -2,12 +2,12 @@
 
 Five tracer-bullet slices that put a name to whoever picks each team, so that an Entrant's
 read of a Fixture stops depending on how recent its training data is. Source:
-[spec 0021](../specs/0021-the-head-coach-in-post-joins-the-match-context.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md), including the two entries ADR-0045 split apart — **Head
+[spec 0021](../../specs/0021-the-head-coach-in-post-joins-the-match-context.md). Vocabulary:
+[CONTEXT.md](../../../CONTEXT.md), including the two entries ADR-0045 split apart — **Head
 Coach** and **Head Coach Change**. Decisions:
-[ADR-0045](../adr/0045-the-packet-names-who-picks-each-team-not-only-who-changed.md),
+[ADR-0045](../../adr/0045-the-packet-names-who-picks-each-team-not-only-who-changed.md),
 overturning one sentence of
-[ADR-0044](../adr/0044-head-coach-changes-join-the-match-context-racing-the-freeze.md).
+[ADR-0044](../../adr/0044-head-coach-changes-join-the-match-context-racing-the-freeze.md).
 
 Bound to a Lock rather than a date. Slice 1 is the only one that can land under any
 freeze, because it changes a sentence rather than the packet's shape; slices 2 to 5 move

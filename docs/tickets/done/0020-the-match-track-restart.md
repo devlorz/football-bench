@@ -2,11 +2,11 @@
 
 Six tracer-bullet slices under one gate — the earliest restarted Lock, at latest the
 Premier League's **2026-08-21T17:30Z** — that retire one question and freeze a better one.
-Source: [spec 0020](../specs/0020-the-match-track-restart.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md), including **Head Coach**. Decisions:
-[ADR-0042](../adr/0042-the-match-track-restarts-under-amended-prompt-versions.md),
-[ADR-0043](../adr/0043-base-rates-xg-rates-and-two-instruction-lines-join-the-restarted-match-versions.md),
-[ADR-0044](../adr/0044-head-coach-changes-join-the-match-context-racing-the-freeze.md).
+Source: [spec 0020](../../specs/0020-the-match-track-restart.md). Vocabulary:
+[CONTEXT.md](../../../CONTEXT.md), including **Head Coach**. Decisions:
+[ADR-0042](../../adr/0042-the-match-track-restarts-under-amended-prompt-versions.md),
+[ADR-0043](../../adr/0043-base-rates-xg-rates-and-two-instruction-lines-join-the-restarted-match-versions.md),
+[ADR-0044](../../adr/0044-head-coach-changes-join-the-match-context-racing-the-freeze.md).
 
 Six slices and their edges, deliberately. Scoring Gameweek 1 is first and alone because
 its window closes forever at the flip — it is an act against the live record, and spec
@@ -364,7 +364,7 @@ rather than the box's "touches": production is read — `raw_snapshots` for the 
 `models` for the roster — over a session `restrictToReadOnly` downgrades before the first
 statement, and every write goes to the `startTemporaryPostgres` cluster dropped in the
 `finally`. The run's own output is kept as
-[a report](../reports/2026-08-19-match-restart-bench-pd-gw1.md).
+[a report](../../reports/2026-08-19-match-restart-bench-pd-gw1.md).
 
 **Two things had to move before the bench could be attempted**, both recorded in the
 commits rather than here: `previewGameweek` named `PL` as a literal and ran at the wall
@@ -461,7 +461,7 @@ own `locked_in_gw` attribution. The bench's fifty — the 17, the draw counts, t
 came out of a cluster that was dropped with the process, from Base Models that answer
 differently each time. Re-running the command produces a different run, not this one.
 What stands behind those numbers is the run's own output, kept at
-[docs/reports/2026-08-19-match-restart-bench-pd-gw1.md](../reports/2026-08-19-match-restart-bench-pd-gw1.md).
+[docs/reports/2026-08-19-match-restart-bench-pd-gw1.md](../../reports/2026-08-19-match-restart-bench-pd-gw1.md).
 
 ## 4 — The flip and the re-seat
 

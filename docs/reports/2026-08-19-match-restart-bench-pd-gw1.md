@@ -1,6 +1,6 @@
 # The amended question on the bench — La Liga's Gameweek 1 — 2026-08-19
 
-The run behind [ticket 0020](../tickets/0020-the-match-track-restart.md) slice 3. The
+The run behind [ticket 0020](../tickets/done/0020-the-match-track-restart.md) slice 3. The
 amended Match template ([ADR-0043](../adr/0043-base-rates-xg-rates-and-two-instruction-lines-join-the-restarted-match-versions.md))
 was put to the real roster over the six Fixtures La Liga's Gameweek 1 Locked, through
 `predict:preview` — archived snapshots into a throwaway cluster, real Base Model calls,
