@@ -446,11 +446,15 @@ describe("The Chips the FPL context reports", () => {
 });
 
 describe("The Fixtures the FPL context lists", () => {
-  test("groups six Gameweeks of raw lines, home side first", () => {
+  test("groups raw Fixture lines under their Gameweeks, home side first", () => {
     // A Double is Chelsea twice in Gameweek 9 and a Blank is Chelsea nowhere in
     // Gameweek 10 — repetition and absence, with nothing said about either.
+    //
+    // Six Gameweeks against a window of eleven, so this is the season's-end case
+    // too: a short schedule renders as itself and says nothing about being short.
+    // The window's own length is the query's, and is proved over Postgres.
     expect(sectionShown(context({ schedule: SCHEDULE }), "Fixtures")).toEqual([
-      "Fixtures, this Gameweek and the five ahead:",
+      "Fixtures, this Gameweek and the ten ahead:",
       "Gameweek 8",
       "- Arsenal v Chelsea | 2026-10-24",
       "- Brentford v Everton | 2026-10-25",
@@ -468,25 +472,6 @@ describe("The Fixtures the FPL context lists", () => {
       "Gameweek 13",
       "- Arsenal v Chelsea | 2026-12-05",
       "- Brentford v Everton | 2026-12-06"
-    ]);
-  });
-
-  test("stops at the last Gameweek the calendar has, saying nothing", () => {
-    // Three Gameweeks from the end of a Season: the window is what the schedule
-    // holds, and a shorter horizon is a fact of the calendar rather than
-    // something to announce.
-    expect(sectionShown(context({
-      schedule: SCHEDULE.filter(({ gameweek }) => gameweek < 11)
-    }), "Fixtures")).toEqual([
-      "Fixtures, this Gameweek and the five ahead:",
-      "Gameweek 8",
-      "- Arsenal v Chelsea | 2026-10-24",
-      "- Brentford v Everton | 2026-10-25",
-      "Gameweek 9",
-      "- Chelsea v Brentford | 2026-10-31",
-      "- Everton v Chelsea | 2026-11-01",
-      "Gameweek 10",
-      "- Arsenal v Everton | 2026-11-07"
     ]);
   });
 

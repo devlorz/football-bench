@@ -112,8 +112,8 @@ export interface FplPlayerPerformance {
   lastFive?: FplPerformanceWindow;
 }
 
-/** This Gameweek and the five after it: the planning window (ADR-0021). */
-export const SCHEDULE_GAMEWEEKS = 6;
+/** This Gameweek and the ten after it: the planning window (ADR-0046). */
+export const SCHEDULE_GAMEWEEKS = 11;
 
 /**
  * One Fixture of the schedule window: who plays whom, in which Gameweek, and
@@ -152,7 +152,7 @@ export interface BuildFplTrackContextOptions {
   state: ManagerState;
   pool: FplTrackPlayer[];
   /**
-   * This Gameweek's Fixtures and the five Gameweeks after it, ordered by
+   * This Gameweek's Fixtures and the ten Gameweeks after it, ordered by
    * Gameweek and then by kickoff. Ordering and windowing are the opening
    * flow's, as the stat windows are; the builder groups what it is handed.
    */
@@ -444,7 +444,7 @@ function fixturesSection(schedule: FplFixture[]): string[] {
   // rather than from the constant: this text is half of a frozen Prompt
   // Version, and a sentence that rewrote itself when a later ADR widened the
   // window would change a frozen pair without anyone deciding to.
-  const lines = ["Fixtures, this Gameweek and the five ahead:"];
+  const lines = ["Fixtures, this Gameweek and the ten ahead:"];
   let headed: number | undefined;
   for (const fixture of schedule) {
     if (fixture.gameweek !== headed) {
