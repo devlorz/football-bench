@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const MATCH_PROMPT_VERSION = "match/2026-27-v2";
 export const MATCH_PROMPT_SHA256 =
-  "c80fb3609e05e0abd562062fabe8214e0ca4b7b5d94aff02b051e6b6ab1d7291";
+  "4e3d03b3bcdeb453eac0dd20640459796ab0cd54d00dc62d10aa7b86c00b83fe";
 
 export interface MatchPrompt {
   /** The Prompt Version a Competition's seats are entered under. */
@@ -82,10 +82,15 @@ export const RETIRED_GAMEWEEK_CAVEAT =
  *
  * The sha is over a fully rendered context, not over the template, because
  * that is the mechanism that already exists and what it is worth pinning is
- * the whole prompt's format. Both pins here were re-taken from real renders of
- * the template ADR-0043 amended, read before they were written down — which is
+ * the whole prompt's format. Both pins here are taken from the suite's own
+ * render, not from a real one: the Head Coach section they now carry needs
+ * migration 0033, which production does not have, so `context:show` cannot
+ * render a packet containing it. Re-taking them from a real render — which is
  * what `context:show` is for, and how every earlier move of `PD`'s sha was
- * found.
+ * found — waits on that migration reaching production, and is ticket 0021's
+ * slice 5 box and ticket 0020's box 6, both still open. So ADR-0045 is landed
+ * in code and not yet closed: its "both sha pins move whenever it lands, and
+ * they are re-taken from real renders" is the half still outstanding.
  *
  * `PD` sits on `match-pd/2026-27-v2`. Its v1 was used — La Liga's Gameweek 1,
  * six contexts and sixty Predictions — and so is unamendable and retired: the
@@ -103,7 +108,7 @@ const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
   PD: {
     version: "match-pd/2026-27-v2",
     sha256:
-      "3a0fb89d6e334f96340ae49cafa7142487de21c17880fb6977f59706ef05b05c",
+      "44df40bd38489b8fd380177ec26b4ea24c7b480314c5218ee9181d440f0fd49c",
     competitionName: "La Liga",
     retired: { version: "match-pd/2026-27-v1", gw: 1 }
   }

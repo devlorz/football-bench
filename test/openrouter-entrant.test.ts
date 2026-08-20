@@ -198,6 +198,22 @@ const contextData = (competition: string): MatchContextData => ({
       manner: null,
       dated_on: "2026-09-01"
     }
+  ],
+  // The home club's incumbent, and an away club whose only stored row was
+  // observed after the deadline -- so the render carries both a name and the
+  // announced Gap, and the pinned hash moves if either sentence is reworded or
+  // if the observed bound stops holding.
+  headCoaches: [
+    {
+      club: "Arsenal",
+      head_coach: "Arrived Coach",
+      observed_at: new Date("2026-08-21T06:00:00Z")
+    },
+    {
+      club: "Coventry City",
+      head_coach: "Unseen Coach",
+      observed_at: new Date("2026-08-21T18:00:00Z")
+    }
   ]
 });
 
@@ -213,8 +229,10 @@ describe("the Match Prompt Version", () => {
   // has been played yet this Season" rather than one that states it is
   // unavailable. Read off `matchPromptOf` rather than a constant of its own,
   // because which version La Liga stands on is the thing that moves: this pin
-  // is `match-pd/2026-27-v2`'s, taken from a real render of the template
-  // ADR-0043 amended. Its v1 was used -- Gameweek 1, six contexts and sixty
+  // is `match-pd/2026-27-v2`'s, taken from this suite's own render and not
+  // from a real one -- production has no `head_coaches` to render the section
+  // from, and the constant's doc block carries what closes that. Its v1 was
+  // used -- Gameweek 1, six contexts and sixty
   // Predictions -- and is retired unamendable (ADR-0042), so this is a new
   // version being frozen and not a frozen prompt changing.
   test("pins La Liga's own rendering under its own Prompt Version", () => {

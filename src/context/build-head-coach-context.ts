@@ -19,12 +19,27 @@ export interface HeadCoachChangeRow {
   dated_on: string;
 }
 
-export interface BuildHeadCoachChangesContextOptions {
+/**
+ * One stored `head_coaches` row: who is in post at a club for this Gameweek,
+ * and the instant the row was observed.
+ *
+ * `observed_at` is a real instant rather than a date, and is the whole of this
+ * store's pre-Lock guarantee -- the source is the article's present tense and
+ * states no date at all (ADR-0045).
+ */
+export interface HeadCoachRow {
+  club: string;
+  head_coach: string;
+  observed_at: Date;
+}
+
+export interface BuildHeadCoachContextOptions {
   competition: string;
   season: string;
   deadline: Date;
   homeTeam: string;
   awayTeam: string;
+  headCoaches: HeadCoachRow[];
   changes: HeadCoachChangeRow[];
 }
 
@@ -96,10 +111,20 @@ function changeText(change: HeadCoachChangeRow): string {
 }
 
 /**
- * A club's lines, and nothing at all for a club that kept its Head Coach. The
- * absence of the event is the fact (ADR-0044), so an unchanged club costs no
- * line and a club that has not filled its vacancy yet costs one.
+ * Every club has a Head Coach, so a club with none to render is a Gap in the
+ * record and is announced as one (ADR-0045).
  *
+ * The sentence states what this render could reach, not what the record
+ * holds, because those are not the same thing: no fetch landed, a fetch
+ * landed short, and a row landed but was observed after the deadline all end
+ * here, and only the first two are "nothing is stored". Saying the club has
+ * no Head Coach would be worse still -- that is a claim about football, of
+ * the kind ADR-0045 struck out of this section's other empty state.
+ */
+const NO_HEAD_COACH =
+  "unavailable; no Head Coach is readable for this Gameweek.";
+
+/**
  * Arrivals before Departures, which is the Squad Changes section's order and
  * not this data's natural one -- a seat is vacated before it is filled, and
  * the two lines read backwards from that. The section is asked to render in
@@ -111,14 +136,27 @@ const DIRECTIONS = [
   { direction: "out", label: "Out" }
 ] as const;
 
-function clubSection(club: string, changes: HeadCoachChangeRow[]): string[] {
+/**
+ * A club's block: its Head Coach, then the Changes that explain how the seat
+ * came to be his. Both clubs always render, because both always have a Head
+ * Coach line -- a name or an announced Gap -- so no packet can reach a reader
+ * with a heading and nothing under it.
+ *
+ * A club that kept its Head Coach carries no Change lines at all. The absence
+ * of the event is the fact (ADR-0044) and keeping a Head Coach is ordinary,
+ * where a missing incumbent above is not.
+ */
+function clubSection(
+  club: string,
+  headCoaches: HeadCoachRow[],
+  changes: HeadCoachChangeRow[]
+): string[] {
+  const inPost = headCoaches.find((row) => row.club === club);
   const clubChanges = changes.filter((change) => change.club === club);
-  if (clubChanges.length === 0) {
-    return [];
-  }
   return [
     "",
     club,
+    `Head Coach: ${inPost === undefined ? NO_HEAD_COACH : inPost.head_coach}`,
     ...DIRECTIONS.flatMap(({ direction, label }) => {
       const line = orderChangesForDisplay(
         clubChanges.filter((change) => change.direction === direction)
@@ -129,36 +167,37 @@ function clubSection(club: string, changes: HeadCoachChangeRow[]): string[] {
 }
 
 /**
- * The Season's Head Coach changes for both clubs, or undefined for a
- * Competition and Season whose article is not listed -- then the section is
+ * Both clubs' Head Coach with their Season's Changes beneath, or undefined for
+ * a Competition and Season whose article is not listed -- then the section is
  * absent rather than empty, exactly as a Gameweek outside the transfer
  * window's gate states no squad movement at all (ADR-0031).
+ *
+ * One section and not two, because an Entrant is answering one question --
+ * who picks this team, and did that recently change -- and splitting it across
+ * two headings makes it read two places to assemble one fact (ADR-0045).
  */
-export function buildHeadCoachChangesContext(
-  options: BuildHeadCoachChangesContextOptions
+export function buildHeadCoachContext(
+  options: BuildHeadCoachContextOptions
 ): string | undefined {
   if (headCoachSource(options.competition, options.season) === undefined) {
     return undefined;
   }
-  // An empty partition renders as the heading with nothing under it, and so
-  // does a Season in which nobody has changed Head Coach yet. They are one
-  // sentence here on purpose.
-  //
-  // The Squad Change section says "no Squad Change data stored" over an empty
-  // partition, and that line was copied here first. It is wrong on this
-  // source: a transfer window's page always lists moves, so an empty Squad
-  // Change partition really is a fetch that did not land, while a
-  // managerial-changes table with no rows in it is an ordinary August in a
-  // league where every club kept its Head Coach. Distinguishing the two would
-  // need the store to record that a fetch ran, which it does not, and until
-  // it does the honest reading is ADR-0044's: absence of the event is the
-  // fact, for a club and for a league alike. Stating a Gap that is not one is
-  // the worse error of the two -- it is a sentence about our pipeline in a
-  // packet that is supposed to be about football.
+  // The same rule the store already holds, held again at the render. Migration
+  // 0033's two triggers cover the writes -- a row may not arrive after its
+  // Gameweek's deadline, and a deadline may not be moved back over a row that
+  // already arrived -- so this is defence in depth over a path they cover and
+  // not a hole they leave. It is here because the deadline is here: this is
+  // the reader that bounds the Changes by it, and a section that bounds one
+  // of its two stores and trusts the other for the same guarantee is a
+  // section that has to be read twice to be believed. A club left without one
+  // reads as the Gap it is.
+  const headCoaches = options.headCoaches.filter(
+    ({ observed_at: observed }) => observed < options.deadline
+  );
   const changes = boundedByDeadline(options.changes, options.deadline);
   return [
-    "Head Coach changes this Season:",
-    ...clubSection(options.homeTeam, changes),
-    ...clubSection(options.awayTeam, changes)
+    "Head Coach and changes this Season:",
+    ...clubSection(options.homeTeam, headCoaches, changes),
+    ...clubSection(options.awayTeam, headCoaches, changes)
   ].join("\n");
 }

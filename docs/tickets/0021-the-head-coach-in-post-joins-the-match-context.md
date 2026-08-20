@@ -33,6 +33,13 @@ record, not football, so they stay true whether nobody changed or nothing was fe
 
 **Blocked by:** None — can start immediately, and nothing waits on it.
 
+**Moot, and never landed — recorded 2026-08-20.** Slice 5 landed first and dissolved the
+branch this slice would have added: every club now renders a Head Coach line, so no packet
+reaches a reader with a heading and nothing under it, and there is nowhere left to put
+`none recorded`. The boxes below are left unticked rather than ticked or deleted — they
+describe a fallback the ADR named for the case where slice 5 did not land in time, and it
+did.
+
 - [ ] Where the partition holds no Head Coach Change for either club, the section reads
       `none recorded` — the phrase the Squad Changes section already uses for a direction
       with nothing in it — rather than a heading followed by a blank line.
@@ -182,21 +189,94 @@ instead of two.
 
 **Blocked by:** 4.
 
-- [ ] Each club renders its Head Coach, then its Change lines where the Season has any, in
-      the manner the Change section already uses.
-- [ ] A club with no stored Head Coach renders an announced Gap, not a blank: every club
-      has one, so a missing name is the record failing and the packet says so.
-- [ ] A club with no Change carries no Change lines under its incumbent, because keeping a
+- [x] Each club renders its Head Coach, then its Change lines where the Season has any, in
+      the manner the Change section already uses. The section is one and its heading says
+      so: `Head Coach and changes this Season:`, with each club's block reading its name,
+      `Head Coach: <name>`, then the `In` and `Out` lines the Change section already
+      wrote. The module is `build-head-coach-context.ts` now — the old
+      `build-head-coach-changes-context.ts` named only half of what it renders.
+- [x] A club with no stored Head Coach renders an announced Gap, not a blank:
+      `Head Coach: unavailable; no Head Coach is readable for this Gameweek.` The sentence
+      states what the render could reach rather than what the record holds, and that is
+      the whole of the correction below: three states end at this line — no fetch landed,
+      a fetch landed short, and a row landed but was observed after the deadline — and
+      only the first two are "nothing is stored". It never says the club has no Head
+      Coach, which would be a claim about football of the kind ADR-0045 struck out of this
+      section's other empty state.
+- [x] A club with no Change carries no Change lines under its incumbent, because keeping a
       Head Coach is ordinary.
-- [ ] A Head Coach row observed after the deadline the context is built for is not read,
+- [x] A Head Coach row observed after the deadline the context is built for is not read,
       so a sacking on the morning of the match cannot reach a packet that predates the
-      Lock.
-- [ ] The section stays absent for a Competition and Season with no listed article.
-- [ ] Slice 1's `none recorded` branch is gone or unreachable, because every club now has
-      a Head Coach and no packet can reach a reader with a heading and nothing beneath it.
-- [ ] Every sentence the section can say is a render test's expected line, over production
-      data read by eye before the pins move.
-- [ ] Both sha pins are re-taken from real renders carrying the section.
+      Lock. Held at the read as well as at the write, and the write is already covered
+      both ways round — migration 0033's `head_coach_precedes_deadline` refuses the row
+      and `gameweek_deadline_preserves_head_coach_lock` refuses the deadline being moved
+      back over one. So this filter is the same rule held twice and not a hole in the
+      triggers; it lives here because the deadline lives here, beside the bound this
+      section already puts on the Changes.
+- [x] The section stays absent for a Competition and Season with no listed article.
+- [x] Slice 1's `none recorded` branch is gone or unreachable: both clubs always render a
+      Head Coach line, a name or the Gap, so the heading can no longer be the whole
+      section. Slice 1 never landed and is now moot — see its own boxes.
+- [x] Every sentence the section can say is a render test's expected line, whole rather
+      than by substring: the name, the Gap, the Gap standing in for a row observed after
+      the deadline, and a club that kept its Head Coach. Every one is a whole-render
+      `toBe`, the Gap cases included, so a stray line under a club cannot survive the way
+      it would under a `toContain`. `predict-gameweek` holds the
+      packet where nothing is stored and both clubs announce the Gap; `preflight` holds
+      the packet where both are named and one has Changes.
+- [ ] Both sha pins are re-taken from real renders carrying the section. **Not done, and
+      not doable from here:** production has no `head_coaches` — migration 0033 is merged
+      and unapplied, so `context:show` against it fails on `relation "head_coaches" does
+      not exist` rather than rendering the section. The pins moved to the test's own
+      render, as ticket 0020's slice 6 left them: `match/2026-27-v2` is `4e3d03b3` and
+      `match-pd/2026-27-v2` is `44df40bd`. What closes this box is the same act that
+      closes 0020's box 6 — 0033 applied to production and a fetch landed, then both pins
+      re-taken from a rendered packet read by eye. That is an act against the record and
+      ADR-0018 keeps it out of a code slice.
+
+### What slice 5 landed — recorded 2026-08-20
+
+**The rename was the honest half of the diff.** `buildHeadCoachChangesContext` renders the
+incumbent first now, so it is `buildHeadCoachContext` in
+`src/context/build-head-coach-context.ts`, with `test/build-head-coach-context.test.ts`
+beside it. Slices 2 and 4 above name the old path in their run records; those records read
+true when they were written and are left as they were.
+
+**Both clubs always render, and that is what dissolves the empty heading.** `clubSection`
+no longer returns nothing for a club with no Change — it returns the club's name and its
+Head Coach line unconditionally, and the Change lines only where there are Changes. There
+is no branch left in which the section is its heading alone.
+
+**The observed bound is a filter at the read, not a `where` in the query.** It sits beside
+the Changes' `dated_on` bound in the same builder, where a reader comparing the two
+guarantees can see both: one is about when the fact was dated, the other about when the row
+arrived, and ADR-0045 is explicit that the second is the weaker claim.
+
+**Test counts, per file, on 2026-08-20 with `--exclude '**/.claude/**'`:**
+`build-head-coach-context` 9, `openrouter-entrant` 6, `preflight-base-models` 15,
+`predict-gameweek` 28, `competition-context-contamination` 3, with `fetch-squad-changes`
+25 and `build-squad-changes-context` 11 unmoved beside them — 7 files, 97 tests, all
+passing. `tsc --noEmit` clean.
+
+**The window this landed in.** Before the freeze, which is the condition this ticket binds
+slices 2 to 5 to rather than a date: the Premier League's first restarted Lock is
+2026-08-21T17:30Z and this landed on 2026-08-20, so it is part of the restarted versions
+and both Competitions take it together (ADR-0038). What is still outside the window is the
+real-render re-pin above, which cannot happen until production has migration 0033.
+
+**The review found two comments claiming what the code and the schema do not.** The Gap
+sentence said "none is stored" over a case the suite itself seeds as stored-but-unreadable,
+and the filter's comment named a hole in the triggers that migration 0033 does not have.
+Both are corrected, in the boxes above and in the code, and both were caught before the sha
+moved for the last time. This is the fourth time in this module family that a comment has
+asserted a behaviour its subject does not have; the pattern is a comment written from the
+change's intent rather than read back off what shipped.
+
+**A third hash moved with the two pins.** `predict-gameweek` asserts the stored context's
+own sha beside the body it stores; adding lines to every packet moves it, and it is
+`e078ec32` now. It is not a frozen pin — it is the hash of the body the same test spells
+out — but it is a value that has to be re-taken by hand when the packet changes. It is
+`d04dd751`.
 
 ## Not in these slices
 

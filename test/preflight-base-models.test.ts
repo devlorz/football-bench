@@ -118,6 +118,22 @@ describe("pre-flight for the Base Model roster", () => {
            '2026-06-04', '2026-08-21T17:00:00Z'
          )`
     );
+    // Both clubs, because every club has one: the incumbent is a state and a
+    // club missing from here is a Gap, where a club missing from the Changes
+    // above simply kept its Head Coach.
+    await client.query(
+      `insert into head_coaches (
+         competition, season, gw, club, head_coach, observed_at
+       ) values
+         (
+           'PL', '2026-27', 1, 'Arsenal', 'Arrived Coach',
+           '2026-08-21T17:00:00Z'
+         ),
+         (
+           'PL', '2026-27', 1, 'Coventry City', 'A Steady Coach',
+           '2026-08-21T17:00:00Z'
+         )`
+    );
     for (let index = 1; index <= 9; index += 1) {
       await client.query(
         `insert into models (
@@ -203,11 +219,15 @@ describe("pre-flight for the Base Model roster", () => {
       "In: none recorded",
       "Out: none recorded",
       "",
-      "Head Coach changes this Season:",
+      "Head Coach and changes this Season:",
       "",
       "Arsenal",
+      "Head Coach: Arrived Coach",
       "In: Arrived Coach (4 Jun 2026)",
       "Out: Departed Coach (sacked, 30 May 2026)",
+      "",
+      "Coventry City",
+      "Head Coach: A Steady Coach",
       "",
       "Return only JSON with fixture_id, probs (H, D, A), score (home, away), and rationale.",
       "The first character must be { and the last character must be }.",

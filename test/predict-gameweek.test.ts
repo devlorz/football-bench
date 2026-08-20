@@ -349,10 +349,16 @@ describe("predicting a Gameweek", () => {
       "",
       "Squad change data status: no Squad Change data stored for this Gameweek.",
       "",
-      // Nothing under the heading: a Gameweek with no stored Head Coach
-      // change and a Season in which nobody changed read alike, and the
-      // section says the second rather than reporting a Gap.
-      "Head Coach changes this Season:",
+      // Every club has a Head Coach, so a Gameweek with nothing stored is a
+      // Gap in the record and both clubs announce it. No Change lines: a
+      // club that kept its Head Coach is ordinary and costs none.
+      "Head Coach and changes this Season:",
+      "",
+      "Arsenal",
+      "Head Coach: unavailable; no Head Coach is readable for this Gameweek.",
+      "",
+      "Coventry City",
+      "Head Coach: unavailable; no Head Coach is readable for this Gameweek.",
       "",
       "Return only JSON with fixture_id, probs (H, D, A), score (home, away), and rationale.",
       "The first character must be { and the last character must be }.",
@@ -462,7 +468,7 @@ describe("predicting a Gameweek", () => {
       track: "match",
       fixture_id: 1,
       body: context,
-      hash: "dc25a8843fb3b537edfbecff4f43e1cc9730aaf1097c016f434bd98df0c33845",
+      hash: "d04dd751b68e6d061a9fc6c9064be58b4cbbb4fcbc7c53958af47cf74378d8c1",
       model_id: "entrant/v1",
       probs: { H: 0.6003600360036003, D: 0.23982398239823982, A: 0.15981598159815982 },
       pred_home: 2,

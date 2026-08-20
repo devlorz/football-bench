@@ -12,9 +12,10 @@ import {
   type SquadChangeRow
 } from "../context/build-squad-changes-context.js";
 import {
-  buildHeadCoachChangesContext,
-  type HeadCoachChangeRow
-} from "../context/build-head-coach-changes-context.js";
+  buildHeadCoachContext,
+  type HeadCoachChangeRow,
+  type HeadCoachRow
+} from "../context/build-head-coach-context.js";
 import {
   matchContext,
   type MatchPromptFixture
@@ -78,6 +79,7 @@ export interface MatchContextData {
   fplPlayers: FplPlayer[];
   squadChanges: SquadChangeRow[];
   headCoachChanges: HeadCoachChangeRow[];
+  headCoaches: HeadCoachRow[];
 }
 
 export async function loadMatchContextData(
@@ -143,6 +145,16 @@ export async function loadMatchContextData(
       where competition = $1 and season = $2 and gw = $3`,
     [competition, season, gameweek]
   );
+  // The same partition again, and the state beside the events: one row per
+  // club. Every row comes back and the deadline bound is the renderer's, where
+  // the deadline is and where the Changes are bounded too -- no `where` here
+  // holds it back.
+  const headCoaches = await database.query<HeadCoachRow>(
+    `select club, head_coach, observed_at
+       from head_coaches
+      where competition = $1 and season = $2 and gw = $3`,
+    [competition, season, gameweek]
+  );
   return {
     competition,
     season,
@@ -152,7 +164,8 @@ export async function loadMatchContextData(
     ),
     fplPlayers: fplPlayers.rows,
     squadChanges: squadChanges.rows,
-    headCoachChanges: headCoachChanges.rows
+    headCoachChanges: headCoachChanges.rows,
+    headCoaches: headCoaches.rows
   };
 }
 
@@ -198,12 +211,13 @@ export function buildMatchContext(
       }),
       // Undefined for a Season whose article is not listed, and then the
       // section is absent rather than empty.
-      buildHeadCoachChangesContext({
+      buildHeadCoachContext({
         competition: data.competition,
         season: data.season,
         deadline: data.deadline,
         homeTeam: fixture.home_team,
         awayTeam: fixture.away_team,
+        headCoaches: data.headCoaches,
         changes: data.headCoachChanges
       })
     ].filter((section) => section !== undefined).join("\n\n"),
