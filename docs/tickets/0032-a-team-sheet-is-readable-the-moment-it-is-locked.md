@@ -26,6 +26,12 @@ moment the Lock stores them.
       any settled player points.
 - [x] The header's word follows the data: `GW2 locked` until the points exist, `GW2 settled`
       after. The ranking's header is untouched, because a ranking is what settling produces.
+- [x] **The body states that word's fact rather than the page inferring it.** `settled` is
+      served, computed from the same player points the Sheet's own points were read
+      against. The page had inferred it from the aggregate `scores` row, which production
+      writes in a transaction after the one that commits the player points: in the gap
+      between them the pitch draws every player's return under a header saying `locked`.
+      Pinned by a test that deletes the aggregates and keeps the player points.
 - [x] The page renders a null point as the view's own dash rather than a nought — nought is
       a return, and a player who has not kicked a ball has not had one.
 - [x] The pre-Season block says what it now means: no Team Sheet locked yet, rather than no

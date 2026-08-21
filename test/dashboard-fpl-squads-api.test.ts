@@ -402,6 +402,47 @@ describe("the FPL squads endpoint", () => {
     }
   });
 
+  test("calls a Gameweek settled from the players' points, not the aggregate",
+    async () => {
+      // The gap production actually passes through (ADR-0048): the fetch
+      // commits `fpl_player_points` and the scorer writes the aggregate rows
+      // after it, in its own transaction with its own error path. In between,
+      // every player on the pitch has a return and no Entrant has a total.
+      //
+      // A page inferring the state from the aggregate would print "locked" over
+      // a pitch already drawing points. The body answers with the state its own
+      // player points were read against.
+      const before = await squads();
+      expect(before.settled).toBe(true);
+      const aggregates = (await writer.query(
+        `delete from scores
+          where season = $1 and track = 'fpl' and gw = $2
+        returning model_id, competition, metric, value, n, detail`,
+        [SEASON, before.gw]
+      )).rows;
+      expect(aggregates.length).toBeGreaterThan(0);
+      try {
+        const body = await squads();
+
+        expect(body.gw).toBe(before.gw);
+        expect(body.settled).toBe(true);
+        // The half that arrived is drawn, and the half that has not is null.
+        expect(body.entrants[0]!.players.every(({ points }) => points !== null))
+          .toBe(true);
+        expect(body.entrants[0]!.gwPoints).toBeNull();
+      } finally {
+        for (const row of aggregates) {
+          await writer.query(
+            `insert into scores (
+               season, gw, track, model_id, competition, metric, value, n,
+               detail
+             ) values ($1, $2, 'fpl', $3, $4, $5, $6, $7, $8)`,
+            [SEASON, before.gw, ...Object.values(row)]
+          );
+        }
+      }
+    });
+
   test("still refuses a settled Gameweek missing one player's points",
     async () => {
       // The state the unsettled Gameweek below had to be told apart from, kept:
@@ -410,7 +451,7 @@ describe("the FPL squads endpoint", () => {
       // publishing fourteen players who scored and one blank (ADR-0048).
       const before = await squads();
       const dropped = before.entrants[0]!.players[0]!.fplId;
-      const kept = (await writer.query<{ total_points: number }>(
+      const pointsRowForRestore = (await writer.query<{ total_points: number }>(
         `delete from fpl_player_points
           where season = $1 and gw = $2 and fpl_id = $3
         returning minutes, total_points, goals_scored, assists, clean_sheets,
@@ -418,7 +459,7 @@ describe("the FPL squads endpoint", () => {
                   expected_assists, expected_goals_conceded, competition`,
         [SEASON, before.gw, dropped]
       )).rows;
-      expect(kept).toHaveLength(1);
+      expect(pointsRowForRestore).toHaveLength(1);
       try {
         // It throws rather than answering: the read API has no branch for a
         // record that contradicts itself, and a page rendering fourteen
@@ -435,7 +476,7 @@ describe("the FPL squads endpoint", () => {
              competition
            ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
                      $14, $15, $16)`,
-          [SEASON, before.gw, dropped, ...Object.values(kept[0]!)]
+          [SEASON, before.gw, dropped, ...Object.values(pointsRowForRestore[0]!)]
         );
       }
     });
@@ -951,6 +992,7 @@ describe("the FPL squads endpoint at a Gameweek that is locked and unscored",
       // The locked Gameweek, not the settled one behind it.
       expect(body.gw).toBe(6);
       expect(body.entrants.length).toBeGreaterThan(0);
+      expect(body.settled).toBe(false);
       for (const entrant of body.entrants) {
         // Readable without a single point: the fifteen, the armband, the money.
         expect(entrant.players).toHaveLength(15);

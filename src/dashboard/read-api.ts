@@ -1646,6 +1646,20 @@ export interface FplSquadsBody {
    * is wrong in the half a reader cannot check.
    */
   maxRepairs: number;
+  /**
+   * Whether the Gameweek above has settled, which is the difference between a
+   * Sheet whose points are still to come and one whose points are in
+   * (ADR-0048).
+   *
+   * Served rather than inferred, because the two facts the page could infer it
+   * from arrive separately: `fpl_player_points` is committed by the fetch and
+   * the aggregate `scores` row by the scorer, in its own transaction and its
+   * own error path. A page reading the aggregate would call a Gameweek locked
+   * while already drawing its players' points, for as long as the gap between
+   * the two lasts. This is the one answer both halves of the body agree with,
+   * because it is the answer the players' points were read against.
+   */
+  settled: boolean;
   entrants: FplSquadsEntrant[];
 }
 
@@ -1889,6 +1903,7 @@ async function fplSquads(query: Query, season: string): Promise<Response> {
       ? null
       : new Date(deadline.deadline_at as string | Date).toISOString(),
     maxRepairs: MAX_REPAIRS,
+    settled,
     entrants: entrants.sort(byTotalPoints)
   };
   return json(body, SCORED_CACHE);

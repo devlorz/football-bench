@@ -402,12 +402,12 @@ import { SEASON_ROSTER_SIZE } from "../../../../src/season-roster.js";
       text($("status"),
         statusLine(
           data.season, data.gw, data.entrants.length,
-          // The word follows the data rather than the page: this Gameweek is
-          // locked until its points exist, and they arrive with settlement
-          // (ADR-0048).
-          data.entrants.some((entrant) => entrant.gwPoints !== null)
-            ? "settled"
-            : "locked"
+          // The state the body states, not one this page infers (ADR-0048).
+          // Inferring it from the aggregate points would call a Gameweek locked
+          // while the pitch beneath already drew its players' points: the fetch
+          // commits the player points and the scorer writes the aggregate row
+          // after it, in a transaction of its own.
+          data.settled ? "settled" : "locked"
         ));
 
       const pre = data.gw === null;
