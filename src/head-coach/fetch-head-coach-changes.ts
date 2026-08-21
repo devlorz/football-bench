@@ -133,11 +133,15 @@ export async function fetchHeadCoachChanges({
     throw new HeadCoachSourceHttpError(source, response.status, url);
   }
 
-  const changes = parseHeadCoachChanges(source, response.body, pinned);
+  const changes = parseHeadCoachChanges(
+    source, response.body, pinned, article.columns
+  );
   // The same bytes, read a second time: who is in post is a state the record
   // holds beside the changes that explain it (ADR-0045), and both come off one
   // request.
-  const inPost = parseHeadCoaches(source, response.body, pinned);
+  const inPost = parseHeadCoaches(
+    source, response.body, pinned, article.personnelColumns
+  );
 
   await database.query("begin");
   try {

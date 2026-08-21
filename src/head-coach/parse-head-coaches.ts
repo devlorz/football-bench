@@ -33,7 +33,6 @@ const SECTION_HEADINGS = ["Personnel and kits", "Personnel and sponsorship"];
 const SOURCE_COLUMNS = ["Team", "Manager"];
 
 const CLUB = 0;
-const HEAD_COACH = 1;
 
 /**
  * Each club's Head Coach for the Season, from the season article's raw
@@ -48,8 +47,14 @@ const HEAD_COACH = 1;
 export function parseHeadCoaches(
   source: string,
   wikitext: string,
-  pinned: PinnedClubs
+  pinned: PinnedClubs,
+  columns: readonly string[] = SOURCE_COLUMNS
 ): HeadCoachInPost[] {
+  // Read off the labels rather than fixed at 1: the column the Head Coach sits
+  // in is wherever this article's own pinned list puts `Manager`, so an article
+  // that leads with an extra column moves the read with it instead of needing a
+  // second constant that could disagree with the first.
+  const headCoachAt = columns.indexOf("Manager");
   const issues: HeadCoachSourceIssue[] = [];
   const inPost: HeadCoachInPost[] = [];
   const { heading, wikitable } = sectionTable(
@@ -58,12 +63,11 @@ export function parseHeadCoaches(
   const { header, rows } = tableLines(wikitable);
 
   const labels = header.map(cellText);
-  if (labels.slice(0, SOURCE_COLUMNS.length).join("|")
-    !== SOURCE_COLUMNS.join("|")) {
+  if (labels.slice(0, columns.length).join("|") !== columns.join("|")) {
     throw new HeadCoachSourceValidationError(source, [{
       field: heading,
       detail:
-        `expected the columns ${SOURCE_COLUMNS.join(", ")}, `
+        `expected the columns ${columns.join(", ")}, `
         + `received ${labels.join(", ")}`
     }]);
   }
@@ -88,7 +92,7 @@ export function parseHeadCoaches(
       });
       continue;
     }
-    const headCoach = cellText(cells[HEAD_COACH] as string);
+    const headCoach = cellText(cells[headCoachAt] as string);
     if (headCoach === "") {
       issues.push({
         field: `${heading}.${index}.headCoach`,
