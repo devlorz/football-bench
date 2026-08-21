@@ -6,7 +6,10 @@ import {
   UnderstatSourceHttpError,
   UnderstatSourceValidationError
 } from "../src/understat/fetch-season-xg.js";
-import { resolveUnderstatTeamName } from "../src/understat/team-identity.js";
+import {
+  resolveUnderstatTeamName, understatTeamNamesOf
+} from "../src/understat/team-identity.js";
+import { archivedBody } from "./archived-fixture.js";
 
 const { Client } = pg;
 
@@ -548,14 +551,64 @@ describe("fetching Understat per-match xG", () => {
       ]);
     });
 
+  // The map read back against the two feeds it was derived from, both
+  // committed: a list typed into a test would agree with a map typed from the
+  // same draft, and neither would touch the sources. Every key must be a title
+  // in the Understat feed, every value a `HomeTeam` in the football-data.co.uk
+  // file, and each side exactly twenty with nothing left over — which is the
+  // whole of what "derived, not transcribed" claims.
+  test("derives Serie A's twenty from the two feeds it was read off",
+    async () => {
+      const feed = JSON.parse(
+        await archivedBody("understat-2025-26-Serie_A.json.gz")
+      ) as { dates: Array<{ h: { title: string }; a: { title: string } }> };
+      const titles = new Set(feed.dates.flatMap(({ h, a }) => [h.title, a.title]));
+
+      const rows = (await archivedBody("football-data-2526-I1.csv.gz"))
+        .split(/\r?\n/).filter((line) => line.length > 0);
+      const homeTeam = rows[0]?.split(",").indexOf("HomeTeam") ?? -1;
+      const stored = new Set(
+        rows.slice(1).map((row) => row.split(",")[homeTeam] ?? "")
+      );
+
+      expect(titles.size).toBe(20);
+      expect(stored.size).toBe(20);
+
+      // Every key a title and every title a key, compared as sets rather than
+      // by resolving the feed's twenty: resolving proves only that nothing in
+      // the feed is missing, and a twenty-first key naming a club Understat
+      // does not list would survive it.
+      expect(Object.keys(understatTeamNamesOf("SA") ?? {}).sort())
+        .toEqual([...titles].sort());
+
+      const resolved = [...titles].map(
+        (title) => resolveUnderstatTeamName("SA", title)
+      );
+      expect(resolved.filter((name) => name === undefined)).toEqual([]);
+      // Every value a stored name, and the two sets equal — so the map can
+      // neither point at a club football-data.co.uk does not hold nor leave
+      // one of its twenty unnamed.
+      expect(new Set(resolved).size).toBe(20);
+      expect([...new Set(resolved)].sort()).toEqual([...stored].sort());
+
+      // The two the review was asked about, named rather than left to the set
+      // arithmetic: a rename on either side that kept the sets equal would
+      // still have to keep these two pointing where they point.
+      expect(resolveUnderstatTeamName("SA", "AC Milan")).toBe("Milan");
+      expect(resolveUnderstatTeamName("SA", "Parma Calcio 1913")).toBe("Parma");
+      // The club the first can be confused with — both sources call it
+      // `Inter`, so a swapped pair is spelt apart on each side.
+      expect(resolveUnderstatTeamName("SA", "Inter")).toBe("Inter");
+    });
+
   test("refuses a Competition with no Understat league", async () => {
     await expect(fetchUnderstatSeasonXg({
       database: client,
-      competition: "SA",
+      competition: "BL1",
       season: "2026-27",
       http: async () => {
         throw new Error("no request should be made");
       }
-    })).rejects.toThrow("Competition SA has no Understat league");
+    })).rejects.toThrow("Competition BL1 has no Understat league");
   });
 });

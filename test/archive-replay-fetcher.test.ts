@@ -53,13 +53,16 @@ describe("the archive replay fetcher", () => {
   test("replays Understat, whose Season is addressed by its opening year", async () => {
     const http = createArchiveReplayFetcher([
       { source: "understat:2025-26:La_liga", body: "{\"dates\":[]}" },
-      { source: "understat:2025-26:EPL", body: "{\"dates\":[1]}" }
+      { source: "understat:2025-26:EPL", body: "{\"dates\":[1]}" },
+      { source: "understat:2025-26:Serie_A", body: "{\"dates\":[2]}" }
     ]);
 
     expect((await http("https://understat.com/getLeagueData/La_liga/2025")).body)
       .toBe("{\"dates\":[]}");
     expect((await http("https://understat.com/getLeagueData/EPL/2025")).body)
       .toBe("{\"dates\":[1]}");
+    expect((await http("https://understat.com/getLeagueData/Serie_A/2025")).body)
+      .toBe("{\"dates\":[2]}");
   });
 
   // The turn of the century, where `(year + 1) % 100` has to keep its zero.

@@ -126,8 +126,17 @@ const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
   // Lock. Their pins are this suite's render read on 2026-08-21, before either
   // league's history is backfilled — so each league table reads "no result
   // has been played yet this Season" rather than unavailable, the divisions
-  // being listed, and each pin moves once when the backfill lands: the
-  // documented single move `PD`'s made.
+  // being listed.
+  //
+  // This block used to end "and each pin moves once when the backfill lands".
+  // Serie A's landed on 2026-08-21 and this pin did not move: the pin hashes
+  // the suite's render, which is built from a literal and reads no database,
+  // so a backfill cannot reach it. What moved `PD`'s pins twice was the
+  // builder — an empty history section over 842 stored rows, then a table
+  // reading `unavailable` — and each of those was a code change the suite saw.
+  // Serie A needed no such fix: its divisions were curated before its first
+  // render, and the real packet, read whole over 760 stored results and 380
+  // joined xG rows, says what the pinned render says.
   SA: {
     version: "match-sa/2026-27-v1",
     sha256:

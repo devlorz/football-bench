@@ -242,7 +242,12 @@ describe("the Match Prompt Version", () => {
   // template: both pins were read before they were written -- each rendering
   // names its own league in every line that names one, and each states no
   // result has been played yet this Season rather than that the table is
-  // unavailable -- and each moves once when its history backfill lands.
+  // unavailable.
+  //
+  // That last line used to end "and each moves once when its history backfill
+  // lands", which was wrong twice over: `contextData` is a literal and this
+  // render reads no database, so no backfill can reach it. Serie A's landed
+  // and this pin did not move. What moved `PD`'s twice was the builder.
   test.each(MATCH_PROMPT_COMPETITIONS)(
     "pins %s's own rendering under its own Prompt Version",
     (competition) => {

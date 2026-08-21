@@ -16,7 +16,8 @@ type Database = Pick<Client, "query">;
  */
 const UNDERSTAT_LEAGUES: Readonly<Record<string, string>> = {
   PL: "EPL",
-  PD: "La_liga"
+  PD: "La_liga",
+  SA: "Serie_A"
 };
 
 interface MatchXg {

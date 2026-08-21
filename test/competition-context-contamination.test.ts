@@ -18,16 +18,16 @@ const FPL_SECTION = "FPL-derived player context";
 const HISTORICAL_SECTION = "Historical context as of";
 
 /**
- * Two leagues in `historical_matches` and `understat_match_xg`, the two tables
+ * Three leagues in `historical_matches` and `understat_match_xg`, the two tables
  * whose reads were bounded by date and Season alone until ADR-0037.
  *
- * Both leagues' rows are seeded under one `division`, which is not an
+ * Every league's rows are seeded under one `division`, which is not an
  * oversight: a division belongs to one Competition by convention and would
  * separate these rows on its own, so a test leaning on it would pass against a
  * filter that does not exist.
  *
- * Each league does now name its own clubs, where both named English ones until
- * ticket 6. That changed with the Understat alias map, which is keyed by
+ * Each league does now name its own clubs, where every one named English ones
+ * until ticket 6. That changed with the Understat alias map, which is keyed by
  * Competition — a Spanish club resolves under `PD` and nowhere else. The
  * construction that keeps `competition` the only thing under test survives it,
  * and is worth stating because it is easy to undo: **each contaminant names the
@@ -63,7 +63,7 @@ describe("a context packet holds one Competition's data", () => {
          understat_match_xg, fpl_players
        restart identity cascade`
     );
-    for (const competition of ["PL", "PD"]) {
+    for (const competition of ["PL", "PD", "SA"]) {
       await client.query(
         "insert into competitions (competition, season) values ($1, $2)",
         [competition, SEASON]
@@ -85,7 +85,9 @@ describe("a context packet holds one Competition's data", () => {
          ('PL', $1, 'Premier League', $2, 'Arsenal', 'Chelsea', 2, 1),
          ('PL', $1, 'Premier League', $3, 'Liverpool', 'Everton', 1, 1),
          ('PD', $1, 'Premier League', $2, 'Vallecano', 'Espanol', 0, 3),
-         ('PD', $1, 'Premier League', $3, 'Betis', 'Getafe', 2, 0)`,
+         ('PD', $1, 'Premier League', $3, 'Betis', 'Getafe', 2, 0),
+         ('SA', $1, 'Premier League', $2, 'Roma', 'Lazio', 1, 0),
+         ('SA', $1, 'Premier League', $3, 'Milan', 'Inter', 3, 2)`,
       [SEASON, EARLIER, LATER]
     );
     // Each contaminant is stored under one Competition and names the *other*
@@ -101,7 +103,10 @@ describe("a context packet holds one Competition's data", () => {
          ('PD', $1, 'pd-contaminant', $2, 'Arsenal', 'Chelsea', 9.9, 9.9),
          ('PL', $1, 'pl-own', $3, 'Liverpool', 'Everton', 1.5, 0.5),
          ('PL', $1, 'pl-contaminant', $2, 'Rayo Vallecano', 'Espanyol', 9.9, 9.9),
-         ('PD', $1, 'pd-own', $3, 'Real Betis', 'Getafe', 2.5, 1.5)`,
+         ('PD', $1, 'pd-own', $3, 'Real Betis', 'Getafe', 2.5, 1.5),
+         ('PD', $1, 'pd-contaminant-sa', $2, 'Roma', 'Lazio', 9.9, 9.9),
+         ('SA', $1, 'sa-contaminant-pl', $2, 'Arsenal', 'Chelsea', 9.9, 9.9),
+         ('SA', $1, 'sa-own', $3, 'AC Milan', 'Inter', 2.2, 1.1)`,
       [SEASON, EARLIER, LATER]
     );
   });
@@ -112,25 +117,31 @@ describe("a context packet holds one Competition's data", () => {
         client, "PL", SEASON, 1
       );
       const laLiga = await loadMatchContextData(client, "PD", SEASON, 1);
+      const serieA = await loadMatchContextData(client, "SA", SEASON, 1);
 
       expect(premierLeague.historicalMatches.map((match) => match.home_team))
         .toEqual(["Arsenal", "Liverpool"]);
       expect(laLiga.historicalMatches.map((match) => match.home_team))
         .toEqual(["Vallecano", "Betis"]);
+      expect(serieA.historicalMatches.map((match) => match.home_team))
+        .toEqual(["Roma", "Milan"]);
     });
 
   test("xG from another Competition never reaches a form line", async () => {
     const premierLeague = await loadMatchContextData(client, "PL", SEASON, 1);
     const laLiga = await loadMatchContextData(client, "PD", SEASON, 1);
+    const serieA = await loadMatchContextData(client, "SA", SEASON, 1);
 
     // The Competition's own xG lands, which is what makes the two absences
     // below mean something: without it this test would also pass against a
     // join that had stopped joining at all.
     expect(xgOf(premierLeague, "Liverpool")).toBe(1.5);
     expect(xgOf(laLiga, "Betis")).toBe(2.5);
+    expect(xgOf(serieA, "Milan")).toBe(2.2);
 
     expect(xgOf(premierLeague, "Arsenal")).toBeUndefined();
     expect(xgOf(laLiga, "Vallecano")).toBeUndefined();
+    expect(xgOf(serieA, "Roma")).toBeUndefined();
   });
 
   test("a non-PL packet renders its history and no availability section",
@@ -152,6 +163,9 @@ describe("a context packet holds one Competition's data", () => {
       const premierLeague = buildMatchContext(
         fixture, await loadMatchContextData(client, "PL", SEASON, 1)
       );
+      const serieA = buildMatchContext(
+        fixture, await loadMatchContextData(client, "SA", SEASON, 1)
+      );
 
       expect(laLiga).toContain(HISTORICAL_SECTION);
       expect(laLiga).toContain("Vallecano");
@@ -171,5 +185,14 @@ describe("a context packet holds one Competition's data", () => {
       );
       expect(laLiga).not.toContain("Premier League table");
       expect(premierLeague).toContain("Premier League table");
+
+      // The third league says the same thing about the other two: a packet
+      // headed by somebody else's division is the failure that would still
+      // look like a working Serie A packet.
+      expect(serieA).toContain(
+        "Serie A table: no result has been played yet this Season."
+      );
+      expect(serieA).not.toContain("La Liga table");
+      expect(serieA).not.toContain("Premier League table");
     });
 });

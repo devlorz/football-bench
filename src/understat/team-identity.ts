@@ -94,12 +94,67 @@ const LA_LIGA_TEAM_NAMES: Readonly<Record<string, string>> = {
   Villarreal: "Villarreal"
 };
 
+const SERIE_A_TEAM_NAMES: Readonly<Record<string, string>> = {
+  // Serie A's 2025-26 twenty, read off the live feeds rather than transcribed:
+  // every key is a title in `getLeagueData/Serie_A/2025` and every value a
+  // `HomeTeam` in `mmz4281/2526/I1.csv`, and the two sets are each exactly
+  // twenty with nothing left over on either side. Reviewed and approved
+  // 2026-08-21. Eighteen are the same string on both sides and cannot be
+  // wrong; the two that are not are the whole of what the review was asked to
+  // decide.
+  //
+  // `AC Milan`→`Milan` is the one to look at twice, because the other Milan
+  // club is in the same twenty: Understat calls it `Inter` and so does
+  // football-data.co.uk, so the pair that would still read plausibly if it
+  // were swapped is spelt apart on both sides.
+  //
+  // 2026-27's promoted three are deliberately absent: Understat lists no
+  // 2026-27 Serie A match yet, and they arrive as `unknown Understat team
+  // name` at the first pre-Season fetch, which is where that failure belongs.
+  // The three relegated out of this twenty stay for the reason La Liga's do:
+  // the five-match form window still reaches back into 2025-26, and every one
+  // of those matches has an xG row keyed by these names.
+  "AC Milan": "Milan",
+  Atalanta: "Atalanta",
+  Bologna: "Bologna",
+  Cagliari: "Cagliari",
+  Como: "Como",
+  Cremonese: "Cremonese",
+  Fiorentina: "Fiorentina",
+  Genoa: "Genoa",
+  Inter: "Inter",
+  Juventus: "Juventus",
+  Lazio: "Lazio",
+  Lecce: "Lecce",
+  Napoli: "Napoli",
+  "Parma Calcio 1913": "Parma",
+  Pisa: "Pisa",
+  Roma: "Roma",
+  Sassuolo: "Sassuolo",
+  Torino: "Torino",
+  Udinese: "Udinese",
+  Verona: "Verona"
+};
+
 const BY_COMPETITION: Readonly<
   Record<string, Readonly<Record<string, string>>>
 > = {
   PL: PREMIER_LEAGUE_TEAM_NAMES,
-  PD: LA_LIGA_TEAM_NAMES
+  PD: LA_LIGA_TEAM_NAMES,
+  SA: SERIE_A_TEAM_NAMES
 };
+
+/**
+ * One Competition's Understat names, for the read that has to see the whole
+ * map rather than ask it about a name — the derivation test compares this key
+ * set against the feed's titles, and a lookup cannot answer "and nothing
+ * else". The football-data side already exposes its map for the same reason.
+ */
+export function understatTeamNamesOf(
+  competition: string
+): Readonly<Record<string, string>> | undefined {
+  return BY_COMPETITION[competition];
+}
 
 /**
  * Undefined for a club this Competition does not field, and for a Competition

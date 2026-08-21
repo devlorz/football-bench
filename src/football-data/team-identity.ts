@@ -82,9 +82,51 @@ const LA_LIGA: TeamNames = {
   "Villarreal CF": "Villarreal"
 };
 
+/**
+ * Serie A's twenty, derived rather than transcribed: every key is a
+ * `homeTeam.name` in the recorded `competitions/SA/matches?season=2026`
+ * response and every value a `HomeTeam` football-data.co.uk stored for
+ * 2025-26 — seventeen in `I1` and the three promoted clubs in `I2` (Monza,
+ * Frosinone, Venezia). The two sets are each exactly twenty with nothing left
+ * over on either side. Reviewed and approved 2026-08-21, before the backfill
+ * it governs was read through.
+ *
+ * What the review was asked to decide: none of the twenty is the same string
+ * on both sides, so every one is a judgement, and nineteen are the club with
+ * its legal form taken off — `Juventus FC`→`Juventus`, `SSC Napoli`→`Napoli`.
+ *
+ * The twentieth is the only pair in this league that can be got wrong and
+ * still read: `FC Internazionale Milano`→`Inter`, whose official name ends in
+ * the city that is the *other* Milan club's stored identity, with
+ * `AC Milan`→`Milan` beside it.
+ */
+const SERIE_A: TeamNames = {
+  "AC Milan": "Milan",
+  "AC Monza": "Monza",
+  "ACF Fiorentina": "Fiorentina",
+  "AS Roma": "Roma",
+  "Atalanta BC": "Atalanta",
+  "Bologna FC 1909": "Bologna",
+  "Cagliari Calcio": "Cagliari",
+  "Como 1907": "Como",
+  "FC Internazionale Milano": "Inter",
+  "Frosinone Calcio": "Frosinone",
+  "Genoa CFC": "Genoa",
+  "Juventus FC": "Juventus",
+  "Parma Calcio 1913": "Parma",
+  "SS Lazio": "Lazio",
+  "SSC Napoli": "Napoli",
+  "Torino FC": "Torino",
+  "US Lecce": "Lecce",
+  "US Sassuolo Calcio": "Sassuolo",
+  "Udinese Calcio": "Udinese",
+  "Venezia FC": "Venezia"
+};
+
 const BY_COMPETITION: Readonly<Record<string, TeamNames>> = {
   PL: PREMIER_LEAGUE,
-  PD: LA_LIGA
+  PD: LA_LIGA,
+  SA: SERIE_A
 };
 
 /**

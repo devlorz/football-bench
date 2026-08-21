@@ -441,6 +441,65 @@ describe("fetching football-data.co.uk results", () => {
     ]);
   });
 
+  // Serie A's map, checked against the bytes it was derived from rather than
+  // against a list somebody typed out: every key is a club in the recorded
+  // response, every club in the recorded response is a key, and the twenty
+  // values are twenty distinct stored identities. A transcription that dropped
+  // a club, invented one, or pointed two live names at one stored name fails
+  // here.
+  //
+  // The two named pairs are the whole of what this league can get wrong and
+  // still read: the official name of one Milan club ends in the city that is
+  // the other's stored identity.
+  test("maps Serie A's twenty from the response the map was derived from",
+    async () => {
+      const recorded = JSON.parse(
+        await archivedBody("football-data-org-2026-27-SA-recorded.json.gz")
+      ) as { matches: Array<{
+        homeTeam: { name: string }; awayTeam: { name: string };
+      }> };
+      const clubs = new Set(recorded.matches.flatMap(
+        ({ homeTeam, awayTeam }) => [homeTeam.name, awayTeam.name]
+      ));
+
+      const homeTeams = async (fixture: string): Promise<Set<string>> => {
+        const rows = (await archivedBody(fixture))
+          .split(/\r?\n/).filter((line) => line.length > 0);
+        const column = rows[0]?.split(",").indexOf("HomeTeam") ?? -1;
+        return new Set(rows.slice(1).map((row) => row.split(",")[column] ?? ""));
+      };
+      const topFlight = await homeTeams("football-data-2526-I1.csv.gz");
+      const secondTier = await homeTeams("football-data-2526-I2.csv.gz");
+
+      const names = teamNamesOf("SA");
+      expect(Object.keys(names ?? {}).sort()).toEqual([...clubs].sort());
+
+      // Distinctness alone would pass a value football-data.co.uk has never
+      // stored, which is the failure this map exists to prevent: it fails
+      // nothing, and every club's history section reads as though the club had
+      // none. So each value is required to be an identity one of the two
+      // stored divisions actually holds -- seventeen that played 2025-26 in
+      // Serie A and the three promoted out of Serie B.
+      const values = Object.values(names ?? {});
+      expect(new Set(values).size).toBe(20);
+      expect(values.filter((name) => topFlight.has(name))).toHaveLength(17);
+      // Which seventeen, not how many: a count admits a live name pointed at
+      // the wrong stored club, so long as the wrong one is also in `I1`. The
+      // three of `I1`'s twenty this map leaves behind are the three relegated
+      // out of it, and no others.
+      expect([...topFlight].filter((name) => !values.includes(name)).sort())
+        .toEqual(["Cremonese", "Pisa", "Verona"]);
+      expect(values.filter((name) => secondTier.has(name)).sort())
+        .toEqual(["Frosinone", "Monza", "Venezia"]);
+      expect(values.filter(
+        (name) => !topFlight.has(name) && !secondTier.has(name)
+      )).toEqual([]);
+
+      expect(resolveFootballDataTeamName(names, "FC Internazionale Milano"))
+        .toBe("Inter");
+      expect(resolveFootballDataTeamName(names, "AC Milan")).toBe("Milan");
+    });
+
   // The per-file division check, over the mistake that is actually available:
   // football-data.co.uk answers a season it has no file for by redirecting to
   // a near-miss filename — `2627/SP1.csv` currently lands on Portugal's
