@@ -223,6 +223,24 @@ const WIKIPEDIA_CLUBS: Readonly<
   FL1: LIGUE_1
 };
 
+/**
+ * A Competition's whole club map, or undefined for one nobody has curated yet,
+ * on the same terms as `teamNamesOf`: undefined is a Competition whose clubs
+ * cannot be resolved at all, which is a thing to say rather than a lookup that
+ * answers every question with "not one of ours".
+ *
+ * Exposed so a test can enumerate the keys rather than only ask whether each
+ * live-source spelling resolves. Asking one club at a time proves the roster
+ * is a subset of the map and nothing more: a stale twenty-first entry left
+ * behind by a relegation resolves nobody, is asked about by nothing, and would
+ * sit here unnoticed. **Found by review.**
+ */
+export function wikipediaClubsOf(
+  competition: string
+): Readonly<Record<string, WikipediaClub>> | undefined {
+  return WIKIPEDIA_CLUBS[competition];
+}
+
 export function resolveWikipediaClub(
   competition: string,
   club: string

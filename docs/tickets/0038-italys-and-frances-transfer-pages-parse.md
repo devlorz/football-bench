@@ -115,6 +115,25 @@ anywhere: the first one lands with activation.
       are the only pair that could be confused and they are not**: `Paris FC` and
       `Paris Saint-Germain` head their own sections and share no spelling._
 
+      _**The first version of this proof was one-directional and is replaced.**
+      It asked whether every club in the recorded response resolved, which shows the
+      roster is a *subset* of the map: a stale twenty-first Serie A entry or nineteenth
+      Ligue 1 entry left behind by a relegation resolves nobody, is asked about by
+      nothing, and passed. `wikipediaClubsOf` now exposes the map — the shape
+      `teamNamesOf` already had — and the test enumerates its keys against the recorded
+      roster. **Found by review.**_
+
+      _**Both fields are now compared against the page, as a pair.** Asking whether an
+      article appears somewhere is too weak on a page that also lists a second division;
+      what the map claims is that *this* article is displayed by *this* name, so the test
+      looks for that one link — `[[US Lecce|Lecce]]`, or the unpiped `[[Paris FC]]` — on
+      each league's own page. A value carrying one club's article beside another's name
+      fails even though both strings are on the page. Neither field may repeat either:
+      two clubs sharing an article would resolve the same rows twice, and two sharing a
+      displayed name would make a bare heading ambiguous. Serie A's articles are also
+      checked against the `Transfers` table alone rather than the whole page.
+      **Found by review.**_
+
       _Which identity is load bearing differs by page, and the maps hold both: Italy
       links every club, so the **article** resolves there; France heads its sections in
       bare text — `===Lens===` — so the **displayed name** is the whole join, exactly as
@@ -208,6 +227,23 @@ the source restored from a byte copy taken before the run — never `git checkou
 | the fetch's delete unscoped from `competition` | 11 red |
 | a map key spelt `Como` instead of `Como 1907` | 10 red |
 | Troyes' displayed name changed to `ES Troyes` | 8 red |
+| a stale 21st Serie A entry, `Empoli FC` | 1 red — the key set, and only it: the page does write that pair |
+| a stale 19th Ligue 1 entry, `Montpellier HSC` | 2 red |
+| Lecce's article beside Palermo's name, both on the page | 1 red |
+| two Ligue 1 clubs sharing one article | 2 red |
+
+## Review
+
+Three findings, all answered above and in the commit that follows this one.
+
+- _Map key equality was one-directional_ — the map is enumerated now, not sampled
+  through the roster. **P2.**
+- _Both Wikipedia fields were not proved against the real pages_ — the pair is checked
+  per league, with uniqueness on each field and Serie A's articles narrowed to the table.
+  **P2.**
+- _Four country helpers repeated one archived-page reader_ — `pinnedPage(fixture, sha)`
+  is that reading and nothing else; every digest and every country's assertions stay
+  where they were. **P3.**
 
 ## Known and deliberate
 

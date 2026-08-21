@@ -16,6 +16,7 @@ import {
 } from "../src/context/build-squad-changes-context.js";
 import {
   resolveWikipediaClub,
+  wikipediaClubsOf,
   type WikipediaClub
 } from "../src/squad-changes/club-identity.js";
 
@@ -48,12 +49,20 @@ const CLUBS = [
 const SUMMER_PAGE_SHA256 =
   "7e451a305c1f7b5bdd8b944414c5f2c85c55cf7553423958fecd6932a49ba20d";
 
-async function summerPage(): Promise<string> {
-  const body = await archivedBody("wikipedia-transfers-summer-2026.txt.gz");
-  expect(createHash("sha256").update(body, "utf8").digest("hex"))
-    .toBe(SUMMER_PAGE_SHA256);
+/**
+ * An archived page, refusing to hand back bytes that are not the ones the
+ * assertions below were read off. Four countries' pages are pinned this way
+ * and the reading is the only part they share: each digest, and everything
+ * asserted about the page it names, stays with its own country.
+ */
+async function pinnedPage(fixture: string, sha256: string): Promise<string> {
+  const body = await archivedBody(fixture);
+  expect(createHash("sha256").update(body, "utf8").digest("hex")).toBe(sha256);
   return body;
 }
+
+const summerPage = (): Promise<string> =>
+  pinnedPage("wikipedia-transfers-summer-2026.txt.gz", SUMMER_PAGE_SHA256);
 
 function pinnedClubs(
   competition = "PL",
@@ -499,14 +508,9 @@ const SPANISH_PAGE_URL =
 const SPANISH_PAGE_SHA256 =
   "60466f3b743ec854d3c72760aa9684fde41df991c6975f3c821ba07be06ab52a";
 
-async function spanishPage(): Promise<string> {
-  const body = await archivedBody(
-    "wikipedia-transfers-spain-summer-2026.txt.gz"
-  );
-  expect(createHash("sha256").update(body, "utf8").digest("hex"))
-    .toBe(SPANISH_PAGE_SHA256);
-  return body;
-}
+const spanishPage = (): Promise<string> => pinnedPage(
+  "wikipedia-transfers-spain-summer-2026.txt.gz", SPANISH_PAGE_SHA256
+);
 
 describe("parsing a window published as one section per club", () => {
   const parse = (wikitext: string, clubs = SPANISH_CLUBS) =>
@@ -850,14 +854,9 @@ const ITALIAN_PAGE_URL =
 const ITALIAN_PAGE_SHA256 =
   "4e2520901d0aeb2c56847ee4fe6d84e82c5b8473a3044448e5d77e9912457563";
 
-async function italianPage(): Promise<string> {
-  const body = await archivedBody(
-    "wikipedia-transfers-italy-summer-2026.txt.gz"
-  );
-  expect(createHash("sha256").update(body, "utf8").digest("hex"))
-    .toBe(ITALIAN_PAGE_SHA256);
-  return body;
-}
+const italianPage = (): Promise<string> => pinnedPage(
+  "wikipedia-transfers-italy-summer-2026.txt.gz", ITALIAN_PAGE_SHA256
+);
 
 /** Ligue 1's eighteen, as football-data.org spells them. */
 const FRENCH_CLUBS = [
@@ -876,27 +875,45 @@ const FRENCH_PAGE_URL =
 const FRENCH_PAGE_SHA256 =
   "5fe7caa9fd90ae36f41fb2a643b2676a5f16277b4f751d881be46ccadf978733";
 
-async function frenchPage(): Promise<string> {
-  const body = await archivedBody(
-    "wikipedia-transfers-france-summer-2026.txt.gz"
-  );
-  expect(createHash("sha256").update(body, "utf8").digest("hex"))
-    .toBe(FRENCH_PAGE_SHA256);
-  return body;
+const frenchPage = (): Promise<string> => pinnedPage(
+  "wikipedia-transfers-france-summer-2026.txt.gz", FRENCH_PAGE_SHA256
+);
+
+/**
+ * Every `[[article]]` and `[[article|displayed]]` a page writes, as the pairs
+ * they are. Pairs and not two sets: what a map value claims is that this
+ * article is displayed by this name, and two sets would accept a value that
+ * borrowed one club's article and another club's name.
+ */
+function clubLinksOn(page: string): Set<string> {
+  const links = new Set<string>();
+  for (const [, article, displayed] of
+    page.matchAll(/\[\[([^\]|]+)(?:\|([^\]]*))?\]\]/g)) {
+    const title = (article as string).trim();
+    links.add(`${title}|${(displayed ?? title).trim()}`);
+  }
+  return links;
 }
 
 /**
- * The club map derived, both directions, against the two responses the map was
- * derived from — `test/fetch-football-data-org-competition.test.ts` pins those
- * bytes as the day-one capture and this reads the same file. A count is not a
- * set: what is asserted is which spellings, each way, so a map that gained a
- * relegated club and lost a promoted one could not pass by staying the same
- * size.
+ * The club maps derived, against the sources they were derived from and in
+ * both directions on each side.
+ *
+ * The first version of this suite asked whether every club in the recorded
+ * response resolved, which proves the roster is a *subset* of the map and
+ * nothing more: a twenty-first entry left behind by a relegation resolves
+ * nobody, is asked about by nothing, and passed. The keys are enumerated here
+ * instead. **Found by review.**
  */
 describe("the derived Wikipedia club maps", () => {
+  const mapOf = (competition: string) =>
+    Object.entries(wikipediaClubsOf(competition) as Readonly<
+      Record<string, WikipediaClub>
+    >);
+
   test.each([
-    ["SA", "football-data-org-2026-27-SA-recorded.json.gz", ITALIAN_CLUBS],
-    ["FL1", "football-data-org-2026-27-FL1-recorded.json.gz", FRENCH_CLUBS]
+    ["SA", "football-data-org-2026-27-SA-recorded.json.gz", 20],
+    ["FL1", "football-data-org-2026-27-FL1-recorded.json.gz", 18]
   ])("%s's keys are exactly the clubs the live source names",
     async (competition, fixture, clubs) => {
       const recorded = JSON.parse(await archivedBody(fixture)) as {
@@ -906,10 +923,40 @@ describe("the derived Wikipedia club maps", () => {
         ({ homeTeam }) => homeTeam.name
       ))].sort();
 
-      expect(named).toEqual([...clubs].sort());
-      for (const club of named) {
-        expect(resolveWikipediaClub(competition, club)).toBeDefined();
+      expect(named).toHaveLength(clubs);
+      expect(mapOf(competition).map(([club]) => club).sort()).toEqual(named);
+    });
+
+  // Story 11 asks the map to hold the article title *and* the displayed name,
+  // so both are compared against the page rather than only the one each page
+  // happens to resolve by. Asking whether the article appears somewhere is too
+  // weak on a page that also lists a second division: the pair is what is
+  // checked, so a value carrying one club's article beside another's name
+  // fails even though both strings are on the page. **Found by review.**
+  test.each([
+    ["SA", () => italianPage()] as const,
+    ["FL1", () => frenchPage()] as const
+  ])("%s's article and displayed name are one link the page writes",
+    async (competition, page) => {
+      const links = clubLinksOn(await page());
+
+      for (const [club, { article, name }] of mapOf(competition)) {
+        expect({ club, link: links.has(`${article}|${name}`) })
+          .toEqual({ club, link: true });
       }
+    });
+
+  // Neither field may repeat. Two clubs sharing an article would resolve the
+  // same rows twice, and two sharing a displayed name would make a bare
+  // heading — which is the whole of France's identity — ambiguous.
+  test.each(["SA", "FL1"])("%s pairs each club with its own two strings",
+    (competition) => {
+      const clubs = mapOf(competition);
+
+      expect(new Set(clubs.map(([, { article }]) => article)).size)
+        .toBe(clubs.length);
+      expect(new Set(clubs.map(([, { name }]) => name)).size)
+        .toBe(clubs.length);
     });
 
   test("Ligue 1's displayed names are exactly the page's own section headings",
@@ -924,9 +971,25 @@ describe("the derived Wikipedia club maps", () => {
       const headings = [...ligue1.matchAll(/^===\s*(.+?)\s*===$/gm)]
         .map(([, heading]) => heading as string).sort();
 
-      expect(headings).toEqual(FRENCH_CLUBS.map((club) =>
-        (resolveWikipediaClub("FL1", club) as WikipediaClub).name).sort());
+      expect(headings).toEqual(mapOf("FL1")
+        .map(([, { name }]) => name).sort());
     });
+
+  // Italy's equivalent of the heading check, on the side its parser resolves
+  // by: every article the map claims is one the `Transfers` table actually
+  // links, which is what the parser's own every-article-is-linked check tests
+  // through a fetch and this states directly.
+  test("Serie A's articles are all linked by the table itself", async () => {
+    const page = await italianPage();
+    const table = page.slice(page.indexOf("{|"), page.indexOf("\n|}"));
+    const linked = new Set([...clubLinksOn(table)]
+      .map((link) => link.slice(0, link.indexOf("|"))));
+
+    for (const [club, { article }] of mapOf("SA")) {
+      expect({ club, linked: linked.has(article) })
+        .toEqual({ club, linked: true });
+    }
+  });
 });
 
 describe("parsing a window published as one dated table", () => {
