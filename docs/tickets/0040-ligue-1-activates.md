@@ -52,8 +52,17 @@ trail.
       `17:05` was mistaken for the observation and re-run afterwards.
 - [x] Ligue 1 appears on the dashboard with no dashboard change.
       `test/dashboard-competition-view.test.ts` is 16 passed with Ligue 1 among its cases
-      and no file under `dashboard/` touched by this ticket. The live page is evidence
-      only once deployed; that is not claimed here.
+      and no file under `dashboard/` touched by this ticket.
+
+      _**The live page is now read, and it was worth reading.** This box first said the
+      live page "is evidence only once deployed; that is not claimed here" while ticket
+      0039 left the same box open over the same evidence — one ticket ticking and the
+      other not, on identical grounds, which review caught. The deployed Worker answers:
+      `https://football-bench.leelorz6.workers.dev/fl1` returns `200` and its switcher
+      renders `Premier League`, `La Liga`, `Serie A`, `Ligue 1`. That closes the box on
+      the thing the box names, and it is the check ticket 0022 exists over — the build
+      passing says nothing about what the edge serves, which is exactly how the
+      2026-08-20 restart left the page answering a question nobody wanted asked._
 
 ---
 
@@ -145,6 +154,52 @@ gw | trigger | scheduled_for          | completed_at
 A count taken mid-run read 85 of 90 and was read as a Gap; it was the run still in
 flight. Count after a run, not during one.
 
+### The record, as queries rather than as pasted output
+
+Every figure above was read off production and pasted. Tickets 0036 and 0037 set the
+standard this first draft dropped: the query beside the value, so a reader checks rather
+than trusts. **Found by review** — it counted seven `select`s in 0036, six in 0037 and
+none here.
+
+```sql
+-- The league is listed. Read FL1, PD, PL at activation; SA joined on 2026-08-21T19:10Z.
+select competition from competitions where season = '2026-27' order by competition;
+
+-- Ten seats, under the frozen version and no other. Expect one row: 10.
+select prompt_version, count(*)::int as seats
+  from models where prompt_version = 'match-fl1/2026-27-v1'
+ group by prompt_version;
+
+-- The deadline the run was measured against, which the derivation must equal.
+-- Expect 1 | 2026-08-21 17:15:00+00.
+select gw, deadline_at from gameweeks
+ where competition = 'FL1' and season = '2026-27' and gw = 1;
+
+-- The two due runs. Expect main scheduled 11:15:00+00 and fill 15:15:00+00,
+-- both completed 2026-08-21 17:05:1x+00.
+select gw, trigger, scheduled_for, completed_at from prediction_runs
+ where competition = 'FL1' and season = '2026-27' and gw = 1
+ order by trigger;
+
+-- The claim this whole ticket rests on: ninety Predictions, every one of them
+-- before the Lock. Expect 90 and a last write of 2026-08-21 17:05:16+00,
+-- nine minutes inside the 17:15:00+00 deadline above.
+select count(*)::int as predictions, max(p.predicted_at) as last_written
+  from predictions p
+  join fixtures f
+    on f.competition = p.competition
+   and f.season = p.season
+   and f.fixture_id = p.fixture_id
+ where p.competition = 'FL1' and p.season = '2026-27'
+   and coalesce(f.locked_in_gw, f.gw) = 1;
+```
+
+_Written against the schema rather than from memory — `predictions` carries `competition`
+and `fixture_id` (migration 0022), the Gameweek of a Fixture is `coalesce(locked_in_gw,
+gw)` as the predict path itself selects, and `prompt_version` is a column of `models`, the
+seat, and never of `contexts`. That last one is a mistake this project has already made
+once and written down._
+
 ### Cost
 
 Nine Fixtures times ten seats, at the $0.1845 per Fixture the
@@ -219,10 +274,18 @@ correct and was not weakened to get past it.
 `predictions` is insert-only, so that is Gameweek 1's stored context permanently. The
 packet says so rather than omitting the section.
 
-The fix for 1 and 2 is uncommitted and **has no test**; it must not be merged as it
-stands. It is not on the prediction path — `build-head-coach-context.ts:182` calls
-`headCoachSource` only to ask whether an article is listed, and the two added fields are
-optional — which is why the run was made from the untouched main checkout.
+At the moment of the run the fix for 1 and 2 was uncommitted and untested, which is why
+the run was made from the untouched main checkout: it is not on the prediction path —
+`build-head-coach-context.ts:182` calls `headCoachSource` only to ask whether an article
+is listed, and the two added fields are optional.
+
+_**That sentence stood after it stopped being true, and review found it.** It read "is
+uncommitted and **has no test**; it must not be merged as it stands" while, two paragraphs
+below, this ticket's own Checks section named the test and its five passes. All three of
+its claims are now false: `5c6fdae` carries both `src/head-coach/*` and
+`test/parse-ligue-1-head-coach-tables.test.ts` in one commit, merged at `ecada5a`, and
+`fcc9908` closed drift 3. A ticket is the record, so a sentence that expired inside it is
+worth more as a correction than as a deletion._
 
 ### Context, read before paying for it
 

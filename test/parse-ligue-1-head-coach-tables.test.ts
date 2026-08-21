@@ -61,6 +61,39 @@ describe("the Ligue 1 season article's Head Coach tables", () => {
     )).not.toThrow();
   });
 
+  test("a row is measured against the caller's columns, not the default list",
+    () => {
+      // Ligue 1's list is seven long and so is the parser's default, so the two
+      // agree by luck and no real article can tell them apart. This is the
+      // league that has not arrived: eight labels, eight cells, and a table
+      // that reads correctly only if the width comes from what the caller
+      // stated. Measured against the default's seven, every row is refused for
+      // a width nobody wrote down.
+      const columns = [...(ligue1?.columns ?? []), "Notes"];
+      const wikitable = [
+        "{|",
+        ...columns.map((label) => `!${label}`),
+        "|-",
+        "|[[Lille OSC|Lille]]",
+        "|[[Bruno Genesio]]",
+        "|Sacked",
+        "|1 September 2026",
+        "|18th",
+        "|[[Will Still]]",
+        "|2 September 2026",
+        "|A column the other four articles do not carry"
+      ].join("\n") + "\n|}";
+      const page = `==Managerial changes==\n${wikitable}\n`;
+
+      expect(() => parseHeadCoachChanges(SOURCE, page, pinned, columns))
+        .not.toThrow();
+      // And the eighth column is not silently swallowed: dropped from the
+      // caller's list, the row is one cell wider than stated and refused.
+      expect(() => parseHeadCoachChanges(
+        SOURCE, page, pinned, columns.slice(0, -1)
+      )).toThrow(HeadCoachSourceValidationError);
+    });
+
   test("and is refused under the other three leagues' labels", async () => {
     // Ligue 1 heads its fifth column `Position in table` where the Premier
     // League, La Liga and Serie A all write `Position in the table`. A parser

@@ -35,50 +35,42 @@ async function seedEntrants(
  * that table and a Season listing none reaches no source at all — which in a
  * database built from scratch is every database this function is ever handed.
  *
- * The rehearsed Competition and `PL`, and deliberately nothing else. `PL`
- * because the FPL fetch runs whatever is listed and its sources are the ones
- * every archive has; the rehearsed Competition because that is the one being
- * rehearsed. A league nobody asked about contributes nothing to this run's
- * verdict and can only take it down with it.
+ * The Competition being rehearsed and no other. A league nobody asked about
+ * contributes nothing to this run's verdict and can only take it down with it.
+ * Exposed so a test can read the list back: the whole fault this scoping
+ * removes is a second league joining unasked, and that is a fact about the
+ * table rather than about any one rehearsal's outcome.
  *
- * Listing every league the archive holds *a* snapshot for is what this used to
- * do, and one football-data.org snapshot turned out to be far too weak a
- * predicate for "the archive can answer for this league". Ticket 0033 captured
- * Serie A's and Ligue 1's schedules months before either was activated, so both
- * joined every rehearsal while their Understat, transfer and season-article
- * bytes did not exist — and `runDailyFetch` collects every miss and throws, so
- * the Premier League's own rehearsal went red over Serie A. It also made the
- * ordering circular: a Competition's snapshots only exist once it is activated,
- * and its activation is supposed to wait on a green rehearsal.
+ * Two other leagues used to ride along here and each cost a rehearsal.
+ * **Every league the archive holds *a* snapshot for** was the first: one
+ * football-data.org snapshot is far too weak a predicate for "the archive can
+ * answer for this league", and ticket 0033 captured Serie A's and Ligue 1's
+ * schedules months before either was activated, so both joined every rehearsal
+ * while their Understat, transfer and season-article bytes did not exist.
+ * `runDailyFetch` collects every miss and throws, so the Premier League's own
+ * rehearsal went red over Serie A. It also made the ordering circular: a
+ * Competition's snapshots only exist once it is activated, and its activation
+ * is supposed to wait on a green rehearsal.
+ *
+ * **`PL` beside the league being rehearsed** was the second, and free only
+ * while the Premier League's feed was live. From its own Gameweek 1 Lock, with
+ * no current-Season football-data file published, `PL` fails the stale-Season
+ * guard — and listed everywhere, it failed every other league's rehearsal
+ * through the door the pairing left open.
  *
  * A Competition whose own bytes are missing still fails, and fails naming
  * itself, which is the check that was wanted all along.
- */
-/**
- * The Competitions a rehearsal lists, which is the one being rehearsed and no
- * other. Exposed so a test can read the list back: the whole fault this
- * scoping removes is a second league joining unasked, and that is a fact about
- * the table rather than about any one rehearsal's outcome.
  */
 export async function listRehearsedCompetitions(
   database: Database,
   competition: string,
   season: string
 ): Promise<void> {
-  // The rehearsed Competition alone. `PL` rode along here because every
-  // archive holds its sources, which was free while its own feed was live and
-  // stopped being free at its Gameweek 1 Lock: from that instant, with no
-  // current-Season football-data file published, `PL` fails the stale-Season
-  // guard and took every other league's rehearsal down with it. That is the
-  // fault this scoping was written to remove, arriving through the door the
-  // pairing left open.
-  for (const code of [competition]) {
-    await database.query(
-      `insert into competitions (competition, season) values ($1, $2)
-       on conflict do nothing`,
-      [code, season]
-    );
-  }
+  await database.query(
+    `insert into competitions (competition, season) values ($1, $2)
+     on conflict do nothing`,
+    [competition, season]
+  );
 }
 
 export interface PrepareArchivedGameweekOptions {

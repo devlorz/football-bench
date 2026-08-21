@@ -13,7 +13,8 @@ the ADR-0036 banner (no hand-set Lock, ever again).
 first deadline), 0036 (its history and xG are curated and reviewed). Deliberately not
 blocked by 0038 — Squad Changes may trail.
 
-**Status:** activated — boxes 1–4 green; 5–7 wait on the Lock at 2026-08-22T15:00Z
+**Status:** activated — boxes 1–4 and 7 green; 5, 6 and 8 wait on the Lock at
+2026-08-22T15:00Z
 
 - [x] The pre-cron checklist runs **in order** this time: secrets verified, then the
       `competitions` insert (operator), then `roster:enter`, then the prior-Season xG
@@ -29,7 +30,24 @@ blocked by 0038 — Squad Changes may trail.
       let go, ADR-0035's accepted price.
 - [ ] The first Lock is observed at the derived deadline, and every Entrant's Prediction
       with its stored context predates it.
-- [ ] Serie A appears on the dashboard with no dashboard change.
+- [ ] The scheduled prediction run, the fill run and the gap alert pick Serie A up with
+      **no workflow edit** — spec 0024 story 28, which neither activation ticket carried a
+      box for until review found it missing. 0040 hand-ran `predict:scheduled` for good
+      reason (`predict.yml`'s manual job runs `predict`, not the scheduled entrypoint), so
+      cron pickup is still unproven for any new league. Serie A's poll at
+      `deadline − 6h` = **2026-08-22T09:00Z** is the first chance to prove it, and proving
+      it is what makes "opening a league is the `competitions` insert" (ADR-0035) a fact
+      rather than a design intention.
+- [x] Serie A appears on the dashboard with no dashboard change.
+      _Read live rather than left open: `https://football-bench.leelorz6.workers.dev/sa`
+      returns `200` and the deployed switcher renders `Premier League`, `La Liga`,
+      `Serie A`, `Ligue 1`. No file under `dashboard/` was touched by this ticket._
+
+      _This box and 0040's were being judged two ways on identical evidence — one ticked
+      over a view test, the other left open over the same view test — which review caught
+      and reading the page settled. Ticket 0022's own recorded failure is why the page and
+      not the test is the evidence: on 2026-08-20 the build was green while the edge
+      served older code and the page answered a question nobody wanted asked._
 
 ## What happened
 
@@ -43,6 +61,13 @@ from a note. No earlier Gameweek existed, so none arrived as Locked history.
 Ligue 1, `SEASON=2026-27`), the `competitions` insert run by the operator, then
 `roster:enter`, then the prior-Season xG check, then the dry run. The sequence
 spec 0016's launch met out of order was met in order this time.
+
+_**The first fetch after the insert did not pass, and this box read as though it
+had.** It refused Serie A's `Personnel and kits` table — correctly, on the
+registry's default column pair — and that refusal is what box 3 below then fixed
+and records. The order held; the run inside it did not, and a box that says
+"in order" without saying "and one step failed first" is the shape of report
+this project keeps writing down rather than smoothing over. **Found by review.**_
 
 **Box 2.** Forty Entrants across the four listed Competitions, ten of them
 `match-sa/*` under the frozen `match-sa/2026-27-v1` (`openrouter-entrant.ts:157`).
@@ -74,6 +99,41 @@ snapshots, and only then could the rehearsal read them. Box 3 asks for green
 *before the first Lock*, not before the insert, so the ordering satisfies it as
 written.
 
+### The record, as queries rather than as pasted output
+
+Same standard as 0040's, and dropped here for the same reason: 0036 and 0037 embed the
+query beside the value and these two first embedded none. **Found by review.**
+
+```sql
+-- Four leagues listed. Expect FL1, PD, PL, SA.
+select competition from competitions where season = '2026-27' order by competition;
+
+-- Ten seats under the frozen Serie A version. Expect one row: 10.
+select prompt_version, count(*)::int as seats
+  from models where prompt_version = 'match-sa/2026-27-v1'
+ group by prompt_version;
+
+-- The Lock this ticket's open boxes wait on, which must equal the derivation
+-- from the recorded schedule. Expect 1 | 2026-08-22 15:00:00+00.
+select gw, deadline_at from gameweeks
+ where competition = 'SA' and season = '2026-27' and gw = 1;
+
+-- Boxes 5 and 6, once the Lock has passed: ten seats over ten Fixtures, every
+-- Prediction before 15:00:00+00. Expect 100 and a last write inside it.
+select count(*)::int as predictions, max(p.predicted_at) as last_written
+  from predictions p
+  join fixtures f
+    on f.competition = p.competition
+   and f.season = p.season
+   and f.fixture_id = p.fixture_id
+ where p.competition = 'SA' and p.season = '2026-27'
+   and coalesce(f.locked_in_gw, f.gw) = 1;
+```
+
+_The last one is written before the run it measures, deliberately: the figure it must
+return is stated here now, so the Lock is checked against a number nobody chose
+afterwards._
+
 ### Artifacts named so they are not rediscovered as faults
 
 - **Prior-Season xG reads `unavailable` throughout the rehearsal**, for every
@@ -95,8 +155,9 @@ written.
   2026-08-22T15:00Z and the scheduled poll reaches Serie A at
   `deadline − 6h` = **2026-08-22T09:00Z**, where ten seats over ten Fixtures is
   **100 Base Model calls**. No Lock is to be set by hand under any clock.
-- **Box 7** — Serie A on the dashboard — has not been looked at. 0040 left the
-  live dashboard unread too; only its view test has run.
+- **Box 8 is the one nobody had written down.** Cron pickup for a newly listed
+  league has never been observed; Serie A's 09:00Z poll is the first chance.
+  Nothing about it needs doing beforehand — that is the point of the box.
 - **Ticket 0035 stays open and is now the only thing red.** `FOOTBALL_DATA_SEASON`
   reads `2025-26` and still cannot be advanced: read live 2026-08-21T19:20Z,
   `E1 SP1 SP2 F2` publish their own division and `E0 I1 I2 F1` answer

@@ -215,15 +215,26 @@ function rowspanOf(cell: string): number {
  * The header's own spans are deliberately not carried into the first row. One
  * of the two articles writes `!rowspan=2|Date of vacancy` in a header that has
  * only one row, and carrying it would refuse a page that renders correctly.
+ *
+ * The width comes from the caller's `columns` — the same list the labels above
+ * were validated against — and not from `SOURCE_COLUMNS`. Reading the constant
+ * here made the table's width and the table's labels two facts that could
+ * disagree, and they only agreed because Ligue 1's list happens to be the same
+ * length as the default. A league whose article carries one column more would
+ * have had every row refused for a width nobody had stated.
  */
-function filledRows(source: string, rows: string[][]): string[][] {
+function filledRows(
+  source: string,
+  rows: string[][],
+  columns: readonly string[]
+): string[][] {
   const issues: HeadCoachSourceIssue[] = [];
   const carried = new Map<number, { cell: string; remaining: number }>();
   const filled: string[][] = [];
   for (const [index, cells] of rows.entries()) {
     const row: string[] = [];
     let next = 0;
-    for (let column = 0; column < SOURCE_COLUMNS.length; column += 1) {
+    for (let column = 0; column < columns.length; column += 1) {
       const carry = carried.get(column);
       if (carry !== undefined) {
         row.push(carry.cell);
@@ -244,11 +255,11 @@ function filledRows(source: string, rows: string[][]): string[][] {
         carried.set(column, { cell, remaining: span - 1 });
       }
     }
-    if (row.length !== SOURCE_COLUMNS.length || next !== cells.length) {
+    if (row.length !== columns.length || next !== cells.length) {
       issues.push({
         field: `${SECTION_HEADING}.${index}`,
         detail:
-          `a row reads as ${row.length} of ${SOURCE_COLUMNS.length} columns `
+          `a row reads as ${row.length} of ${columns.length} columns `
           + `from ${cells.length} cells`
       });
       continue;
@@ -348,7 +359,7 @@ export function parseHeadCoachChanges(
     }]);
   }
 
-  for (const [index, row] of filledRows(source, rows).entries()) {
+  for (const [index, row] of filledRows(source, rows, columns).entries()) {
     const club = resolveClub(row[CLUB] as string, pinned);
     if (club === undefined) {
       issues.push({
