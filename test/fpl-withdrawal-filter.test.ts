@@ -53,11 +53,38 @@ function sourceFiles(directory: string): string[] {
 }
 
 /** Every source file once, read once, for the scanners below to share. */
-const sourceTexts = (): { file: string; text: string }[] =>
+const SOURCES: readonly { file: string; text: string }[] =
   sourceFiles(SOURCE_ROOT).map((path) => ({
     file: relative(REPOSITORY, path),
     text: readFileSync(path, "utf8")
   }));
+
+/**
+ * Every template literal in the sources, with where it sits and what follows
+ * it — which is where a query's parameters are written.
+ *
+ * `sql` is not necessarily SQL: this is a split on backticks, and each scanner
+ * below says for itself which literals it means.
+ */
+const literals = (): ModelsRead[] => SOURCES.flatMap(({ file, text }) => {
+  const segments = text.split("`");
+  const found: ModelsRead[] = [];
+  for (let segment = 1; segment < segments.length; segment += 2) {
+    const sql = segments[segment] ?? "";
+    const after = segments[segment + 1] ?? "";
+    // To the end of the call rather than to a fixed number of characters. A
+    // window is a lookahead with a length, and a parameter list longer than the
+    // window is how the draft before this one let a stale marker through.
+    const callEnds = after.indexOf(");");
+    found.push({
+      file,
+      line: text.slice(0, text.indexOf(sql)).split("\n").length,
+      sql,
+      parameters: callEnds === -1 ? after : after.slice(0, callEnds + 2)
+    });
+  }
+  return found;
+});
 
 /**
  * Every SQL literal in `src` that reads `models` and names a `prompt_version`,
@@ -70,25 +97,11 @@ const sourceTexts = (): { file: string; text: string }[] =>
  * them, and a read that opened with one used to be invisible here.
  */
 function modelsReads(): ModelsRead[] {
-  const reads: ModelsRead[] = [];
-  for (const { file, text } of sourceTexts()) {
-    const segments = text.split("`");
-    for (let segment = 1; segment < segments.length; segment += 2) {
-      const sql = segments[segment] ?? "";
-      const readsModels = /from\s+models|join\s+models/.test(sql);
-      const isWrite = /^\s*(insert|update|delete)\b/i.test(sql);
-      if (!readsModels || isWrite || !/prompt_version/.test(sql)) {
-        continue;
-      }
-      reads.push({
-        file,
-        line: text.slice(0, text.indexOf(sql)).split("\n").length,
-        sql,
-        parameters: (segments[segment + 1] ?? "").slice(0, 300)
-      });
-    }
-  }
-  return reads;
+  return literals().filter(({ sql }) => {
+    const readsModels = /from\s+models|join\s+models/.test(sql);
+    const isWrite = /^\s*(insert|update|delete)\b/i.test(sql);
+    return readsModels && !isWrite && /prompt_version/.test(sql);
+  });
 }
 
 /**
@@ -103,24 +116,13 @@ function modelsReads(): ModelsRead[] {
  * messages that quote a seat's Prompt Version back to an operator are not SQL.
  */
 function modelsQueriesWithoutTheTable(): string[] {
-  const hidden: string[] = [];
-  for (const { file, text } of sourceTexts()) {
-    const segments = text.split("`");
-    for (let segment = 1; segment < segments.length; segment += 2) {
-      const sql = segments[segment] ?? "";
-      const looksLikeAQuery = /\b(select|with)\b/i.test(sql)
-        && /\b(from|join|into|update)\b/i.test(sql);
-      if (!looksLikeAQuery || !/prompt_version/.test(sql)) {
-        continue;
-      }
-      if (/\b(from|join|into|update)\s+models\b/i.test(sql)) {
-        continue;
-      }
-      const opening = sql.trim().split("\n")[0] ?? "";
-      hidden.push(`${file} — ${opening.slice(0, 60)}`);
-    }
-  }
-  return hidden;
+  return literals()
+    .filter(({ sql }) => /\b(select|with)\b/i.test(sql)
+      && /\b(from|join|into|update)\b/i.test(sql))
+    .filter(({ sql }) => /prompt_version/.test(sql))
+    .filter(({ sql }) => !/\b(from|join|into|update)\s+models\b/i.test(sql))
+    .map(({ file, sql }) =>
+      `${file} — ${(sql.trim().split("\n")[0] ?? "").slice(0, 60)}`);
 }
 
 /**
@@ -213,9 +215,13 @@ describe("the withdrawal filter on the FPL track's Entrant reads", () => {
       // half reads as a query. So both halves are refused — the table, and the
       // column that exists on no other table.
       const quotedModelReads: string[] = [];
-      for (const { file, text } of sourceTexts()) {
+      for (const { file, text } of SOURCES) {
         for (const [quoted] of text.matchAll(/(["'])(?:\\.|(?!\1).)*\1/g)) {
-          const namesTheTable = /\b(from|join)\s+models\b/.test(quoted);
+          // A module specifier is not a query. `preflight-base-models.js` ends
+          // in the word this rule is about, and an import is the one place it
+          // may.
+          const isModulePath = /\.js["']$|\//.test(quoted);
+          const namesTheTable = /\bmodels\b/.test(quoted) && !isModulePath;
           const namesTheColumn = /\bprompt_version\b/.test(quoted);
           if (namesTheTable || namesTheColumn) {
             quotedModelReads.push(`${file} — ${quoted.slice(0, 60)}`);

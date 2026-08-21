@@ -30,14 +30,18 @@ convention, and a convention decays. This test is the price paid for the smaller
       text scan can catch is an author who aliases the Prompt Version *and* writes a
       `-- roster:` line that says something untrue. That is not inattention, which is what
       this test is for; it is a false claim in the source, and the reader it is written for
-      is a reviewer. **Proved by mutation, twice, with the source
-      restored byte-for-byte after each:** the filter dropped from the squads read; a plain
-      new unfiltered read; a read written as a common table expression; a read whose Prompt
-      Version comes from an aliased constant with its parameters far from the literal; a
-      filtered read that stops being recognised because its SQL was concatenated; **a match
-      read swapped for an unfiltered FPL read, leaving the file's count unchanged**; and
-      **a read assembled at run time out of quoted fragments**. Seven mutations, seven
-      failures, every source restored.
+      is a reviewer. **Proved by mutation, with the source restored
+      byte-for-byte after each:** the filter dropped from the squads read; a plain new
+      unfiltered read; a read written as a common table expression; a read whose Prompt
+      Version comes from an aliased constant; a filtered read that stops being recognised
+      because its SQL was concatenated; a match read swapped for an unfiltered FPL read,
+      leaving the file's count unchanged; a read assembled at run time out of quoted
+      fragments; a table name reached through an interpolation; a table name split across
+      two quoted strings; a match read repointed at this track's Prompt Version with its
+      marker left intact; the same with the parameters padded past any fixed lookahead; and
+      a table name held in a bare quoted string. **Twelve mutations, twelve failures.** The
+      record of them is the session they were run in and not an artefact in the tree, which
+      is the whole of what this ticket can claim for them.
 - [x] The test does not fire on Match track reads, which are deliberately unfiltered.
 
 **It fails closed, which the first draft did not.** That draft recognised a read by asking
