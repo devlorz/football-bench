@@ -37,10 +37,15 @@ export interface HeadCoachSource {
   /**
    * The Personnel table's leading column labels, up to and including the one
    * holding the Head Coach, where this article does not lead with the common
-   * pair. Absent means `Team, Manager`. Ligue 1 puts `Chairman` between them,
-   * which is the case the pair was pinned to catch -- read by position against
-   * the common pair it would have filed every club's chairman as its Head
-   * Coach, and nothing downstream could have told.
+   * pair. Absent means `Team, Manager`. Ligue 1 and Serie A both put `Chairman`
+   * between them, which is the case the pair was pinned to catch -- read by
+   * position against the common pair it would have filed every club's chairman
+   * as its Head Coach, and nothing downstream could have told.
+   *
+   * The two leagues sharing a shape is not a rule about them: this list is the
+   * article's fact, and Serie A's was read off the page only after its own
+   * first fetch refused. A league opened next is unpinned until its page is
+   * read, not assumed to match whichever neighbour it resembles.
    */
   personnelColumns?: readonly string[];
 }
@@ -59,7 +64,8 @@ const SEASON_ARTICLES: Readonly<
     },
     SA: {
       name: "2026-27-serie-a",
-      page: "2026–27 Serie A"
+      page: "2026–27 Serie A",
+      personnelColumns: ["Team", "Chairman", "Manager"]
     },
     FL1: {
       name: "2026-27-ligue-1",
