@@ -377,7 +377,8 @@ async function leaderboard(
   // nothing. `gw = $4` is null before the first Gameweek is scored and matches
   // no row, which is the same branch.
   const rows = await query(
-    `select m.id, m.name, m.role,
+    `-- roster: the match track's, per Competition (ADR-0038).
+     select m.id, m.name, m.role,
             m.config ->> 'baseModelClass' as base_model_class,
             ran_after.gw as ran_after_gw,
             points.value as match_points, points.n as n,
@@ -647,7 +648,8 @@ async function fixtures(
   // under one of its own (ADR-0038), so the constant would list every league's
   // Fixtures against the Premier League's Entrants.
   const roster = await query(
-    `select id, name from models
+    `-- roster: the match track's, per Competition (ADR-0038).
+     select id, name from models
       where role = 'entrant' and prompt_version = $1 order by id`,
     [matchPromptOf(competition).version]
   );
@@ -836,7 +838,8 @@ async function entrants(
   // returns the ten entered Entrants with nothing beside them, and `gw = $6`
   // is null there and matches no row.
   const rows = await query(
-    `select m.id, m.name,
+    `-- roster: the match track's, per Competition (ADR-0038).
+     select m.id, m.name,
             points.value as match_points, points.n as n,
             points.detail as points_detail,
             bets.value as bet_points, bets.detail as bets_detail,
@@ -2251,7 +2254,8 @@ async function retiredGameweek(
   retired: RetiredGameweek
 ): Promise<Response> {
   const rows = await query(
-    `select m.id, m.name,
+    `-- roster: a retired match version's block (ADR-0042).
+     select m.id, m.name,
             points.value as match_points,
             points.detail ->> 'qualification' as match_qualification,
             bets.value as bet_points,

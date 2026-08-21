@@ -1585,7 +1585,8 @@ export async function matchRoster(
   competition: string
 ): Promise<string[]> {
   const stored = await database.query<{ id: string }>(
-    `select id from models
+    `-- roster: the match track's.
+     select id from models
       where role = 'entrant' and prompt_version = $1
       order by id`,
     [matchPromptOf(competition).version]

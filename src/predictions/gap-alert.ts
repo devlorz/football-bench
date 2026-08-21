@@ -130,7 +130,8 @@ export async function readGapAlert(
   now: () => Date
 ): Promise<GapAlert | null> {
   const result = await database.query<GapRow>(
-    `select
+    `-- roster: the match track's.
+     select
        m.id as entrant_id,
        m.name as entrant_name,
        f.fixture_id,

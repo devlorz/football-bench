@@ -105,7 +105,9 @@ export async function runFplGameweek({
   // the filter everywhere else names this read as its one exception.
   const roster = await loadStartedRoster(database, season, startedAt);
   const entrantResult = await database.query<GameweekCaller>(
-    `select id, base_model, provider, quantization, role
+    `-- roster: the started roster, by id (ADR-0047). See above: a withdrawn
+     -- seat never opened, so it is not in this list to begin with.
+     select id, base_model, provider, quantization, role
        from models
       where id = any($1) and role = 'entrant' and prompt_version = $2
       order by id`,

@@ -55,7 +55,8 @@ export async function loadDryRunArchive(
     "select max(first_seen_at) as observed_at from raw_snapshots"
   );
   const entrants = await database.query<ArchivedEntrant>(
-    `select id, name, role, base_model, provider, quantization,
+    `-- roster: whichever track the archive holds; the caller filters it.
+     select id, name, role, base_model, provider, quantization,
             prompt_version, config
        from models
       order by id`

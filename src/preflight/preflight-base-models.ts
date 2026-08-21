@@ -320,7 +320,8 @@ export async function preflightBaseModels({
     // `role = 'entrant'` in the same table. The count is still checked, so a
     // roster short of a Base Model is still refused before the first call.
     const entrants = await database.query<CalledRow>(
-      `select id, base_model, provider, quantization, prompt_version, role
+      `-- roster: the match track's, told from this track's by Prompt Version.
+       select id, base_model, provider, quantization, prompt_version, role
          from models
         where role = 'entrant' and prompt_version = $1
         order by id`,

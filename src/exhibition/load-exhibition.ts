@@ -56,7 +56,9 @@ export async function loadExhibition(
   promptVersion: FrozenPromptVersion
 ): Promise<CalledRow> {
   const result = await database.query<CalledRow>(
-    `select id, base_model, provider, quantization, prompt_version, role
+    `-- roster: none. One Exhibition Run by id, which sits on no Season
+     -- Roster at all (ADR-0032) and so has none to leave.
+     select id, base_model, provider, quantization, prompt_version, role
        from models
       where id = $1`,
     [modelId]

@@ -153,7 +153,8 @@ export async function predictGameweek({
   // The refusal it replaces asserted that every Entrant is a Match Entrant.
   // That premise has expired rather than the check having been weakened.
   const entrantResult = await database.query<EntrantRow>(
-    `select id, base_model, provider, quantization, prompt_version
+    `-- roster: the match track's.
+     select id, base_model, provider, quantization, prompt_version
        from models
       where role = 'entrant' and prompt_version = $1
       order by id`,
@@ -164,7 +165,8 @@ export async function predictGameweek({
   }
 
   const work = await database.query<WorkItemRow>(
-    `select
+    `-- roster: the match track's.
+     select
        f.fixture_id, f.home_team, f.away_team, f.kickoff_at,
        m.id as entrant_id, m.base_model, m.provider, m.quantization, m.role
       from fixtures f

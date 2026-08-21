@@ -383,7 +383,10 @@ async function refuseARosterTheRecordDisagreesWith(
   versions: readonly string[]
 ): Promise<void> {
   const stored = await database.query<StoredSeat>(
-    `select id, prompt_version, name, base_model, provider, quantization,
+    `-- roster: both tracks' stored seats, and it must see a withdrawn one:
+     -- this guard refuses a seat re-entered as a different Base Model, and
+     -- a withdrawn row is still a row a Season path points at.
+     select id, prompt_version, name, base_model, provider, quantization,
             config
        from models
       where role = 'entrant' and prompt_version = any($1)
@@ -511,7 +514,8 @@ export async function enterSeasonRoster(
   // statement that qualified the id in SQL is the upgrade if that stops being
   // true.
   const retired = await database.query<{ id: string }>(
-    `select id from models
+    `-- roster: both tracks', by id, looking for a seat under another version.
+     select id from models
       where id = any($1) and prompt_version <> $2`,
     [plain.map(({ id }) => id), version]
   );

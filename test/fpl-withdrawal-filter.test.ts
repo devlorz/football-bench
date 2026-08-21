@@ -15,14 +15,20 @@ import { describe, expect, test } from "vitest";
  * indirection. This test is the price of that choice, and its whole value is in
  * the read site nobody has written yet.
  *
- * **It fails closed.** Every read of `models` that names a `prompt_version` is
- * either filtered, the one recorded exception, or listed below as a read of
- * another track's roster with the reason it is one. A read that is none of
- * those fails this suite by name — whatever shape it takes, because nothing
- * here asks what the query looks like beyond the two tables it names. An
- * earlier draft asked instead whether `FPL_PROMPT_VERSION` appeared near the
- * literal, which let a common table expression, an aliased constant or a long
- * argument list walk straight past it.
+ * **It fails closed, per query.** Every read of `models` that names a
+ * `prompt_version` either filters on `withdrawn_at is null` or says in its own
+ * SQL whose roster it reads, on a `-- roster:` line. A read that does neither
+ * fails this suite by name, whatever shape it takes: nothing here asks what the
+ * query looks like beyond the tables it names.
+ *
+ * Two earlier drafts failed open and are worth naming, because both looked
+ * closed. The first recognised a read by whether `FPL_PROMPT_VERSION` appeared
+ * within four hundred characters of the literal, which a common table
+ * expression, an aliased constant or a long argument list walked straight past.
+ * The second classified the survivors by file and count, which hands a file a
+ * quota: swap one of `read-api.ts`'s four match reads for an unfiltered FPL
+ * read and the arithmetic still balances, so the new read inherits a reason
+ * nobody wrote for it. A marker in the query itself cannot be inherited.
  */
 
 const REPOSITORY = new URL("..", import.meta.url).pathname;
@@ -89,54 +95,18 @@ const FPL_ROSTER_READS: Readonly<Record<string, number>> = {
 };
 
 /**
- * The reads that ask `models` about somebody else's roster, each with why it
- * carries no withdrawal filter. Listed so that a read added anywhere in `src`
- * has to be classified rather than merely not noticed.
+ * What an unfiltered read must carry, in its own SQL, to say whose roster it
+ * reads: a `-- roster:` line and a sentence after it.
+ *
+ * The marker lives in the query rather than in a table here, and that is the
+ * whole point. A table keyed by file and count gives a file a quota — swap one
+ * of the match track's four reads in `read-api.ts` for an unfiltered FPL read
+ * and the count still matches, so the new read inherits the old one's reason
+ * without ever being looked at. A marker cannot be inherited: the new read
+ * either carries one, which is a claim its author has to write down and a
+ * reviewer can read, or it does not, and this suite names it.
  */
-const NOT_THIS_TRACKS_ROSTER: Readonly<Record<string, {
-  reads: number;
-  why: string;
-}>> = {
-  "src/dashboard/read-api.ts": {
-    reads: 4,
-    why: "The match track's pages. Every seat of that roster stands, and a "
-      + "Base Model that left the FPL track did not leave this one."
-  },
-  "src/dry-run/load-archive.ts": {
-    reads: 1,
-    why: "Loads an archived roster of either track and filters it in the "
-      + "caller, where the archive's own record of who was seated is the point."
-  },
-  "src/exhibition/load-exhibition.ts": {
-    reads: 1,
-    why: "One Exhibition Run's row, read by id. An Exhibition Run is not on a "
-      + "Season Roster at all (ADR-0032) and has no roster to leave."
-  },
-  "src/predictions/gap-alert.ts": {
-    reads: 1,
-    why: "The match track's Gaps."
-  },
-  "src/predictions/predict-gameweek.ts": {
-    reads: 2,
-    why: "The match track's Prediction run."
-  },
-  "src/predictions/score-match-gameweek.ts": {
-    reads: 1,
-    why: "The match track's scorer."
-  },
-  "src/preflight/preflight-base-models.ts": {
-    reads: 1,
-    why: "Pre-flight probes the match track's seats, told from this track's by "
-      + "Prompt Version, and takes a Competition and a Fixture to do it."
-  },
-  "src/season-roster.ts": {
-    reads: 2,
-    why: "The entry doors' guard, which must see a withdrawn seat: it refuses "
-      + "a seat re-entered as a different Base Model, and a withdrawn row is "
-      + "still a row that a Season path points at. Filtering it would let the "
-      + "one seat nobody is watching be relabelled."
-  }
-};
+const ROSTER_MARKER = /--\s*roster:\s*\S[^\n]*/;
 
 /**
  * The Gameweek run's read, told by its shape: it asks for a list of ids rather
@@ -171,28 +141,50 @@ describe("the withdrawal filter on the FPL track's Entrant reads", () => {
     expect(countByFile(filtered)).toEqual(FPL_ROSTER_READS);
   });
 
-  test("every read of models is classified, and unclassified is a failure",
+  test("every read of models says whose roster it reads", () => {
+    const unexplained = reads
+      .filter((read) => !carriesTheFilter(read))
+      .filter((read) => !ROSTER_MARKER.test(read.sql))
+      .map(({ file, line, sql }) =>
+        `${file}:${line} — ${sql.trim().split("\n")[0]}`);
+
+    // Fail closed, per query rather than per file. Every read of `models` that
+    // names a Prompt Version is filtered or says in its own SQL whose roster it
+    // reads instead.
+    expect(
+      unexplained,
+      "A read of `models` naming a `prompt_version` neither filters on "
+      + "`withdrawn_at is null` nor says whose roster it reads. If it reads "
+      + "the FPL track's, add the filter — a seat that left still holds its "
+      + "row (ADR-0047), so an unfiltered read puts three Base Models back on "
+      + "a track they are not running. If it reads another track's, say so in "
+      + "the query with a `-- roster:` line."
+    ).toEqual([]);
+  });
+
+  test("keeps every models read inside a SQL literal, where it can be read",
     () => {
-      const expected = countByFile([...filtered, ...exceptions]);
-      for (const [file, { reads: count }] of Object.entries(
-        NOT_THIS_TRACKS_ROSTER
-      )) {
-        expected[file] = (expected[file] ?? 0) + count;
+      // The one shape that could hide from the scan above: SQL assembled at run
+      // time out of ordinary strings, which no text search can classify. So the
+      // codebase does not write one. Every `models` read is a template literal,
+      // and a read concatenated out of quoted fragments fails here rather than
+      // slipping past unclassified.
+      const assembled: string[] = [];
+      for (const path of sourceFiles(SOURCE_ROOT)) {
+        const text = readFileSync(path, "utf8");
+        for (const [quoted] of text.matchAll(/(["'])(?:\\.|(?!\1).)*\1/g)) {
+          if (/\b(from|join)\s+models\b/.test(quoted)) {
+            assembled.push(`${relative(REPOSITORY, path)} — ${quoted.slice(0, 60)}`);
+          }
+        }
       }
 
-      // Fail closed: the population is every read of `models` naming a Prompt
-      // Version, and each one is filtered, the exception, or recorded above as
-      // another track's. A new read of any shape lands here as an unexplained
-      // count and fails by file.
       expect(
-        countByFile(reads),
-        "A read of `models` naming a `prompt_version` is not accounted for. "
-        + "If it reads the FPL track's roster, add `and withdrawn_at is null` "
-        + "— a seat that left still holds its row (ADR-0047), so an unfiltered "
-        + "read puts three Base Models back on a track they are not running. "
-        + "If it reads another track's, record it in NOT_THIS_TRACKS_ROSTER "
-        + "with the reason."
-      ).toEqual(expected);
+        assembled,
+        "This reads `models` from a quoted string rather than a SQL literal, "
+        + "so the withdrawal check cannot classify it. Write the query as a "
+        + "template literal."
+      ).toEqual([]);
     });
 
   test("names exactly one exception, and it says why inline", () => {
@@ -214,18 +206,16 @@ describe("the withdrawal filter on the FPL track's Entrant reads", () => {
     // The other half of the boundary. A seat is entered per track, so one Base
     // Model holds two rows and leaving one says nothing about the other; a
     // filter applied one table too widely would stop ten seats predicting
-    // Fixtures. Every entry above carries its own reason, and this asserts
-    // there is a population for them to describe.
+    // Fixtures. Each of those reads carries its own `-- roster:` line, and this
+    // asserts there is a population for those lines to describe.
     const unfiltered = reads.filter(
       (read) => !carriesTheFilter(read) && !exceptions.includes(read)
     );
 
-    expect(unfiltered.length).toBe(
-      Object.values(NOT_THIS_TRACKS_ROSTER)
-        .reduce((total, { reads: count }) => total + count, 0)
-    );
-    for (const { why } of Object.values(NOT_THIS_TRACKS_ROSTER)) {
-      expect(why.length).toBeGreaterThan(20);
+    expect(unfiltered.length).toBeGreaterThan(0);
+    for (const read of unfiltered) {
+      expect(ROSTER_MARKER.test(read.sql), `${read.file}:${read.line}`)
+        .toBe(true);
     }
   });
 });
