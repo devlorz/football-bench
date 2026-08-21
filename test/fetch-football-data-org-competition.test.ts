@@ -33,6 +33,82 @@ const recorded = async (): Promise<string> =>
   archivedBody("football-data-org-2026-27-PD-recorded.json.gz");
 
 /**
+ * Serie A's and Ligue 1's, captured the same way and for the same reason. Each
+ * entry is the whole day-one audit spec 0024 story 8 asks for, written down as
+ * the numbers the response really carried: the counts, the status mix, the
+ * Gameweek 1 kickoff slots and where Gameweek 2 starts. The clubs' spellings
+ * in these bytes are what this expansion's identity maps are keyed by, so the
+ * map tickets read their keys out of the fixture rather than out of a draft.
+ *
+ * Both are tabled rather than written twice because every assertion below is
+ * the same assertion — only the league's published shape differs, and the
+ * table is where that shape is legible side by side.
+ */
+const RECORDED_COMPETITIONS = [
+  {
+    competition: "SA",
+    fixtureFile: "football-data-org-2026-27-SA-recorded.json.gz",
+    matches: 380,
+    gameweeks: 38,
+    statuses: { TIMED: 50, SCHEDULED: 330 },
+    firstMatch: {
+      id: 558629,
+      utcDate: "2026-08-22T16:30:00Z",
+      status: "TIMED",
+      matchday: 1,
+      homeTeam: { name: "Udinese Calcio" },
+      awayTeam: { name: "Como 1907" }
+    },
+    // Sorted, and the source's own spellings — legal forms and all. These are
+    // the keys tickets 0036-0038 map from, so the fixture is where they are
+    // pinned rather than a list in a ticket that nothing checks.
+    clubs: [
+      "AC Milan", "AC Monza", "ACF Fiorentina", "AS Roma", "Atalanta BC",
+      "Bologna FC 1909", "Cagliari Calcio", "Como 1907",
+      "FC Internazionale Milano", "Frosinone Calcio", "Genoa CFC",
+      "Juventus FC", "Parma Calcio 1913", "SS Lazio", "SSC Napoli",
+      "Torino FC", "US Lecce", "US Sassuolo Calcio", "Udinese Calcio",
+      "Venezia FC"
+    ],
+    openingFixtures: 10,
+    // 18:30 and 20:45 in Italy in August, which is Serie A's published pair.
+    openingSlotsUtc: ["16:30", "18:45"],
+    // Gameweek 1 is its own weekend and every date in it is named, so a
+    // Fixture held back to late August fails whether or not it still
+    // precedes Gameweek 2.
+    openingDates: ["2026-08-22", "2026-08-23", "2026-08-24"],
+    secondGameweekOpensAt: "2026-08-28T18:45:00Z"
+  },
+  {
+    competition: "FL1",
+    fixtureFile: "football-data-org-2026-27-FL1-recorded.json.gz",
+    matches: 306,
+    gameweeks: 34,
+    statuses: { TIMED: 40, SCHEDULED: 266 },
+    firstMatch: {
+      id: 559715,
+      utcDate: "2026-08-21T18:45:00Z",
+      status: "TIMED",
+      matchday: 1,
+      homeTeam: { name: "Olympique de Marseille" },
+      awayTeam: { name: "RC Strasbourg Alsace" }
+    },
+    clubs: [
+      "AJ Auxerre", "AS Monaco FC", "Angers SCO", "ES Troyes AC", "FC Lorient",
+      "Le Havre AC", "Le Mans FC", "Lille OSC", "OGC Nice",
+      "Olympique Lyonnais", "Olympique de Marseille", "Paris FC",
+      "Paris Saint-Germain FC", "RC Strasbourg Alsace", "Racing Club de Lens",
+      "Stade Brestois 29", "Stade Rennais FC 1901", "Toulouse FC"
+    ],
+    openingFixtures: 9,
+    // 15:00, 17:15 and 20:45 in France in August — Ligue 1's published three.
+    openingSlotsUtc: ["13:00", "15:15", "18:45"],
+    openingDates: ["2026-08-21", "2026-08-22", "2026-08-23"],
+    secondGameweekOpensAt: "2026-08-28T18:45:00Z"
+  }
+] as const;
+
+/**
  * A constructed body, and deliberately still here: it holds states the
  * recorded response does not and no recorded response could be relied on to —
  * a settled match, a settled match with its score missing, a postponed one, a
@@ -147,6 +223,77 @@ describe("a Competition read from football-data.org", () => {
     // shape a first fetch of a Season really has.
     expect(matches.every(({ score }) => score.fullTime.home === null)).toBe(true);
   });
+
+  test.each(RECORDED_COMPETITIONS)(
+    "parses $competition's real response and passes its day-one checks",
+    async (competition) => {
+      const body = await archivedBody(competition.fixtureFile);
+      const matches = parseFootballDataOrgMatches("test", body);
+
+      expect(matches).toHaveLength(competition.matches);
+      expect(new Set(matches.map(({ matchday }) => matchday)).size)
+        .toBe(competition.gameweeks);
+      expect(matches[0]).toMatchObject(competition.firstMatch);
+
+      // No `matchday` is null and no status is withdrawn, so neither the
+      // ADR-0024 null path nor `WITHDRAWN_STATUSES` is exercised here — which
+      // is the check, not an omission from it.
+      const statuses: Record<string, number> = {};
+      for (const { status } of matches) {
+        statuses[status] = (statuses[status] ?? 0) + 1;
+      }
+      expect(statuses).toEqual(competition.statuses);
+      expect(matches.every(({ matchday }) => matchday !== null)).toBe(true);
+
+      // Captured before either Season opened, so nothing has settled: the
+      // state the Lock guard reads on a first fetch. Both sides, because a
+      // response carrying one of them would be a shape neither the parser nor
+      // `settledResult` has ever seen.
+      expect(matches.flatMap(({ score }) =>
+        [score.fullTime.home, score.fullTime.away])).toEqual(
+        Array.from({ length: competition.matches * 2 }, () => null));
+      // The envelope agrees with the matches, which is the source's own
+      // statement that this is a Season that has not started.
+      const envelope: { resultSet: { count: number; played: number } } =
+        JSON.parse(body);
+      expect(envelope.resultSet).toMatchObject({
+        count: competition.matches,
+        played: 0
+      });
+
+      // The spellings the identity maps of tickets 0036-0038 are keyed by, in
+      // full rather than counted: a count catches a club that vanished and
+      // nothing catches one that is misspelt, and a misspelt key is the
+      // failure mode those maps have no alarm for.
+      expect([...new Set(matches.flatMap(({ homeTeam, awayTeam }) =>
+        [homeTeam.name, awayTeam.name]))].sort())
+        .toEqual([...competition.clubs]);
+
+      const opening = matches
+        .filter(({ matchday }) => matchday === 1)
+        .map(({ utcDate }) => utcDate)
+        .sort();
+      expect(opening).toHaveLength(competition.openingFixtures);
+      // Timezone-sound: every opening kickoff lands on one of the league's
+      // published slots and no third value appears. A response an hour out
+      // would still parse and would fail here.
+      expect([...new Set(opening.map((utcDate) => utcDate.slice(11, 16)))].sort())
+        .toEqual([...competition.openingSlotsUtc]);
+
+      // No deferred opening Fixture, which La Liga's first response had four
+      // of: every Gameweek 1 kickoff precedes Gameweek 2's earliest, so
+      // Gameweek 1 is its own weekend and `deriveDeadline` has the ordinary
+      // case. A Fixture held back to late August would sort past this.
+      expect([...new Set(opening.map((utcDate) => utcDate.slice(0, 10)))].sort())
+        .toEqual([...competition.openingDates]);
+
+      const secondGameweekOpensAt = matches
+        .filter(({ matchday }) => matchday === 2)
+        .map(({ utcDate }) => utcDate)
+        .sort()[0];
+      expect(secondGameweekOpensAt).toBe(competition.secondGameweekOpensAt);
+    }
+  );
 
   test("parses the documented-shape fixture, envelope fields and all", async () => {
     const matches = parseFootballDataOrgMatches("test", await snapshot());
