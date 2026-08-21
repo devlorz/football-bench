@@ -63,20 +63,14 @@ function squadsEndpoint(): {
 
 /**
  * Rewinds the record to when `gameweek` was the last one scored, by deleting
- * what was published after it and never by writing a figure of its own. The Manager
- * States behind it stay where they are: the endpoint reads the Gameweek it is
- * answering with and the one the Entrant last stood on, and both are behind
- * this line.
- */
-/**
- * The scores past `gameweek` dropped, so that Gameweek is the latest settled.
+ * what was published after it and never by writing a figure of its own.
  *
- * The Manager States cannot be rewound with them: `manager_states` is
- * insert-only and the database refuses the delete, which is the Season path
- * being a record rather than a working set. So a fixture that needs an earlier
- * Gameweek to be the *locked* one — which is the Gameweek this page shows since
- * ADR-0048 — stops the seed there with `fplThrough` instead of deleting back to
- * it.
+ * The Manager States stay where they are, and cannot do otherwise:
+ * `manager_states` is insert-only and the database refuses the delete, which is
+ * the Season path being a record rather than a working set. So a fixture that
+ * needs an earlier Gameweek to be the *locked* one — which is the Gameweek this
+ * page shows since ADR-0048 — stops the seed there with `fplThrough` rather
+ * than deleting back to it.
  */
 async function rewindTo(
   writer: pg.Client,
