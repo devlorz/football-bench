@@ -294,7 +294,8 @@ function dateOf(
 export function parseHeadCoachChanges(
   source: string,
   wikitext: string,
-  pinned: PinnedClubs
+  pinned: PinnedClubs,
+  columns: readonly string[] = SOURCE_COLUMNS
 ): HeadCoachChange[] {
   const issues: HeadCoachSourceIssue[] = [];
   const changes: HeadCoachChange[] = [];
@@ -303,11 +304,11 @@ export function parseHeadCoachChanges(
   );
 
   const labels = header.map(cellText);
-  if (labels.join("|") !== SOURCE_COLUMNS.join("|")) {
+  if (labels.join("|") !== columns.join("|")) {
     throw new HeadCoachSourceValidationError(source, [{
       field: SECTION_HEADING,
       detail:
-        `expected the columns ${SOURCE_COLUMNS.join(", ")}, `
+        `expected the columns ${columns.join(", ")}, `
         + `received ${labels.join(", ")}`
     }]);
   }

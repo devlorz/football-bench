@@ -21,6 +21,28 @@ export interface HeadCoachSource {
   name: string;
   /** English Wikipedia's article title for the Season. */
   page: string;
+  /**
+   * The Managerial changes table's column labels, where this article does not
+   * write them the way the others do. Absent means the common seven, which is
+   * what Premier League, La Liga and Serie A all publish; Ligue 1 heads the
+   * fifth column `Position in table` and English Wikipedia's season articles
+   * are written by different editors, so the wording is the article's fact and
+   * belongs beside its title rather than inside the parser.
+   *
+   * Listed and not matched loosely: the pin exists so a reordered or re-scoped
+   * table is a refusal, and a parser that shrugged at one label's wording would
+   * accept that wording from every league whose page does not use it.
+   */
+  columns?: readonly string[];
+  /**
+   * The Personnel table's leading column labels, up to and including the one
+   * holding the Head Coach, where this article does not lead with the common
+   * pair. Absent means `Team, Manager`. Ligue 1 puts `Chairman` between them,
+   * which is the case the pair was pinned to catch -- read by position against
+   * the common pair it would have filed every club's chairman as its Head
+   * Coach, and nothing downstream could have told.
+   */
+  personnelColumns?: readonly string[];
 }
 
 const SEASON_ARTICLES: Readonly<
@@ -41,7 +63,17 @@ const SEASON_ARTICLES: Readonly<
     },
     FL1: {
       name: "2026-27-ligue-1",
-      page: "2026–27 Ligue 1"
+      page: "2026–27 Ligue 1",
+      columns: [
+        "Team",
+        "Outgoing manager",
+        "Manner of departure",
+        "Date of vacancy",
+        "Position in table",
+        "Incoming manager",
+        "Date of appointment"
+      ],
+      personnelColumns: ["Team", "Chairman", "Manager"]
     }
   }
 };
