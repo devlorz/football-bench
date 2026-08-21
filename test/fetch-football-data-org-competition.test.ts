@@ -221,7 +221,12 @@ describe("a Competition read from football-data.org", () => {
     // Fetched on the opening day, so nothing has settled and every score is
     // null — which is the state the Lock guard reads, and worth pinning as the
     // shape a first fetch of a Season really has.
-    expect(matches.every(({ score }) => score.fullTime.home === null)).toBe(true);
+    // Both sides, not just the home one: a response carrying a settled away
+    // score beside a null home score would pass a one-sided check and read as
+    // an unsettled Season.
+    expect(matches.every(
+      ({ score }) => score.fullTime.home === null && score.fullTime.away === null
+    )).toBe(true);
   });
 
   test.each(RECORDED_COMPETITIONS)(
