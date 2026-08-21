@@ -137,6 +137,10 @@ const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
   // Serie A needed no such fix: its divisions were curated before its first
   // render, and the real packet, read whole over 760 stored results and 380
   // joined xG rows, says what the pinned render says.
+  //
+  // Ligue 1's landed on 2026-08-21 and its pin did not move either — read,
+  // not predicted: the suite stayed green across the backfill, and the real
+  // packet was read whole over 611 stored results and 298 joined xG rows.
   SA: {
     version: "match-sa/2026-27-v1",
     sha256:

@@ -9,7 +9,7 @@ import {
 import {
   resolveUnderstatTeamName, understatTeamNamesOf
 } from "../src/understat/team-identity.js";
-import { archivedBody } from "./archived-fixture.js";
+import { archivedBody, archivedHomeTeams } from "./archived-fixture.js";
 
 const { Client } = pg;
 
@@ -564,12 +564,7 @@ describe("fetching Understat per-match xG", () => {
       ) as { dates: Array<{ h: { title: string }; a: { title: string } }> };
       const titles = new Set(feed.dates.flatMap(({ h, a }) => [h.title, a.title]));
 
-      const rows = (await archivedBody("football-data-2526-I1.csv.gz"))
-        .split(/\r?\n/).filter((line) => line.length > 0);
-      const homeTeam = rows[0]?.split(",").indexOf("HomeTeam") ?? -1;
-      const stored = new Set(
-        rows.slice(1).map((row) => row.split(",")[homeTeam] ?? "")
-      );
+      const stored = await archivedHomeTeams("football-data-2526-I1.csv.gz");
 
       expect(titles.size).toBe(20);
       expect(stored.size).toBe(20);
@@ -599,6 +594,40 @@ describe("fetching Understat per-match xG", () => {
       // The club the first can be confused with — both sources call it
       // `Inter`, so a swapped pair is spelt apart on each side.
       expect(resolveUnderstatTeamName("SA", "Inter")).toBe("Inter");
+    });
+
+  // Ligue 1's eighteen, read back against its own two feeds. Eighteen on each
+  // side, which is the count this league actually has and the one a map
+  // copied from Serie A's shape would fail.
+  test("derives Ligue 1's eighteen from the two feeds it was read off",
+    async () => {
+      const feed = JSON.parse(
+        await archivedBody("understat-2025-26-Ligue_1.json.gz")
+      ) as { dates: Array<{ h: { title: string }; a: { title: string } }> };
+      const titles = new Set(feed.dates.flatMap(({ h, a }) => [h.title, a.title]));
+
+      const stored = await archivedHomeTeams("football-data-2526-F1.csv.gz");
+
+      expect(titles.size).toBe(18);
+      expect(stored.size).toBe(18);
+
+      expect(Object.keys(understatTeamNamesOf("FL1") ?? {}).sort())
+        .toEqual([...titles].sort());
+
+      const resolved = [...titles].map(
+        (title) => resolveUnderstatTeamName("FL1", title)
+      );
+      expect(resolved.filter((name) => name === undefined)).toEqual([]);
+      expect(new Set(resolved).size).toBe(18);
+      expect([...new Set(resolved)].sort()).toEqual([...stored].sort());
+
+      // The one pair that differs across the two sources, and the club it can
+      // be confused with. Both are named because the sets above stay equal
+      // under a swap of the two: `Paris FC` and `Paris SG` are both stored
+      // names, so exchanging which key points at which passes every count.
+      expect(resolveUnderstatTeamName("FL1", "Paris Saint Germain"))
+        .toBe("Paris SG");
+      expect(resolveUnderstatTeamName("FL1", "Paris FC")).toBe("Paris FC");
     });
 
   test("refuses a Competition with no Understat league", async () => {

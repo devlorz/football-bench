@@ -52,8 +52,13 @@ function footballDataSource(url: string): string | null {
   return `football_data:20${startYear}-${endYear}:${division}`;
 }
 
+// The slug admits a digit because `Ligue_1` is one: the pattern used to read
+// letters and underscores only, so every Ligue 1 snapshot the archive held
+// replayed as "no archived snapshot source is known". That degrades a dry run
+// to "xG unavailable" rather than failing it (ADR-0019), which is why this is
+// pinned by a test rather than trusted.
 const UNDERSTAT_URL =
-  /^https:\/\/understat\.com\/getLeagueData\/([A-Za-z_]+)\/(\d{4})$/;
+  /^https:\/\/understat\.com\/getLeagueData\/([A-Za-z_\d]+)\/(\d{4})$/;
 
 /**
  * Understat addresses a Season by its opening year while its snapshot is

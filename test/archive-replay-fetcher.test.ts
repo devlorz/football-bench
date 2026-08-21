@@ -54,7 +54,12 @@ describe("the archive replay fetcher", () => {
     const http = createArchiveReplayFetcher([
       { source: "understat:2025-26:La_liga", body: "{\"dates\":[]}" },
       { source: "understat:2025-26:EPL", body: "{\"dates\":[1]}" },
-      { source: "understat:2025-26:Serie_A", body: "{\"dates\":[2]}" }
+      { source: "understat:2025-26:Serie_A", body: "{\"dates\":[2]}" },
+      // A slug whose own name ends in a digit, where the Season's opening year
+      // follows immediately after the slash: `Ligue_1/2025`. `Serie_A` does
+      // not exercise that, and a pattern that read the trailing `1` as part of
+      // the year would replay nothing.
+      { source: "understat:2025-26:Ligue_1", body: "{\"dates\":[3]}" }
     ]);
 
     expect((await http("https://understat.com/getLeagueData/La_liga/2025")).body)
@@ -63,6 +68,8 @@ describe("the archive replay fetcher", () => {
       .toBe("{\"dates\":[1]}");
     expect((await http("https://understat.com/getLeagueData/Serie_A/2025")).body)
       .toBe("{\"dates\":[2]}");
+    expect((await http("https://understat.com/getLeagueData/Ligue_1/2025")).body)
+      .toBe("{\"dates\":[3]}");
   });
 
   // The turn of the century, where `(year + 1) % 100` has to keep its zero.

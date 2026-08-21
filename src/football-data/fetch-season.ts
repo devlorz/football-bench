@@ -205,6 +205,23 @@ function parseMatches(
         detail: `expected ${division.code}`
       });
     }
+
+    // A row whose two score cells are *both* empty is the source carrying a
+    // Match it has no result for — abandoned, postponed, or not yet played.
+    // That is football-data.co.uk saying "no result", not corruption, and it
+    // is the only reading of an empty cell that is: one empty cell beside a
+    // filled one is a half-written row and still fails below. Skipped rather
+    // than stored, because a 0-0 invented here is a result that never
+    // happened, and every base rate in the packet is an average over these
+    // rows. The `Div` check above still runs on it — a redirected file is a
+    // redirected file whether or not its rows carry scores.
+    //
+    // Ligue 2's Bastia v Red Star of 05/12/2025 is the first the benchmark has
+    // met; `E0`, `SP1`, `SP2`, `I1` and `I2` have none, which is why this
+    // arrived as a failed backfill rather than a review note.
+    if (value("FTHG").length === 0 && value("FTAG").length === 0) {
+      continue;
+    }
     if (playedOn === undefined) {
       issues.push({
         field: `row.${rowNumber}.Date`,

@@ -247,7 +247,8 @@ describe("the Match Prompt Version", () => {
   // That last line used to end "and each moves once when its history backfill
   // lands", which was wrong twice over: `contextData` is a literal and this
   // render reads no database, so no backfill can reach it. Serie A's landed
-  // and this pin did not move. What moved `PD`'s twice was the builder.
+  // and this pin did not move, and Ligue 1's landed and neither did that one.
+  // What moved `PD`'s twice was the builder.
   test.each(MATCH_PROMPT_COMPETITIONS)(
     "pins %s's own rendering under its own Prompt Version",
     (competition) => {

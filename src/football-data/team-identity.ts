@@ -123,10 +123,55 @@ const SERIE_A: TeamNames = {
   "Venezia FC": "Venezia"
 };
 
+/**
+ * Ligue 1's eighteen — eighteen, not twenty. Derived rather than transcribed:
+ * every key is a `homeTeam.name` in the recorded
+ * `competitions/FL1/matches?season=2026` response and every value a `HomeTeam`
+ * football-data.co.uk stored for 2025-26 — sixteen in `F1` and the two
+ * promoted clubs in `F2` (Troyes, Le Mans). The two sets are each exactly
+ * eighteen with nothing left over on either side. Reviewed and approved
+ * 2026-08-21, before the backfill it governs was read through.
+ *
+ * What the review was asked to decide: seventeen of the eighteen are the club
+ * with its legal form taken off, or the city under it —
+ * `Toulouse FC`→`Toulouse`, `Stade Brestois 29`→`Brest`. A substring
+ * derivation over the stored names resolves sixteen of those on its own and
+ * leaves two, which are the two a person had to answer:
+ * `Stade Rennais FC 1901`→`Rennes`, where the stored name is the city and the
+ * official one the demonym, and the pair below.
+ *
+ * `Paris Saint-Germain FC`→`Paris SG` is the one in this league that can be
+ * got wrong and still read, because the *other* Paris club is in the same
+ * eighteen: `Paris FC`→`Paris FC`, the same string on both sides. Pointing the
+ * first at `Paris FC` is the swap that reads plausibly, and it is what the
+ * join rate rules out.
+ */
+const LIGUE_1: TeamNames = {
+  "AJ Auxerre": "Auxerre",
+  "AS Monaco FC": "Monaco",
+  "Angers SCO": "Angers",
+  "ES Troyes AC": "Troyes",
+  "FC Lorient": "Lorient",
+  "Le Havre AC": "Le Havre",
+  "Le Mans FC": "Le Mans",
+  "Lille OSC": "Lille",
+  "OGC Nice": "Nice",
+  "Olympique Lyonnais": "Lyon",
+  "Olympique de Marseille": "Marseille",
+  "Paris FC": "Paris FC",
+  "Paris Saint-Germain FC": "Paris SG",
+  "RC Strasbourg Alsace": "Strasbourg",
+  "Racing Club de Lens": "Lens",
+  "Stade Brestois 29": "Brest",
+  "Stade Rennais FC 1901": "Rennes",
+  "Toulouse FC": "Toulouse"
+};
+
 const BY_COMPETITION: Readonly<Record<string, TeamNames>> = {
   PL: PREMIER_LEAGUE,
   PD: LA_LIGA,
-  SA: SERIE_A
+  SA: SERIE_A,
+  FL1: LIGUE_1
 };
 
 /**
