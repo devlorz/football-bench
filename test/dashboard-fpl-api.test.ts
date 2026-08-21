@@ -270,6 +270,20 @@ describe("the FPL leaderboard endpoint", () => {
       expect(body.entrants.map(({ id }) => id))
         .toEqual(expect.not.arrayContaining(withdrawnEntrantIds));
       expect(body.entrants).toHaveLength(before.entrants.length - 3);
+
+      // The places are counted over the seats that remain, not over the ones
+      // that left. A rank is one more than the number above it, so score rows
+      // left behind by a withdrawn seat rank the survivors 1, 2, 5, 6, 7, 9 —
+      // a ranking printed with holes in it. The movement is measured from the
+      // same rows and goes wrong the same way.
+      const ranks = body.entrants.map(({ rank }) => rank!);
+      expect(ranks[0]).toBe(1);
+      // No place beyond the field it is a place in. Ties still share a rank and
+      // skip the next -- four seats then a tie is 1, 2, 3, 4, 4, 6 -- so the
+      // bound is the count, not a contiguous run. Before the fix the survivors
+      // ranked 1, 2, 5, 6, 7, 9 against a field of six.
+      expect(Math.max(...ranks)).toBeLessThanOrEqual(body.entrants.length);
+      expect([...ranks].sort((a, b) => a - b)).toEqual(ranks);
     } finally {
       await writer.query(
         "update models set withdrawn_at = null where id = any($1)", [withdrawnEntrantIds]

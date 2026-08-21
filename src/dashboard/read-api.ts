@@ -1309,11 +1309,20 @@ async function fplLeaderboard(query: Query, season: string): Promise<Response> {
   // movement is measured against, all three being the same stored figure at
   // different Gameweeks.
   const totals = throughGw === null ? [] : await query(
-    `select model_id, gw, value, detail ->> 'qualification' as qualification
-       from scores
-      where competition = 'PL' and season = $1
-        and track = 'fpl' and metric = $2 and gw <= $3
-      order by gw`,
+    `select s.model_id, s.gw, s.value,
+            s.detail ->> 'qualification' as qualification
+       from scores s
+       join models m on m.id = s.model_id
+      where s.competition = 'PL' and s.season = $1
+        and s.track = 'fpl' and s.metric = $2 and s.gw <= $3
+        -- The roster as it stands, joined here and not only on the seat read
+        -- below (ADR-0047). These rows are what the ranks are counted from --
+        -- a place is one more than the seats above it -- so a withdrawn seat
+        -- left in them ranks the standing six as 1, 2, 5, 6, 7, 9 and prints a
+        -- ranking with holes where three Base Models used to be. The Race
+        -- chart draws off the same rows and would have drawn their lines.
+        and m.withdrawn_at is null
+      order by s.gw`,
     [season, FPL_POINTS_SEASON_TO_DATE_METRIC, throughGw]
   );
 

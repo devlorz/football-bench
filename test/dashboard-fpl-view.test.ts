@@ -749,10 +749,11 @@ describe("the count each FPL page prints beside the Season", () => {
     }
   ])("$page counts the seats it was served", ({ path }) => {
     const script = read(path).split("<script>")[1] ?? "";
-    const counts = [...script.matchAll(/statusLine\([^)]*\)/g)].map(([c]) => c);
+    const statusLineCalls =
+      [...script.matchAll(/statusLine\([^)]*\)/g)].map(([call]) => call);
 
-    expect(counts).not.toHaveLength(0);
-    for (const call of counts) {
+    expect(statusLineCalls).not.toHaveLength(0);
+    for (const call of statusLineCalls) {
       expect(call).toMatch(/\.entrants\.length\s*\)$/);
     }
     // No second source for the same number anywhere in the page.
