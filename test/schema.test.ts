@@ -5,10 +5,9 @@ import {
   storePlayerPoints,
   type PlayerPointsStat
 } from "./fpl-points-fixture.js";
-import { divisionsOf } from "../src/football-data/divisions.js";
 import {
-  MATCH_PROMPT_COMPETITIONS
-} from "../src/predictions/openrouter-entrant.js";
+  CURATED_COMPETITIONS, divisionsOf
+} from "../src/football-data/divisions.js";
 
 const { Client } = pg;
 
@@ -175,16 +174,20 @@ describe("the benchmark database", () => {
     }
   });
 
-  // The curated list and the check constraint hold the same four names in two
-  // languages, and only one of them can be typechecked. "Segunda División"
-  // has to match migration 0026 accent for accent, and nothing said so until
-  // an insert failed — in production, mid-backfill. Every name, every
+  // The curated list and the check constraint hold the same eight names in
+  // four languages, and only one of them can be typechecked. "Segunda
+  // División" has to match migration 0026 accent for accent, and nothing said
+  // so until an insert failed — in production, mid-backfill. Every name, every
   // Competition, driven through the constraint. **Found by review.**
+  //
+  // Driven from the curated list itself and not from the Competitions with a
+  // frozen Prompt Version, which is a set that merely happens to match it: an
+  // entry curated ahead of its freeze is a division name no migration has
+  // added yet, and reading the prompt list would step over exactly that.
+  // **Found by review.**
   test("accepts every division name the curated list holds", async () => {
-    for (const competition of MATCH_PROMPT_COMPETITIONS) {
-      const divisions = divisionsOf(competition);
-      expect(divisions).toBeDefined();
-      for (const { name } of divisions!) {
+    for (const competition of CURATED_COMPETITIONS) {
+      for (const { name } of divisionsOf(competition)!) {
         await expect(client.query(
           `insert into historical_matches (
              competition, season, division, played_on, home_team, away_team,
@@ -194,6 +197,27 @@ describe("the benchmark database", () => {
         )).resolves.toBeDefined();
       }
     }
+  });
+
+  // The other direction, which the test above cannot see: it drives every
+  // curated name through the constraint and stays green over a constraint that
+  // also holds names nothing curates. An extra name is not harmless — it is
+  // exactly the drift the check exists to refuse, a spelling that can be
+  // stored and never selected on. Read off the constraint itself rather than
+  // asserted as a count, so the failure names the surplus. **Found by review.**
+  test("holds the curated names and no others", async () => {
+    const definition = await client.query<{ definition: string }>(
+      `select pg_get_constraintdef(oid) as definition from pg_constraint
+        where conname = 'historical_matches_division_check'`
+    );
+    const held = [...definition.rows[0]!.definition.matchAll(/'((?:[^']|'')*)'/g)]
+      .map(([, name]) => name!.replaceAll("''", "'"));
+
+    const curated = CURATED_COMPETITIONS
+      .flatMap((competition) => divisionsOf(competition)!)
+      .map(({ name }) => name);
+
+    expect([...held].sort()).toEqual([...curated].sort());
   });
 
   test("refuses a division name the curated list does not hold", async () => {

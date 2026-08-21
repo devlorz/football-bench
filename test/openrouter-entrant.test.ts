@@ -9,6 +9,7 @@ import {
   openRouterRequest
 } from "../src/predictions/openrouter-entrant.js";
 import { divisionsOf } from "../src/football-data/divisions.js";
+import { headCoachSource } from "../src/head-coach/head-coach-source.js";
 import {
   buildMatchContext,
   type MatchContextData
@@ -237,14 +238,21 @@ describe("the Match Prompt Version", () => {
   // used -- Gameweek 1, six contexts and sixty
   // Predictions -- and is retired unamendable (ADR-0042), so this is a new
   // version being frozen and not a frozen prompt changing.
-  test("pins La Liga's own rendering under its own Prompt Version", () => {
-    expect(sha256(buildMatchContext(FIXTURE, contextData("PD"))))
-      .toBe(matchPromptOf("PD").sha256);
-  });
+  // Serie A and Ligue 1 join it on the same terms, born on the current
+  // template: both pins were read before they were written -- each rendering
+  // names its own league in every line that names one, and each states no
+  // result has been played yet this Season rather than that the table is
+  // unavailable -- and each moves once when its history backfill lands.
+  test.each(MATCH_PROMPT_COMPETITIONS)(
+    "pins %s's own rendering under its own Prompt Version",
+    (competition) => {
+      expect(sha256(buildMatchContext(FIXTURE, contextData(competition))))
+        .toBe(matchPromptOf(competition).sha256);
+    });
 
   // Story 38: the only-variable claim, checked mechanically rather than read
   // off two constants that happen to look alike. The history is one literal
-  // for both renderings so that the template is the only thing under test.
+  // for every rendering so that the template is the only thing under test.
   test("renders per Competition differing by exactly the Competition name",
     () => {
       const history = "Recent form: no matches on record.";
@@ -252,10 +260,15 @@ describe("the Match Prompt Version", () => {
       // `replaceAll`, not `replace`: the claim is that the league's name is
       // the variable wherever it appears, and replacing the first occurrence
       // only would still pass a template that named the league twice.
-      expect(matchContext(FIXTURE, history, "PD")).toBe(
-        matchContext(FIXTURE, history, "PL")
-          .replaceAll("Premier League", "La Liga")
-      );
+      for (const competition of MATCH_PROMPT_COMPETITIONS) {
+        expect(matchContext(FIXTURE, history, competition)).toBe(
+          matchContext(FIXTURE, history, "PL")
+            .replaceAll(
+              "Premier League",
+              matchPromptOf(competition).competitionName
+            )
+        );
+      }
       expect(matchContext(FIXTURE, history, "PL"))
         .toContain("Predict this Premier League Fixture.");
     });
@@ -287,6 +300,28 @@ describe("the Match Prompt Version", () => {
     }
   });
 
+  // The third list a Competition has to appear in before its packet is whole,
+  // and the only one whose absence is silent: an unlisted pair renders no Head
+  // Coach section and nothing fails. The en dash is asserted because a hyphen
+  // there is a different article title and a 404 the fetch reports as a source
+  // failure rather than as a typo -- the module's own docblock says to read it
+  // twice, which is a thing a test can do every run instead.
+  //
+  // The title is written as the Season and the league's own name because all
+  // four articles are titled that way, not because Wikipedia promises it. A
+  // league whose article is titled otherwise fails here and is written out as
+  // the exception it is, which is the outcome wanted -- an unread title is how
+  // this list goes wrong.
+  test("lists a Season article for every Competition, en dash and all", () => {
+    for (const competition of MATCH_PROMPT_COMPETITIONS) {
+      const article = headCoachSource(competition, "2026-27");
+      expect([competition, article?.page]).toEqual([
+        competition,
+        `2026–27 ${matchPromptOf(competition).competitionName}`
+      ]);
+    }
+  });
+
   // ADR-0043's two sentences, verbatim and beside the shape rules they
   // qualify: the rules above say what the JSON must look like, these two say
   // what `score` means and by what rule the probabilities are judged. A
@@ -304,9 +339,13 @@ describe("the Match Prompt Version", () => {
       ].join("\n"));
   });
 
+  // `BL1`, because it is the code migration 0022's domain holds that no ticket
+  // has opened: the Bundesliga waits on hands, not money (ADR-0049). This test
+  // named `SA` until Serie A was opened, which is the drift a real unlisted
+  // code avoids.
   test("refuses a Competition with no frozen Prompt Version", () => {
-    expect(() => matchContext(FIXTURE, "", "SA"))
-      .toThrow("Competition SA has no frozen Prompt Version");
+    expect(() => matchContext(FIXTURE, "", "BL1"))
+      .toThrow("Competition BL1 has no frozen Prompt Version");
   });
 });
 

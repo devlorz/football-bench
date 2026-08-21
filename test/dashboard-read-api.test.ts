@@ -302,11 +302,13 @@ describe("the dashboard read API", () => {
 
   test("answers a Competition it does not serve with a 404", async () => {
     // A typo and a league nobody has frozen a Prompt Version for get the same
-    // answer: a missing thing, and not an empty league. `SA` is in the schema's
-    // `competition_code` domain and has no frozen Prompt Version, which is the
-    // case one list for both the build and the API keeps from disagreeing.
+    // answer: a missing thing, and not an empty league. `BL1` is in the
+    // schema's `competition_code` domain and has no frozen Prompt Version,
+    // which is the case one list for both the build and the API keeps from
+    // disagreeing. It read `SA` until Serie A was opened -- an unopened code
+    // is the point, so it has to be one no ticket is about to open.
     expect((await get("/api/xx/leaderboard")).status).toBe(404);
-    expect((await get("/api/sa/leaderboard")).status).toBe(404);
+    expect((await get("/api/bl1/leaderboard")).status).toBe(404);
   });
 
   test("lets no Competition's rows reach another's response", async () => {

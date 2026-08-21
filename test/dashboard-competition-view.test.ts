@@ -18,10 +18,11 @@ describe("the Match track's Competition routes", () => {
   test("emits a page for every Competition with a frozen Prompt Version", () => {
     // Written out rather than derived from the same list the module reads: a
     // route set that recomputed the answer the way the module does could not
-    // disagree with it, and disagreeing is the whole job. `SA`, `BL1` and `FL1`
-    // are in the schema's `competition_code` domain and are deliberately
-    // absent — the site advertises a league once its Prompt Version is frozen
-    // and not before (ADR-0039).
+    // disagree with it, and disagreeing is the whole job. `BL1` is in the
+    // schema's `competition_code` domain and is deliberately absent — the site
+    // advertises a league once its Prompt Version is frozen and not before
+    // (ADR-0039), which is why Serie A and Ligue 1 appear here from their
+    // freeze and before either is listed in `competitions`.
     expect(competitionRoutes()).toEqual([
       {
         params: { competition: "pl" },
@@ -46,6 +47,22 @@ describe("the Match track's Competition routes", () => {
           // another is the one lie this block can tell.
           retiredLabel:
             "Gameweek 1 — played under match-pd/2026-27-v1, before the restart"
+        }
+      },
+      {
+        params: { competition: "sa" },
+        props: {
+          competition: "SA", competitionName: "Serie A",
+          path: "/sa", api: "/api/sa",
+          retiredLabel: null
+        }
+      },
+      {
+        params: { competition: "fl1" },
+        props: {
+          competition: "FL1", competitionName: "Ligue 1",
+          path: "/fl1", api: "/api/fl1",
+          retiredLabel: null
         }
       }
     ]);
@@ -137,12 +154,12 @@ describe("the link to a page of a Competition", () => {
   test("gives every built route its own copy of both pages under it", () => {
     // Written out rather than derived: a list that recomputed the href the way
     // the function does could not disagree with it, and disagreeing is the job.
-    // Every one of these four is a file the build emits, from the one function
-    // both pages under the segment now call.
+    // Every one of these eight is a file the build emits, from the one
+    // function both pages under the segment now call.
     expect(competitionRoutes().map(({ props }) => pageHref(props.path, "fixtures")))
-      .toEqual(["/pl/fixtures", "/pd/fixtures"]);
+      .toEqual(["/pl/fixtures", "/pd/fixtures", "/sa/fixtures", "/fl1/fixtures"]);
     expect(competitionRoutes().map(({ props }) => pageHref(props.path, "entrants")))
-      .toEqual(["/pl/entrants", "/pd/entrants"]);
+      .toEqual(["/pl/entrants", "/pd/entrants", "/sa/entrants", "/fl1/entrants"]);
   });
 });
 
@@ -164,7 +181,7 @@ describe("the Competition switcher", () => {
 
   test("holds the reader's page across every crossing", () => {
     // Every combination of the page a reader is on and the league they cross
-    // to, written out. Six files, all of them emitted by the route list above.
+    // to, written out. Twelve files, all emitted by the route list above.
     const crossings = Object.fromEntries(
       (["leaderboard", "fixtures", "entrants"] as const).map((page) => [
         page, SWITCHER.map(({ path }) => pageHref(path, page))
@@ -172,9 +189,13 @@ describe("the Competition switcher", () => {
     );
 
     expect(crossings).toEqual({
-      leaderboard: ["/pl", "/pd"],
-      fixtures: ["/pl/fixtures", "/pd/fixtures"],
-      entrants: ["/pl/entrants", "/pd/entrants"]
+      leaderboard: ["/pl", "/pd", "/sa", "/fl1"],
+      fixtures: [
+        "/pl/fixtures", "/pd/fixtures", "/sa/fixtures", "/fl1/fixtures"
+      ],
+      entrants: [
+        "/pl/entrants", "/pd/entrants", "/sa/entrants", "/fl1/entrants"
+      ]
     });
   });
 });

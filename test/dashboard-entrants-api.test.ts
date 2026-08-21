@@ -339,7 +339,7 @@ describe("the Entrant record endpoint on the design's Season", () => {
       // the Match track: no default, and one lower-case spelling, so the edge
       // holds one entry per league rather than four.
       expect((await get("/api/entrants")).status).toBe(404);
-      expect((await get("/api/sa/entrants")).status).toBe(404);
+      expect((await get("/api/bl1/entrants")).status).toBe(404);
       expect((await get("/api/PL/entrants")).status).toBe(404);
       expect((await get("/api/pl/entrants/1")).status).toBe(404);
     });

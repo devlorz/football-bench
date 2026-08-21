@@ -305,8 +305,8 @@ describe("entering the Season Roster", () => {
   });
 
   test("refuses a Competition with no frozen Prompt Version", async () => {
-    await expect(enterSeasonRoster(client, "SA", SEASON)).rejects
-      .toThrow("Competition SA has no frozen Prompt Version");
+    await expect(enterSeasonRoster(client, "BL1", SEASON)).rejects
+      .toThrow("Competition BL1 has no frozen Prompt Version");
     expect(await entrants()).toHaveLength(0);
   });
 

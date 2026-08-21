@@ -120,6 +120,25 @@ const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
       "44df40bd38489b8fd380177ec26b4ea24c7b480314c5218ee9181d440f0fd49c",
     competitionName: "La Liga",
     retired: { version: "match-pd/2026-27-v1", gw: 1 }
+  },
+  // Born on the current template, so neither carries a `retired` block and
+  // neither has a v1 to keep whole: both are frozen unused, at their first
+  // Lock. Their pins are this suite's render read on 2026-08-21, before either
+  // league's history is backfilled — so each league table reads "no result
+  // has been played yet this Season" rather than unavailable, the divisions
+  // being listed, and each pin moves once when the backfill lands: the
+  // documented single move `PD`'s made.
+  SA: {
+    version: "match-sa/2026-27-v1",
+    sha256:
+      "c82e68504614152e4f019e22c3444b87c0b12acb25ab412aace3540b81274b76",
+    competitionName: "Serie A"
+  },
+  FL1: {
+    version: "match-fl1/2026-27-v1",
+    sha256:
+      "dabac3c9a5ee3d4e9ff08a91adb6d53d13562e8c85f312be7f142edf11810468",
+    competitionName: "Ligue 1"
   }
 };
 

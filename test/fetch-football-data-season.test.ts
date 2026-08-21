@@ -480,11 +480,11 @@ describe("fetching football-data.co.uk results", () => {
   test("refuses a Competition with no curated divisions", async () => {
     await expect(fetchFootballDataSeason({
       database: client,
-      competition: "SA",
+      competition: "BL1",
       season: "2025-26",
       http: async () => {
         throw new Error("no request should be made");
       }
-    })).rejects.toThrow("Competition SA has no curated divisions");
+    })).rejects.toThrow("Competition BL1 has no curated divisions");
   });
 });
