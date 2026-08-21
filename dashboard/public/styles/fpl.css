@@ -799,6 +799,12 @@ circle.fplline { fill: var(--fplline); stroke: none; }
      `overrides.css` is not edited for it, the same box every other rule in
      this block is held to, so it is undone here instead. */
   .nav { padding-block: 12px; flex-wrap: nowrap; }
+  /* ...except while the burger's panel is open. `overrides.css` puts that
+     panel on its own row with `flex-basis: 100%` and a wrap; `nowrap` above
+     kept it on the header's row instead, where it could only shrink to the
+     widest tab and hung 14px past the right edge at 375px. The one-row
+     header the rule above is for is the closed one. */
+  .nav.menu-open { flex-wrap: wrap; }
   /* The design's one-row phone header drops the Gameweek status line
      visually, not out of the document: `overrides.css`'s own `.lbhead` and
      `.fxtable .fxhead` clip rather than `display: none` for the reason their
