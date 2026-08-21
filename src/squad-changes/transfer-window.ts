@@ -15,7 +15,10 @@
  * carries the loans; Spain and France are one section per club holding two
  * `{{fs player}}` lists and neither column.
  */
-export type TransferListFormat = "tables" | "oneTable" | "clubSections";
+export type TransferListFormat =
+  | "twoTables"
+  | "oneTable"
+  | "clubSections";
 
 export interface TransferWindow {
   /** Names the archive source, `wikipedia:squad-changes:<name>`. */
@@ -72,7 +75,7 @@ const TRANSFER_WINDOWS: Readonly<Record<string, readonly TransferWindow[]>> = {
       since: new Date("2026-02-02T00:00:00Z"),
       opensOn: new Date("2026-06-15T00:00:00Z"),
       closesOn: new Date("2026-09-01T00:00:00Z"),
-      format: "tables"
+      format: "twoTables"
     },
     {
       name: "winter-2026-27",
@@ -80,7 +83,7 @@ const TRANSFER_WINDOWS: Readonly<Record<string, readonly TransferWindow[]>> = {
       since: new Date("2026-09-01T00:00:00Z"),
       opensOn: new Date("2027-01-01T00:00:00Z"),
       closesOn: new Date("2027-02-02T00:00:00Z"),
-      format: "tables"
+      format: "twoTables"
     }
   ],
   // Read off the page's own lead on 2026-08-15: "The summer transfer window

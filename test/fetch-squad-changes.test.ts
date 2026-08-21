@@ -11,6 +11,9 @@ import {
   type SquadChange
 } from "../src/squad-changes/parse-squad-changes.js";
 import {
+  transferWindowByPage
+} from "../src/squad-changes/transfer-window.js";
+import {
   buildSquadChangesContext,
   type SquadChangeRow
 } from "../src/context/build-squad-changes-context.js";
@@ -85,7 +88,7 @@ describe("parsing a window's Wikipedia transfer list", () => {
       "wikipedia:squad-changes:summer-2026",
       await summerPage(),
       pinnedClubs(),
-      "tables"
+      "twoTables"
     );
 
     expect(movement(changes, "Spurs", "in")).toEqual([
@@ -103,7 +106,7 @@ describe("parsing a window's Wikipedia transfer list", () => {
       "wikipedia:squad-changes:summer-2026",
       await summerPage(),
       pinnedClubs(),
-      "tables"
+      "twoTables"
     );
 
     expect(movement(changes, "Spurs", "out")).toEqual([
@@ -129,7 +132,7 @@ describe("parsing a window's Wikipedia transfer list", () => {
       "wikipedia:squad-changes:summer-2026",
       await summerPage(),
       pinnedClubs(),
-      "tables"
+      "twoTables"
     );
 
     expect(movement(changes, "Newcastle", "out")).toContainEqual(
@@ -149,7 +152,7 @@ describe("parsing a window's Wikipedia transfer list", () => {
           `[[Tottenham Hotspur F.C.|${displayed}]]`
         ),
         pinnedClubs(),
-        "tables"
+        "twoTables"
       );
 
       expect(movement(changes, "Spurs", "in")).toHaveLength(6);
@@ -167,7 +170,7 @@ describe("parsing a window's Wikipedia transfer list", () => {
       "wikipedia:squad-changes:summer-2026",
       renamed,
       pinnedClubs(),
-      "tables"
+      "twoTables"
     )).toThrow(
       /no move on the page links Spurs's article Tottenham Hotspur F\.C\./
     );
@@ -189,7 +192,7 @@ describe("parsing a window's Wikipedia transfer list", () => {
       "wikipedia:squad-changes:summer-2026",
       relinked,
       pinnedClubs(),
-      "tables"
+      "twoTables"
     )).toThrow(
       /displays Tottenham Hotspur but links to /
     );
@@ -207,7 +210,7 @@ describe("parsing a window's Wikipedia transfer list", () => {
       "wikipedia:squad-changes:summer-2026",
       await summerPage(),
       pinnedClubs(),
-      "tables"
+      "twoTables"
     );
 
     expect(changes
@@ -233,7 +236,7 @@ describe("parsing a window's Wikipedia transfer list", () => {
       "wikipedia:squad-changes:summer-2026",
       await summerPage(),
       pinnedClubs(),
-      "tables"
+      "twoTables"
     );
 
     expect(changes.some(({ player }) => player === "Tomas Kalinauskas"))
@@ -1109,6 +1112,20 @@ describe("parsing a window published as one dated table", () => {
     );
   });
 
+  // The evidence `format: "oneTable"` stands on, stated rather than remembered:
+  // the runbook's own test for the shape is `{|` under a heading, and this page
+  // opens exactly one table where England's opens two. A second one appearing
+  // is a page that has become England's shape and a parser reading half of it.
+  // **Found by review.**
+  test("opens exactly one wikitable, which is what the format claims",
+    async () => {
+      const page = await italianPage();
+
+      expect(page.match(/^\{\|/gm)).toHaveLength(1);
+      expect(page.match(/^\|\}/gm)).toHaveLength(1);
+      expect(page.match(/^==\s*Loans\s*==\s*$/m)).toBeNull();
+    });
+
   test("skips a move touching none of the twenty clubs", async () => {
     const changes = parse(await italianPage());
 
@@ -1451,3 +1468,88 @@ describe("fetching a third and a fourth Competition's Squad Changes", () => {
       ].join("\n"));
     });
 });
+
+/**
+ * The LFP's own announcements, captured on 2026-08-21 because France's window
+ * dates come from nowhere else — its transfer list states none, where the other
+ * three countries' pages open with a lead that does. Every other source in this
+ * pipeline is archived; without these bytes the one number in `TRANSFER_WINDOWS`
+ * that no committed file backs would be a dead link away from unverifiable, and
+ * those dates sit inside a frozen sha. **Found by review.**
+ */
+const LFP_PAGES = {
+  "2026-2027": {
+    fixture: "lfp-mercato-2026-2027.html.gz",
+    sha256:
+      "23f7d682c57baff98d00d73d044cce96b1dbd45725964eeb190cbf198e814870"
+  },
+  "2025-2026": {
+    fixture: "lfp-mercato-2025-2026.html.gz",
+    sha256:
+      "4ea78448b27642a395858063da217b4538d32d5586f9381f6842dbb5f441f40a"
+  }
+} as const;
+
+/**
+ * The announcement as it reads, out of the framework payload it is served
+ * inside: the page writes `1er` as a `<sup>` of its own, so the sentence
+ * arrives split across three JSON strings and is put back together here rather
+ * than asserted around.
+ */
+async function lfpSentences(season: keyof typeof LFP_PAGES): Promise<string> {
+  const { fixture, sha256 } = LFP_PAGES[season];
+  return (await pinnedPage(fixture, sha256))
+    .replace(/\\"/g, "\"")
+    .replace(/",\["\$","sup","\d+",\{"children":"er"\}\]," /g, "er ")
+    .replace(/\s+/g, " ");
+}
+
+describe("France's window dates, against the LFP announcements they came from",
+  () => {
+    test("the summer 2026 window opens 15 June and shuts 1 September",
+      async () => {
+        expect(await lfpSentences("2026-2027")).toContain(
+          "mercato estival débutera le lundi 15 juin 2026 et s’achèvera le "
+          + "mardi 1er septembre 2026"
+        );
+      });
+
+    test("the winter 2026-27 window is announced, not customary", async () => {
+      // The one country of the four whose winter dates are a published fact in
+      // August rather than the previous editions' habit.
+      expect(await lfpSentences("2026-2027")).toContain(
+        "mercato hivernal commencera le vendredi 1er janvier 2027 et se "
+        + "terminera le lundi 1er février 2027"
+      );
+    });
+
+    test("the summer window's `since` is the previous window's close",
+      async () => {
+        expect(await lfpSentences("2025-2026")).toContain(
+          "se clôturera le lundi 2 février 2026"
+        );
+      });
+
+    // Read through the page title, which is how the archive replay reaches a
+    // window too: the announcement above and the constant below have to be the
+    // same dates, or the sentences are evidence for something nobody uses.
+    test("the dates written down are the dates announced", () => {
+      const summer = transferWindowByPage(
+        "List of French football transfers summer 2026"
+      );
+      const winter = transferWindowByPage(
+        "List of French football transfers winter 2026–27"
+      );
+
+      expect([
+        summer?.since, summer?.opensOn, summer?.closesOn,
+        winter?.opensOn, winter?.closesOn
+      ].map((date) => date?.toISOString())).toEqual([
+        "2026-02-02T00:00:00.000Z",
+        "2026-06-15T00:00:00.000Z",
+        "2026-09-01T00:00:00.000Z",
+        "2027-01-01T00:00:00.000Z",
+        "2027-02-01T00:00:00.000Z"
+      ]);
+    });
+  });

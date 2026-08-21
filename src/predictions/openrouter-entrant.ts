@@ -144,7 +144,7 @@ const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
   //
   // Both pins then moved once, on 2026-08-21, and for the one reason a frozen
   // rendering may move before its first use: a window gate changed what the
-  // packet says. Each league's transfer windows were written down, so a
+  // packet says. Each Competition's transfer windows were written down, so a
   // deadline inside one now renders a Squad Changes section where the render
   // carried none at all — the stated absence "no Squad Change data stored for
   // this Gameweek", which is exactly what the Premier League's and La Liga's

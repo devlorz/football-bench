@@ -54,6 +54,18 @@ anywhere: the first one lands with activation.
       lundi 2 février 2026". France is therefore the one country whose **winter** dates
       are announced rather than customary._
 
+      _The LFP's two announcement pages are **committed** — `lfp-mercato-2026-2027.html.gz`
+      and `lfp-mercato-2025-2026.html.gz` — and a test reads the sentences back out of
+      them and asserts they are the dates `TRANSFER_WINDOWS` holds. Every other source in
+      this pipeline is archived; France's window dates sit inside a frozen sha and were
+      the one number no committed file backed, a dead link away from unverifiable.
+      Moving the summer open to 10 June or the winter close to 2 February turns that test
+      red. **Found by review.**_
+
+      _`format: "oneTable"` is likewise stated rather than remembered: Italy's page opens
+      **exactly one** `{|`, closes exactly one `|}`, and carries no `Loans` heading, which
+      is the runbook's own test for the shape. **Found by review.**_
+
       _Both winter titles are frozen from the naming convention with the en dash, and
       both answered **404** on 2026-08-21:_
 
@@ -162,6 +174,22 @@ anywhere: the first one lands with activation.
       `RC Lens` and `Stade Rennais FC 1901` → `Stade Rennais FC` — and approved. Every
       other pairing is a straight title match._
 
+      _Re-runnable, and the predicate ADR-0026 lets both frozen shas move on — a
+      structural argument for why a row cannot exist is not a query showing that it does
+      not:_
+
+      ```sql
+      select prompt_version, count(*) from contexts
+       where prompt_version in ('match-sa/2026-27-v1', 'match-fl1/2026-27-v1')
+       group by prompt_version;
+
+      select competition, count(*) from squad_changes
+       where competition in ('SA', 'FL1') group by competition;
+      ```
+
+      _**Result: pending** — to be run against production and recorded here before this
+      box is trusted. Both must return no rows. **Found by review.**_
+
       _**No fetch has stored a row, and none can yet.** The daily fetch walks the
       `competitions` rows for the Season, and neither league has one until it is
       activated; `fetchSquadChanges` would in any case find no upcoming Gameweek to
@@ -244,6 +272,8 @@ the source restored from a byte copy taken before the run — never `git checkou
 | a stale 19th Ligue 1 entry, `Montpellier HSC` | 2 red |
 | Lecce's article beside Palermo's name, both on the page | 1 red |
 | two Ligue 1 clubs sharing one article | 2 red |
+| France's summer open moved to 10 June | 1 red |
+| France's winter close moved to 2 February | 1 red |
 | `AC Monza` → `Palermo FC\|Palermo`, the reviewer's own case | 1 red |
 | `Como 1907` → `Palermo FC\|Palermo` | 1 red |
 | `AC Monza` → `Carrarese Calcio 1908\|Carrarese` | 1 red |
@@ -261,6 +291,16 @@ Three findings, all answered above and in the commit that follows this one.
 - _Serie A's pairing was still provable only against a page carrying two divisions_ —
   the article is asserted to be the live source's own spelling, with the reviewed
   exceptions pinned as a constant. **P2, second pass.**
+- _The LFP was the one uncommitted source_ — both announcement pages are archived and
+  read by a test that pins France's five dates to their sentences. **P2, third pass.**
+- _Nothing asserted Italy's page opens one table_ — the evidence `oneTable` stands on is
+  stated now. **P2, third pass.**
+- _`as unknown as string[]` was a dead cast_ — `noUncheckedIndexedAccess` leaves the
+  elements `string | undefined` either way, so the per-element `as string` was doing the
+  work; one cast gone. **Ponytail.**
+- _Naming and latent nits_ — the format literal is `"twoTables"` beside `"oneTable"`, the
+  heading is escaped before it reaches a `RegExp`, and the new comment says Competition
+  where its neighbours do. **Nits.**
 - _Four country helpers repeated one archived-page reader_ — `pinnedPage(fixture, sha)`
   is that reading and nothing else; every digest and every country's assertions stay
   where they were. **P3.**

@@ -88,9 +88,9 @@ function wikitableUnder(
   // pages disagree about them: England writes `== Transfers ==` and Italy
   // writes `==Transfers==`. Matched rather than compared, or Italy's page
   // reads as a page with no table on it.
-  const headingAt = wikitext.search(
-    new RegExp(`^==\\s*${heading}\\s*==\\s*$`, "m")
-  );
+  const headingAt = wikitext.search(new RegExp(
+    `^==\\s*${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*==\\s*$`, "m"
+  ));
   const opensAt = headingAt < 0 ? -1 : wikitext.indexOf("{|", headingAt);
   const closesAt = opensAt < 0 ? -1 : wikitext.indexOf("\n|}", opensAt);
   if (closesAt < 0) {
@@ -620,7 +620,7 @@ export function parseSquadChanges(
   format: TransferListFormat
 ): SquadChange[] {
   switch (format) {
-    case "tables":
+    case "twoTables":
       return parseTables(source, wikitext, pinned, TWO_TABLES);
     case "oneTable":
       return parseTables(source, wikitext, pinned, ONE_TABLE);

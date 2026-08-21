@@ -56,10 +56,11 @@ const SORTABLE_DATE =
  */
 export function parseDate(value: string): string | undefined {
   const sortable = SORTABLE_DATE.exec(value);
-  if (sortable?.[1] !== undefined) {
-    const [, year, month, day] = sortable as unknown as string[];
-    return `${year}-${(month as string).padStart(2, "0")}`
-      + `-${(day as string).padStart(2, "0")}`;
+  if (sortable !== null) {
+    const year = sortable[1] as string;
+    const month = (sortable[2] as string).padStart(2, "0");
+    const day = (sortable[3] as string).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   }
   const match = /^(\d{1,2}) ([A-Za-z]+) (\d{4})$/.exec(value);
   const month = MONTHS.indexOf((match?.[2] ?? "").toLowerCase());
