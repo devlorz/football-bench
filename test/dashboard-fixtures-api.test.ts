@@ -345,7 +345,7 @@ describe("the Fixtures endpoint on the design's Season", () => {
       // The same terms as the leaderboard's: no default, and one lower-case
       // spelling, so the edge holds one entry per league rather than four.
       expect(await get("/api/fixtures")).toBe(404);
-      expect(await get("/api/sa/fixtures")).toBe(404);
+      expect(await get("/api/bl1/fixtures")).toBe(404);
       expect(await get("/api/PL/fixtures")).toBe(404);
       expect(await get("/api/pl/fixtures/1")).toBe(404);
     });

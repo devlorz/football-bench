@@ -652,11 +652,11 @@ describe("building historical Match context", () => {
   // Competition with no stored divisions has lost no rows to be missing.
   test("announces base rates unavailable for a Competition with no divisions", () => {
     expect(buildHistoricalContext({
-      competition: "SA",
+      competition: "BL1",
       season: "2026-27",
       asOf: new Date("2026-08-21T17:30:00.000Z"),
-      homeTeam: "Juventus",
-      awayTeam: "Napoli",
+      homeTeam: "Bayern Munich",
+      awayTeam: "Dortmund",
       matches: []
     })).toContain([
       "League table: unavailable; no division history is stored for this "
@@ -665,7 +665,7 @@ describe("building historical Match context", () => {
       "Prior-Season base rates: unavailable; no division history is stored "
         + "for this Competition.",
       "",
-      "Juventus"
+      "Bayern Munich"
     ].join("\n"));
   });
 

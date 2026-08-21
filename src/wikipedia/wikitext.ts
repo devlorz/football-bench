@@ -40,8 +40,28 @@ const MONTHS = [
   "july", "august", "september", "october", "november", "december"
 ];
 
-/** "6 February 2026" — the only date form any of these tables uses. */
+/**
+ * `{{dts|format=dmy|2026|2|12}}` — the Italian transfer list's date cell, and
+ * the only page of the three that writes its dates as a template rather than
+ * as text. Its leading named parameters are display instructions; the three
+ * numbers after them are the date, always year first whatever `format` says.
+ */
+const SORTABLE_DATE =
+  /^\{\{dts\|(?:[^|}]*=[^|}]*\|)*(\d{4})\|(\d{1,2})\|(\d{1,2})\}\}$/i;
+
+/**
+ * "6 February 2026", or the `{{dts}}` template that says the same thing.
+ * Undefined for anything else, which is what refuses a page whose date column
+ * has changed shape.
+ */
 export function parseDate(value: string): string | undefined {
+  const sortable = SORTABLE_DATE.exec(value);
+  if (sortable !== null) {
+    const year = sortable[1] as string;
+    const month = (sortable[2] as string).padStart(2, "0");
+    const day = (sortable[3] as string).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
   const match = /^(\d{1,2}) ([A-Za-z]+) (\d{4})$/.exec(value);
   const month = MONTHS.indexOf((match?.[2] ?? "").toLowerCase());
   if (match?.[1] === undefined || match[3] === undefined || month < 0) {
@@ -100,6 +120,12 @@ export function cellSource(cell: string): string {
     // disambiguation for the link target and are never part of the name.
     .replace(/\{\{sortname\|([^}]*)\}\}/gi, (_, parameters: string) =>
       parameters.split("|").filter((part) => !part.includes("=")).join(" "))
+    // {{Sort|Jiménez, Álex|{{flagicon|ESP}} [[Álex Jiménez ...|Álex Jiménez]]}}
+    // -- the Italian page's whole name column. The first parameter is the
+    // column's sort key and the rest is what the row displays. It runs after
+    // the flag templates because the flag it wraps is one, and the key itself
+    // holds no brace and no pipe, so what is left to match is flat.
+    .replace(/\{\{sort\|[^|}]*\|([^}]*)\}\}/gi, "$1")
     .replace(/'''?/g, "")
     .replace(/\s+/g, " ")
     .trim();

@@ -8,7 +8,7 @@ import {
 import {
   resolveFootballDataTeamName, teamNamesOf
 } from "../src/football-data/team-identity.js";
-import { archivedBody } from "./archived-fixture.js";
+import { archivedBody, archivedHomeTeams } from "./archived-fixture.js";
 
 const { Client } = pg;
 
@@ -229,6 +229,127 @@ describe("fetching football-data.co.uk results", () => {
     ]);
   });
 
+  // Ligue 2 2025-26 carries one row with both score cells empty --
+  // Bastia v Red Star of 05/12/2025, a Match football-data.co.uk has no result
+  // for -- and the first backfill of `FL1` failed on it. Skipped rather than
+  // stored: a 0-0 invented here is a result that never happened, and every
+  // base rate the packet prints is an average over these rows.
+  //
+  // Both halves are the claim. A row with one score and not the other is a
+  // half-written row, not a Match without a result, and still fails -- which
+  // is what stops "skip the empties" from becoming "skip anything awkward".
+  test("skips a row the source has no result for, and refuses a half-written one",
+    async () => {
+      const responses = new Map([
+        [
+          "https://www.football-data.co.uk/mmz4281/2526/E0.csv",
+          "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG\n"
+          + "E0,15/08/2025,20:00,Liverpool,Bournemouth,4,2\n"
+          + "E0,16/08/2025,20:00,Arsenal,Chelsea,,\n"
+        ],
+        [
+          "https://www.football-data.co.uk/mmz4281/2526/E1.csv",
+          "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG\n"
+          + "E1,08/08/2025,20:00,Birmingham,Ipswich,1,1\n"
+        ]
+      ]);
+
+      await fetchFootballDataSeason({
+        database: client,
+        competition: "PL",
+        season: "2025-26",
+        http: async (url) => ({ status: 200, body: responses.get(url) ?? "" })
+      });
+
+      const stored = await client.query(
+        "select home_team from historical_matches order by home_team"
+      );
+      expect(stored.rows.map((row) => row.home_team))
+        .toEqual(["Birmingham", "Liverpool"]);
+
+      await client.query(
+        "truncate historical_matches, raw_snapshots restart identity cascade"
+      );
+      const halfWritten = new Map(responses);
+      halfWritten.set(
+        "https://www.football-data.co.uk/mmz4281/2526/E0.csv",
+        "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG\n"
+        + "E0,16/08/2025,20:00,Arsenal,Chelsea,2,\n"
+      );
+
+      await expect(fetchFootballDataSeason({
+        database: client,
+        competition: "PL",
+        season: "2025-26",
+        http: async (url) => ({ status: 200, body: halfWritten.get(url) ?? "" })
+      })).rejects.toMatchObject({
+        name: FootballDataSourceValidationError.name,
+        source: "football_data:2025-26:E0",
+        issues: [
+          { field: "row.2.FTAG", detail: "expected a non-negative integer" }
+        ]
+      });
+
+      // How rare this row is, checked rather than asserted in prose: of the six
+      // committed files only `F2` carries one, and only one. That is what makes
+      // it reasonable that the parser met it for the first time on the seventh
+      // backfill -- and it is scoped to what the repo holds, since `SP1` and
+      // `SP2` are not committed and nothing here can speak for them.
+      const resultless = await Promise.all([
+        "E0", "E1", "F1", "F2", "I1", "I2"
+      ].map(async (code) => {
+        const rows = (await archivedBody(`football-data-2526-${code}.csv.gz`))
+          .split(/\r?\n/).filter((line) => line.length > 0);
+        const header = rows[0]?.split(",") ?? [];
+        const home = header.indexOf("FTHG");
+        const away = header.indexOf("FTAG");
+        const empty = rows.slice(1)
+          .map((row) => row.split(","))
+          .filter((row) => row[home] === "" && row[away] === "");
+        return [code, empty.length] as const;
+      }));
+      expect(resultless).toEqual([
+        ["E0", 0], ["E1", 0], ["F1", 0], ["F2", 1], ["I1", 0], ["I2", 0]
+      ]);
+    });
+
+  // The half of the rule above that an earlier version of it broke. Withholding
+  // the two score issues is not the same as skipping the row, and the first
+  // version skipped: a resultless row with an unreadable date, an empty club or
+  // a redirected `Div` was dropped in silence where it used to raise. Every
+  // check other than the two scores still runs on such a row.
+  test("still refuses a resultless row that is broken some other way",
+    async () => {
+      const responses = new Map([
+        [
+          "https://www.football-data.co.uk/mmz4281/2526/E0.csv",
+          "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG\n"
+          + "E0,not-a-date,20:00,Arsenal,,,\n"
+        ],
+        [
+          "https://www.football-data.co.uk/mmz4281/2526/E1.csv",
+          "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG\n"
+          + "E1,08/08/2025,20:00,Birmingham,Ipswich,1,1\n"
+        ]
+      ]);
+
+      await expect(fetchFootballDataSeason({
+        database: client,
+        competition: "PL",
+        season: "2025-26",
+        http: async (url) => ({ status: 200, body: responses.get(url) ?? "" })
+      })).rejects.toMatchObject({
+        name: FootballDataSourceValidationError.name,
+        source: "football_data:2025-26:E0",
+        // The two score issues are the only ones withheld, and they are absent
+        // here while both of the others are raised.
+        issues: [
+          { field: "row.2.Date", detail: "expected DD/MM/YYYY" },
+          { field: "row.2.AwayTeam", detail: "team name is empty" }
+        ]
+      });
+    });
+
   test("refuses a row whose shot column is present but malformed", async () => {
     const responses = new Map([
       [
@@ -441,6 +562,106 @@ describe("fetching football-data.co.uk results", () => {
     ]);
   });
 
+  // Serie A's map, checked against the bytes it was derived from rather than
+  // against a list somebody typed out: every key is a club in the recorded
+  // response, every club in the recorded response is a key, and the twenty
+  // values are twenty distinct stored identities. A transcription that dropped
+  // a club, invented one, or pointed two live names at one stored name fails
+  // here.
+  //
+  // The two named pairs are the whole of what this league can get wrong and
+  // still read: the official name of one Milan club ends in the city that is
+  // the other's stored identity.
+  test("maps Serie A's twenty from the response the map was derived from",
+    async () => {
+      const recorded = JSON.parse(
+        await archivedBody("football-data-org-2026-27-SA-recorded.json.gz")
+      ) as { matches: Array<{
+        homeTeam: { name: string }; awayTeam: { name: string };
+      }> };
+      const clubs = new Set(recorded.matches.flatMap(
+        ({ homeTeam, awayTeam }) => [homeTeam.name, awayTeam.name]
+      ));
+
+      const topFlight = await archivedHomeTeams("football-data-2526-I1.csv.gz");
+      const secondDivision = await archivedHomeTeams("football-data-2526-I2.csv.gz");
+
+      const names = teamNamesOf("SA");
+      expect(Object.keys(names ?? {}).sort()).toEqual([...clubs].sort());
+
+      // Distinctness alone would pass a value football-data.co.uk has never
+      // stored, which is the failure this map exists to prevent: it fails
+      // nothing, and every club's history section reads as though the club had
+      // none. So each value is required to be an identity one of the two
+      // stored divisions actually holds -- seventeen that played 2025-26 in
+      // Serie A and the three promoted out of Serie B.
+      const values = Object.values(names ?? {});
+      expect(new Set(values).size).toBe(20);
+      expect(values.filter((name) => topFlight.has(name))).toHaveLength(17);
+      // Which seventeen, not how many: a count admits a live name pointed at
+      // the wrong stored club, so long as the wrong one is also in `I1`. The
+      // three of `I1`'s twenty this map leaves behind are the three relegated
+      // out of it, and no others.
+      expect([...topFlight].filter((name) => !values.includes(name)).sort())
+        .toEqual(["Cremonese", "Pisa", "Verona"]);
+      expect(values.filter((name) => secondDivision.has(name)).sort())
+        .toEqual(["Frosinone", "Monza", "Venezia"]);
+      expect(values.filter(
+        (name) => !topFlight.has(name) && !secondDivision.has(name)
+      )).toEqual([]);
+
+      expect(resolveFootballDataTeamName(names, "FC Internazionale Milano"))
+        .toBe("Inter");
+      expect(resolveFootballDataTeamName(names, "AC Milan")).toBe("Milan");
+    });
+
+  // Ligue 1's eighteen, checked the same way and against the same bytes.
+  // Eighteen and not twenty is the whole of what this league adds: a test that
+  // carried Serie A's twenty over would fail here rather than quietly pass a
+  // short map, and the counts below are read off the two committed files.
+  //
+  // The pair this league can get wrong and still read is the two Paris clubs:
+  // pointing `Paris Saint-Germain FC` at `Paris FC` leaves eighteen distinct
+  // keys and eighteen `F1` members, so only naming them catches it.
+  test("maps Ligue 1's eighteen from the response the map was derived from",
+    async () => {
+      const recorded = JSON.parse(
+        await archivedBody("football-data-org-2026-27-FL1-recorded.json.gz")
+      ) as { matches: Array<{
+        homeTeam: { name: string }; awayTeam: { name: string };
+      }> };
+      const clubs = new Set(recorded.matches.flatMap(
+        ({ homeTeam, awayTeam }) => [homeTeam.name, awayTeam.name]
+      ));
+
+      const topFlight = await archivedHomeTeams("football-data-2526-F1.csv.gz");
+      const secondDivision = await archivedHomeTeams("football-data-2526-F2.csv.gz");
+
+      const names = teamNamesOf("FL1");
+      expect(Object.keys(names ?? {}).sort()).toEqual([...clubs].sort());
+
+      const values = Object.values(names ?? {});
+      expect(new Set(values).size).toBe(18);
+      expect(values.filter((name) => topFlight.has(name))).toHaveLength(16);
+      // Which two of `F1` this map leaves behind, not how many: the two
+      // relegated out of it, and no others.
+      expect([...topFlight].filter((name) => !values.includes(name)).sort())
+        .toEqual(["Metz", "Nantes"]);
+      expect(values.filter((name) => secondDivision.has(name)).sort())
+        .toEqual(["Le Mans", "Troyes"]);
+      expect(values.filter(
+        (name) => !topFlight.has(name) && !secondDivision.has(name)
+      )).toEqual([]);
+
+      expect(resolveFootballDataTeamName(names, "Paris Saint-Germain FC"))
+        .toBe("Paris SG");
+      expect(resolveFootballDataTeamName(names, "Paris FC")).toBe("Paris FC");
+      // The other name a substring derivation could not answer: the stored
+      // name is the city, the official one the demonym.
+      expect(resolveFootballDataTeamName(names, "Stade Rennais FC 1901"))
+        .toBe("Rennes");
+    });
+
   // The per-file division check, over the mistake that is actually available:
   // football-data.co.uk answers a season it has no file for by redirecting to
   // a near-miss filename — `2627/SP1.csv` currently lands on Portugal's
@@ -480,11 +701,11 @@ describe("fetching football-data.co.uk results", () => {
   test("refuses a Competition with no curated divisions", async () => {
     await expect(fetchFootballDataSeason({
       database: client,
-      competition: "SA",
+      competition: "BL1",
       season: "2025-26",
       http: async () => {
         throw new Error("no request should be made");
       }
-    })).rejects.toThrow("Competition SA has no curated divisions");
+    })).rejects.toThrow("Competition BL1 has no curated divisions");
   });
 });

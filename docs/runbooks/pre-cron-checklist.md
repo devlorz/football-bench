@@ -102,42 +102,49 @@ league's.
 own convention is `2526`, which is the natural thing to type and is **rejected**.
 
 Leaving it on the prior Season after the first matchday is the dangerous direction: the fetch
-keeps succeeding while current-Season results never load. A guard fails the run once
-Gameweek 1's deadline has passed with no stored matches for `SEASON` — but its tolerance is
-tight, see [§7](#7-known-imperfections).
+keeps succeeding while current-Season results never load. Each listed Competition's guard
+fails the run once that Competition's own Gameweek 1 deadline has passed with no stored
+matches for `SEASON` in it — but its tolerance is tight, see
+[§7](#7-known-imperfections).
 
 ### It is overdue right now, and cannot be done yet
 
-**Both leagues have played their first matchday and this still reads `2025-26`, so no
-2026-27 result is stored for either.** The guard starts failing the daily fetch once
-**Premier League Gameweek 1's deadline (2026-08-21T17:30Z)** passes with nothing stored —
-correctly, because at that point the claim "current-Season results are loading" is false.
+**Both live leagues have played their first Gameweek and this still reads `2025-26`, so no
+2026-27 result is stored for either.** Each Competition's guard fails the daily fetch once
+**its own** Gameweek 1 deadline passes with nothing stored for it — La Liga's passed on
+2026-08-15 and the Premier League's at 2026-08-21T17:30Z — correctly, because from that
+instant the claim "current-Season results are loading" is false for that league.
 
-It cannot be advanced until football-data.co.uk publishes the files, and on 2026-08-15 it
-had published none. Requests for one it does not hold are answered by a redirect to a
-near-miss filename returning `200`:
+It cannot be advanced until football-data.co.uk publishes every file the listed
+Competitions read, and it publishes them one at a time. Read on 2026-08-21, four of the
+eight exist and four do not:
 
 ```
-2627/E0.csv   → 301 → 2627/EC.csv  (English Conference)
-2627/SP1.csv  → 301 → 2627/P1.csv  (Portuguese first division)
-2627/E1.csv   → 300 Multiple Choices
+E1 SP1 SP2 F2   the file, with its own Div and 2026-27 dates
+E0 I1 I2 F1     300 Multiple Choices — no such file
 ```
 
-Advancing early therefore fetches the English fifth tier as the Premier League and Portugal
-as La Liga. The per-file `Div` check refuses both, loudly, so nothing lands wrong — but the
-fetch fails daily until the files are real. Check before advancing, and require four `200`s:
+**A `200` is not proof on its own.** A request for a file the site does not hold has also
+been answered by a redirect to a near-miss name — `2627/SP1.csv` → `2627/P1.csv`, the
+Portuguese first division — which `fetch` follows and returns as a 200. The per-file `Div`
+check refuses that, loudly, so nothing lands wrong, but the status line will not tell you.
+Read the first row instead, and require all eight to name their own division:
 
 ```bash
-for d in E0 E1 SP1 SP2; do printf "%s: " "$d"; \
-  curl -sI --max-time 20 \
-    "https://www.football-data.co.uk/mmz4281/2627/$d.csv" | head -1; done
+for d in E0 E1 SP1 SP2 I1 I2 F1 F2; do printf "%-4s " "$d"; \
+  curl -s --max-time 20 "https://www.football-data.co.uk/mmz4281/2627/$d.csv" \
+  | sed -n '2p' | cut -d, -f1-2; done
 ```
 
-**One variable serves every Competition and the files publish one at a time.** If England's
-lands before Spain's, advancing satisfies the Premier League's guard and fails La Liga's
-fetch every day until Spain's appears — collected as that Competition's error, so the other
-league's day still lands. The guard itself names `PL` on both halves, so a lagging La Liga
-is caught by its own fetch and not by the guard.
+A file that is there answers `E1,14/08/2026`. One that is not answers `<html><head>`.
+
+**One variable serves `PL`, `PD`, `SA` and `FL1` alike, and the files publish one at a
+time.** Today `SP1` and `SP2` are ready while `E0`, `I1`, `I2` and `F1` are not, so
+advancing now would satisfy La Liga and fail the Premier League, Serie A and Ligue 1 every
+day until each of their files appears — collected as that Competition's error, so the
+leagues that are ready still land their day. Each of the four is now caught by its own
+guard, against its own deadline and its own feed, and named in the failure; none of them
+rides on the Premier League's clock any more.
 
 Assignees are optional. Without them, notification depends on watch settings rather than being
 addressed to a person.
@@ -244,6 +251,11 @@ no current-Season matches stored. Real timings: deadline 21 Aug 17:30 UTC, first
 hours to publish a Friday-night result. Probably enough, not certainly. A false positive costs
 one spurious issue, not data. Keying off a kick-off more than a day old would move the first
 evaluation to 23 August and remove the noise.
+
+Those timings are the Premier League's, and every listed Competition now runs the same guard
+against its own deadline and its own feed. So the tolerance is as tight as it ever was and
+there are four of it: a league whose source publishes slowly is one spurious issue per league,
+not one in total.
 
 **A manual Fill that leaves Gaps does not open an issue** — only scheduled Fills do. That is
 the right default for an operator who triggered the run and is watching, and the wrong one for

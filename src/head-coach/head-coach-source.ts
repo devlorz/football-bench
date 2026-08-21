@@ -34,6 +34,14 @@ const SEASON_ARTICLES: Readonly<
     PD: {
       name: "2026-27-la-liga",
       page: "2026–27 La Liga"
+    },
+    SA: {
+      name: "2026-27-serie-a",
+      page: "2026–27 Serie A"
+    },
+    FL1: {
+      name: "2026-27-ligue-1",
+      page: "2026–27 Ligue 1"
     }
   }
 };

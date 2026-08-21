@@ -42,6 +42,13 @@ Edits 3 and 4 are one change and are checked against each other by
 `test/schema.test.ts`; edit 2's `competitionName` must equal edit 3's top-flight name and
 `test/openrouter-entrant.test.ts` requires it.
 
+**Edit 6 moves edit 2's sha.** A Competition with no transfer window renders no Squad
+Changes section at all; writing its windows down opens the gate, and the packet grows the
+stated absence "no Squad Change data stored for this Gameweek" even before a fetch lands.
+Do edit 6 first, or expect the pin to move once — it is the one rendering change that
+arrives from a registry rather than from the builder, and it is legitimate only while the
+version is unused.
+
 **The `competitions` row is not on this list.** Inserting it is what *activates* a
 Competition and it comes last, after the curation and the backfill — a row present before
 the maps exist is a league the scheduler will walk with nothing to say. That insert is
@@ -106,17 +113,37 @@ refuses it. Understat opens a Season with an empty `dates`, so a new Season's pr
 clubs cannot be added to a map until it publishes; they arrive as `unknown Understat team
 name` at the first pre-Season fetch, which is where that failure is meant to land.
 
-English Wikipedia's transfer lists are **two formats, not one**, and which one a country
-uses is not guessable from the title. England publishes two wikitables — `Transfers` and
-`Loans` — whose first column is the date every move is filed under and whose last is the
-fee. Spain publishes one section per club holding two `{{fs player}}` lists, arrivals
-first and departures second, with **no date and no fee anywhere on the page**; a Spanish
-row is therefore stored with both null, which is what migration 0027 made room for. The
-window's `format` field picks the parser. A new country's page has to be read before its
-window is written down — check for `{|` under a heading, and if there is none it is the
-club-section shape.
+English Wikipedia's transfer lists are **three formats, not one**, and which one a
+country uses is not guessable from the title. England publishes two wikitables —
+`Transfers` and `Loans` — whose first column is the date every move is filed under and
+whose last is the fee. Italy publishes **one** wikitable of England's five columns and
+states its loans in the fee column, as `Loan` or `6-month loan`; such a row is stored as
+a loan with a null fee, because `Loan` is not an amount. Spain and France publish one
+section per club holding two `{{fs player}}` lists, arrivals first and departures second,
+with **no date and no fee anywhere on the page**; those rows are stored with both null,
+which is what migration 0027 made room for. The window's `format` field picks the parser.
+A new country's page has to be read before its window is written down — check for `{|`
+under a heading, and if there is none it is the club-section shape; if there is one,
+count the tables.
 
-The winter page for a Season does not exist in August, for either country. Its title is
+The page furniture varies with it. Italy heads its table `==Transfers==` where England
+writes `== Transfers ==`, files its dates as `{{dts|format=dmy|2026|8|2}}` rather than as
+text, and wraps every name in `{{Sort|key|displayed}}`; each of those was a silent
+refusal until the reader was widened. France heads its club sections in bare text —
+`===Lens===` — so the **displayed name** is the identity that resolves a club there, as
+on every Spanish winter edition, while Italy links every club and resolves by article.
+
+**Not every league has twenty clubs.** Ligue 1 has eighteen, and its map is the first in
+this codebase that is not twenty rows. Nothing counts to twenty, but a reviewer reading a
+derived map should know what the total is meant to be before they read it.
+
+**A country's transfer list need not state its own window dates.** England's, Spain's and
+Italy's all open with a lead that does; France's says only which league it lists, and its
+winter edition before it says no more. France's dates are the LFP's own announcement
+instead (`lfp.fr/article/les-dates-du-mercato-2026-2027`), which makes France the one
+country whose *winter* dates are announced rather than customary.
+
+The winter page for a Season does not exist in August, for any of the four. Its title is
 frozen from the naming convention the previous ones used
 (`List of Spanish football transfers winter 2026–27`, en dash) and is not verifiable
 until it is created.

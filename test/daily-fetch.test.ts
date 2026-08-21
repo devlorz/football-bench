@@ -149,6 +149,18 @@ describe("the daily fetch", () => {
         "insert into competitions (competition, season) values ('PD', $1)",
         ["2026-27"]
       );
+      // La Liga Locked its Gameweek 1 on 15 August, so a listed `PD` holding
+      // no current-Season history is stale by its own clock and the guard
+      // says so by name. What this test is about is which sources the loop
+      // reaches, so it holds the row that makes the league not stale rather
+      // than the failure that would answer for it.
+      await client.query(
+        `insert into historical_matches
+           (competition, season, division, played_on,
+            home_team, away_team, home_goals, away_goals)
+         values ('PD', '2026-27', 'La Liga', '2026-08-16T19:00:00Z',
+                 'Barcelona', 'Getafe', 2, 0)`
+      );
       // The recorded response, not ticket 3's constructed one: that fixture
       // carries `Girona FC` and `RCD Mallorca`, neither of which is in La Liga
       // in 2026-27, so the Squad Change club map derived from the real twenty
@@ -462,4 +474,98 @@ describe("the daily fetch", () => {
     );
     expect(matches.rows).toEqual([{ season: "2025-26", count: 932 }]);
   });
+
+  test("dates each Competition's staleness from its own Gameweek 1 deadline",
+    async () => {
+      await client.query(
+        "insert into competitions (competition, season) values ('PD', $1)",
+        ["2026-27"]
+      );
+      // The Premier League's current Season is loading and La Liga's is not,
+      // which is the pair of states a shared question cannot tell apart: asked
+      // about the English feed on La Liga's behalf it finds this row and calls
+      // Spain live. The discrimination is what this ticket is for, so it is
+      // asserted here rather than left to a test about something else.
+      await client.query(
+        `insert into historical_matches
+           (competition, season, division, played_on,
+            home_team, away_team, home_goals, away_goals)
+         values ('PL', '2026-27', 'Premier League', '2026-08-16T15:00:00Z',
+                 'Arsenal', 'Chelsea', 1, 0)`
+      );
+      const responses = await sourceResponses([[
+        LA_LIGA_MATCHES_URL,
+        await archivedBody("football-data-org-2026-27-PD-recorded.json.gz")
+      ]]);
+
+      // La Liga Locked its Gameweek 1 on 15 August and the Premier League
+      // Locks its own at 17:30Z today, so this instant is six days past one
+      // league's deadline and half an hour inside the other's. A guard dated
+      // from the English clock reads it as "not yet" for both, which is how a
+      // Competition with no current-Season history at all stays quiet.
+      await expect(runDailyFetch({
+        database: client,
+        season: "2026-27",
+        footballDataSeason: "2025-26",
+        footballDataOrgToken: "a-football-data-org-token",
+        now: () => new Date("2026-08-21T17:00:00.000Z"),
+        http: async (url: string) => ({
+          status: 200,
+          body: responses.get(url) ?? ""
+        })
+      })).rejects.toMatchObject({
+        name: StaleFootballDataSeasonError.name,
+        competition: "PD",
+        season: "2026-27",
+        footballDataSeason: "2025-26"
+      });
+
+      // Loud for La Liga, and the Premier League's day still landed whole:
+      // one league's staleness is collected as that league's error.
+      const { rows } = await client.query(
+        `select competition, count(*)::int as fixtures
+           from fixtures where season = $1
+          group by competition order by competition`,
+        ["2026-27"]
+      );
+      expect(rows).toEqual([
+        { competition: "PD", fixtures: 380 },
+        { competition: "PL", fixtures: 380 }
+      ]);
+    });
+
+  test("collects every stale Competition rather than stopping at the first",
+    async () => {
+      await client.query(
+        "insert into competitions (competition, season) values ('PD', $1)",
+        ["2026-27"]
+      );
+      const responses = await sourceResponses([[
+        LA_LIGA_MATCHES_URL,
+        await archivedBody("football-data-org-2026-27-PD-recorded.json.gz")
+      ]]);
+
+      // Both leagues are past their own deadline at 17:30Z and neither holds a
+      // current-Season result. A guard that threw where this one collects
+      // would report the league it happened to ask first and leave the other's
+      // staleness undiscovered until that one was fixed -- so the run has to
+      // name both, and still fail.
+      const thrown = await runDailyFetch({
+        database: client,
+        season: "2026-27",
+        footballDataSeason: "2025-26",
+        footballDataOrgToken: "a-football-data-org-token",
+        now: () => new Date("2026-08-21T17:30:00.000Z"),
+        http: async (url: string) => ({
+          status: 200,
+          body: responses.get(url) ?? ""
+        })
+      }).catch((error: unknown) => error);
+
+      expect(thrown).toBeInstanceOf(AggregateError);
+      expect((thrown as AggregateError).errors).toMatchObject([
+        { name: StaleFootballDataSeasonError.name, competition: "PD" },
+        { name: StaleFootballDataSeasonError.name, competition: "PL" }
+      ]);
+    });
 });

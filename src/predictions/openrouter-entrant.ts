@@ -120,6 +120,50 @@ const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
       "44df40bd38489b8fd380177ec26b4ea24c7b480314c5218ee9181d440f0fd49c",
     competitionName: "La Liga",
     retired: { version: "match-pd/2026-27-v1", gw: 1 }
+  },
+  // Born on the current template, so neither carries a `retired` block and
+  // neither has a v1 to keep whole: both are frozen unused, at their first
+  // Lock. Their pins are this suite's render read on 2026-08-21, before either
+  // league's history is backfilled — so each league table reads "no result
+  // has been played yet this Season" rather than unavailable, the divisions
+  // being listed.
+  //
+  // This block used to end "and each pin moves once when the backfill lands".
+  // Serie A's landed on 2026-08-21 and this pin did not move: the pin hashes
+  // the suite's render, which is built from a literal and reads no database,
+  // so a backfill cannot reach it. What moved `PD`'s pins twice was the
+  // builder — an empty history section over 842 stored rows, then a table
+  // reading `unavailable` — and each of those was a code change the suite saw.
+  // Serie A needed no such fix: its divisions were curated before its first
+  // render, and the real packet, read whole over 760 stored results and 380
+  // joined xG rows, says what the pinned render says.
+  //
+  // Ligue 1's landed on 2026-08-21 and its pin did not move either — read,
+  // not predicted: the suite stayed green across the backfill, and the real
+  // packet was read whole over 611 stored results and 298 joined xG rows.
+  //
+  // Both pins then moved once, on 2026-08-21, and for the one reason a frozen
+  // rendering may move before its first use: a window gate changed what the
+  // packet says. Each Competition's transfer windows were written down, so a
+  // deadline inside one now renders a Squad Changes section where the render
+  // carried none at all — the stated absence "no Squad Change data stored for
+  // this Gameweek", which is exactly what the Premier League's and La Liga's
+  // pinned renders carry over the same empty list. Read before it was
+  // written: the four renders' sections are identical but for their heading
+  // date, and both versions are v1, unused and unamendable only from their
+  // first Lock (ADR-0042), so this is a freeze being corrected and not a used
+  // prompt changing.
+  SA: {
+    version: "match-sa/2026-27-v1",
+    sha256:
+      "0f2098122b40dfdbcbf59e4da9811984d560bd340cec09ca1c6146434c1051db",
+    competitionName: "Serie A"
+  },
+  FL1: {
+    version: "match-fl1/2026-27-v1",
+    sha256:
+      "ea8046976d449d960fefd67a42856baad487a3d23ce5e486b0b840d2dd917be7",
+    competitionName: "Ligue 1"
   }
 };
 

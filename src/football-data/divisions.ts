@@ -43,8 +43,28 @@ const BY_COMPETITION: Readonly<
   PD: [
     { code: "SP1", name: "La Liga" },
     { code: "SP2", name: "Segunda División" }
+  ],
+  SA: [
+    { code: "I1", name: "Serie A" },
+    { code: "I2", name: "Serie B" }
+  ],
+  FL1: [
+    { code: "F1", name: "Ligue 1" },
+    { code: "F2", name: "Ligue 2" }
   ]
 };
+
+/**
+ * Every Competition this list curates, which is not the same set as the
+ * Competitions with a frozen Prompt Version and must not be read as one. The
+ * two agree today and `test/openrouter-entrant.test.ts` requires that they
+ * keep agreeing, but the constraint above answers to *this* list: an entry
+ * added here ahead of its freeze still needs the migration, and a schema test
+ * reading the prompt list instead would stay green over the gap.
+ * **Found by review.**
+ */
+export const CURATED_COMPETITIONS: readonly string[] =
+  Object.keys(BY_COMPETITION);
 
 export function divisionsOf(
   competition: string

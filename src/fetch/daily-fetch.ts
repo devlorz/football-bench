@@ -76,42 +76,57 @@ export interface DailyFetchResult {
 
 export class StaleFootballDataSeasonError extends Error {
   constructor(
+    public readonly competition: string,
     public readonly season: string,
     public readonly footballDataSeason: string
   ) {
+    // `FOOTBALL_DATA_SEASON` is one variable over every league while
+    // football-data.co.uk publishes one file at a time, so this guidance can
+    // be true for the league that raised it and premature for another that
+    // has not published yet. Naming the Competition is what lets an operator
+    // tell those apart; the pre-cron checklist carries the rest.
     const guidance = footballDataSeason === season
       ? "the current feed yielded zero stored matches"
       : `advance FOOTBALL_DATA_SEASON from ${footballDataSeason} to ${season}`;
     super(
-      `Current Season ${season} has no stored football-data matches after `
-      + `its Gameweek 1 deadline; ${guidance}`
+      `Competition ${competition} has no stored football-data matches for `
+      + `Season ${season} after its own Gameweek 1 deadline; ${guidance}`
     );
     this.name = "StaleFootballDataSeasonError";
   }
 }
 
+/**
+ * Whether one Competition's football-data.co.uk feed has produced any
+ * current-Season result by the time that Competition's own Gameweek 1 has
+ * Locked.
+ *
+ * A literal `'PL'` on both halves guaranteed one league that and denied it to
+ * every other: `gw = 1` returns a row per listed Competition, and a Spanish
+ * result answered "the English feed is live".
+ *
+ * The `exists` half is correlated to the row rather than to `$2`, which today
+ * buys nothing — the outer filter already pins one league. It is what keeps
+ * the two halves together if that filter is ever widened.
+ */
 async function requireCurrentSeasonMatchesAfterFirstDeadline(
   database: Database,
+  competition: string,
   season: string,
   footballDataSeason: string,
   observedAt: Date
 ): Promise<void> {
-  // Premier League on both halves, as a literal: the feed this guards is
-  // football-data.co.uk's English one, and the Gameweek 1 whose deadline dates
-  // the guard has to be the same Competition's. Without it `gw = 1` returns a
-  // row per listed Competition and `rows[0]` picks between them by luck, while
-  // a Spanish result would answer "the English feed is live".
   const currentSeasonState = await database.query(
     `select
        g.deadline_at,
        exists (
          select 1
            from historical_matches h
-          where h.season = g.season and h.competition = 'PL'
+          where h.season = g.season and h.competition = g.competition
        ) as has_matches
        from gameweeks g
-      where g.season = $1 and g.gw = 1 and g.competition = 'PL'`,
-    [season]
+      where g.season = $1 and g.gw = 1 and g.competition = $2`,
+    [season, competition]
   );
   const state = currentSeasonState.rows[0] as
     | { deadline_at: Date; has_matches: boolean }
@@ -121,7 +136,11 @@ async function requireCurrentSeasonMatchesAfterFirstDeadline(
     && observedAt.getTime() >= state.deadline_at.getTime()
     && !state.has_matches
   ) {
-    throw new StaleFootballDataSeasonError(season, footballDataSeason);
+    throw new StaleFootballDataSeasonError(
+      competition,
+      season,
+      footballDataSeason
+    );
   }
 }
 
@@ -158,7 +177,6 @@ export async function runDailyFetch({
   const observedAt = now();
   const errors: unknown[] = [];
   let fpl: FetchFplDailyResult | undefined;
-  let footballDataSucceeded = false;
   try {
     fpl = await fetchFplDaily({
       database,
@@ -232,21 +250,18 @@ export async function runDailyFetch({
         season: footballDataSeason,
         http
       });
-      if (competition === "PL") {
-        footballDataSucceeded = true;
-      }
-    } catch (error) {
-      errors.push(error);
-    }
-  }
-  // Premier League only, and stated rather than looped: the guard dates itself
-  // from Gameweek 1's deadline and asks whether *the English feed* is live
-  // (`h.competition = 'PL'` on both halves). Each Competition needs its own
-  // before its own first deadline, which is its own change.
-  if (footballDataSucceeded) {
-    try {
+      // Each Competition against its own clock, which is ADR-0036's
+      // consequence read literally: a league whose feed has produced no
+      // current-Season result by its own Gameweek 1 deadline fails by name,
+      // and a league still inside its own deadline stays quiet whatever the
+      // others are doing.
+      //
+      // Inside the same `try` as the fetch that feeds it, so a league whose
+      // fetch threw is never asked: it has already said so, and a second
+      // question would report one outage twice.
       await requireCurrentSeasonMatchesAfterFirstDeadline(
         database,
+        competition,
         season,
         footballDataSeason,
         observedAt

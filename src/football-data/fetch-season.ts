@@ -205,6 +205,7 @@ function parseMatches(
         detail: `expected ${division.code}`
       });
     }
+
     if (playedOn === undefined) {
       issues.push({
         field: `row.${rowNumber}.Date`,
@@ -223,13 +224,35 @@ function parseMatches(
         detail: "team name is empty"
       });
     }
-    if (homeGoals === undefined) {
+    // A row whose two score cells are *both* empty is the source carrying a
+    // Match it has no result for — abandoned, postponed, or not yet played.
+    // That is football-data.co.uk saying "no result", not corruption, and it
+    // is the only reading of an empty cell that is: one empty cell beside a
+    // filled one is a half-written row and still fails. Not stored either,
+    // because a 0-0 invented here is a result that never happened and every
+    // base rate in the packet is an average over these rows — the push below
+    // already requires both figures, so saying nothing here is the whole of
+    // it (ADR-0050).
+    //
+    // Only the two score issues are withheld, and deliberately: an earlier
+    // version skipped the row outright and took the `Date`, `HomeTeam` and
+    // `AwayTeam` checks down with it, so a resultless row with a broken date
+    // was dropped in silence where it used to raise. **Found by review.**
+    // Every other check still runs on this row, which is the point — a
+    // redirected file, an unreadable date or a missing club is a failure
+    // whether or not the row carries a score.
+    //
+    // Ligue 2's Bastia v Red Star of 05/12/2025 is the first the benchmark has
+    // met; the four committed English and Italian files hold none.
+    const noResult =
+      value("FTHG").length === 0 && value("FTAG").length === 0;
+    if (homeGoals === undefined && !noResult) {
       issues.push({
         field: `row.${rowNumber}.FTHG`,
         detail: "expected a non-negative integer"
       });
     }
-    if (awayGoals === undefined) {
+    if (awayGoals === undefined && !noResult) {
       issues.push({
         field: `row.${rowNumber}.FTAG`,
         detail: "expected a non-negative integer"

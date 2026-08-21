@@ -6,7 +6,10 @@ import {
   UnderstatSourceHttpError,
   UnderstatSourceValidationError
 } from "../src/understat/fetch-season-xg.js";
-import { resolveUnderstatTeamName } from "../src/understat/team-identity.js";
+import {
+  resolveUnderstatTeamName, understatTeamNamesOf
+} from "../src/understat/team-identity.js";
+import { archivedBody, archivedHomeTeams } from "./archived-fixture.js";
 
 const { Client } = pg;
 
@@ -548,14 +551,165 @@ describe("fetching Understat per-match xG", () => {
       ]);
     });
 
+  // The map read back against the two feeds it was derived from, both
+  // committed: a list typed into a test would agree with a map typed from the
+  // same draft, and neither would touch the sources. Every key must be a title
+  // in the Understat feed, every value a `HomeTeam` in the football-data.co.uk
+  // file, and each side exactly twenty with nothing left over — which is the
+  // whole of what "derived, not transcribed" claims.
+  test("derives Serie A's twenty from the two feeds it was read off",
+    async () => {
+      const feed = JSON.parse(
+        await archivedBody("understat-2025-26-Serie_A.json.gz")
+      ) as { dates: Array<{ h: { title: string }; a: { title: string } }> };
+      const titles = new Set(feed.dates.flatMap(({ h, a }) => [h.title, a.title]));
+
+      const stored = await archivedHomeTeams("football-data-2526-I1.csv.gz");
+
+      expect(titles.size).toBe(20);
+      expect(stored.size).toBe(20);
+
+      // Every key a title and every title a key, compared as sets rather than
+      // by resolving the feed's twenty: resolving proves only that nothing in
+      // the feed is missing, and a twenty-first key naming a club Understat
+      // does not list would survive it.
+      expect(Object.keys(understatTeamNamesOf("SA") ?? {}).sort())
+        .toEqual([...titles].sort());
+
+      const resolved = [...titles].map(
+        (title) => resolveUnderstatTeamName("SA", title)
+      );
+      expect(resolved.filter((name) => name === undefined)).toEqual([]);
+      // Every value a stored name, and the two sets equal — so the map can
+      // neither point at a club football-data.co.uk does not hold nor leave
+      // one of its twenty unnamed.
+      expect(new Set(resolved).size).toBe(20);
+      expect([...new Set(resolved)].sort()).toEqual([...stored].sort());
+
+      // The two the review was asked about, named rather than left to the set
+      // arithmetic: a rename on either side that kept the sets equal would
+      // still have to keep these two pointing where they point.
+      expect(resolveUnderstatTeamName("SA", "AC Milan")).toBe("Milan");
+      expect(resolveUnderstatTeamName("SA", "Parma Calcio 1913")).toBe("Parma");
+      // The club the first can be confused with — both sources call it
+      // `Inter`, so a swapped pair is spelt apart on each side.
+      expect(resolveUnderstatTeamName("SA", "Inter")).toBe("Inter");
+    });
+
+  // Ligue 1's eighteen, read back against its own two feeds. Eighteen on each
+  // side, which is the count this league actually has and the one a map
+  // copied from Serie A's shape would fail.
+  test("derives Ligue 1's eighteen from the two feeds it was read off",
+    async () => {
+      const feed = JSON.parse(
+        await archivedBody("understat-2025-26-Ligue_1.json.gz")
+      ) as { dates: Array<{ h: { title: string }; a: { title: string } }> };
+      const titles = new Set(feed.dates.flatMap(({ h, a }) => [h.title, a.title]));
+
+      const stored = await archivedHomeTeams("football-data-2526-F1.csv.gz");
+
+      expect(titles.size).toBe(18);
+      expect(stored.size).toBe(18);
+
+      expect(Object.keys(understatTeamNamesOf("FL1") ?? {}).sort())
+        .toEqual([...titles].sort());
+
+      const resolved = [...titles].map(
+        (title) => resolveUnderstatTeamName("FL1", title)
+      );
+      expect(resolved.filter((name) => name === undefined)).toEqual([]);
+      expect(new Set(resolved).size).toBe(18);
+      expect([...new Set(resolved)].sort()).toEqual([...stored].sort());
+
+      // The one pair that differs across the two sources, and the club it can
+      // be confused with. Both are named because the sets above stay equal
+      // under a swap of the two: `Paris FC` and `Paris SG` are both stored
+      // names, so exchanging which key points at which passes every count.
+      expect(resolveUnderstatTeamName("FL1", "Paris Saint Germain"))
+        .toBe("Paris SG");
+      expect(resolveUnderstatTeamName("FL1", "Paris FC")).toBe("Paris FC");
+    });
+
+  // What the join rate cannot say, said here instead. `FL1`'s rate is 298 of
+  // 306 against `PD`'s 379 of 380, and a low rate is exactly the shape a
+  // mis-mapped club makes -- so the number on its own leaves the maps under
+  // suspicion. Both feeds are committed, so the question can be answered
+  // without dates at all: pair every stored result with its Understat match by
+  // club pair, and check the two sources agree on the score.
+  //
+  // They agree on all 306. That exonerates every one of the eighteen names
+  // independently of any date, which no join rate could: a swapped pair would
+  // put a wrong score on sixty-six of them.
+  test("agrees with Understat on every result, so the eight misses are dates",
+    async () => {
+      const feed = JSON.parse(
+        await archivedBody("understat-2025-26-Ligue_1.json.gz")
+      ) as {
+        dates: Array<{
+          datetime: string;
+          h: { title: string }; a: { title: string };
+          goals: { h: string; a: string };
+        }>;
+      };
+      const rows = (await archivedBody("football-data-2526-F1.csv.gz"))
+        .split(/\r?\n/).filter((line) => line.length > 0);
+      const column = new Map(
+        (rows[0]?.split(",") ?? []).map((name, index) => [name, index])
+      );
+      const field = (row: string[], name: string): string =>
+        row[column.get(name) ?? -1] ?? "";
+
+      const understat = new Map(feed.dates.map((match) => [
+        `${resolveUnderstatTeamName("FL1", match.h.title)}`
+        + `|${resolveUnderstatTeamName("FL1", match.a.title)}`,
+        { date: match.datetime.slice(0, 10), score: `${match.goals.h}-${match.goals.a}` }
+      ]));
+
+      const unpaired: string[] = [];
+      const disagreed: string[] = [];
+      const differentDate: string[] = [];
+      for (const row of rows.slice(1).map((line) => line.split(","))) {
+        const home = field(row, "HomeTeam");
+        const away = field(row, "AwayTeam");
+        const match = understat.get(`${home}|${away}`);
+        if (match === undefined) {
+          unpaired.push(`${home} v ${away}`);
+          continue;
+        }
+        if (match.score !== `${field(row, "FTHG")}-${field(row, "FTAG")}`) {
+          disagreed.push(`${home} v ${away}`);
+        }
+        // `DD/MM/YYYY` to the ISO date Understat sends, which is `joinXg`'s key.
+        const [day, month, year] = field(row, "Date").split("/");
+        if (match.date !== `${year}-${month}-${day}`) {
+          differentDate.push(`${home} v ${away}`);
+        }
+      }
+
+      expect(rows.slice(1)).toHaveLength(306);
+      expect(unpaired).toEqual([]);
+      expect(disagreed).toEqual([]);
+
+      // And the eight that do not join, named rather than counted: Understat
+      // files each of these two matchdays at a single nominal slot where
+      // football-data.co.uk holds the real kick-offs, spread across days. A
+      // ninth appearing here is a new disagreement worth reading, not a
+      // number to bump.
+      expect(differentDate.sort()).toEqual([
+        "Brest v Lorient", "Lens v Rennes", "Metz v Lille", "Metz v Monaco",
+        "Nantes v Lyon", "Nantes v Marseille", "Nice v Lens",
+        "Paris SG v Lorient"
+      ]);
+    });
+
   test("refuses a Competition with no Understat league", async () => {
     await expect(fetchUnderstatSeasonXg({
       database: client,
-      competition: "SA",
+      competition: "BL1",
       season: "2026-27",
       http: async () => {
         throw new Error("no request should be made");
       }
-    })).rejects.toThrow("Competition SA has no Understat league");
+    })).rejects.toThrow("Competition BL1 has no Understat league");
   });
 });

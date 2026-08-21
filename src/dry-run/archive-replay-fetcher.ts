@@ -52,8 +52,19 @@ function footballDataSource(url: string): string | null {
   return `football_data:20${startYear}-${endYear}:${division}`;
 }
 
+// The slug admits a digit because `Ligue_1` is one: the pattern used to read
+// letters and underscores only, so every Ligue 1 snapshot the archive held
+// replayed as "no archived snapshot source is known". That degrades a dry run
+// to "xG unavailable" rather than failing it (ADR-0019), which is why this is
+// pinned by a test rather than trusted.
+//
+// It is the same bug as the three-character division code below, which ticket 6
+// fixed for `SP1` and which the football-data pattern was widened for: a source
+// name this codebase chooses, and a pattern narrower than the names it chooses.
+// Ticket 0033 wrote that it could not recur here, and for `Serie_A` that was
+// true. `Ligue_1` ends in a digit.
 const UNDERSTAT_URL =
-  /^https:\/\/understat\.com\/getLeagueData\/([A-Za-z_]+)\/(\d{4})$/;
+  /^https:\/\/understat\.com\/getLeagueData\/(\w+)\/(\d{4})$/;
 
 /**
  * Understat addresses a Season by its opening year while its snapshot is
