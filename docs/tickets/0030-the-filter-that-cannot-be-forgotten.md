@@ -23,23 +23,35 @@ convention, and a convention decays. This test is the price paid for the smaller
       hold a Season path.
 - [x] Adding a new FPL Entrant read without the filter fails this test, and the failure
       message says which read and what to add. **Proved by mutation, twice, with the source
-      restored byte-for-byte after each:** dropping the filter from the squads read failed
-      with `src/dashboard/read-api.ts:1658 — select m.id, m.name, m.base_model, m.provider,`,
-      and adding a fresh unfiltered read to the context renderer failed with
-      `src/cli/show-fpl-context.ts:29 — select id from models`. The second is the case this
-      ticket exists for — a read nobody has written yet.
+      restored byte-for-byte after each:** the filter dropped from the squads read; a plain
+      new unfiltered read; **a read written as a common table expression**; **a read whose
+      Prompt Version comes from an aliased constant with its parameters far from the
+      literal**; and **a filtered read that stops being recognised** because its SQL was
+      concatenated rather than written as one literal. Five mutations, five failures, every
+      source restored.
 - [x] The test does not fire on Match track reads, which are deliberately unfiltered.
 
-**A guard on the guard.** A structural check that finds nothing reports success, which is the
-one way this kind of test lies. So it also asserts it found at least six reads: a refactor
-that moved the queries out of template literals would fail here rather than pass silently.
+**It fails closed, which the first draft did not.** That draft recognised a read by asking
+whether `FPL_PROMPT_VERSION` appeared within four hundred characters after the literal, and
+whether the literal opened with `select`. Both were fail-open: a common table expression
+opens with `with`, an aliased constant never names the constant, and a long argument list
+pushes the parameters past the window. Each of those walked straight past it, and review
+caught what the mutations had not been asked.
 
-**What it does not cover, stated so the next reader is not misled.** The scan judges a read
-by two things — it names `models` and `prompt_version`, and its parameters name
-`FPL_PROMPT_VERSION`. A read that took the version from a variable, or built its SQL by
-concatenation, would be invisible to it. Both are foreign to this codebase today, and the
-day one arrives is the day this test needs to grow rather than the day it silently stops
-working — which is what the six-read floor above is for.
+What the suite does now is classify rather than detect. The population is every SQL literal
+in `src` that reads `models` and names a `prompt_version` — twenty of them today — and each
+must be one of three things: filtered, the Gameweek run's recorded exception, or listed in
+`NOT_THIS_TRACKS_ROSTER` with the reason it reads somebody else's roster. A read that is
+none of the three fails by file. The shape of the query stopped mattering.
+
+**A guard on the guard.** The six FPL reads are asserted by file and count as an identity,
+not as a floor: a floor lets one read stop being recognised while the suite still passes,
+which is the same failure one layer up. A concatenated read that vanishes from the scan
+fails this assertion.
+
+**What it still does not cover.** SQL assembled at run time from fragments, and a read
+issued from outside `src`. Neither exists here, and both would fail the identity assertion
+the moment they replaced a read that does.
 
 ## Not in this ticket
 
