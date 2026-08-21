@@ -179,16 +179,32 @@ anywhere: the first one lands with activation.
       not:_
 
       ```sql
-      select prompt_version, count(*) from contexts
+      -- the version is what a seat is entered under; `contexts` has no such column
+      select prompt_version, count(*) from models
        where prompt_version in ('match-sa/2026-27-v1', 'match-fl1/2026-27-v1')
        group by prompt_version;
+
+      select competition, track, count(*) from contexts
+       where competition in ('SA', 'FL1') group by competition, track;
+
+      select competition, count(*) from predictions
+       where competition in ('SA', 'FL1') group by competition;
 
       select competition, count(*) from squad_changes
        where competition in ('SA', 'FL1') group by competition;
       ```
 
-      _**Result: pending** — to be run against production and recorded here before this
-      box is trusted. Both must return no rows. **Found by review.**_
+      _**All four returned no rows** on 2026-08-21: no seat is entered under either
+      version, neither Competition has ever had a context rendered, no Prediction is
+      stored for either, and neither has a Squad Change row. That is ADR-0026's
+      "the freeze binds at first use" as a fact rather than as an argument._
+
+      _The first version of this block asked `contexts.prompt_version`, **a column that
+      does not exist** — the version lives on `models`, which is the seat. It was written
+      from an assumption about the schema rather than read off it, which is the same
+      mistake in miniature that asking for the query at all guards against. It failed
+      loudly, which is the only reason it is recorded rather than believed.
+      **Found by review.**_
 
       _**No fetch has stored a row, and none can yet.** The daily fetch walks the
       `competitions` rows for the Season, and neither league has one until it is
@@ -291,6 +307,9 @@ Three findings, all answered above and in the commit that follows this one.
 - _Serie A's pairing was still provable only against a page carrying two divisions_ —
   the article is asserted to be the live source's own spelling, with the reviewed
   exceptions pinned as a constant. **P2, second pass.**
+- _"Unused" was prose where 0036 and 0037 set the standard of re-runnable SQL_ — the
+  four queries and their zero rows are above; the first draft of them named a column
+  that does not exist. **P2, third pass.**
 - _The LFP was the one uncommitted source_ — both announcement pages are archived and
   read by a test that pins France's five dates to their sentences. **P2, third pass.**
 - _Nothing asserted Italy's page opens one table_ — the evidence `oneTable` stands on is
