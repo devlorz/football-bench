@@ -688,16 +688,23 @@ export const statStrip = (
 ];
 
 /**
- * The header's status line. A Season with nothing settled says so rather than
+ * The header's status line. A Season with nothing to show says so rather than
  * showing a Gameweek nought.
+ *
+ * `state` because the squads page stopped waiting for settlement (ADR-0048): it
+ * shows the Sheet from the Lock, so its Gameweek is locked and not yet settled,
+ * and a header that said "settled" over a Gameweek nobody has scored would be
+ * the page's only untrue sentence. The ranking still says settled, because a
+ * ranking is what settling produces.
  */
 export const statusLine = (
   season: string,
   throughGw: number | null,
-  entrants: number
+  entrants: number,
+  state: "settled" | "locked" = "settled"
 ): string => [
   `Season ${seasonLabel(season)}`,
-  throughGw === null ? "no Gameweek settled" : `GW${throughGw} settled`,
+  throughGw === null ? `no Gameweek ${state}` : `GW${throughGw} ${state}`,
   `${entrants} ${entrants === 1 ? "entrant" : "entrants"}`
 ].join(" · ");
 

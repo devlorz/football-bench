@@ -16,17 +16,22 @@ import { SEASON_ROSTER_SIZE } from "../../../../src/season-roster.js";
     The Team Sheets could not be read. Nothing is being retried.
   </p>
 
-  {/* The Season nothing has been scored in. `gw` being null is the whole of the
-      test, as it is on the ranking: an empty list of Entrants cannot tell a
-      Season that has not been scored from a read that returned nothing. */}
+  {/* The Season before any Team Sheet is locked. `gw` being null is the whole
+      of the test, as it is on the ranking: an empty list of Entrants cannot
+      tell a Season nobody has acted in from a read that returned nothing.
+
+      Since ADR-0048 this is a narrower state than the ranking's: a Sheet shows
+      from the moment its Lock stores it, so this block is the pre-Season one
+      and not the whole gap between a Lock and its settlement. */}
   <section class="preseason" id="preseason" hidden>
     <div>
-      <div class="kicker">No Gameweek settled</div>
-      <h2>Team Sheets appear once a Gameweek has been scored</h2>
+      <div class="kicker">No Team Sheet locked</div>
+      <h2>Team Sheets appear once the first Gameweek is locked</h2>
       <p>
-        Every Entrant locks a Team Sheet before each Gameweek's deadline. None
-        is shown here until the Gameweek it was locked for has settled, and a
-        Gameweek settles for the whole field or for none of it.
+        Every Entrant locks a Team Sheet before each Gameweek's deadline. Each
+        one is shown here from the moment it is locked; the points beside it
+        arrive when the Gameweek settles, which happens for the whole field or
+        for none of it.
       </p>
     </div>
   </section>
@@ -278,7 +283,10 @@ import { SEASON_ROSTER_SIZE } from "../../../../src/season-roster.js";
         // The bench strip's left slot is the order they come on, where the
         // field's is the opponent. Both are the seat's own answer.
         el("span", "fplplate-vs", bench ? seat.slot ?? "" : opponentLabel(player.opponents)),
-        el("span", "fplplate-pts", String(player.points))
+        // An em dash rather than a nought while the Gameweek is locked and
+        // unscored (ADR-0048): nought is a return, and this player has not had
+        // the chance to have one.
+        el("span", "fplplate-pts", figure(player.points))
       );
       if (captain) foot.classList.add("fplplate-foot-cap");
 
@@ -318,7 +326,7 @@ import { SEASON_ROSTER_SIZE } from "../../../../src/season-roster.js";
           el("td", "fpllist-club", clubTag(player)),
           el("td", "num", pounds(player.priceTenths)),
           el("td", "num", pounds(player.sellingPriceTenths)),
-          el("td", "num fpltotal", String(player.points))
+          el("td", "num fpltotal", figure(player.points))
         );
         const tag = el("td", "");
         tag.append(el("span", `tag tag-${seat.tone}`, seat.label));
@@ -392,7 +400,15 @@ import { SEASON_ROSTER_SIZE } from "../../../../src/season-roster.js";
       if (data === null) return;
 
       text($("status"),
-        statusLine(data.season, data.gw, data.entrants.length));
+        statusLine(
+          data.season, data.gw, data.entrants.length,
+          // The word follows the data rather than the page: this Gameweek is
+          // locked until its points exist, and they arrive with settlement
+          // (ADR-0048).
+          data.entrants.some((entrant) => entrant.gwPoints !== null)
+            ? "settled"
+            : "locked"
+        ));
 
       const pre = data.gw === null;
       $("loading").hidden = true;

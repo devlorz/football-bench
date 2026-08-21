@@ -68,6 +68,16 @@ function squadsEndpoint(): {
  * answering with and the one the Entrant last stood on, and both are behind
  * this line.
  */
+/**
+ * The scores past `gameweek` dropped, so that Gameweek is the latest settled.
+ *
+ * The Manager States cannot be rewound with them: `manager_states` is
+ * insert-only and the database refuses the delete, which is the Season path
+ * being a record rather than a working set. So a fixture that needs an earlier
+ * Gameweek to be the *locked* one — which is the Gameweek this page shows since
+ * ADR-0048 — stops the seed there with `fplThrough` instead of deleting back to
+ * it.
+ */
 async function rewindTo(
   writer: pg.Client,
   gameweek: number
@@ -392,6 +402,44 @@ describe("the FPL squads endpoint", () => {
     }
   });
 
+  test("still refuses a settled Gameweek missing one player's points",
+    async () => {
+      // The state the unsettled Gameweek below had to be told apart from, kept:
+      // at a Gameweek that *has* been scored, a player on a Sheet with no
+      // points row is a record broken since, and the read fails rather than
+      // publishing fourteen players who scored and one blank (ADR-0048).
+      const before = await squads();
+      const dropped = before.entrants[0]!.players[0]!.fplId;
+      const kept = (await writer.query<{ total_points: number }>(
+        `delete from fpl_player_points
+          where season = $1 and gw = $2 and fpl_id = $3
+        returning minutes, total_points, goals_scored, assists, clean_sheets,
+                  bonus, yellow_cards, red_cards, saves, expected_goals,
+                  expected_assists, expected_goals_conceded, competition`,
+        [SEASON, before.gw, dropped]
+      )).rows;
+      expect(kept).toHaveLength(1);
+      try {
+        // It throws rather than answering: the read API has no branch for a
+        // record that contradicts itself, and a page rendering fourteen
+        // players would be the worse outcome.
+        await expect(get()).rejects.toThrow(
+          `The Season records no settled points for player ${dropped}`
+        );
+      } finally {
+        await writer.query(
+          `insert into fpl_player_points (
+             season, gw, fpl_id, minutes, total_points, goals_scored, assists,
+             clean_sheets, bonus, yellow_cards, red_cards, saves,
+             expected_goals, expected_assists, expected_goals_conceded,
+             competition
+           ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                     $14, $15, $16)`,
+          [SEASON, before.gw, dropped, ...Object.values(kept[0]!)]
+        );
+      }
+    });
+
   test("shows the Squads of the seats that still hold a place", async () => {
     // The same filter the leaderboard carries (ADR-0047): a withdrawn seat has
     // no Squad standing, and the page would render it as an Entrant with none.
@@ -517,7 +565,7 @@ describe("the FPL squads endpoint at the Gameweek a Hit was taken", () => {
     await reader.connect();
     await resetSchema(writer);
     await seedSeason({
-      database: writer, season: SEASON, stopAt: "the design's"
+      database: writer, season: SEASON, stopAt: "the design's", fplThrough: 2
     });
     await rewindTo(writer, 2);
     await reader.query("set role dashboard_read");
@@ -585,7 +633,7 @@ describe("the FPL squads endpoint at a Gameweek that Rolled Over", () => {
     await reader.connect();
     await resetSchema(writer);
     await seedSeason({
-      database: writer, season: SEASON, stopAt: "the design's"
+      database: writer, season: SEASON, stopAt: "the design's", fplThrough: 3
     });
     await rewindTo(writer, 3);
     await reader.query("set role dashboard_read");
@@ -725,7 +773,7 @@ describe("the FPL squads endpoint at a Free Hit Gameweek", () => {
     await reader.connect();
     await resetSchema(writer);
     await seedSeason({
-      database: writer, season: SEASON, stopAt: "the design's"
+      database: writer, season: SEASON, stopAt: "the design's", fplThrough: 4
     });
     await playFreeHitAtGameweekFour(writer);
     // The record as it stood when the Free Hit's own Gameweek was the last one
@@ -856,3 +904,62 @@ describe("the FPL squads endpoint before the Season starts", () => {
     )).toBe(true);
   });
 });
+
+describe("the FPL squads endpoint at a Gameweek that is locked and unscored",
+  () => {
+    const { writer, reader, squads } = squadsEndpoint();
+
+    // The state a Season opens in and returns to after every Lock: Team Sheets
+    // stored, nothing scored (ADR-0048). Its own database because
+    // `manager_states` is insert-only — a Gameweek locked into a shared fixture
+    // could never be taken back out of it.
+    beforeAll(async () => {
+      await writer.connect();
+      await reader.connect();
+      await resetSchema(writer);
+      await seedSeason({
+        database: writer, season: SEASON, stopAt: "the design's"
+      });
+      // A Gameweek past the seeded run, which therefore has Manager States and
+      // no settled player points: the Sheets copied forward are the ones the
+      // Lock would have stored.
+      await writer.query(
+        `insert into manager_states (
+           competition, model_id, season, gw, squad, team_sheet, bank,
+           free_transfers, chips_used, chip_active, rolled_over, attempts_used,
+           predicted_at, hits, rationale
+         )
+         select competition, model_id, season, gw + 1, squad, team_sheet, bank,
+                free_transfers, chips_used, chip_active, rolled_over,
+                attempts_used, predicted_at, hits, rationale
+           from manager_states
+          where season = $1
+            and gw = (select max(gw) from manager_states where season = $1)`,
+        [SEASON]
+      );
+      await reader.query("set role dashboard_read");
+
+      return async () => {
+        await writer.end();
+        await reader.end();
+      };
+    });
+
+    test("shows the Sheet with every point still to come", async () => {
+      const body = await squads();
+
+      // The locked Gameweek, not the settled one behind it.
+      expect(body.gw).toBe(6);
+      expect(body.entrants.length).toBeGreaterThan(0);
+      for (const entrant of body.entrants) {
+        // Readable without a single point: the fifteen, the armband, the money.
+        expect(entrant.players).toHaveLength(15);
+        expect(entrant.teamSheet).not.toBeNull();
+        expect(entrant.squadValueTenths).not.toBeNull();
+        expect(entrant.gwPoints).toBeNull();
+        expect(entrant.totalPoints).toBeNull();
+        expect(entrant.players.every(({ points }) => points === null))
+          .toBe(true);
+      }
+    });
+  });

@@ -749,12 +749,15 @@ describe("the count each FPL page prints beside the Season", () => {
     }
   ])("$page counts the seats it was served", ({ path }) => {
     const script = read(path).split("<script>")[1] ?? "";
-    const statusLineCalls =
-      [...script.matchAll(/statusLine\([^)]*\)/g)].map(([call]) => call);
+    // Read forward from the call rather than matching it whole: the squads
+    // page's call spans several lines and carries a callback of its own since
+    // ADR-0048, and a regex that stopped at the first `)` would stop inside it.
+    const statusLineCalls = [...script.matchAll(/statusLine\(/g)]
+      .map(({ index }) => script.slice(index, index + 320));
 
     expect(statusLineCalls).not.toHaveLength(0);
     for (const call of statusLineCalls) {
-      expect(call).toMatch(/\.entrants\.length\s*\)$/);
+      expect(call).toMatch(/\.entrants\.length/);
     }
     // No second source for the same number anywhere in the page.
     expect(script).not.toMatch(/SEASON_ROSTER_SIZE|FPL_ROSTER_SIZE/);

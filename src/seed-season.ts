@@ -389,6 +389,17 @@ export interface SeedSeasonOptions {
   }) => Promise<unknown>;
   /** The same, for the FPL track and for the same reason. */
   scoreFpl?: (options: ScoreFplGameweekOptions) => Promise<unknown>;
+  /**
+   * The last FPL Gameweek to write a Manager State for, defaulting to the whole
+   * seeded run.
+   *
+   * A test knob with one job: the squads page shows the Gameweek whose Team
+   * Sheets are the latest locked (ADR-0048), and `manager_states` is
+   * insert-only, so a fixture cannot delete its way back to an earlier
+   * Gameweek. A suite that wants to read Gameweek 4's Sheet stops the seed
+   * there instead.
+   */
+  fplThrough?: number;
 }
 
 /**
@@ -403,14 +414,15 @@ export async function seedSeason({
   season,
   stopAt,
   score = scoreMatchSeason,
-  scoreFpl = scoreFplGameweek
+  scoreFpl = scoreFplGameweek,
+  fplThrough = FPL_GAMEWEEKS
 }: SeedSeasonOptions): Promise<void> {
   // Every row the seed writes itself, in one transaction: a run that fails
   // half way through leaves nothing rather than a database that is neither
   // empty enough to seed again nor complete enough to read.
   await database.query("begin");
   try {
-    await writeSeason(database, season, stopAt);
+    await writeSeason(database, season, stopAt, fplThrough);
     await database.query("commit");
   } catch (error) {
     await database.query("rollback");
@@ -432,7 +444,7 @@ export async function seedSeason({
   // reaches them: the record at each Gameweek is what the rank movement
   // between two of them is read from, and one call at the last Gameweek would
   // write that Gameweek alone.
-  for (let gameweek = 1; gameweek <= FPL_GAMEWEEKS; gameweek += 1) {
+  for (let gameweek = 1; gameweek <= fplThrough; gameweek += 1) {
     await scoreFpl({ database, season, gameweek });
   }
 
@@ -451,7 +463,8 @@ export async function seedSeason({
 async function writeSeason(
   database: Database,
   season: string,
-  stopAt: SeedStop
+  stopAt: SeedStop,
+  fplThrough: number
 ): Promise<void> {
   for (const entrant of ROSTER) {
     // One seat per track per Base Model (CONTEXT.md, Season Roster): a seat is
@@ -537,7 +550,7 @@ async function writeSeason(
     }
   }
 
-  await writeFplSeason(database, season);
+  await writeFplSeason(database, season, fplThrough);
 }
 
 /**
@@ -752,11 +765,12 @@ function fplGameweekOf(
  */
 async function writeFplSeason(
   database: Database,
-  season: string
+  season: string,
+  through: number
 ): Promise<void> {
   const states = new Map<number, ManagerState>();
 
-  for (let gameweek = 1; gameweek <= FPL_GAMEWEEKS; gameweek += 1) {
+  for (let gameweek = 1; gameweek <= through; gameweek += 1) {
     const pool = fplPoolAt(gameweek);
     for (const player of pool) {
       await database.query(

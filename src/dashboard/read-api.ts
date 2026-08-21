@@ -1464,11 +1464,17 @@ export interface FplSquadPlayer {
    */
   sellingPriceTenths: number;
   /**
-   * The Gameweek's points, before any armband. Never null: a Gameweek settles
-   * for every player on the Team Sheet or not at all, so a missing row is a
-   * broken record and the read fails on it rather than publishing a blank.
+   * The Gameweek's points, before any armband, or null while the Gameweek is
+   * locked and not yet settled (ADR-0048).
+   *
+   * It read `number` and said "never null", which held while this page waited
+   * for settlement to show anything at all. The page now shows a Sheet from the
+   * moment its Lock stores it, and a Squad is readable — the fifteen, the
+   * armband, the formation, the money — before a single point exists. Null is
+   * that state and not a missing row: a settled Gameweek still refuses a player
+   * without points.
    */
-  points: number;
+  points: number | null;
 }
 
 /**
@@ -1644,18 +1650,50 @@ export interface FplSquadsBody {
 }
 
 /**
- * Every Entrant's Team Sheet at the latest Settled Gameweek, with the stat
- * strip's figures, the Gameweek's Transfers and how cleanly the action landed.
+ * The Gameweek whose Team Sheets are the latest ones locked, which is the
+ * Gameweek this page shows (ADR-0048).
+ *
+ * `manager_states` and not `scores`: a Sheet is a fact the moment the Lock
+ * stores it, and it was previously read at the latest *Settled* Gameweek, which
+ * left the page empty for the days between a Lock and its settlement — the days
+ * a reader most wants to see what was picked.
+ *
+ * No join to `models` and so no withdrawal filter, deliberately: a seat that
+ * left the track has no Manager State to be the latest of. One withdrawn
+ * mid-Season would keep the rows it wrote, and they name Gameweeks the standing
+ * seats wrote rows for too, so the maximum is the same number either way.
+ */
+async function fplTeamSheetsThrough(
+  query: Query,
+  season: string
+): Promise<number | null> {
+  const [row] = await query(
+    `select max(gw) as gw from manager_states
+      where competition = 'PL' and season = $1`,
+    [season]
+  );
+  const gw = row?.gw;
+  return gw === null || gw === undefined ? null : Number(gw);
+}
+
+/**
+ * Every Entrant's Team Sheet at the latest Gameweek one was locked for, with
+ * the stat strip's figures, the Gameweek's Transfers and how cleanly the action
+ * landed.
  *
  * The Manager State is read at that Gameweek exactly, where the leaderboard
- * takes the latest at or before it. A Settled Gameweek has a row for all ten —
- * a Gameweek any Entrant stored none in is removed from every Season path
- * (ADR-0011) — and the Repairs, the Roll Over and the Transfers are facts about
- * *this* Gameweek, so an earlier Gameweek's row standing in for a missing one
- * would report its Repairs as though they were this Gameweek's.
+ * takes the latest at or before it. The Repairs, the Roll Over and the
+ * Transfers are facts about *this* Gameweek, so an earlier Gameweek's row
+ * standing in for a missing one would report its Repairs as though they were
+ * this Gameweek's.
+ *
+ * The points beside the Sheet are null until the Gameweek settles, which is
+ * what ADR-0048 accepts to show the Sheet early: a Squad is a decision and
+ * readable as one before anything has been scored, and the left joins below
+ * already answer with nulls for a Gameweek `scores` holds no row for.
  */
 async function fplSquads(query: Query, season: string): Promise<Response> {
-  const gw = await fplScoredThrough(query, season);
+  const gw = await fplTeamSheetsThrough(query, season);
 
   const rows = await query(
     `select m.id, m.name, m.base_model, m.provider,
@@ -1766,6 +1804,12 @@ async function fplSquads(query: Query, season: string): Promise<Response> {
   // The Squad being fielded, which during a Free Hit is the borrowed fifteen
   // and not the permanent Squad waiting in `free_hit_stash` — the Sheet beside
   // it belongs to the players it names.
+  // Whether this Gameweek has been scored, read off the player points rather
+  // than asked for separately: the scorer writes a row for every player on
+  // every Sheet or none at all, so an empty map is a Gameweek that is locked
+  // and not yet settled (ADR-0048).
+  const settled = scored.size > 0;
+
   const playersOf = (squad: SquadEnvelope): FplSquadPlayer[] =>
     squad.active.map(({ fplId, purchasePriceTenths }) => {
       const { priceTenths, ...player } = pool.player(fplId);
@@ -1776,7 +1820,11 @@ async function fplSquads(query: Query, season: string): Promise<Response> {
       // a player owned at a scored Gameweek with no points row is a record
       // that has been broken since, and this fails on it rather than showing
       // fourteen players who scored and one who is a blank.
-      if (points === undefined) {
+      //
+      // `settled` is what tells that from the Gameweek this page now also
+      // shows: one that is locked and unscored, where nobody has points and
+      // every Sheet is readable anyway (ADR-0048).
+      if (settled && points === undefined) {
         throw new Error(
           `The Season records no settled points for player ${fplId} at `
           + `Gameweek ${gw}, so the Squad holding him cannot be read`
@@ -1788,7 +1836,7 @@ async function fplSquads(query: Query, season: string): Promise<Response> {
         opponents: opponents.get(player.club) ?? [],
         priceTenths,
         sellingPriceTenths: sellingPrice(purchasePriceTenths, priceTenths),
-        points
+        points: points ?? null
       };
     });
 
