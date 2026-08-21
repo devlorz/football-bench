@@ -123,7 +123,9 @@ export async function runDryRun({
   concurrency
 }: RunDryRunOptions): Promise<DryRunResult> {
   const http = createArchiveReplayFetcher(archive.snapshots);
-  await prepareArchivedGameweek({ target, archive, season, footballDataSeason });
+  await prepareArchivedGameweek({
+    target, archive, competition, season, footballDataSeason
+  });
 
   const deadline = await readGameweekDeadline(
     target, competition, season, gameweek

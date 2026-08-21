@@ -31,34 +31,39 @@ async function seedEntrants(
 }
 
 /**
- * Lists the Competitions the archive can actually answer for, because the
- * fetch below walks that table and a Season listing none reaches no source at
- * all — which in a database built from scratch is every database this function
- * is ever handed.
+ * Lists the Competitions the rehearsal will walk, because the fetch below walks
+ * that table and a Season listing none reaches no source at all — which in a
+ * database built from scratch is every database this function is ever handed.
  *
- * Read off the snapshot names rather than declared: `PL` because its sources
- * are the ones every archive has, and one row per football-data.org snapshot,
- * whose source name carries the code it was fetched for. An archive that never
- * saw a league cannot rehearse it, and listing it anyway would replay a fetch
- * against bytes that are not there.
+ * The rehearsed Competition and `PL`, and deliberately nothing else. `PL`
+ * because the FPL fetch runs whatever is listed and its sources are the ones
+ * every archive has; the rehearsed Competition because that is the one being
+ * rehearsed. A league nobody asked about contributes nothing to this run's
+ * verdict and can only take it down with it.
+ *
+ * Listing every league the archive holds *a* snapshot for is what this used to
+ * do, and one football-data.org snapshot turned out to be far too weak a
+ * predicate for "the archive can answer for this league". Ticket 0033 captured
+ * Serie A's and Ligue 1's schedules months before either was activated, so both
+ * joined every rehearsal while their Understat, transfer and season-article
+ * bytes did not exist — and `runDailyFetch` collects every miss and throws, so
+ * the Premier League's own rehearsal went red over Serie A. It also made the
+ * ordering circular: a Competition's snapshots only exist once it is activated,
+ * and its activation is supposed to wait on a green rehearsal.
+ *
+ * A Competition whose own bytes are missing still fails, and fails naming
+ * itself, which is the check that was wanted all along.
  */
-async function listArchivedCompetitions(
+async function listRehearsedCompetitions(
   database: Database,
-  archive: DryRunArchive,
+  competition: string,
   season: string
 ): Promise<void> {
-  const codes = new Set(["PL"]);
-  for (const { source } of archive.snapshots) {
-    const code = /^football_data_org:[^:]+:(.+)$/.exec(source)?.[1];
-    if (code !== undefined) {
-      codes.add(code);
-    }
-  }
-  for (const competition of [...codes].sort()) {
+  for (const code of [...new Set(["PL", competition])].sort()) {
     await database.query(
       `insert into competitions (competition, season) values ($1, $2)
        on conflict do nothing`,
-      [competition, season]
+      [code, season]
     );
   }
 }
@@ -66,6 +71,8 @@ async function listArchivedCompetitions(
 export interface PrepareArchivedGameweekOptions {
   target: Database;
   archive: DryRunArchive;
+  /** The Competition being rehearsed; listed alongside `PL` and nothing else. */
+  competition: string;
   season: string;
   footballDataSeason: string;
 }
@@ -83,11 +90,12 @@ export interface PrepareArchivedGameweekOptions {
 export async function prepareArchivedGameweek({
   target,
   archive,
+  competition,
   season,
   footballDataSeason
 }: PrepareArchivedGameweekOptions): Promise<void> {
   await seedEntrants(target, archive.entrants);
-  await listArchivedCompetitions(target, archive, season);
+  await listRehearsedCompetitions(target, competition, season);
   await runDailyFetch({
     database: target,
     season,

@@ -202,8 +202,18 @@ addressed to a person.
 
       | `DRY_RUN_AT` | Predictions | Gaps |
       |---|---|---|
-      | before the Lock | 9 | 81 |
-      | at or after the Lock | 0 | 90 |
+      | before the Lock | 10 | 90 |
+      | at or after the Lock | 0 | 100 |
+
+      Those counts follow the archive and move when it grows — the run derives
+      what it should produce and exits non-zero on a mismatch, so read its
+      verdict rather than these numbers. Observed 2026-08-21 at 43 snapshots.
+
+      **`COMPETITION` names the Competition being rehearsed, and only that one
+      is walked** (plus `PL`, whose sources every archive holds). A rehearsal is
+      green or red on its own league's bytes; a league captured but not yet
+      activated cannot take another's rehearsal down with it, which it did until
+      2026-08-21.
 
       Replaying archived responses yields Predictions only for the Fixture each response was
       recorded against; the remaining Gaps are an artifact of the archive, not a fault. See

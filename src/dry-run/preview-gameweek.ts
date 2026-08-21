@@ -86,6 +86,7 @@ export async function previewGameweek({
   await prepareArchivedGameweek({
     target,
     archive,
+    competition,
     season,
     footballDataSeason
   });

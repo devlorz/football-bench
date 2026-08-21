@@ -2,6 +2,9 @@ import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { MATCH_PROMPT_VERSION } from "../src/predictions/openrouter-entrant.js";
 import { runDryRun } from "../src/dry-run/run-dry-run.js";
+import {
+  prepareArchivedGameweek
+} from "../src/dry-run/prepare-archived-gameweek.js";
 import type { DryRunArchive } from "../src/dry-run/load-archive.js";
 import { archivedBase64Body, archivedBody } from "./archived-fixture.js";
 import { resetSchema } from "./schema-fixture.js";
@@ -179,5 +182,33 @@ describe("a dry run against an archived Gameweek", () => {
     );
     expect(predictions.rows[0].n).toBe(0);
     expect(refused.rows[0].n).toBeGreaterThan(0);
+  });
+
+  test("rehearses one Competition, not every league the archive has bytes for", async () => {
+    // Ticket 0033 captured Serie A's and Ligue 1's schedules long before either
+    // was activated, so an archive holds a football-data.org snapshot for a
+    // league whose Understat, transfer and season-article bytes do not exist.
+    // Listed, that league takes the rehearsal down with it -- and the Premier
+    // League's own rehearsal went red over Serie A for exactly this reason.
+    const withAForeignSchedule: DryRunArchive = {
+      ...archive,
+      snapshots: [
+        ...archive.snapshots,
+        { source: `football_data_org:${SEASON}:SA`, body: "never read" }
+      ]
+    };
+
+    await prepareArchivedGameweek({
+      target: client,
+      archive: withAForeignSchedule,
+      competition: "PL",
+      season: SEASON,
+      footballDataSeason: FOOTBALL_DATA_SEASON
+    });
+
+    const listed = await client.query<{ competition: string }>(
+      "select competition from competitions order by competition"
+    );
+    expect(listed.rows.map(({ competition }) => competition)).toEqual(["PL"]);
   });
 });
