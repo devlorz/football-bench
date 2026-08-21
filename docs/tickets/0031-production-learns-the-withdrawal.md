@@ -26,8 +26,12 @@ is cheap and it comes first.
       names `fpl/claude-opus-5`, `fpl/deepseek-v4-pro`, `fpl/gemini-3.1-pro-preview`,
       `fpl/gpt-5.6-sol-pro`, `fpl/grok-4.6`, `fpl/kimi-k3` and `fpl/muse-spark-1.2`, and none
       of the three that left. That absence is the dates having landed.
-- [ ] The withdrawn seats are confirmed to still hold their attempts and their contexts.
-      Needs a direct read of the two tables, which is the operator's to run.
+- [x] The withdrawn seats are confirmed to still hold their attempts and their contexts.
+      Read on production: each of the three carries `withdrawn_at 2026-08-20 19:33:06+00`,
+      **four attempts** — the four refusals of the opening — and **one context**, the
+      insert-or-nothing body it was handed. The foreign keys the whole decision rests on
+      did what ADR-0047 said they would: the evidence the withdrawal was read from survived
+      the withdrawal.
 - [x] Everything that has a script uses it — the migration runner and the FPL entry door —
       and the connection string is set explicitly rather than inherited, because `.env`
       points at production. The migration-record diff has no script and is a direct read,
