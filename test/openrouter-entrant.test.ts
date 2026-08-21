@@ -249,6 +249,11 @@ describe("the Match Prompt Version", () => {
   // render reads no database, so no backfill can reach it. Serie A's landed
   // and this pin did not move, and Ligue 1's landed and neither did that one.
   // What moved `PD`'s twice was the builder.
+  //
+  // Both then moved on 2026-08-21, for the other thing that reaches a literal
+  // render: writing down each league's transfer windows opened a gate, and a
+  // deadline inside one renders a Squad Changes section where these two
+  // carried none. `openrouter-entrant.ts` records the move.
   test.each(MATCH_PROMPT_COMPETITIONS)(
     "pins %s's own rendering under its own Prompt Version",
     (competition) => {

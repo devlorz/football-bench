@@ -84,7 +84,13 @@ function wikitableUnder(
   wikitext: string,
   heading: string
 ): string {
-  const headingAt = wikitext.indexOf(`== ${heading} ==`);
+  // The spaces around a heading's text are optional in wikitext and the two
+  // pages disagree about them: England writes `== Transfers ==` and Italy
+  // writes `==Transfers==`. Matched rather than compared, or Italy's page
+  // reads as a page with no table on it.
+  const headingAt = wikitext.search(
+    new RegExp(`^==\\s*${heading}\\s*==\\s*$`, "m")
+  );
   const opensAt = headingAt < 0 ? -1 : wikitext.indexOf("{|", headingAt);
   const closesAt = opensAt < 0 ? -1 : wikitext.indexOf("\n|}", opensAt);
   if (closesAt < 0) {
@@ -143,21 +149,33 @@ function tableRows(wikitable: string): string[][] {
 }
 
 /**
- * The two tables the page publishes, and which column holds what. They differ
- * only in that: the loans table spends its second column on an end date the
- * context does not state, and has no fee column at all.
+ * A wikitable of moves: which heading it sits under, which column holds what,
+ * and how the row says it is a loan.
+ *
+ * `loan` is asked of the fee cell rather than stated, because the two
+ * table-shaped pages carry the answer in different places. England splits the
+ * moves into two tables and the table is the answer; Italy publishes one table
+ * and writes `Loan` where a fee would go. A loan stores a null fee either way:
+ * `Loan` is not an amount, and the render states the loan as its own marker.
  */
-const TABLES: readonly {
+interface MoveTable {
   heading: string;
-  loan: boolean;
+  loan: (fee: string | null) => boolean;
   player: number;
   movingFrom: number;
   movingTo: number;
   fee: number | undefined;
-}[] = [
+}
+
+/**
+ * England's two tables, which differ only in that the loans table spends its
+ * second column on an end date the context does not state and has no fee
+ * column at all.
+ */
+const TWO_TABLES: readonly MoveTable[] = [
   {
     heading: "Transfers",
-    loan: false,
+    loan: () => false,
     player: 1,
     movingFrom: 2,
     movingTo: 3,
@@ -165,11 +183,26 @@ const TABLES: readonly {
   },
   {
     heading: "Loans",
-    loan: true,
+    loan: () => true,
     player: 2,
     movingFrom: 3,
     movingTo: 4,
     fee: undefined
+  }
+];
+
+/**
+ * Italy's one table, whose columns are England's `Transfers` exactly and whose
+ * fee column carries every loan on the page as `Loan` or `6-month loan`.
+ */
+const ONE_TABLE: readonly MoveTable[] = [
+  {
+    heading: "Transfers",
+    loan: (fee) => /\bloan\b/i.test(fee ?? ""),
+    player: 1,
+    movingFrom: 2,
+    movingTo: 3,
+    fee: 4
   }
 ];
 
@@ -248,7 +281,8 @@ function clubRowsForMove(
 function parseTables(
   source: string,
   wikitext: string,
-  pinned: PinnedClubs
+  pinned: PinnedClubs,
+  tables: readonly MoveTable[]
 ): SquadChange[] {
   const issues: SquadChangeSourceIssue[] = [];
   const changes: SquadChange[] = [];
@@ -259,7 +293,7 @@ function parseTables(
   // `tableRows` would otherwise count as a cell of its own.
   const page = withoutCitations(wikitext);
 
-  for (const spec of TABLES) {
+  for (const spec of tables) {
     const rows = tableRows(wikitableUnder(source, page, spec.heading));
     for (const [index, cells] of rows.entries()) {
       const movingFrom = clubLink(cells[spec.movingFrom] as string);
@@ -291,12 +325,15 @@ function parseTables(
       if (from === undefined && to === undefined) {
         continue;
       }
+      const stated = spec.fee === undefined
+        ? null
+        : cellText(cells[spec.fee] as string);
+      const loan = spec.loan(stated);
       changes.push(...clubRowsForMove(from, to, movingFrom, movingTo, {
         player: cellText(cells[spec.player] as string),
-        fee: spec.fee === undefined
-          ? null
-          : cellText(cells[spec.fee] as string),
-        loan: spec.loan,
+        // A loan states no fee, whichever way its page says it is one.
+        fee: loan ? null : stated,
+        loan,
         datedOn
       }));
     }
@@ -582,7 +619,12 @@ export function parseSquadChanges(
   pinned: PinnedClubs,
   format: TransferListFormat
 ): SquadChange[] {
-  return format === "tables"
-    ? parseTables(source, wikitext, pinned)
-    : parseClubSections(source, wikitext, pinned);
+  switch (format) {
+    case "tables":
+      return parseTables(source, wikitext, pinned, TWO_TABLES);
+    case "oneTable":
+      return parseTables(source, wikitext, pinned, ONE_TABLE);
+    case "clubSections":
+      return parseClubSections(source, wikitext, pinned);
+  }
 }

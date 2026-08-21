@@ -9,11 +9,13 @@
  * a boundary, so a day or two of drift changes nothing.
  */
 /**
- * The two shapes English Wikipedia publishes a country's transfer list in.
- * England is two wikitables with a date column and a fee column; Spain is one
- * section per club holding two `{{fs player}}` lists and neither column.
+ * The three shapes English Wikipedia publishes a country's transfer list in.
+ * England is two wikitables, `Transfers` and `Loans`, with a date column and a
+ * fee column; Italy is one wikitable of England's columns whose fee column
+ * carries the loans; Spain and France are one section per club holding two
+ * `{{fs player}}` lists and neither column.
  */
-export type TransferListFormat = "tables" | "clubSections";
+export type TransferListFormat = "tables" | "oneTable" | "clubSections";
 
 export interface TransferWindow {
   /** Names the archive source, `wikipedia:squad-changes:<name>`. */
@@ -85,6 +87,61 @@ const TRANSFER_WINDOWS: Readonly<Record<string, readonly TransferWindow[]>> = {
   // began on 1 July 2026 ... will close at midnight on 1 September 2026." The
   // winter dates are the customary ones and are frozen here in August on the
   // same terms as England's, whose 2026-27 page does not exist yet either.
+  // Read off the page's own lead on 2026-08-21: "The 2026 Italian football
+  // summer transfer window runs from 1 July to 1 September 2026 (8 p.m.)", and
+  // `since` off the previous page's lead the same way -- the winter 2025-26
+  // list states its window as 2 January to 2 February 2026. The winter 2026-27
+  // dates are the customary ones and are frozen here in August on England's
+  // and Spain's terms, the page for them not existing yet.
+  SA: [
+    {
+      name: "italy-summer-2026",
+      page: "List of Italian football transfers summer 2026",
+      since: new Date("2026-02-02T00:00:00Z"),
+      opensOn: new Date("2026-07-01T00:00:00Z"),
+      closesOn: new Date("2026-09-01T00:00:00Z"),
+      format: "oneTable"
+    },
+    {
+      name: "italy-winter-2026-27",
+      page: "List of Italian football transfers winter 2026–27",
+      since: new Date("2026-09-01T00:00:00Z"),
+      opensOn: new Date("2027-01-02T00:00:00Z"),
+      closesOn: new Date("2027-02-02T00:00:00Z"),
+      format: "oneTable"
+    }
+  ],
+  // France is the one country of the four whose transfer list states no window
+  // dates at all -- neither the summer 2026 page nor the winter one before it
+  // says when the window it lists opened or shut. These come from the LFP's
+  // own announcements instead, which are the dates the page is a list of:
+  // 15 June to 1 September 2026 for the summer (`lfp.fr/article/
+  // les-dates-du-mercato-2026-2027`, read 2026-08-21), and 1 January to
+  // 1 February 2027 for the winter, announced in the same article. `since` is
+  // the previous window's close, 2 February 2026, from the LFP's 2025-2026
+  // article. France's winter dates are therefore announced rather than
+  // customary, which no other country's are. Its title is not: like every
+  // other winter title here it is frozen from the naming convention the
+  // previous editions used, and both winter 2026-27 pages answered 404 on
+  // 2026-08-21, so neither is verifiable until it is created.
+  FL1: [
+    {
+      name: "france-summer-2026",
+      page: "List of French football transfers summer 2026",
+      since: new Date("2026-02-02T00:00:00Z"),
+      opensOn: new Date("2026-06-15T00:00:00Z"),
+      closesOn: new Date("2026-09-01T00:00:00Z"),
+      format: "clubSections"
+    },
+    {
+      name: "france-winter-2026-27",
+      page: "List of French football transfers winter 2026–27",
+      since: new Date("2026-09-01T00:00:00Z"),
+      opensOn: new Date("2027-01-01T00:00:00Z"),
+      closesOn: new Date("2027-02-01T00:00:00Z"),
+      format: "clubSections"
+    }
+  ],
   PD: [
     {
       name: "spain-summer-2026",

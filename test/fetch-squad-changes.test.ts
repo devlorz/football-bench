@@ -826,3 +826,532 @@ describe("fetching a second Competition's Squad Changes", () => {
     expect(requested).toEqual([]);
   });
 });
+
+/**
+ * Serie A's twenty as football-data.org spells them, the identity `fixtures`
+ * stores for a Competition that reads its schedule from there (ADR-0036).
+ */
+const ITALIAN_CLUBS = [
+  "AC Milan", "AC Monza", "ACF Fiorentina", "AS Roma", "Atalanta BC",
+  "Bologna FC 1909", "Cagliari Calcio", "Como 1907",
+  "FC Internazionale Milano", "Frosinone Calcio", "Genoa CFC", "Juventus FC",
+  "Parma Calcio 1913", "SS Lazio", "SSC Napoli", "Torino FC", "US Lecce",
+  "US Sassuolo Calcio", "Udinese Calcio", "Venezia FC"
+];
+
+const ITALIAN_PAGE_URL =
+  "https://en.wikipedia.org/w/index.php"
+  + "?title=List_of_Italian_football_transfers_summer_2026&action=raw";
+
+/**
+ * The real page, fetched on 2026-08-21 and pinned on the same terms as the
+ * two above. Re-pinning this digest means re-reading the assertions below.
+ */
+const ITALIAN_PAGE_SHA256 =
+  "4e2520901d0aeb2c56847ee4fe6d84e82c5b8473a3044448e5d77e9912457563";
+
+async function italianPage(): Promise<string> {
+  const body = await archivedBody(
+    "wikipedia-transfers-italy-summer-2026.txt.gz"
+  );
+  expect(createHash("sha256").update(body, "utf8").digest("hex"))
+    .toBe(ITALIAN_PAGE_SHA256);
+  return body;
+}
+
+/** Ligue 1's eighteen, as football-data.org spells them. */
+const FRENCH_CLUBS = [
+  "AJ Auxerre", "AS Monaco FC", "Angers SCO", "ES Troyes AC", "FC Lorient",
+  "Le Havre AC", "Le Mans FC", "Lille OSC", "OGC Nice", "Olympique Lyonnais",
+  "Olympique de Marseille", "Paris FC", "Paris Saint-Germain FC",
+  "RC Strasbourg Alsace", "Racing Club de Lens", "Stade Brestois 29",
+  "Stade Rennais FC 1901", "Toulouse FC"
+];
+
+const FRENCH_PAGE_URL =
+  "https://en.wikipedia.org/w/index.php"
+  + "?title=List_of_French_football_transfers_summer_2026&action=raw";
+
+/** The real page, fetched on 2026-08-21 and pinned. */
+const FRENCH_PAGE_SHA256 =
+  "5fe7caa9fd90ae36f41fb2a643b2676a5f16277b4f751d881be46ccadf978733";
+
+async function frenchPage(): Promise<string> {
+  const body = await archivedBody(
+    "wikipedia-transfers-france-summer-2026.txt.gz"
+  );
+  expect(createHash("sha256").update(body, "utf8").digest("hex"))
+    .toBe(FRENCH_PAGE_SHA256);
+  return body;
+}
+
+/**
+ * The club map derived, both directions, against the two responses the map was
+ * derived from — `test/fetch-football-data-org-competition.test.ts` pins those
+ * bytes as the day-one capture and this reads the same file. A count is not a
+ * set: what is asserted is which spellings, each way, so a map that gained a
+ * relegated club and lost a promoted one could not pass by staying the same
+ * size.
+ */
+describe("the derived Wikipedia club maps", () => {
+  test.each([
+    ["SA", "football-data-org-2026-27-SA-recorded.json.gz", ITALIAN_CLUBS],
+    ["FL1", "football-data-org-2026-27-FL1-recorded.json.gz", FRENCH_CLUBS]
+  ])("%s's keys are exactly the clubs the live source names",
+    async (competition, fixture, clubs) => {
+      const recorded = JSON.parse(await archivedBody(fixture)) as {
+        matches: { homeTeam: { name: string } }[];
+      };
+      const named = [...new Set(recorded.matches.map(
+        ({ homeTeam }) => homeTeam.name
+      ))].sort();
+
+      expect(named).toEqual([...clubs].sort());
+      for (const club of named) {
+        expect(resolveWikipediaClub(competition, club)).toBeDefined();
+      }
+    });
+
+  test("Ligue 1's displayed names are exactly the page's own section headings",
+    async () => {
+      // The other direction, on the side the map is joined to: a heading left
+      // over would be a club the map does not hold, and this page heads its
+      // sections in bare text, so the displayed name is the whole join.
+      const page = await frenchPage();
+      const ligue1 = page.slice(
+        page.indexOf("==Ligue 1=="), page.indexOf("==Ligue 2==")
+      );
+      const headings = [...ligue1.matchAll(/^===\s*(.+?)\s*===$/gm)]
+        .map(([, heading]) => heading as string).sort();
+
+      expect(headings).toEqual(FRENCH_CLUBS.map((club) =>
+        (resolveWikipediaClub("FL1", club) as WikipediaClub).name).sort());
+    });
+});
+
+describe("parsing a window published as one dated table", () => {
+  const parse = (wikitext: string, clubs = ITALIAN_CLUBS) =>
+    parseSquadChanges(
+      "wikipedia:squad-changes:italy-summer-2026",
+      wikitext,
+      pinnedClubs("SA", clubs),
+      "oneTable"
+    );
+
+  // Italy's page carries England's five columns and only one table, so the fee
+  // column is where a loan is stated. Its dates and its names are templates
+  // rather than text — `{{dts|format=dmy|2026|8|2}}` and `{{Sort|Kolo Muani,
+  // Randal|...}}` — which is the second thing about this page that no other
+  // one does.
+  test("reads Signings with the fees and the templated dates the page states",
+    async () => {
+      const changes = parse(await italianPage());
+
+      expect(movement(changes, "Juventus FC", "in")).toEqual([
+        ["2026-06-15", "Jérémie Boga", "Nice", "€4.8M", false],
+        ["2026-07-01", "Jeff Ekhator", "Genoa", "€16,4M", false],
+        ["2026-08-02", "Kerim Alajbegović", "Bayer Leverkusen", "€32M", false],
+        ["2026-08-02", "Randal Kolo Muani", "Paris Saint-Germain", "€41.2M",
+          false],
+        ["2026-08-17", "Jhon Lucumí", "Bologna", "€20.1M", false],
+        // The fee column says `Loan`, which is not an amount: the row is a
+        // loan and it states no fee, exactly as an English loans-table row.
+        ["2026-08-18", "Guglielmo Vicario", "Tottenham", null, true]
+      ]);
+    });
+
+  test("reads a loan from the fee column, and stores no fee for it",
+    async () => {
+      const changes = parse(await italianPage());
+
+      expect(movement(changes, "Juventus FC", "out")).toEqual([
+        ["2026-07-01", "Giovanni Daffara", "Parma", "Undisclosed", false],
+        ["2026-07-28", "Loïs Openda", "Lyon", null, true],
+        ["2026-08-03", "João Mário", "Fiorentina", null, true],
+        ["2026-08-03", "Vasilije Adžić", "Sassuolo", null, true],
+        ["2026-08-10", "Simone Scaglia", "Padova", null, true],
+        ["2026-08-20", "Emanuele Pecorino", "Catanzaro", "Undisclosed", false]
+      ]);
+    });
+
+  test("records both sides of a move between two Serie A clubs", async () => {
+    const changes = parse(await italianPage());
+
+    expect(movement(changes, "Juventus FC", "out")).toContainEqual(
+      ["2026-08-03", "Vasilije Adžić", "Sassuolo", null, true]
+    );
+    expect(movement(changes, "US Sassuolo Calcio", "in")).toContainEqual(
+      ["2026-08-03", "Vasilije Adžić", "Juventus", null, true]
+    );
+  });
+
+  test("reads a club through its article, however the row displays it",
+    async () => {
+      // football-data.org's `FC Internazionale Milano` is the page's `Inter
+      // Milan`, displayed as `Inter`: the one pairing in this map that is not
+      // the article title outright.
+      const changes = parse(await italianPage());
+
+      expect(movement(changes, "FC Internazionale Milano", "in"))
+        .toContainEqual(
+          ["2026-07-08", "Ivan Provedel", "Lazio", "Undisclosed", false]
+        );
+    });
+
+  test("fails naming a club whose article the page has moved", async () => {
+    const moved = new Map(pinnedClubs("SA", ITALIAN_CLUBS));
+    moved.set("US Lecce", { article: "Unione Sportiva Lecce", name: "Lecce" });
+    const page = await italianPage();
+
+    expect(() => parseSquadChanges(
+      "wikipedia:squad-changes:italy-summer-2026",
+      page,
+      moved,
+      "oneTable"
+    )).toThrow(
+      /no move on the page links US Lecce's article Unione Sportiva Lecce/
+    );
+  });
+
+  test("skips a move touching none of the twenty clubs", async () => {
+    const changes = parse(await italianPage());
+
+    // Two Serie B clubs, on a page that lists the whole of Serie A and B.
+    expect(changes.some(({ counterpartClub }) =>
+      counterpartClub === "Juve Stabia")).toBe(true);
+    expect(changes.some(({ club }) => club === "SS Juve Stabia")).toBe(false);
+  });
+});
+
+describe("parsing France's window, published as one section per club", () => {
+  const parse = (wikitext: string, clubs = FRENCH_CLUBS) =>
+    parseSquadChanges(
+      "wikipedia:squad-changes:france-summer-2026",
+      wikitext,
+      pinnedClubs("FL1", clubs),
+      "clubSections"
+    );
+
+  test("reads both directions from headings the page does not link",
+    async () => {
+      // `===Brest===` — bare text, so the displayed name is the only identity
+      // the heading carries, exactly as on every Spanish winter edition.
+      const changes = parse(await frenchPage());
+
+      expect(movement(changes, "Stade Brestois 29", "in")).toEqual([
+        [null, "Noé Poillion", "Metz", null, false]
+      ]);
+      expect(movement(changes, "Stade Brestois 29", "out")).toEqual([
+        [null, "Radosław Majecki", "Monaco", null, true],
+        [null, "Daouda Guindo", "Reims", null, false]
+      ]);
+    });
+
+  test("records both sides of a move between two Ligue 1 clubs", async () => {
+    const changes = parse(await frenchPage());
+
+    expect(movement(changes, "Racing Club de Lens", "out")).toContainEqual(
+      [null, "Adrien Thomasson", "Rennes", null, false]
+    );
+    expect(movement(changes, "Stade Rennais FC 1901", "in")).toContainEqual(
+      [null, "Adrien Thomasson", "Lens", null, false]
+    );
+  });
+
+  test("reads the loan marker from the move, not from the career behind it",
+    async () => {
+      const changes = parse(await frenchPage());
+
+      // "to Panathinaikos, previously on loan" — a permanent departure whose
+      // sentence says loan, and the shape that called thirty Spanish rows
+      // loans before `currentMove` cut the sentence at its first clause.
+      expect(movement(changes, "Racing Club de Lens", "out")).toContainEqual(
+        [null, "Anass Zaroury", "Panathinaikos", null, false]
+      );
+      expect(movement(changes, "Racing Club de Lens", "out")).toContainEqual(
+        [null, "Mattia Fortin", "Palermo", null, true]
+      );
+    });
+
+  test("skips the Ligue 2 sections the page lists beside Ligue 1's",
+    async () => {
+      const changes = parse(await frenchPage());
+
+      expect(changes.every(({ club }) => FRENCH_CLUBS.includes(club)))
+        .toBe(true);
+      // Nantes heads a Ligue 2 section on this page and moved players in it.
+      expect(changes.some(({ club }) => club === "Nantes")).toBe(false);
+    });
+
+  test("fails naming a club the page carries no section for", async () => {
+    // Montpellier is on this page, under `==Ligue 2==`: a club relegated out
+    // of the Competition whose map still held it would fail here rather than
+    // render as a club that stood still.
+    const promoted = new Map(pinnedClubs("FL1", FRENCH_CLUBS));
+    promoted.set("Montpellier HSC", {
+      article: "Montpellier HSC",
+      name: "Montpellier HSC"
+    });
+    const page = await frenchPage();
+
+    expect(() => parseSquadChanges(
+      "wikipedia:squad-changes:france-summer-2026",
+      page,
+      promoted,
+      "clubSections"
+    )).toThrow(/no section for Montpellier HSC/);
+  });
+});
+
+describe("fetching a third and a fourth Competition's Squad Changes", () => {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+
+  beforeAll(async () => {
+    await client.connect();
+    await resetSchema(client);
+
+    return async () => {
+      await client.end();
+    };
+  });
+
+  beforeEach(async () => {
+    await client.query(
+      "truncate squad_changes, fixtures, gameweeks, raw_snapshots "
+      + "restart identity cascade"
+    );
+    // Four Competitions, four Gameweek 1s. The number is shared and the
+    // partition is not, which is the whole hazard this suite watches.
+    await client.query(
+      `insert into gameweeks (competition, season, gw, deadline_at) values
+         ('PL', '2026-27', 1, '2026-08-21T17:30:00Z'),
+         ('PD', '2026-27', 1, '2026-08-15T16:00:00Z'),
+         ('SA', '2026-27', 1, '2026-08-22T16:00:00Z'),
+         ('FL1', '2026-27', 1, '2026-08-21T18:45:00Z')`
+    );
+    let fixtureId = 0;
+    for (const [competition, clubs] of [
+      ["SA", ITALIAN_CLUBS] as const,
+      ["FL1", FRENCH_CLUBS] as const
+    ]) {
+      for (const [index, club] of clubs.entries()) {
+        fixtureId += 1;
+        await client.query(
+          `insert into fixtures (
+             competition, season, fixture_id, gw, home_team, away_team,
+             kickoff_at
+           ) values ($1, '2026-27', $2, 1, $3, $4, '2026-08-22T17:30:00Z')`,
+          [
+            competition,
+            fixtureId,
+            club,
+            clubs[(index + 1) % clubs.length]
+          ]
+        );
+      }
+    }
+  });
+
+  const fetcherFor = async (competition: "SA" | "FL1") => {
+    const body = competition === "SA"
+      ? await italianPage()
+      : await frenchPage();
+    const requested: string[] = [];
+    return {
+      requested,
+      http: async (url: string) => {
+        requested.push(url);
+        return { status: 200, body };
+      }
+    };
+  };
+
+  const fetchFor = async (competition: "SA" | "FL1") => {
+    const { http, requested } = await fetcherFor(competition);
+    const result = await fetchSquadChanges({
+      database: client,
+      competition,
+      season: "2026-27",
+      http,
+      now: () => new Date("2026-08-21T09:00:00Z")
+    });
+    return { result, requested };
+  };
+
+  test("stores Serie A's window under its own Competition", async () => {
+    const { result, requested } = await fetchFor("SA");
+
+    expect(requested).toEqual([ITALIAN_PAGE_URL]);
+    expect(result).toMatchObject({ stored: true, gameweek: 1 });
+    const stored = await client.query(
+      // `dated_on` as text, because a `date` column comes back as a Date at
+      // the runtime's own midnight and the assertion is about which day.
+      `select competition, gw, direction, counterpart_club, fee,
+              dated_on::text as dated_on, loan
+         from squad_changes
+        where club = 'Juventus FC' and player = 'Randal Kolo Muani'`
+    );
+    expect(stored.rows).toEqual([{
+      competition: "SA",
+      gw: 1,
+      direction: "in",
+      counterpart_club: "Paris Saint-Germain",
+      fee: "€41.2M",
+      dated_on: "2026-08-02",
+      loan: false
+    }]);
+    const archived = await client.query<{ source: string }>(
+      "select source from raw_snapshots"
+    );
+    expect(archived.rows).toEqual([{
+      source: "wikipedia:squad-changes:italy-summer-2026"
+    }]);
+  });
+
+  test("stores Ligue 1's window under its own Competition", async () => {
+    const { result, requested } = await fetchFor("FL1");
+
+    expect(requested).toEqual([FRENCH_PAGE_URL]);
+    expect(result).toMatchObject({ stored: true, gameweek: 1 });
+    const stored = await client.query(
+      `select competition, gw, direction, counterpart_club, fee, dated_on, loan
+         from squad_changes
+        where club = 'Stade Brestois 29' and player = 'Radosław Majecki'`
+    );
+    expect(stored.rows).toEqual([{
+      competition: "FL1",
+      gw: 1,
+      direction: "out",
+      counterpart_club: "Monaco",
+      fee: null,
+      dated_on: null,
+      loan: true
+    }]);
+    const archived = await client.query<{ source: string }>(
+      "select source from raw_snapshots"
+    );
+    expect(archived.rows).toEqual([{
+      source: "wikipedia:squad-changes:france-summer-2026"
+    }]);
+  });
+
+  test("leaves every other Competition's Gameweek 1 partition untouched",
+    async () => {
+      for (const competition of ["PL", "PD"]) {
+        await client.query(
+          `insert into squad_changes (
+             competition, season, gw, club, direction, player,
+             counterpart_club, fee, loan, dated_on, observed_at
+           ) values (
+             $1, '2026-27', 1, 'a club', 'in', 'a player', 'a counterpart',
+             null, false, null, '2026-08-14T09:00:00Z'
+           )`,
+          [competition]
+        );
+      }
+
+      await fetchFor("SA");
+      await fetchFor("FL1");
+
+      const partitions = await client.query(
+        `select competition, count(*)::int as rows
+           from squad_changes group by competition order by competition`
+      );
+      expect(partitions.rows).toEqual([
+        { competition: "FL1", rows: 162 },
+        { competition: "PD", rows: 1 },
+        { competition: "PL", rows: 1 },
+        { competition: "SA", rows: 342 }
+      ]);
+    });
+
+  const storedSection = async (
+    competition: string,
+    deadline: string,
+    homeTeam: string,
+    awayTeam: string
+  ) => {
+    const stored = await client.query<SquadChangeRow>(
+      `select club, direction, player, counterpart_club, fee, loan, dated_on
+         from squad_changes
+        where competition = $1 and season = '2026-27' and gw = 1`,
+      [competition]
+    );
+    return buildSquadChangesContext({
+      competition,
+      deadline: new Date(deadline),
+      homeTeam,
+      awayTeam,
+      changes: stored.rows
+    });
+  };
+
+  // The whole path in one test, as La Liga's has: the recorded page, through
+  // the fetch, into the database, and back out through the query
+  // `loadMatchContextData` runs into the section an Entrant reads.
+  test("renders a stored Serie A window as the section a packet carries",
+    async () => {
+      await fetchFor("SA");
+
+      expect(await storedSection(
+        "SA", "2026-08-22T16:00:00Z", "SSC Napoli", "Juventus FC"
+      )).toBe([
+        "Squad changes since 2 Feb 2026:",
+        "",
+        "SSC Napoli",
+        "In: Rasmus Højlund (from Man United, undisclosed), "
+        + "Alisson Santos (from Sporting, undisclosed), "
+        + "Costantino Favasuli (from Catanzaro) (loan)",
+        "Out: Alessio Zerbin (to Frosinone, undisclosed), "
+        + "Luis Hasa (to Frosinone, undisclosed), "
+        + "Coli Saco (to Riga, undisclosed), "
+        + "Emanuele Rao (to Pisa) (loan), "
+        + "Miguel Gutiérrez (to Bayer Leverkusen, undisclosed), "
+        + "Lorenzo Sgarbi (to Sambenedettese) (loan), "
+        + "Gennaro Iaccarino (to Arezzo, undisclosed), "
+        + "Romelu Lukaku (to Fenerbahçe, undisclosed), "
+        + "Antonio Cioffi (to Latina, undisclosed)",
+        "",
+        "Juventus FC",
+        // The fees are euros and `feeAmount` reads pounds, so none of them
+        // sorts as an amount and the whole section falls through to the date.
+        "In: Jérémie Boga (from Nice, €4.8m), "
+        + "Jeff Ekhator (from Genoa, €16,4m), "
+        + "Kerim Alajbegović (from Bayer Leverkusen, €32m), "
+        + "Randal Kolo Muani (from Paris Saint-Germain, €41.2m), "
+        + "Jhon Lucumí (from Bologna, €20.1m), "
+        + "Guglielmo Vicario (from Tottenham) (loan)",
+        "Out: Giovanni Daffara (to Parma, undisclosed), "
+        + "Loïs Openda (to Lyon) (loan), "
+        + "João Mário (to Fiorentina) (loan), "
+        + "Vasilije Adžić (to Sassuolo) (loan), "
+        + "Simone Scaglia (to Padova) (loan), "
+        + "Emanuele Pecorino (to Catanzaro, undisclosed)"
+      ].join("\n"));
+    });
+
+  test("renders a stored Ligue 1 window as the section a packet carries",
+    async () => {
+      await fetchFor("FL1");
+
+      expect(await storedSection(
+        "FL1", "2026-08-21T18:45:00Z", "Stade Brestois 29",
+        "Olympique de Marseille"
+      )).toBe([
+        "Squad changes since 2 Feb 2026:",
+        "",
+        "Stade Brestois 29",
+        "In: Noé Poillion (from Metz, fee not stated)",
+        // Every French row ties on fee and on date, both null the whole way
+        // down, so the section orders by player.
+        "Out: Daouda Guindo (to Reims, fee not stated), "
+        + "Radosław Majecki (to Monaco) (loan)",
+        "",
+        "Olympique de Marseille",
+        "In: none recorded",
+        "Out: Hamed Traorè (to Genoa) (loan), "
+        + "Mason Greenwood (to Fenerbahçe, fee not stated), "
+        + "Pierre-Emerick Aubameyang (to Deportivo A Coruña, fee not stated)"
+      ].join("\n"));
+    });
+});

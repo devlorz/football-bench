@@ -141,16 +141,28 @@ const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
   // Ligue 1's landed on 2026-08-21 and its pin did not move either — read,
   // not predicted: the suite stayed green across the backfill, and the real
   // packet was read whole over 611 stored results and 298 joined xG rows.
+  //
+  // Both pins then moved once, on 2026-08-21, and for the one reason a frozen
+  // rendering may move before its first use: a window gate changed what the
+  // packet says. Each league's transfer windows were written down, so a
+  // deadline inside one now renders a Squad Changes section where the render
+  // carried none at all — the stated absence "no Squad Change data stored for
+  // this Gameweek", which is exactly what the Premier League's and La Liga's
+  // pinned renders carry over the same empty list. Read before it was
+  // written: the four renders' sections are identical but for their heading
+  // date, and both versions are v1, unused and unamendable only from their
+  // first Lock (ADR-0042), so this is a freeze being corrected and not a used
+  // prompt changing.
   SA: {
     version: "match-sa/2026-27-v1",
     sha256:
-      "c82e68504614152e4f019e22c3444b87c0b12acb25ab412aace3540b81274b76",
+      "0f2098122b40dfdbcbf59e4da9811984d560bd340cec09ca1c6146434c1051db",
     competitionName: "Serie A"
   },
   FL1: {
     version: "match-fl1/2026-27-v1",
     sha256:
-      "dabac3c9a5ee3d4e9ff08a91adb6d53d13562e8c85f312be7f142edf11810468",
+      "ea8046976d449d960fefd67a42856baad487a3d23ce5e486b0b840d2dd917be7",
     competitionName: "Ligue 1"
   }
 };
