@@ -200,6 +200,13 @@ gw)` as the predict path itself selects, and `prompt_version` is a column of `mo
 seat, and never of `contexts`. That last one is a mistake this project has already made
 once and written down._
 
+_**Re-read 2026-08-21 and every figure held**: four leagues listed, ten seats at
+`match-fl1/2026-27-v1`, `deadline_at` `2026-08-21 17:15:00+00`, the two runs completed
+`17:05:16.821` and `17:05:17.108`, and **90 Predictions with the last written
+`17:05:16.549+00`**. So the margin is eight minutes and forty-three seconds, which the
+prose above rounds to nine; the record is the timestamp. Nothing in this ticket now rests
+on a pasted number that cannot be asked for again._
+
 ### Cost
 
 Nine Fixtures times ten seats, at the $0.1845 per Fixture the
