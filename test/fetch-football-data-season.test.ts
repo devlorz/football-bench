@@ -289,6 +289,65 @@ describe("fetching football-data.co.uk results", () => {
           { field: "row.2.FTAG", detail: "expected a non-negative integer" }
         ]
       });
+
+      // How rare this row is, checked rather than asserted in prose: of the six
+      // committed files only `F2` carries one, and only one. That is what makes
+      // it reasonable that the parser met it for the first time on the seventh
+      // backfill -- and it is scoped to what the repo holds, since `SP1` and
+      // `SP2` are not committed and nothing here can speak for them.
+      const resultless = await Promise.all([
+        "E0", "E1", "F1", "F2", "I1", "I2"
+      ].map(async (code) => {
+        const rows = (await archivedBody(`football-data-2526-${code}.csv.gz`))
+          .split(/\r?\n/).filter((line) => line.length > 0);
+        const header = rows[0]?.split(",") ?? [];
+        const home = header.indexOf("FTHG");
+        const away = header.indexOf("FTAG");
+        const empty = rows.slice(1)
+          .map((row) => row.split(","))
+          .filter((row) => row[home] === "" && row[away] === "");
+        return [code, empty.length] as const;
+      }));
+      expect(resultless).toEqual([
+        ["E0", 0], ["E1", 0], ["F1", 0], ["F2", 1], ["I1", 0], ["I2", 0]
+      ]);
+    });
+
+  // The half of the rule above that an earlier version of it broke. Withholding
+  // the two score issues is not the same as skipping the row, and the first
+  // version skipped: a resultless row with an unreadable date, an empty club or
+  // a redirected `Div` was dropped in silence where it used to raise. Every
+  // check other than the two scores still runs on such a row.
+  test("still refuses a resultless row that is broken some other way",
+    async () => {
+      const responses = new Map([
+        [
+          "https://www.football-data.co.uk/mmz4281/2526/E0.csv",
+          "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG\n"
+          + "E0,not-a-date,20:00,Arsenal,,,\n"
+        ],
+        [
+          "https://www.football-data.co.uk/mmz4281/2526/E1.csv",
+          "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG\n"
+          + "E1,08/08/2025,20:00,Birmingham,Ipswich,1,1\n"
+        ]
+      ]);
+
+      await expect(fetchFootballDataSeason({
+        database: client,
+        competition: "PL",
+        season: "2025-26",
+        http: async (url) => ({ status: 200, body: responses.get(url) ?? "" })
+      })).rejects.toMatchObject({
+        name: FootballDataSourceValidationError.name,
+        source: "football_data:2025-26:E0",
+        // The two score issues are the only ones withheld, and they are absent
+        // here while both of the others are raised.
+        issues: [
+          { field: "row.2.Date", detail: "expected DD/MM/YYYY" },
+          { field: "row.2.AwayTeam", detail: "team name is empty" }
+        ]
+      });
     });
 
   test("refuses a row whose shot column is present but malformed", async () => {
@@ -525,7 +584,7 @@ describe("fetching football-data.co.uk results", () => {
       ));
 
       const topFlight = await archivedHomeTeams("football-data-2526-I1.csv.gz");
-      const secondTier = await archivedHomeTeams("football-data-2526-I2.csv.gz");
+      const secondDivision = await archivedHomeTeams("football-data-2526-I2.csv.gz");
 
       const names = teamNamesOf("SA");
       expect(Object.keys(names ?? {}).sort()).toEqual([...clubs].sort());
@@ -545,10 +604,10 @@ describe("fetching football-data.co.uk results", () => {
       // out of it, and no others.
       expect([...topFlight].filter((name) => !values.includes(name)).sort())
         .toEqual(["Cremonese", "Pisa", "Verona"]);
-      expect(values.filter((name) => secondTier.has(name)).sort())
+      expect(values.filter((name) => secondDivision.has(name)).sort())
         .toEqual(["Frosinone", "Monza", "Venezia"]);
       expect(values.filter(
-        (name) => !topFlight.has(name) && !secondTier.has(name)
+        (name) => !topFlight.has(name) && !secondDivision.has(name)
       )).toEqual([]);
 
       expect(resolveFootballDataTeamName(names, "FC Internazionale Milano"))
@@ -576,7 +635,7 @@ describe("fetching football-data.co.uk results", () => {
       ));
 
       const topFlight = await archivedHomeTeams("football-data-2526-F1.csv.gz");
-      const secondTier = await archivedHomeTeams("football-data-2526-F2.csv.gz");
+      const secondDivision = await archivedHomeTeams("football-data-2526-F2.csv.gz");
 
       const names = teamNamesOf("FL1");
       expect(Object.keys(names ?? {}).sort()).toEqual([...clubs].sort());
@@ -588,10 +647,10 @@ describe("fetching football-data.co.uk results", () => {
       // relegated out of it, and no others.
       expect([...topFlight].filter((name) => !values.includes(name)).sort())
         .toEqual(["Metz", "Nantes"]);
-      expect(values.filter((name) => secondTier.has(name)).sort())
+      expect(values.filter((name) => secondDivision.has(name)).sort())
         .toEqual(["Le Mans", "Troyes"]);
       expect(values.filter(
-        (name) => !topFlight.has(name) && !secondTier.has(name)
+        (name) => !topFlight.has(name) && !secondDivision.has(name)
       )).toEqual([]);
 
       expect(resolveFootballDataTeamName(names, "Paris Saint-Germain FC"))

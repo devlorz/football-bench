@@ -630,6 +630,78 @@ describe("fetching Understat per-match xG", () => {
       expect(resolveUnderstatTeamName("FL1", "Paris FC")).toBe("Paris FC");
     });
 
+  // What the join rate cannot say, said here instead. `FL1`'s rate is 298 of
+  // 306 against `PD`'s 379 of 380, and a low rate is exactly the shape a
+  // mis-mapped club makes -- so the number on its own leaves the maps under
+  // suspicion. Both feeds are committed, so the question can be answered
+  // without dates at all: pair every stored result with its Understat match by
+  // club pair, and check the two sources agree on the score.
+  //
+  // They agree on all 306. That exonerates every one of the eighteen names
+  // independently of any date, which no join rate could: a swapped pair would
+  // put a wrong score on sixty-six of them.
+  test("agrees with Understat on every result, so the eight misses are dates",
+    async () => {
+      const feed = JSON.parse(
+        await archivedBody("understat-2025-26-Ligue_1.json.gz")
+      ) as {
+        dates: Array<{
+          datetime: string;
+          h: { title: string }; a: { title: string };
+          goals: { h: string; a: string };
+        }>;
+      };
+      const rows = (await archivedBody("football-data-2526-F1.csv.gz"))
+        .split(/\r?\n/).filter((line) => line.length > 0);
+      const column = new Map(
+        (rows[0]?.split(",") ?? []).map((name, index) => [name, index])
+      );
+      const field = (row: string[], name: string): string =>
+        row[column.get(name) ?? -1] ?? "";
+
+      const understat = new Map(feed.dates.map((match) => [
+        `${resolveUnderstatTeamName("FL1", match.h.title)}`
+        + `|${resolveUnderstatTeamName("FL1", match.a.title)}`,
+        { date: match.datetime.slice(0, 10), score: `${match.goals.h}-${match.goals.a}` }
+      ]));
+
+      const unpaired: string[] = [];
+      const disagreed: string[] = [];
+      const differentDate: string[] = [];
+      for (const row of rows.slice(1).map((line) => line.split(","))) {
+        const home = field(row, "HomeTeam");
+        const away = field(row, "AwayTeam");
+        const match = understat.get(`${home}|${away}`);
+        if (match === undefined) {
+          unpaired.push(`${home} v ${away}`);
+          continue;
+        }
+        if (match.score !== `${field(row, "FTHG")}-${field(row, "FTAG")}`) {
+          disagreed.push(`${home} v ${away}`);
+        }
+        // `DD/MM/YYYY` to the ISO date Understat sends, which is `joinXg`'s key.
+        const [day, month, year] = field(row, "Date").split("/");
+        if (match.date !== `${year}-${month}-${day}`) {
+          differentDate.push(`${home} v ${away}`);
+        }
+      }
+
+      expect(rows.slice(1)).toHaveLength(306);
+      expect(unpaired).toEqual([]);
+      expect(disagreed).toEqual([]);
+
+      // And the eight that do not join, named rather than counted: Understat
+      // files each of these two matchdays at a single nominal slot where
+      // football-data.co.uk holds the real kick-offs, spread across days. A
+      // ninth appearing here is a new disagreement worth reading, not a
+      // number to bump.
+      expect(differentDate.sort()).toEqual([
+        "Brest v Lorient", "Lens v Rennes", "Metz v Lille", "Metz v Monaco",
+        "Nantes v Lyon", "Nantes v Marseille", "Nice v Lens",
+        "Paris SG v Lorient"
+      ]);
+    });
+
   test("refuses a Competition with no Understat league", async () => {
     await expect(fetchUnderstatSeasonXg({
       database: client,

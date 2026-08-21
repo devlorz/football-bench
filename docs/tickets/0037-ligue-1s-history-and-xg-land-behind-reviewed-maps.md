@@ -31,6 +31,10 @@ Independent of 0036 — the two leagues' curation can run in parallel.
       it, and which pair could still read if it were swapped stay in each league's own
       test, because that is the part a reviewer has to check. **Found by review.**_
 
+      _The local name for the map's second-division values was `secondTier`, which is a
+      word CONTEXT.md's **Division** entry lists under _Avoid_. It came in with 0036 and
+      is `secondDivision` in both leagues' tests now. **Found by review.**_
+
       _The fixtures are the **archived bytes**, not a second capture. Re-runnable:_
 
       ```sql
@@ -123,14 +127,34 @@ Independent of 0036 — the two leagues' curation can run in parallel.
       _Fixed at the root, in the shared parser rather than at the FL1 call: a row whose
       two score cells are both empty is skipped. Skipped and not stored, because a 0-0
       invented there is a result that never happened and every base rate the packet
-      prints is an average over these rows. The `Div` check still runs on it — a
-      redirected file is a redirected file whether or not its rows carry scores._
+      prints is an average over these rows._
 
       _A row with **one** score and not the other is a half-written row, not a Match
       without a result, and still fails. That half is what stops "skip the empties" from
-      becoming "skip anything awkward", and it is asserted. Mutation-checked both ways:
-      widening the skip to `||` makes the half-written row stop rejecting; removing the
-      skip restores the original failure._
+      becoming "skip anything awkward", and it is asserted. Mutation-checked: widening the
+      condition to `||` makes the half-written row stop rejecting._
+
+      _**The first version of this skipped the row outright and took three other checks
+      down with it.** The `continue` sat after the `Div` check but before the `Date`,
+      `HomeTeam` and `AwayTeam` ones, so a resultless row with an unreadable date was
+      dropped in silence where it used to raise — and the new test used only well-formed
+      rows, so nothing said so. That is the failure mode this repo is built against, and
+      it was in the parser every league shares. **Found by review.**_
+
+      _Only the two score issues are withheld now; the row reaches every other check and
+      is excluded from `matches` by the push guard that already required both figures. A
+      resultless row carrying `not-a-date` and an empty `AwayTeam` is asserted to raise
+      exactly those two issues and neither score one. Mutation-checked by putting the
+      `continue` back above the `Date` check, which is the reviewed regression exactly:
+      red at `promise resolved "undefined" instead of rejecting`._
+
+      _**This changes what every Competition stores, so it is [ADR-0050](../adr/0050-a-row-the-source-has-no-result-for-is-not-corruption.md)**
+      rather than a note in one league's ticket._
+
+      _The claim that this row is rare is now checked instead of asserted: of the **six
+      committed files** — `E0`, `E1`, `F1`, `F2`, `I1`, `I2` — only `F2` carries one, and
+      only one. `SP1` and `SP2` are not committed, so the earlier version of this
+      sentence named two files the repo cannot check; it no longer does._
 
       _Archived under `football_data:2025-26:F1`, `football_data:2025-26:F2` and
       `understat:2025-26:Ligue_1`, each stored before anything was read from it._
@@ -140,8 +164,13 @@ Independent of 0036 — the two leagues' curation can run in parallel.
       so every Ligue 1 snapshot the archive holds replayed as "no archived snapshot
       source is known". That degrades a dry run to "xG unavailable" rather than failing
       it (ADR-0019) — the quiet kind of miss — and it was found only because `Ligue_1`
-      was pinned in the replay test alongside `Serie_A` rather than assumed. Now
-      `([A-Za-z_\d]+)`._
+      was pinned in the replay test alongside `Serie_A` rather than assumed. Now `(\w+)`._
+
+      _It is **the same bug as the three-character division code** ticket 6 fixed for
+      `SP1`: a source name this codebase chooses, and a pattern narrower than the names it
+      chooses. The two now sit next to each other in the file and say so. Ticket 0033
+      wrote that the bug could not recur here — true for `Serie_A`, and `Ligue_1` is why
+      it was worth pinning anyway. **Found by review.**_
 - [x] The xG join rate is read and recorded; a promoted club's prior Season renders from
       the second division the way the Championship does for `PL`.
       _**298 of 306**, read with `joinXg`'s own key — the UTC date of the kick-off and
@@ -171,17 +200,24 @@ Independent of 0036 — the two leagues' curation can run in parallel.
       kick-offs spread across days and times (18:00, 16:00, 19:45, 20:05). Understat is
       the source that is wrong about the date; both agree on the result._
 
-      _**The stronger check, which the join rate cannot make:** comparing the two
-      committed feeds club pair by club pair, all 306 pairs resolve and **not one has a
-      score the two sources disagree on**. That exonerates every name in both maps
-      independently of any date, and it is what a mis-mapped club could not survive —
-      the swap above would cost sixty-six._
+      _**The stronger check, which the join rate cannot make**, and it is a test rather
+      than prose because both feeds are committed: pair every stored result with its
+      Understat match by club pair, and all 306 resolve with **not one score the two
+      sources disagree on**. That exonerates every name in both maps independently of any
+      date, which no join rate could. The eight dates that differ are named in the same
+      test rather than counted, so a ninth is something to read rather than a number to
+      bump. Mutation-checked with the Paris swap, which turns it red at sixty
+      disagreements. **Found by review**, which asked for this claim to be queryable._
 
       _The eight surface honestly rather than silently: the packet prints
-      `xG unavailable` on those form lines and qualifies the prior-Season average as
-      `(over 33 of 34 matches)`. Not fixed here — a ±1-day join is a change to `joinXg`'s
-      key that could reach a club playing twice, and it belongs to whichever ticket wants
-      to argue for it._
+      `xG unavailable` on those form lines and qualifies the prior-Season average with
+      the coverage it actually had. **Ten of the eighteen read `(over 33 of 34 matches)`
+      and two read `(over 32 of 34)`** — Lens and Lorient, each touched twice — and the
+      remaining six carry no qualifier at all. Metz and Nantes are also short by two and
+      never render it: they are the two relegated out of Ligue 1. An earlier version of
+      this note said `33 of 34` for everybody. **Found by review.** Not fixed — a ±1-day
+      join is a change to `joinXg`'s key that could reach a club playing twice, and it
+      belongs to whichever ticket wants to argue for it._
 
       _A promoted club renders from the second division: Le Mans reads
       `Prior-Season final position: 2nd in 2025-26 Ligue 2; promoted: yes`, a
