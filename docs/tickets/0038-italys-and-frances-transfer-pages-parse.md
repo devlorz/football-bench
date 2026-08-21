@@ -134,6 +134,19 @@ anywhere: the first one lands with activation.
       checked against the `Transfers` table alone rather than the whole page.
       **Found by review.**_
 
+      _**Even that pair check admits the wrong club, and the derivation rule is what
+      refuses it.** Italy's `Transfers` table lists Serie A and Serie B together, so
+      `AC Monza` mapped to `Palermo FC|Palermo` is a link the page really writes, unique
+      on both fields, inside the table, leaving the parsed row count at 342 and both
+      rendered samples untouched — it passed every check above. What refuses it is the
+      rule this map was derived by and this ticket already wrote down: the article is the
+      live source's own spelling for all but a named few. Those few are pinned as a
+      constant — Serie A's `FC Internazionale Milano` → `Inter Milan`, Ligue 1's
+      `Racing Club de Lens` → `RC Lens` and `Stade Rennais FC 1901` →
+      `Stade Rennais FC` — so a mapping that wanders fails whether it wanders to a club
+      on the page or off it, and dropping a reviewed exception fails too.
+      **Found by review.**_
+
       _Which identity is load bearing differs by page, and the maps hold both: Italy
       links every club, so the **article** resolves there; France heads its sections in
       bare text — `===Lens===` — so the **displayed name** is the whole join, exactly as
@@ -231,6 +244,10 @@ the source restored from a byte copy taken before the run — never `git checkou
 | a stale 19th Ligue 1 entry, `Montpellier HSC` | 2 red |
 | Lecce's article beside Palermo's name, both on the page | 1 red |
 | two Ligue 1 clubs sharing one article | 2 red |
+| `AC Monza` → `Palermo FC\|Palermo`, the reviewer's own case | 1 red |
+| `Como 1907` → `Palermo FC\|Palermo` | 1 red |
+| `AC Monza` → `Carrarese Calcio 1908\|Carrarese` | 1 red |
+| Lens's reviewed exception quietly dropped | 2 red |
 
 ## Review
 
@@ -241,6 +258,9 @@ Three findings, all answered above and in the commit that follows this one.
 - _Both Wikipedia fields were not proved against the real pages_ — the pair is checked
   per league, with uniqueness on each field and Serie A's articles narrowed to the table.
   **P2.**
+- _Serie A's pairing was still provable only against a page carrying two divisions_ —
+  the article is asserted to be the live source's own spelling, with the reviewed
+  exceptions pinned as a constant. **P2, second pass.**
 - _Four country helpers repeated one archived-page reader_ — `pinnedPage(fixture, sha)`
   is that reading and nothing else; every digest and every country's assertions stay
   where they were. **P3.**

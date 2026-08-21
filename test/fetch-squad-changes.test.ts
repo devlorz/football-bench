@@ -975,10 +975,43 @@ describe("the derived Wikipedia club maps", () => {
         .map(([, { name }]) => name).sort());
     });
 
-  // Italy's equivalent of the heading check, on the side its parser resolves
-  // by: every article the map claims is one the `Transfers` table actually
-  // links, which is what the parser's own every-article-is-linked check tests
-  // through a fetch and this states directly.
+  /**
+   * The pairings that are *not* the live source's own spelling, per league, and
+   * the whole of what the human review was asked to decide.
+   *
+   * Stated as the exceptions rather than proved from the page, because the page
+   * cannot tell one club's real pairing from another's. Italy's `Transfers`
+   * table lists Serie A and Serie B together, so `AC Monza` mapped to
+   * `Palermo FC|Palermo` is a link the page really writes, unique on both
+   * fields, inside the table, leaving the parsed row count at 342 and the
+   * rendered samples untouched — every check here passed it. What refuses it is
+   * the rule the derivation actually followed: nineteen of Serie A's twenty and
+   * sixteen of Ligue 1's eighteen are the article title outright, and these are
+   * the rest. **Found by review.**
+   */
+  const REVIEWED_EXCEPTIONS: Readonly<
+    Record<string, Readonly<Record<string, string>>>
+  > = {
+    SA: { "FC Internazionale Milano": "Inter Milan" },
+    FL1: {
+      "Racing Club de Lens": "RC Lens",
+      "Stade Rennais FC 1901": "Stade Rennais FC"
+    }
+  };
+
+  test.each(["SA", "FL1"])(
+    "%s's articles are the live source's own spelling but for the reviewed few",
+    (competition) => {
+      const differing = mapOf(competition)
+        .filter(([club, { article }]) => article !== club)
+        .map(([club, { article }]) => [club, article]);
+
+      expect(Object.fromEntries(differing))
+        .toEqual(REVIEWED_EXCEPTIONS[competition]);
+    });
+
+  // And each of those articles is one the `Transfers` table itself links,
+  // rather than one the page mentions in prose somewhere.
   test("Serie A's articles are all linked by the table itself", async () => {
     const page = await italianPage();
     const table = page.slice(page.indexOf("{|"), page.indexOf("\n|}"));
