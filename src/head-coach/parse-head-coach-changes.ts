@@ -129,7 +129,15 @@ export function sectionTable(
 }
 
 export interface TableLines {
-  header: string[];
+  /**
+   * The header's own rows, kept apart rather than flattened, because a header
+   * can span two of them: Ligue 1's Personnel table heads five columns
+   * `rowspan="2"` and puts a `colspan="2"` group over two more named on a
+   * second line. Flattened, that table counts eight header cells for seven
+   * columns and every body row reads one short. The first row is the one that
+   * describes the table's shape; anything below it names a subdivision.
+   */
+  headerRows: string[][];
   rows: string[][];
 }
 
@@ -140,23 +148,47 @@ export interface TableLines {
  * wrapped over two lines stays one name.
  */
 export function tableLines(wikitable: string): TableLines {
-  const header: string[] = [];
+  const headerRows: string[][] = [];
   const rows: string[][] = [];
+  let headerRow: string[] | undefined;
   let current: string[] | undefined;
+  // A `|-` closes whatever row is open. Header cells after one belong to a new
+  // header row, not to the row above them.
+  let broken = false;
   for (const line of wikitable.split("\n")) {
     if (line.startsWith("|-")) {
+      broken = true;
       current = [];
       rows.push(current);
     } else if (line.startsWith("!")) {
-      header.push(line.slice(1));
+      if (headerRow === undefined || broken) {
+        headerRow = [];
+        headerRows.push(headerRow);
+        broken = false;
+      }
+      headerRow.push(line.slice(1));
     } else if (line.startsWith("|") && !line.startsWith("|+")) {
       // The table's own opening line is `{|`, which never reaches here.
-      (current ?? header).push(line.slice(1));
+      if (current === undefined && headerRow === undefined) {
+        headerRow = [];
+        headerRows.push(headerRow);
+      }
+      (current ?? headerRow as string[]).push(line.slice(1));
     } else if (current !== undefined && current.length > 0) {
       current[current.length - 1] += `\n${line}`;
     }
   }
-  return { header, rows: rows.filter((row) => row.length > 0) };
+  return { headerRows, rows: rows.filter((row) => row.length > 0) };
+}
+
+/**
+ * How many columns a cell claims, from its own attributes and nothing else —
+ * the companion to `rowspanOf`, and what makes a header's width the number of
+ * columns rather than the number of cells written for it.
+ */
+export function colspanOf(cell: string): number {
+  const attributes = /^[^|[{]*\bcolspan\s*=\s*"?(\d+)"?/i.exec(cell);
+  return Number(attributes?.[1] ?? 1);
 }
 
 /**
@@ -299,11 +331,14 @@ export function parseHeadCoachChanges(
 ): HeadCoachChange[] {
   const issues: HeadCoachSourceIssue[] = [];
   const changes: HeadCoachChange[] = [];
-  const { header, rows } = tableLines(
+  const { headerRows, rows } = tableLines(
     sectionTable(source, [SECTION_HEADING], wikitext).wikitable
   );
 
-  const labels = header.map(cellText);
+  // Flattened: this table's header is one row on all four articles, and a
+  // second one appearing is a shape change the label comparison should refuse
+  // rather than quietly ignore.
+  const labels = headerRows.flat().map(cellText);
   if (labels.join("|") !== columns.join("|")) {
     throw new HeadCoachSourceValidationError(source, [{
       field: SECTION_HEADING,

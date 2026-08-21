@@ -21,10 +21,13 @@ trail.
 - [x] `roster:enter` seats ten Entrants under `match-fl1/2026-27-v1`; the stored-seats
       guard holds.
 - [ ] `COMPETITION=FL1` dry run is green against the archived snapshots before the first
-      Lock. **Not done, and not doable as the archive stands** — the rehearsal is red for
-      every Competition, the two live ones included. Six missing snapshots, enumerated
-      below. The activation went ahead without it, against the stated alternative of
-      opening at Gameweek 2.
+      Lock. **Not done, and it cannot be made true afterwards.** At activation the
+      rehearsal was red for every Competition, the two live ones included; the activation
+      went ahead without it, against the stated alternative of opening at Gameweek 2.
+      Both causes have since been fixed and `COMPETITION=FL1` now exits 0 —
+      `Contexts: 9, Predictions: 0 (expected 0), Gaps: 90 (expected 90)` — but that is
+      after the Lock at `17:15:00Z`, and this box asks for green *before* it. Ticking it
+      would be backdating. Gameweek 2 onward is rehearsed; Gameweek 1 was not.
 - [x] Ligue 1 opens at the first Gameweek whose derived deadline had not passed at
       activation — its Gameweek 1 deadline was hours from ADR-0049's drafting, so played
       Gameweeks arriving as Locked history is the expected shape here, and the
@@ -252,3 +255,30 @@ byte copy, 5 green. `test/parse-head-coaches.test.ts`,
 `test/build-head-coach-context.test.ts` and `test/fetch-head-coach-changes.test.ts` are 40
 passed together, so the Premier League and La Liga are unmoved.
 `test/dashboard-competition-view.test.ts` is 16 passed.
+
+### Afterwards: both dry-run causes fixed
+
+Two changes after the Lock, neither of which can make box 3 true retrospectively.
+
+**The rehearsal walks one league.** `listArchivedCompetitions` became
+`listRehearsedCompetitions`: `PL` and the Competition named by `COMPETITION`, and nothing
+else. A league captured but not activated can no longer take another league's rehearsal
+down with it, and the ordering stops being circular. PL went green immediately; PD
+surfaced `StaleFootballDataSeasonError`, which is ticket 0035's open work showing through
+rather than an archive fault.
+
+**The two-row header is read.** `tableLines` now keeps the header's rows apart instead of
+flattening them, and `parseHeadCoaches` takes its width from the first row's `colspan`
+total rather than from the number of `!` lines. Ligue 1's Personnel table heads five
+columns `rowspan="2"` and puts a `colspan="2"` `Sponsors` group over `Main` and
+`Other(s)` beneath — seven columns written as eight header cells, which is why every one
+of its eighteen rows read one short. All three drifts are now fixed and the packet renders
+real names: `Head Coach: Patrick Videira`, `Will Still`.
+
+`COMPETITION=FL1` dry run: exit 0, `Contexts: 9, Predictions: 0 (expected 0), Gaps: 90
+(expected 90)`.
+
+**Gameweek 1's stored contexts keep the stated absence.** `predictions` is insert-only and
+the context is stored with the Prediction, so the ninety already written say
+`Head Coach: unavailable` and always will. The fix reaches Gameweek 2 onward. Production
+also holds no `head_coach_changes` row for `FL1` until a fetch runs again.

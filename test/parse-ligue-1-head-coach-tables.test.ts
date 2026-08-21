@@ -47,14 +47,14 @@ const ligue1 = headCoachSource("FL1", "2026-27");
 
 describe("the Ligue 1 season article's Head Coach tables", () => {
   test("the registry carries both of the article's own column lists", () => {
-    // Without these the two reads below are the parser's defaults, which are
-    // the other three leagues' shapes -- so their absence is the bug, not a
-    // missing nicety.
+    // Without these the two reads below fall back to the parser's defaults,
+    // which are the other three leagues' shapes -- so their absence is the
+    // bug, not a missing nicety.
     expect(ligue1?.columns).toContain("Position in table");
     expect(ligue1?.personnelColumns).toEqual(["Team", "Chairman", "Manager"]);
   });
 
-  test("Managerial changes parses under the article's own column labels", async () => {
+  test("Managerial changes parses under the article's own labels", async () => {
     const awaited = await article();
     expect(() => parseHeadCoachChanges(
       SOURCE, awaited, pinned, ligue1?.columns
@@ -62,24 +62,40 @@ describe("the Ligue 1 season article's Head Coach tables", () => {
   });
 
   test("and is refused under the other three leagues' labels", async () => {
-    // shrugged at the difference would accept that wording from every league.
+    // Ligue 1 heads its fifth column `Position in table` where the Premier
+    // League, La Liga and Serie A all write `Position in the table`. A parser
+    // that shrugged at the difference would accept that wording from every
+    // league whose page does not use it, which is what pinning prevents.
     const awaited = await article();
     expect(() => parseHeadCoachChanges(SOURCE, awaited, pinned))
       .toThrow(HeadCoachSourceValidationError);
   });
 
   test("Personnel and kits is refused under the common leading pair", async () => {
+    // `Manager` is this article's third column, behind `Chairman`. Read by
+    // position against `Team, Manager`, every club's chairman would be stored
+    // as its Head Coach and nothing downstream could tell, so the refusal is
     // the feature.
     const awaited = await article();
     expect(() => parseHeadCoaches(SOURCE, awaited, pinned))
       .toThrow(HeadCoachSourceValidationError);
   });
 
-  test("and still refuses under its own labels, on the row width", async () => {
-    // lost. Ligue 1 renders no Head Coach section until this is fixed.
+  test("and reads all eighteen Head Coaches under its own labels", async () => {
+    // The header spans two rows: five `rowspan="2"` columns and a `Sponsors`
+    // group that `colspan="2"` splits into `Main` and `Other(s)` beneath it.
+    // The table is seven columns wide, which is what the body rows are;
+    // counting the `!` lines makes it eight and leaves every row one short.
     const awaited = await article();
-    expect(() => parseHeadCoaches(
+    const inPost = parseHeadCoaches(
       SOURCE, awaited, pinned, ligue1?.personnelColumns
-    )).toThrow(/reads as 7 cells of 8 columns/);
+    );
+    expect(inPost).toHaveLength(18);
+    expect(inPost.find(({ club }) => club === "Angers SCO")?.headCoach)
+      .toBe("Stéphane Gilli");
+    // The cell beside it, so a read slipped one place would show: Angers'
+    // chairman is Romain Chabane and no club's Head Coach is named that.
+    expect(inPost.map(({ headCoach }) => headCoach))
+      .not.toContain("Romain Chabane");
   });
 });

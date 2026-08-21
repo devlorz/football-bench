@@ -2,6 +2,7 @@ import { cellText } from "../wikipedia/wikitext.js";
 import {
   HeadCoachSourceValidationError,
   resolveClub,
+  colspanOf,
   sectionTable,
   tableLines,
   type HeadCoachSourceIssue,
@@ -60,9 +61,15 @@ export function parseHeadCoaches(
   const { heading, wikitable } = sectionTable(
     source, SECTION_HEADINGS, wikitext
   );
-  const { header, rows } = tableLines(wikitable);
+  const { headerRows, rows } = tableLines(wikitable);
 
-  const labels = header.map(cellText);
+  // The first header row alone: it is the one that describes the table's
+  // shape, and every column this parser reads is named in it. A second row
+  // names subdivisions of a spanning group and would only make the header
+  // wider than the table.
+  const labels = (headerRows[0] ?? []).map(cellText);
+  const width = (headerRows[0] ?? [])
+    .reduce((columns, cell) => columns + colspanOf(cell), 0);
   if (labels.slice(0, columns.length).join("|") !== columns.join("|")) {
     throw new HeadCoachSourceValidationError(source, [{
       field: heading,
@@ -76,10 +83,10 @@ export function parseHeadCoaches(
     // The width the header states, exactly. No cell here spans a row, so a
     // row that is not the header's width is a shape change and there is no
     // honest way to say which column it gained or lost.
-    if (cells.length !== labels.length) {
+    if (cells.length !== width) {
       issues.push({
         field: `${heading}.${index}`,
-        detail: `a row reads as ${cells.length} cells of ${labels.length} `
+        detail: `a row reads as ${cells.length} cells of ${width} `
           + "columns"
       });
       continue;
