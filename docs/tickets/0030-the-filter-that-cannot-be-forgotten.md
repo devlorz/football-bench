@@ -22,7 +22,15 @@ convention, and a convention decays. This test is the price paid for the smaller
       inline: it reads from the started-roster record, which already records which seats
       hold a Season path.
 - [x] Adding a new FPL Entrant read without the filter fails this test, and the failure
-      message says which read and what to add. **Proved by mutation, twice, with the source
+      message says which read and what to add. **The claim's boundary, stated rather than
+      implied:** the suite reads the source, so it holds for a query written into this
+      repository as SQL. It refuses the shapes that would hide one — an interpolated table
+      name, a table or column split across quoted strings, a query assembled at run time —
+      and it cross-checks the marker against the parameters beside the literal. What no
+      text scan can catch is an author who aliases the Prompt Version *and* writes a
+      `-- roster:` line that says something untrue. That is not inattention, which is what
+      this test is for; it is a false claim in the source, and the reader it is written for
+      is a reviewer. **Proved by mutation, twice, with the source
       restored byte-for-byte after each:** the filter dropped from the squads read; a plain
       new unfiltered read; a read written as a common table expression; a read whose Prompt
       Version comes from an aliased constant with its parameters far from the literal; a
@@ -51,10 +59,19 @@ nobody wrote for it. A marker cannot be inherited — the author either writes t
 where a reviewer will read it, or the suite names the query.
 
 **Run-time assembly is closed by refusing it, not by documenting it.** A query built out of
-ordinary quoted strings cannot be classified by any text search, so the suite asserts that
-no `models` read is written that way: every one is a template literal. That is a rule the
-codebase already followed, now enforced, and it is what makes "a new FPL read without the
-filter fails this test" true rather than nearly true.
+ordinary strings cannot be classified by any text search, so the suite refuses three ways of
+building one. No quoted string in `src` may name `models` or `prompt_version` — one fragment
+each was enough to split `"from " + "models where prompt_version = $1"` past an earlier
+draft. No query may reach its table through an expression: `prompt_version` lives on
+`models` and nowhere else, so a query naming the column names the table. Every one of these
+was a rule the codebase already followed; they are enforced now.
+
+**And the marker is checked against the query, not only for its presence.** A match read
+repointed at `FPL_PROMPT_VERSION` while keeping the `-- roster: the match track's` line it
+was written with would wear a sentence that stopped being true. So a query handed this
+track's Prompt Version must be filtered or be the exception, whatever its marker says. The
+check reads the parameters beside the literal — a narrower thing to look at than the query,
+and layered on the marker rather than replacing it, so it can only ever add a failure.
 
 **A guard on the guard.** The six FPL reads are asserted by file and count as an identity,
 not as a floor: a floor lets one read stop being recognised while the suite still passes,

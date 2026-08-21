@@ -39,6 +39,8 @@ interface ModelsRead {
   file: string;
   line: number;
   sql: string;
+  /** The text just after the literal, which is where the parameters are. */
+  parameters: string;
 }
 
 function sourceFiles(directory: string): string[] {
@@ -49,6 +51,13 @@ function sourceFiles(directory: string): string[] {
       : path.endsWith(".ts") ? [path] : [];
   });
 }
+
+/** Every source file once, read once, for the scanners below to share. */
+const sourceTexts = (): { file: string; text: string }[] =>
+  sourceFiles(SOURCE_ROOT).map((path) => ({
+    file: relative(REPOSITORY, path),
+    text: readFileSync(path, "utf8")
+  }));
 
 /**
  * Every SQL literal in `src` that reads `models` and names a `prompt_version`,
@@ -62,8 +71,7 @@ function sourceFiles(directory: string): string[] {
  */
 function modelsReads(): ModelsRead[] {
   const reads: ModelsRead[] = [];
-  for (const path of sourceFiles(SOURCE_ROOT)) {
-    const text = readFileSync(path, "utf8");
+  for (const { file, text } of sourceTexts()) {
     const segments = text.split("`");
     for (let segment = 1; segment < segments.length; segment += 2) {
       const sql = segments[segment] ?? "";
@@ -73,13 +81,46 @@ function modelsReads(): ModelsRead[] {
         continue;
       }
       reads.push({
-        file: relative(REPOSITORY, path),
+        file,
         line: text.slice(0, text.indexOf(sql)).split("\n").length,
-        sql
+        sql,
+        parameters: (segments[segment + 1] ?? "").slice(0, 300)
       });
     }
   }
   return reads;
+}
+
+/**
+ * Queries that name `prompt_version` without naming `models`.
+ *
+ * `prompt_version` is a column of `models` and of nothing else, so a query that
+ * filters on it reads that table however it spells the `from` clause. A literal
+ * that mentions the column and not the table is reaching it through an
+ * expression, and this suite reads queries rather than running them.
+ *
+ * Prose is excluded by requiring the literal to read like a query: the error
+ * messages that quote a seat's Prompt Version back to an operator are not SQL.
+ */
+function modelsQueriesWithoutTheTable(): string[] {
+  const hidden: string[] = [];
+  for (const { file, text } of sourceTexts()) {
+    const segments = text.split("`");
+    for (let segment = 1; segment < segments.length; segment += 2) {
+      const sql = segments[segment] ?? "";
+      const looksLikeAQuery = /\b(select|with)\b/i.test(sql)
+        && /\b(from|join|into|update)\b/i.test(sql);
+      if (!looksLikeAQuery || !/prompt_version/.test(sql)) {
+        continue;
+      }
+      if (/\b(from|join|into|update)\s+models\b/i.test(sql)) {
+        continue;
+      }
+      const opening = sql.trim().split("\n")[0] ?? "";
+      hidden.push(`${file} — ${opening.slice(0, 60)}`);
+    }
+  }
+  return hidden;
 }
 
 /**
@@ -164,28 +205,72 @@ describe("the withdrawal filter on the FPL track's Entrant reads", () => {
 
   test("keeps every models read inside a SQL literal, where it can be read",
     () => {
-      // The one shape that could hide from the scan above: SQL assembled at run
-      // time out of ordinary strings, which no text search can classify. So the
-      // codebase does not write one. Every `models` read is a template literal,
-      // and a read concatenated out of quoted fragments fails here rather than
-      // slipping past unclassified.
-      const assembled: string[] = [];
-      for (const path of sourceFiles(SOURCE_ROOT)) {
-        const text = readFileSync(path, "utf8");
+      // One shape could hide from the scan above: SQL assembled out of ordinary
+      // strings, which no text search can classify. So the codebase does not
+      // write one, and this says so rather than leaving it to habit.
+      // Two fragments, because one is not enough: `"from " + "models where
+      // prompt_version = $1"` splits the table name across strings and neither
+      // half reads as a query. So both halves are refused — the table, and the
+      // column that exists on no other table.
+      const quotedModelReads: string[] = [];
+      for (const { file, text } of sourceTexts()) {
         for (const [quoted] of text.matchAll(/(["'])(?:\\.|(?!\1).)*\1/g)) {
-          if (/\b(from|join)\s+models\b/.test(quoted)) {
-            assembled.push(`${relative(REPOSITORY, path)} — ${quoted.slice(0, 60)}`);
+          const namesTheTable = /\b(from|join)\s+models\b/.test(quoted);
+          const namesTheColumn = /\bprompt_version\b/.test(quoted);
+          if (namesTheTable || namesTheColumn) {
+            quotedModelReads.push(`${file} — ${quoted.slice(0, 60)}`);
           }
         }
       }
 
       expect(
-        assembled,
-        "This reads `models` from a quoted string rather than a SQL literal, "
-        + "so the withdrawal check cannot classify it. Write the query as a "
-        + "template literal."
+        quotedModelReads,
+        "This names `models` or `prompt_version` in a quoted string rather "
+        + "than a SQL literal. A query assembled from strings cannot be "
+        + "classified by reading it, and reading it is how the withdrawal "
+        + "filter is checked. Write the query as one template literal."
       ).toEqual([]);
     });
+
+  test("names its table outright, so no query hides behind an expression",
+    () => {
+      // The other half of the same shape, and the one that closes an
+      // interpolated table name: `from ${table}` reads `models` without saying
+      // so, and would carry a Prompt Version past every check here. Only that
+      // column tells a seat's track apart, so a query that names it names the
+      // table it lives in.
+      const hidden = modelsQueriesWithoutTheTable();
+
+      expect(
+        hidden,
+        "This query names `prompt_version`, which lives only on `models`, "
+        + "without naming `models`. Write the table into the query: a table "
+        + "reached through an expression cannot be classified, and the "
+        + "withdrawal filter is checked by reading the query."
+      ).toEqual([]);
+    });
+
+  test("a query that sends this track's Prompt Version is filtered", () => {
+    // The marker says whose roster a query reads; this asks the query. A match
+    // read repointed at `FPL_PROMPT_VERSION` while keeping its old `-- roster:`
+    // line would pass the marker check wearing a sentence written for the query
+    // it used to be — a marker inherited by editing rather than by counting.
+    //
+    // Layered on the marker rather than replacing it. This one reads the
+    // parameters beside the literal, which is a narrower thing to look at, and
+    // it can only ever add a failure.
+    const sendsFplVersion = reads
+      .filter(({ parameters }) => /FPL_PROMPT_VERSION/.test(parameters))
+      .filter((read) => !carriesTheFilter(read) && !exceptions.includes(read))
+      .map(({ file, line }) => `${file}:${line}`);
+
+    expect(
+      sendsFplVersion,
+      "This query is handed the FPL track's Prompt Version, so it reads this "
+      + "track's roster whatever its `-- roster:` line says. Add "
+      + "`and withdrawn_at is null`."
+    ).toEqual([]);
+  });
 
   test("names exactly one exception, and it says why inline", () => {
     expect(exceptions.map(({ file }) => file))
