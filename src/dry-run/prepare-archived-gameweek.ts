@@ -54,12 +54,25 @@ async function seedEntrants(
  * A Competition whose own bytes are missing still fails, and fails naming
  * itself, which is the check that was wanted all along.
  */
-async function listRehearsedCompetitions(
+/**
+ * The Competitions a rehearsal lists, which is the one being rehearsed and no
+ * other. Exposed so a test can read the list back: the whole fault this
+ * scoping removes is a second league joining unasked, and that is a fact about
+ * the table rather than about any one rehearsal's outcome.
+ */
+export async function listRehearsedCompetitions(
   database: Database,
   competition: string,
   season: string
 ): Promise<void> {
-  for (const code of [...new Set(["PL", competition])].sort()) {
+  // The rehearsed Competition alone. `PL` rode along here because every
+  // archive holds its sources, which was free while its own feed was live and
+  // stopped being free at its Gameweek 1 Lock: from that instant, with no
+  // current-Season football-data file published, `PL` fails the stale-Season
+  // guard and took every other league's rehearsal down with it. That is the
+  // fault this scoping was written to remove, arriving through the door the
+  // pairing left open.
+  for (const code of [competition]) {
     await database.query(
       `insert into competitions (competition, season) values ($1, $2)
        on conflict do nothing`,
@@ -71,7 +84,7 @@ async function listRehearsedCompetitions(
 export interface PrepareArchivedGameweekOptions {
   target: Database;
   archive: DryRunArchive;
-  /** The Competition being rehearsed; listed alongside `PL` and nothing else. */
+  /** The Competition being rehearsed; the only one listed. */
   competition: string;
   season: string;
   footballDataSeason: string;

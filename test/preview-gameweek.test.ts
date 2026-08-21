@@ -122,10 +122,15 @@ describe("previewing a Gameweek with live Entrants", () => {
   test("previews the Competition it is given rather than the Premier League", async () => {
     // The bench (ticket 0020 slice 3) asks La Liga's Gameweek, and a preview
     // that always previewed the Premier League could not answer it. A
-    // Competition whose Gameweeks this archive does not hold is the cheapest
-    // proof the parameter reaches the run at all: the same call for `PL` gets
-    // as far as the Entrants.
-    await expect(previewGameweek({
+    // Competition whose bytes this archive does not hold is the cheapest proof
+    // the parameter reaches the run at all: the same call for `PL` gets as far
+    // as the Entrants.
+    //
+    // The refusal is read out of the collected errors rather than off the
+    // top-level message. `PD` used to reach the Gameweek lookup because `PL`
+    // was listed beside it and answered the fetch; listed alone it fails at
+    // its own missing sources, which names `PD` one level down.
+    const previewed = previewGameweek({
       target: client,
       archive,
       competition: "PD",
@@ -137,7 +142,12 @@ describe("previewing a Gameweek with live Entrants", () => {
       concurrency: 1,
       at: "deadline-6h",
       http: async () => { throw new Error("no call should be made"); }
-    })).rejects.toThrow("The archive produced no PD Gameweek 1 for Season 2026-27");
+    });
+    const raised = await previewed.then(() => undefined, (error) => error) as
+      AggregateError | undefined;
+    expect(raised).toBeInstanceOf(AggregateError);
+    expect((raised?.errors as Error[]).map((error) => error.message).join("\n"))
+      .toContain("PD");
   });
 
   test("runs at an instant the Gameweek's own Lock dates, not at the wall clock", async () => {

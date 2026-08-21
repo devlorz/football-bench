@@ -210,10 +210,23 @@ addressed to a person.
       verdict rather than these numbers. Observed 2026-08-21 at 43 snapshots.
 
       **`COMPETITION` names the Competition being rehearsed, and only that one
-      is walked** (plus `PL`, whose sources every archive holds). A rehearsal is
-      green or red on its own league's bytes; a league captured but not yet
-      activated cannot take another's rehearsal down with it, which it did until
-      2026-08-21.
+      is walked.** A rehearsal is green or red on its own league's bytes; a
+      league captured but not yet activated cannot take another's rehearsal
+      down with it, which it did until 2026-08-21.
+
+      `PL` was listed beside it until 2026-08-21, on the grounds that every
+      archive holds its sources. That was free while its feed was live and
+      stopped being free at its own Gameweek 1 Lock: from that instant, with no
+      2026-27 `E0.csv` published, `PL` fails the stale-Season guard and failed
+      every other league's rehearsal with it — the same fault, through the door
+      the pairing left open.
+
+      **Prior-Season xG reads `unavailable` in every rehearsal, for every
+      league.** The daily fetch ingests the current Season's Understat only, and
+      the prior Season's comes from the one-off `fetch:xg-history` backfill that
+      no rehearsal runs — so the form lines degrade to a stated absence here
+      while production renders real numbers. Read the packet from
+      `context:show` for the xG, and the rehearsal for the shape.
 
       Replaying archived responses yields Predictions only for the Fixture each response was
       recorded against; the remaining Gaps are an artifact of the archive, not a fault. See

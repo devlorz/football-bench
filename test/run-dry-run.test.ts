@@ -3,6 +3,7 @@ import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { MATCH_PROMPT_VERSION } from "../src/predictions/openrouter-entrant.js";
 import { runDryRun } from "../src/dry-run/run-dry-run.js";
 import {
+  listRehearsedCompetitions,
   prepareArchivedGameweek
 } from "../src/dry-run/prepare-archived-gameweek.js";
 import type { DryRunArchive } from "../src/dry-run/load-archive.js";
@@ -210,5 +211,20 @@ describe("a dry run against an archived Gameweek", () => {
       "select competition from competitions order by competition"
     );
     expect(listed.rows.map(({ competition }) => competition)).toEqual(["PL"]);
+  });
+
+  test("and does not list the Premier League beside it", async () => {
+    // `PL` rode along in every rehearsal, which cost nothing while its own
+    // feed was live. From its Gameweek 1 Lock with no current-Season
+    // football-data file published, `PL` fails the stale-Season guard -- and
+    // listed here it failed every other league's rehearsal too, which is the
+    // fault the scoping above was written to remove, arriving by the other
+    // door.
+    await listRehearsedCompetitions(client, "SA", SEASON);
+
+    const listed = await client.query<{ competition: string }>(
+      "select competition from competitions order by competition"
+    );
+    expect(listed.rows.map(({ competition }) => competition)).toEqual(["SA"]);
   });
 });
