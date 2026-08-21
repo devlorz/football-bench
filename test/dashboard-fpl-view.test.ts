@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import {
   captainReturnTone, captainWearerBadge, chipLabel, chipLegend, chipsTag,
@@ -726,5 +727,44 @@ describe("the operator footer", () => {
     );
     expect(rows.slice(0, 4).map(({ value }) => value))
       .toEqual(["—", "—", "—", "—"]);
+  });
+});
+
+describe("the count each FPL page prints beside the Season", () => {
+  const read = (path: string): string =>
+    readFileSync(new URL(path, import.meta.url), "utf8");
+
+  // The pages the withdrawal filter reaches through the API rather than
+  // through their own markup (ADR-0047): the roster shrank, and each page's
+  // count had to shrink with it without anybody editing a page. That only
+  // holds while the count is read off the body the endpoint served. A page
+  // that counted anything else -- a constant, a second query, the Season
+  // Roster's size -- would print ten beside seven and be believed.
+  test.for([
+    { page: "the leaderboard", path: "../dashboard/src/pages/fpl.astro" },
+    { page: "the squads page", path: "../dashboard/src/pages/fpl/squads.astro" },
+    {
+      page: "the entrants page",
+      path: "../dashboard/src/pages/fpl/entrants.astro"
+    }
+  ])("$page counts the seats it was served", ({ path }) => {
+    const script = read(path).split("<script>")[1] ?? "";
+    const counts = [...script.matchAll(/statusLine\([^)]*\)/g)].map(([c]) => c);
+
+    expect(counts).not.toHaveLength(0);
+    for (const call of counts) {
+      expect(call).toMatch(/\.entrants\.length\s*\)$/);
+    }
+    // No second source for the same number anywhere in the page.
+    expect(script).not.toMatch(/SEASON_ROSTER_SIZE|FPL_ROSTER_SIZE/);
+  });
+
+  test("the leaderboard's entered-count line reads the same list", () => {
+    const script = read("../dashboard/src/pages/fpl.astro").split("<script>")[1]
+      ?? "";
+
+    expect(script).toMatch(
+      /text\(\$\("entered-count"\), String\(body\.entrants\.length\)\)/
+    );
   });
 });

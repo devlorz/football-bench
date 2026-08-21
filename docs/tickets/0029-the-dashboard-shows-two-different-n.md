@@ -27,11 +27,21 @@ reads behind it.
       `fpl.astro` and its two siblings pass `body.entrants.length` into `statusLine`, so the
       count followed the filter the moment the read did. The line's own rendering is already
       covered in the view suite.
-- [x] The Match entrants read is untouched and reads ten from the same fixture — the
-      assertion that catches a filter applied one table too widely.
+- [x] The Match entrants read is untouched and answers with every seat it held while every
+      `fpl/` row is withdrawn — the assertion that catches a filter applied one table too
+      widely. **Ten and seven are production's numbers, not a fixture's:** the seeded Season
+      seats nine per track, so what a suite can prove here is the behaviour — filtered on one
+      track, unfiltered on the other — and the counts that matter are checked where the
+      roster is, in the season-roster and start-track suites.
 - [x] Tests at the existing seams: the FPL API suites for leaderboard, squads and entrants
       and the FPL view suite, all against a fixture that withdraws seats, and the Match
       entrants suite against the same fixture.
+
+**Why the withdraw-and-restore setup is copied across three API suites rather than
+extracted.** Six lines, three files, and each suite seeds and reads through its own
+connections; the only thing they share is a shape. This project's rule for that is to wait
+for a forced simultaneous edit rather than to extract on similarity, so it stays copied
+until one arrives.
 
 **One thing the work turned up.** Two of the four filters went in as `//` comments inside
 SQL template literals, which Postgres reads as syntax rather than as nothing — every squads

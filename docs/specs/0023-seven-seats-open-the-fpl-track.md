@@ -194,8 +194,10 @@ in the last bullet, which is a new test file rather than a new production seam.
 - **The dashboard's FPL reads** — prior art: the existing FPL API suites (leaderboard,
   squads, entrants) and the FPL view suite. All four endpoints return only the standing
   seats when the fixture withdraws three, and the view's entrant-count line reads the same
-  number. The Match entrants suite reads ten from the same fixture, which is the assertion
-  that catches a filter applied one table too widely.
+  number. The Match entrants suite answers with every seat it held while every `fpl/` row is
+  withdrawn, which is the assertion that catches a filter applied one table too widely — the
+  seeded Season seats nine per track, so the fixture proves the behaviour and the roster
+  suites prove the counts.
 - **The schema** — prior art: the existing migrations suite. The column exists, is
   nullable, and has no default.
 - **The rehearsal** — prior art: the existing rehearsal runner and verifier suites. They

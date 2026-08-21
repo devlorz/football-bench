@@ -430,16 +430,17 @@ describe("the FPL Entrant-record endpoint", () => {
     // that never started it. Both of this endpoint's reads have to agree — the
     // Manager State replay and the name list — or an Entrant is named with no
     // path or walks a path with no name.
-    const left = (await entrants()).entrants.slice(0, 2).map(({ id }) => id);
+    const withdrawnEntrantIds =
+      (await entrants()).entrants.slice(0, 3).map(({ id }) => id);
     await writer.query(
-      "update models set withdrawn_at = now() where id = any($1)", [left]
+      "update models set withdrawn_at = now() where id = any($1)", [withdrawnEntrantIds]
     );
     try {
       const body = await entrants();
 
       expect(body.entrants.map(({ id }) => id))
-        .toEqual(expect.not.arrayContaining(left));
-      expect(body.entrants).toHaveLength(9 - left.length);
+        .toEqual(expect.not.arrayContaining(withdrawnEntrantIds));
+      expect(body.entrants).toHaveLength(9 - 3);
       // Every seat that remains still carries its whole record: the filter
       // removed Entrants, not Gameweeks.
       for (const entrant of body.entrants) {
@@ -447,7 +448,7 @@ describe("the FPL Entrant-record endpoint", () => {
       }
     } finally {
       await writer.query(
-        "update models set withdrawn_at = null where id = any($1)", [left]
+        "update models set withdrawn_at = null where id = any($1)", [withdrawnEntrantIds]
       );
     }
   });

@@ -259,19 +259,20 @@ describe("the FPL leaderboard endpoint", () => {
     // A withdrawn seat holds no Season path (ADR-0047), and a ranking that
     // listed it would put a Base Model last for a Season it never played.
     const before = await leaderboard();
-    const left = before.entrants.slice(0, 2).map(({ id }) => id);
+    const withdrawnEntrantIds =
+      before.entrants.slice(0, 3).map(({ id }) => id);
     await writer.query(
-      "update models set withdrawn_at = now() where id = any($1)", [left]
+      "update models set withdrawn_at = now() where id = any($1)", [withdrawnEntrantIds]
     );
     try {
       const body = await leaderboard();
 
       expect(body.entrants.map(({ id }) => id))
-        .toEqual(expect.not.arrayContaining(left));
-      expect(body.entrants).toHaveLength(before.entrants.length - left.length);
+        .toEqual(expect.not.arrayContaining(withdrawnEntrantIds));
+      expect(body.entrants).toHaveLength(before.entrants.length - 3);
     } finally {
       await writer.query(
-        "update models set withdrawn_at = null where id = any($1)", [left]
+        "update models set withdrawn_at = null where id = any($1)", [withdrawnEntrantIds]
       );
     }
   });
