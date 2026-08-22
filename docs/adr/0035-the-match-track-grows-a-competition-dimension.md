@@ -1,5 +1,11 @@
 # The match track grows a Competition dimension
 
+> Status: the closing sentence below — "no combined cross-league ranking is published" — is
+> superseded by ADR-0051, which publishes one at `/overall` as a raw sum. Every other decision
+> here stands: the Competition dimension, the per-league benchmark question and the per-league
+> leaderboards are unchanged, and comparing an Entrant across leagues by hand remains the
+> read-path exercise this ADR describes.
+
 The match track expands beyond the Premier League — La Liga first, then Serie A, the
 Bundesliga and Ligue 1. Each Competition is a separate benchmark with its own leaderboard:
 the question stays "which Base Model forecasts this league best", asked once per league,

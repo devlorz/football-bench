@@ -72,9 +72,13 @@ which is not an error.
 
 The switcher does not carry the selection across a crossing, and deliberately. Building that
 affordance would make comparing one Entrant across two leagues a single click, which is a
-thing ADR-0035 permits a reader to do by hand — "a read-path exercise a future reader can
-run precisely because every row is labelled" — and declines to publish; the leaderboard's
-own footnote says in the same breath that no ranking spans two Competitions. Permitting an
+thing ADR-0035 permitted a reader to do by hand — "a read-path exercise a future reader can
+run precisely because every row is labelled" — and originally declined to publish; the
+leaderboard's own footnote said in the same breath that no ranking spans two Competitions.
+ADR-0051 published that read-path exercise as `/overall`, and the footnote now says so and
+links to it rather than denying it — but still says no ranking *on the leaderboard itself*
+spans two, which is the sentence this paragraph's reasoning depends on and which ADR-0051
+left standing. Permitting an
 edit of a URL is not the same as building the button, and the button would pull against
 both. It also could not be built the way the rest of the chrome is: the href would have to
 be read from the reader's current URL, which the built-HTML rule above forbids and spec
@@ -121,8 +125,12 @@ be read from the reader's current URL, which the built-HTML rule above forbids a
   is the freeze's deploy in practice, and it means the site never advertises a league whose
   cost review ADR-0035 gated has not happened.
 - The switcher makes flipping between two leagues one click, which makes reading one Entrant
-  across leagues easy. ADR-0035 permits exactly that as a read-path exercise and publishes no
-  combined ranking; the footnote states the separation and no surface computes across it.
+  across leagues easy. ADR-0035 permits exactly that as a read-path exercise. `/overall`
+  (ADR-0051) is the one surface that computes across Competitions — as a raw sum in the
+  reader's browser, over the same four leaderboard answers this switcher already links to. The
+  switcher itself still only crosses to another league's copy of the page a reader is on, unrevised
+  by ADR-0051: on the one page with no per-league copy, `/overall`, an entry falls back to that
+  league's leaderboard rather than to a second `/overall`.
 - The switcher has no design handoff, unlike every other control in either section. It is
   assembled from `.seg` and the nav's `aria-current` and adds no CSS, which is what keeps the
   deviation small enough to state in one line.

@@ -162,8 +162,12 @@ filter.
     League scores identical before and after the migration, so that expansion adds
     rankings without touching the one that exists.
 28. As a reader, I want each Competition's leaderboard read only from its own `scores`
-    rows, with no combined cross-league ranking anywhere, so that the per-Competition
-    benchmark claim (ADR-0035) is enforced by construction.
+    rows, with ~~no combined cross-league ranking anywhere~~ **no query of this API
+    combining two Competitions' rows**, so that the per-Competition benchmark claim
+    (ADR-0035) is enforced by construction. Superseded in its "anywhere": ADR-0051's
+    `/overall` computes a combined ranking client-side, over these same
+    per-Competition endpoints, without this story's guarantee about the endpoints
+    themselves changing at all.
 
 ### Operating it
 
@@ -299,7 +303,10 @@ exists to prevent.
 
 - The dashboard's per-Competition shape — its own ADR and spec.
 - Any availability feed for non-`PL` Competitions (ADR-0037 decides its absence).
-- A combined cross-league ranking, in any surface.
+- ~~A combined cross-league ranking, in any surface.~~ Superseded by ADR-0051: `/overall`
+  publishes one, computed client-side over the per-Competition endpoints this spec built. No
+  scorer, schema or read-API change follows from it — the per-Competition shape this spec
+  established is exactly what it reads.
 - Activating `SA`, `BL1`, `FL1` — gated by story 31; when they open it is data and maps,
   not new spec work.
 - The FPL track, entirely.

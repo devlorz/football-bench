@@ -68,7 +68,7 @@ _Avoid_: backfill (a Gap is never back-filled, and an Exhibition Run fills none)
 
 **Competition**:
 One league the match track runs, named by football-data.org's code — `PL`, `PD`, `SA`,
-`BL1`, `FL1`. Each is its own benchmark with its own leaderboard; no ranking spans two.
+`BL1`, `FL1`. Each is its own benchmark with its own leaderboard; no leaderboard spans two.
 _Avoid_: league (in identifiers), tournament
 
 **Active Competition**:
@@ -78,6 +78,20 @@ scored yet, which will fill. Whether a Competition becomes Active is a decision,
 schedule: opening one is an act and closing one is an act, and nothing records an intention
 to open.
 _Avoid_: enabled, live
+
+**Leaderboard**:
+One Competition's ranking: Match Points and Bet Points over its own Season Roster, read from
+its own `scores` rows and nothing else. Spans one Competition and never two — the benchmark
+question stays "which Base Model forecasts this league best", asked once per league
+(ADR-0035).
+
+**Combined Ranking**:
+One ranking over every scored Competition of a Season, by raw season-to-date total: each
+Entrant's Match Points and Bet Points summed across every league that is Active and scored,
+published at `/overall` (ADR-0051). Distinct from a Leaderboard, which spans one Competition
+and still never two — a page that called both a leaderboard would lose the distinction in a
+week.
+_Avoid_: leaderboard (for this), overall leaderboard
 
 **Division**:
 One tier of a Competition's league pyramid as football-data.co.uk names it, stored on

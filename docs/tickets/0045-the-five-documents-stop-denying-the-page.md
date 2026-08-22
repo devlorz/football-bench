@@ -44,15 +44,17 @@ lost inside a week.
 
 ## Acceptance
 
-- [ ] ADR-0035 records that its no-combined-ranking sentence is superseded by ADR-0051, and every
+- [x] ADR-0035 records that its no-combined-ranking sentence is superseded by ADR-0051, and every
       other decision in it reads unchanged.
-- [ ] ADR-0039's consequence no longer claims no surface computes across Competitions, and its
+- [x] ADR-0039's consequence no longer claims no surface computes across Competitions, and its
       switcher reasoning — which declined to carry a selection across a crossing — is left standing
-      or explicitly revisited, not silently contradicted.
-- [ ] Both specs' Out of Scope lines are corrected rather than deleted, so a reader learns where the
+      or explicitly revisited, not silently contradicted. Revisited: the switcher, standing on
+      `/overall`, falls back to a league's leaderboard rather than a second `/overall`, stated in the
+      same consequence bullet.
+- [x] Both specs' Out of Scope lines are corrected rather than deleted, so a reader learns where the
       decision moved.
-- [ ] The per-league footnote states what is still true, names the combined ranking and links to it.
-- [ ] CONTEXT.md defines **Combined Ranking** beside **Leaderboard**, and the two definitions cannot
+- [x] The per-league footnote states what is still true, names the combined ranking and links to it.
+- [x] CONTEXT.md defines **Combined Ranking** beside **Leaderboard**, and the two definitions cannot
       be read as the same thing.
-- [ ] No document is left instructing a future reader that this page may not exist.
-- [ ] The per-league pages are otherwise unchanged, and no figure, query or endpoint moves.
+- [x] No document is left instructing a future reader that this page may not exist.
+- [x] The per-league pages are otherwise unchanged, and no figure, query or endpoint moves.

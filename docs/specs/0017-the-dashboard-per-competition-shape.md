@@ -16,7 +16,9 @@ build that fetches at runtime, with the reader's state in the URL), ADR-0029 (on
 serves the assets and the API on one origin), ADR-0033 (the FPL track is a sibling section
 separated by path alone), ADR-0034 and ADR-0038 (every Competition seats the roster that
 stood at the Season's first Lock, under one Prompt Version per Competition), and ADR-0035
-(each Competition is its own benchmark and no ranking spans two).
+(each Competition is its own benchmark and no ranking spans two — the second half
+superseded by ADR-0051, which sums the leagues at `/overall`; the benchmark question
+stays per-league).
 
 ## Problem Statement
 
@@ -253,7 +255,9 @@ proves only what the file says.
 - A hub page at `/`, and any cross-track switcher. Both stay where ADR-0033 and ADR-0039 left
   them: available to revisit, which the `302` protects.
 - An accent colour or any other visual identity per Competition (ADR-0039).
-- Any combined cross-league ranking or comparison, in any surface.
+- ~~Any combined cross-league ranking or comparison, in any surface.~~ Superseded by ADR-0051:
+  `/overall` publishes one, client-side over the per-Competition endpoints this spec built.
+  `read-api.ts`, its per-path Competition and its no-default routing are unchanged.
 - Activating `SA`, `BL1` or `FL1`. When their Prompt Versions are frozen they appear here
   with no further work in this area, which is the point of reading the list rather than
   writing it.
