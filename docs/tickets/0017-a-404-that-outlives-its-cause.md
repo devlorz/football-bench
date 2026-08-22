@@ -38,14 +38,14 @@ a deliberate lifetime and argues it.
 
 **Blocked by:** None — can start immediately.
 
-- [ ] The if-chain's 404 carries an explicit `cache-control`, and the reasoning sits beside
+- [x] The if-chain's 404 carries an explicit `cache-control`, and the reasoning sits beside
       it the way `SCORED_CACHE` and `FIXTURES_CACHE` carry theirs.
-- [ ] It is a short lifetime and not `no-store`, unless the connection cost below is dealt
+- [x] It is a short lifetime and not `no-store`, unless the connection cost below is dealt
       with first: `worker.ts` opens a Postgres connection **before** routing, on every
       request it handles, so an uncacheable 404 is a database connection for every scanner
       and every typo. Sixty seconds is the number `FIXTURES_CACHE` already uses for the
       endpoint that moves fastest, and a minute of a stale miss is a minute.
-- [ ] A test asserts the header, the way the cache headers of the three Match endpoints are
+- [x] A test asserts the header, the way the cache headers of the three Match endpoints are
       already asserted.
 - [ ] If `no-store` is wanted anyway, the connection moves behind the route match first, so
       a 404 costs nothing to serve. That is the change that makes the choice free; it is
@@ -81,11 +81,15 @@ the data must go dark now.
 **Blocked by:** None. Worth doing before item 1: item 1 bounds how long a wrong answer can
 live, this one says how quickly a right answer arrives.
 
-- [ ] The purge's latency is measured rather than assumed — a deploy, then the canonical URL
-      polled until `cf-cache-status` stops answering from the old entry, timed.
-- [ ] The runbook carries the number, or carries the sentence saying it is unmeasured and
+- [x] The purge's latency is measured rather than assumed — a deploy, then the canonical URL
+      polled until `cf-cache-status` stops answering from the old entry, timed. Measured
+      2026-08-23, deploying this ticket's fix: entries warmed minutes before the deploy were
+      unreachable on the first request after `wrangler deploy` returned, fourteen seconds
+      after it returned. A lower bound from one client at one POP, and it does not explain
+      08-16 — the runbook says both.
+- [x] The runbook carries the number, or carries the sentence saying it is unmeasured and
       what that costs. Either is honest; the current silence reads as instant.
-- [ ] If one deployment is genuinely not enough, the emergency procedure says so and says
+- [x] If one deployment is genuinely not enough, the emergency procedure says so and says
       what to do instead. `/api/pd/leaderboard` cleared on the second of two.
 
 ## Not in scope
