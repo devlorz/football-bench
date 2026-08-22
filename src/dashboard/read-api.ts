@@ -898,7 +898,7 @@ async function entrants(
   // The markets the Season's slips actually state, in the order a slip states
   // them, and taken across the whole field rather than per Entrant. An Entrant
   // that settled nothing has no leg of its own, and story 32 asks for the
-  // breakdown by market whatever that Entrant did — so its five rows read nought
+  // breakdown by market whatever that Entrant did — so its seven rows read nought
   // out of nought instead of vanishing.
   const markets = [
     ...new Set(records.flatMap(({ bets }) => legsOf(bets)).map((leg) => leg.market))

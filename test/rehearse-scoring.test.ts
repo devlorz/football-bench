@@ -156,15 +156,22 @@ describe("rehearsing the complete scorer on the archived Gameweek", () => {
 
     // sol's whole archived Gameweek is one slip: 3-0 named on Fixture 1, which
     // the script settles 2-0. Read by hand, leg by leg —
-    //   result       3-0 is a Home win, 2-0 is a Home win          won
-    //   over/under 2.5   3 goals named is over, 2 settled under    lost
-    //   over/under 3.5   3 is under, 2 is under                    won
-    //   over/under 4.5   3 is under, 2 is under                    won
-    //   btts         3-0 says no, 2-0 says no                      won
-    // — four winning legs off five stated, and no other Fixture was answered,
-    // so the Gameweek and the Season through it are the same four.
+    //   result           3-0 is a Home win, 2-0 is a Home win       won
+    //   over/under 1.5   3 goals named is over, 2 settled is over   won
+    //   over/under 2.5   3 goals named is over, 2 settled under     lost
+    //   over/under 3.5   3 is under, 2 is under                     won
+    //   over/under 4.5   3 is under, 2 is under                     won
+    //   btts             3-0 says no, 2-0 says no                   won
+    //   handicap 1.5     3-0 backs Home, 2-0 backs Home             won
+    // — six winning legs off seven stated, sol's two-goal call covering the
+    // Handicap the way it was named to. No other Fixture was answered, so the
+    // Gameweek and the Season through it are the same six.
     const slip = [
       { market: "result", position: "H", settled: "H", won: true },
+      {
+        market: "over_under_1.5", position: "over", settled: "over",
+        won: true
+      },
       {
         market: "over_under_2.5", position: "over", settled: "under",
         won: false
@@ -177,24 +184,27 @@ describe("rehearsing the complete scorer on the archived Gameweek", () => {
         market: "over_under_4.5", position: "under", settled: "under",
         won: true
       },
-      { market: "btts", position: "no", settled: "no", won: true }
+      { market: "btts", position: "no", settled: "no", won: true },
+      { market: "handicap_1.5", position: "H", settled: "H", won: true }
     ];
     const rate = {
-      won: 4,
-      bet: 5,
+      won: 6,
+      bet: 7,
       markets: {
         result: 1,
+        "over_under_1.5": 1,
         "over_under_2.5": 0,
         "over_under_3.5": 1,
         "over_under_4.5": 1,
-        btts: 1
+        btts: 1,
+        "handicap_1.5": 1
       }
     };
     expect(rows).toContainEqual({
       entrantId: "sol",
       gw: GAMEWEEK,
       metric: BET_POINTS_METRIC,
-      value: 4,
+      value: 6,
       n: 1,
       detail: {
         qualification: BET_POINTS_QUALIFICATION,
@@ -207,7 +217,7 @@ describe("rehearsing the complete scorer on the archived Gameweek", () => {
       entrantId: "sol",
       gw: GAMEWEEK,
       metric: BET_HIT_PCT_METRIC,
-      value: 0.8,
+      value: 6 / 7,
       n: 1,
       detail: rate
     });
@@ -218,7 +228,7 @@ describe("rehearsing the complete scorer on the archived Gameweek", () => {
       entrantId: "sol",
       gw: GAMEWEEK,
       metric: BET_POINTS_SEASON_TO_DATE_METRIC,
-      value: 4,
+      value: 6,
       n: 1,
       detail: {
         qualification: BET_POINTS_QUALIFICATION,
@@ -226,7 +236,7 @@ describe("rehearsing the complete scorer on the archived Gameweek", () => {
           {
             gw: GAMEWEEK,
             n: 1,
-            points: 4,
+            points: 6,
             fixtures: [{ fixtureId: 1, predicted: [3, 0], result: [2, 0], slip }]
           }
         ]
@@ -236,7 +246,7 @@ describe("rehearsing the complete scorer on the archived Gameweek", () => {
       entrantId: "sol",
       gw: GAMEWEEK,
       metric: BET_HIT_PCT_SEASON_TO_DATE_METRIC,
-      value: 0.8,
+      value: 6 / 7,
       n: 1,
       detail: { ...rate, gameweeks: [{ gw: GAMEWEEK, n: 1, ...rate }] }
     });
@@ -248,19 +258,22 @@ describe("rehearsing the complete scorer on the archived Gameweek", () => {
     // The ranking a reader takes off the season-to-date rows, with nothing
     // recomputed from the Predictions. All three answered the same Fixture,
     // settled 2-0, and each slip was read by hand:
-    //   steady  1-0  Home win, all three unders, no both-teams   5 of 5
-    //   sol     3-0  Home win, over 2.5 lost, the rest won       4 of 5
-    //   drawish 1-1  a Draw called and both-teams-to-score lost  3 of 5
-    // One Fixture apiece, and every figure says so.
+    //   sol     3-0  Home win, over 2.5 lost, the Handicap covered  6 of 7
+    //   steady  1-0  Home win, every goal-total but 1.5, no
+    //                both-teams, the Handicap left unbacked        5 of 7
+    //   drawish 1-1  a Draw called, both-teams-to-score lost, and
+    //                the Handicap unbacked against a covered one   4 of 7
+    // The Handicap is what moves sol above steady: naming the two-goal win
+    // and getting it outscores the cautious 1-0 that never backed a side.
     const ranked = report.metrics
       .filter(({ metric }) => metric === BET_POINTS_SEASON_TO_DATE_METRIC)
       .sort((one, other) => other.value - one.value)
       .map(({ entrantId, value, n }) => [entrantId, value, n]);
 
     expect(ranked).toEqual([
+      ["sol", 6, 1],
       ["steady", 5, 1],
-      ["sol", 4, 1],
-      ["drawish", 3, 1]
+      ["drawish", 4, 1]
     ]);
   });
 

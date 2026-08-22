@@ -50,13 +50,12 @@ export const MATCH_POINTS_SEASON_TO_DATE_METRIC = "match_points_season_to_date";
  * a reader without it.
  */
 export const BET_POINTS_QUALIFICATION =
-  "Bet Points rank a second leaderboard and are not evidence: five flat, "
-  + "oddsless markets read off one named scoreline, so a conservative "
-  + "low-scoring slip collects the high over/under lines cheaply — under 4.5 "
-  + "lands in roughly nine Fixtures of ten — and they reward played "
-  + "percentages rather than boldness. Whether one Entrant forecasts better "
-  + "than another is only supported by the probability layer's Paired "
-  + "Differences and their interval.";
+  "Bet Points rank a second leaderboard and are not evidence: seven flat, "
+  + "oddsless markets read off one named scoreline, so the cheap goal-total "
+  + "lines — over 1.5 among them — are weighed against one market, the "
+  + "Handicap, that pays only for naming a decisive result. Whether one "
+  + "Entrant forecasts better than another is only supported by the "
+  + "probability layer's Paired Differences and their interval.";
 
 /**
  * One Gameweek's Bet Points, and the Season's through the same Gameweek: the
@@ -324,24 +323,34 @@ export function matchPoints(
   return outcomeOf(predictedHome, predictedAway) === result.outcome ? 2 : 0;
 }
 
-/** The goal-total lines a slip is read against (ADR-0023). */
-const OVER_UNDER_LINES = [2.5, 3.5, 4.5] as const;
+/** The goal-total lines a slip is read against (ADR-0023, ADR-0040). */
+const OVER_UNDER_LINES = [1.5, 2.5, 3.5, 4.5] as const;
 
-/** The five markets a slip states, named after the line each reads. */
+/** The line the Handicap leg is read against (ADR-0040). */
+const HANDICAP_LINE = 1.5;
+
+/**
+ * The seven markets a slip states, named after the line each reads. The
+ * Handicap's own name carries its line for the same reason the goal-total
+ * legs' do: ADR-0040 leaves room for a second Handicap line later, and a bare
+ * `"handicap"` would collide with it.
+ */
 type BetMarket =
   | "result"
   | `over_under_${(typeof OVER_UNDER_LINES)[number]}`
-  | "btts";
+  | "btts"
+  | `handicap_${typeof HANDICAP_LINE}`;
 
 /**
  * Every side a leg can take: an Outcome on the result leg, a side of the line
- * on a goal total, yes or no on both teams to score.
+ * on a goal total, yes or no on both teams to score, a side of the Handicap
+ * or `"none"` when neither side was backed.
  *
- * One union over all five markets rather than one per market, because a leg
+ * One union over all seven markets rather than one per market, because a leg
  * settles by comparing its own two sides and never one market's against
  * another's.
  */
-type BetPosition = Outcome | "over" | "under" | "yes" | "no";
+type BetPosition = Outcome | "over" | "under" | "yes" | "no" | "none";
 
 /**
  * One market of a Bet Slip: the side the Predicted Score took, the side the
@@ -365,12 +374,16 @@ export interface BetSlipDetail {
 }
 
 /**
- * The five markets one Predicted Score implies, settled against the result:
- * the match result, the three goal-total lines, and both teams to score.
+ * The seven markets one Predicted Score implies, settled against the result:
+ * the match result, the four goal-total lines, both teams to score, and the
+ * Handicap (ADR-0040).
  *
- * Every leg is won by taking the side the result took, so one comparison
- * settles all five and no leg can push — goal totals are integers and every
- * line is a half (spec 0008).
+ * Every leg but the Handicap is won by taking the side the result took, so
+ * one comparison settles it and no leg can push — goal totals are integers
+ * and every line is a half (spec 0008). The Handicap is the one leg where a
+ * shared position does not mean a win: `"none"` is what a hedged Predicted
+ * Score or a tight result backs, and it must never settle as a win against
+ * itself.
  *
  * Nothing here reads `probs`, the result leg included (ADR-0023): the slip is
  * one decision, so an incoherent Prediction settles by its scoreline and its
@@ -391,6 +404,12 @@ function betSlip(
     total > line ? "over" : "under";
   const both = (homeGoals: number, awayGoals: number): BetPosition =>
     homeGoals > 0 && awayGoals > 0 ? "yes" : "no";
+  const handicapSide = (homeGoals: number, awayGoals: number): BetPosition => {
+    const margin = homeGoals - awayGoals;
+    return margin > HANDICAP_LINE ? "H" : margin < -HANDICAP_LINE ? "A" : "none";
+  };
+  const handicapPosition = handicapSide(predictedHome, predictedAway);
+  const handicapSettled = handicapSide(home, away);
   return [
     leg("result", outcomeOf(predictedHome, predictedAway), result.outcome),
     ...OVER_UNDER_LINES.map((line) => leg(
@@ -398,7 +417,13 @@ function betSlip(
       side(predictedHome + predictedAway, line),
       side(home + away, line)
     )),
-    leg("btts", both(predictedHome, predictedAway), both(home, away))
+    leg("btts", both(predictedHome, predictedAway), both(home, away)),
+    {
+      market: `handicap_${HANDICAP_LINE}`,
+      position: handicapPosition,
+      settled: handicapSettled,
+      won: handicapPosition === handicapSettled && handicapPosition !== "none"
+    }
   ];
 }
 
@@ -835,7 +860,7 @@ async function writeRows(
 
     // Both sides of the fraction, with the rate of each market beneath them.
     // The denominator is the legs the slips actually stated, so a Gap and an
-    // unsettled Fixture are absent from it rather than five lost markets: the
+    // unsettled Fixture are absent from it rather than seven lost markets: the
     // total absorbs an absence and the rate measures accuracy, and neither
     // measures a blend of the two (ADR-0023).
     //

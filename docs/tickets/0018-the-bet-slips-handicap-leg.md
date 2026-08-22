@@ -67,33 +67,33 @@ the slip that now exists.
 
 **Blocked by:** None. Can start immediately.
 
-- [ ] The Bet Slip carries a Handicap at 1.5 goals, read off the Predicted Score alone and
+- [x] The Bet Slip carries a Handicap at 1.5 goals, read off the Predicted Score alone and
       never off the probabilities.
-- [ ] A Predicted Score backs a side by naming it a two-goal win. One with a margin of 0 or
+- [x] A Predicted Score backs a side by naming it a two-goal win. One with a margin of 0 or
       1 backs nothing.
-- [ ] The Handicap is won only when a side was backed and the result covered the same way.
+- [x] The Handicap is won only when a side was backed and the result covered the same way.
       **The shared value "neither side backed" must never settle as a win.** Every other
       leg is won by equality, so the shape the other legs use is the wrong one here.
-- [ ] The goal-total lines become 1.5, 2.5, 3.5 and 4.5. The 1.5 line settles the way the
+- [x] The goal-total lines become 1.5, 2.5, 3.5 and 4.5. The 1.5 line settles the way the
       other three do, with no special case: the line is a half and goals are integers, so
       no leg pushes.
-- [ ] Bet Points run 0 to 7 per Fixture. `bet_hit_pct` divides by seven markets per settled
+- [x] Bet Points run 0 to 7 per Fixture. `bet_hit_pct` divides by seven markets per settled
       slip, with the Handicap and the 1.5 line both present in its per-market breakdown.
-- [ ] A Fixture with no result and a Gapped Fixture stay out of the denominator, unchanged.
-- [ ] The Bet Points qualification states seven markets. It keeps the flat-and-oddsless
+- [x] A Fixture with no result and a Gapped Fixture stay out of the denominator, unchanged.
+- [x] The Bet Points qualification states seven markets. It keeps the flat-and-oddsless
       caveat and the sentence that only the probability layer supports a claim about
       forecasting skill. It replaces the boldness clause with what is now true: the cheap
       goal-total lines, over 1.5 among them, are weighed against one market that pays only
       for naming a decisive result.
-- [ ] Four Handicap settlement cases are proven through the scorer over a real database.
+- [x] Four Handicap settlement cases are proven through the scorer over a real database.
       Backed and covered the same way. Backed and covered the other way. Hedged against a
       decisive result. Hedged against a tight result. The last two score zero, and they are
       the behaviour the leg exists to produce.
-- [ ] One case proves the 1.5 line settles both ways, since a Prediction of 0-0 or 1-0 is
+- [x] One case proves the 1.5 line settles both ways, since a Prediction of 0-0 or 1-0 is
       the only kind that takes the under and the suite has not needed one before.
-- [ ] A test asserts the stored qualification states seven markets, so the label cannot
+- [x] A test asserts the stored qualification states seven markets, so the label cannot
       drift from the slip.
-- [ ] Over one seeded Season, every metric other than `bet_points` and `bet_hit_pct` is
+- [x] Over one seeded Season, every metric other than `bet_points` and `bet_hit_pct` is
       identical with and without the new legs, proving a change to one readable ranking is
       a change to one readable ranking.
 

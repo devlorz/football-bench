@@ -172,8 +172,8 @@ const { competition, competitionName, path, api } = Astro.props;
       return node;
     };
 
-    // The design's own labels for the tiers and the five markets. The keys are
-    // the scorer's; an unnamed market renders as its key rather than as
+    // The design's own labels for the tiers and the seven markets. The keys
+    // are the scorer's; an unnamed market renders as its key rather than as
     // nothing, so a new leg on the slip is visible the day it appears.
     const TIERS: Record<number, { label: string; fill: string }> = {
       5: { label: "Exact score · 5 pts", fill: "var(--tier-5)" },
@@ -183,10 +183,12 @@ const { competition, competitionName, path, api } = Astro.props;
     };
     const MARKETS: Record<string, string> = {
       result: "Match result",
+      "over_under_1.5": "Over/under 1.5",
       "over_under_2.5": "Over/under 2.5",
       "over_under_3.5": "Over/under 3.5",
       "over_under_4.5": "Over/under 4.5",
-      btts: "Both teams to score"
+      btts: "Both teams to score",
+      "handicap_1.5": "Handicap 1.5"
     };
 
     // The selected Entrant is in the URL so the link is copyable and a reload

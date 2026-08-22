@@ -46,9 +46,10 @@ const ABSENT = "absent/v1";
 const SPANISH_SEAT = "match-pd/claude/v1";
 const SPANISH_GW = 20;
 
-/** The five legs of a Bet Slip, in the order a slip states them. */
+/** The seven legs of a Bet Slip, in the order a slip states them (ADR-0040). */
 const MARKETS = [
-  "result", "over_under_2.5", "over_under_3.5", "over_under_4.5", "btts"
+  "result", "over_under_1.5", "over_under_2.5", "over_under_3.5",
+  "over_under_4.5", "btts", "handicap_1.5"
 ];
 
 function connections() {
@@ -248,8 +249,8 @@ describe("the Entrant record endpoint on the design's Season", () => {
       const expected = await fromGameweekRows(writer, entrant.id);
       expect(entrant.markets).toEqual(expected.markets);
 
-      // The five legs are stated per settled Fixture, and the legs won are Bet
-      // Points — one count read twice rather than two that could disagree.
+      // The seven legs are stated per settled Fixture, and the legs won are
+      // Bet Points — one count read twice rather than two that could disagree.
       expect(entrant.markets.map(({ market }) => market)).toEqual(MARKETS);
       expect(
         entrant.markets.reduce((sum, { hits }) => sum + hits, 0)
@@ -463,7 +464,7 @@ describe("the Entrant record endpoint with a Gameweek wholly Gapped", () => {
     // The breakdowns are asked for whatever the Entrant did, so both are still
     // there and both read nought. The markets are the Season's own, taken
     // across the field: this Entrant stated no leg of its own to name them
-    // with, and five rows of nought is the answer rather than no rows at all.
+    // with, and seven rows of nought is the answer rather than no rows at all.
     expect(absent!.tiers).toEqual(
       [5, 3, 2, 0].map((points) => ({ points, count: 0 }))
     );
