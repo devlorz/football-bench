@@ -105,20 +105,53 @@ date and seven after it.
 
 **Blocked by:** 1.
 
-- [ ] The rescore is rehearsed before it touches the live record, on the same terms as
-      every other write against that record.
-- [ ] Every listed Competition is rescored in the same pass. PL, PD, SA and FL1 today, and
-      whichever leagues `competitions` lists on the day it runs.
-- [ ] `/overall` is checked after the rescore, not only the per-league tables. It sums Bet
-      Points across leagues (ADR-0051), so a pass that reaches three leagues of four
-      publishes a sum whose parts were counted by different rules.
-- [ ] The rescore reads only stored Predictions and results. No Prediction is rewritten, no
-      Entrant is asked anything again, and no context is rebuilt.
-- [ ] Running it twice changes nothing the first run did not, so a partial run is repaired
-      by running it again.
-- [ ] Match Points and every probability metric are unchanged in the live record
-      afterwards, checked rather than assumed.
-- [ ] It is recorded here that hit rates move for everyone, that the direction differs by
+- [x] The rescore is rehearsed before it touches the live record, on the same terms as
+      every other write against that record. A full copy of the live database was pulled
+      into a throwaway Postgres (the `pg_dump`-into-throwaway-cluster shape `db:rehearse`
+      already uses) and `scoreMatchCompetitions` was run against the copy. 180 Bet
+      Points-family rows changed; every other metric came back byte-identical; a second run
+      against the rehearsed copy changed nothing further.
+- [x] Every listed Competition is rescored in the same pass. `main` was pushed to
+      `origin/main` first (it had been sitting unpushed), then the existing `score.yml`
+      workflow was dispatched by hand — the same mechanism the workflow already documents
+      for applying a corrected result. It scored PL, PD, SA and FL1 in one run (SA's
+      Gameweek 1 was locked but not yet kicked off, so it has no settled Fixture to score
+      yet — expected, not a gap).
+- [x] `/overall` is checked after the rescore, not only the per-league tables. Loaded live:
+      the combined ranking sums PL, PD and FL1 (`n = 4 fixtures · PL 1 · PD 2 · FL1 1`),
+      SA correctly excluded since nothing is scored there yet, and Claude Opus 5's total of
+      20 Bet Points matches 7 (PL) + 9 (PD) + 4 (FL1) read off the per-league APIs.
+- [x] The rescore reads only stored Predictions and results. No Prediction is rewritten, no
+      Entrant is asked anything again, and no context is rebuilt. True by construction —
+      `scoreMatchCompetitions` and everything under it only ever selects from `fixtures`,
+      `predictions` and `attempts`, and writes only to `scores`.
+- [x] Running it twice changes nothing the first run did not, so a partial run is repaired
+      by running it again. Proved in the rehearsal above, and already covered by
+      `test/score-match-season.test.ts`'s idempotency tests.
+- [x] Match Points and every probability metric are unchanged in the live record
+      afterwards, checked rather than assumed. Queried directly post-rescore: every
+      `bet_points`/`bet_hit_pct` row (and their season-to-date twins) carries a
+      `scored_at` inside the run's execution window; every other metric — `match_points`,
+      `score_pct`, `outcome_pct`, `rps`, `brier`, `accuracy`, `coherence`, `gap_rate`,
+      `attempts_to_valid`, and all their season-to-date twins — carries a `scored_at` from
+      before the run, meaning `storeMetric`'s own `is distinct from` guard left every one
+      of those rows untouched.
+- [x] It is recorded here that hit rates move for everyone, that the direction differs by
       Entrant, and that figures read before the rescore cannot be compared with figures
       read after. A cautious slip gains the over 1.5 line and loses the Handicap. A bold
-      one gains both. That spread is the signal the change was made to produce.
+      one gains both. That spread is the signal the change was made to produce. The rescore
+      itself is the evidence: all 180 Bet Points-family rows in the live record changed
+      value. Neither the rehearsal nor the live run recorded each row's individual
+      before-figure, so no specific old-vs-new pair is quoted here — but every row moving is
+      itself the property this bullet asks to be recorded. Treat any Bet Points or
+      `bet_hit_pct` figure read before this rescore as answering a different question from
+      the same figure read after it.
+
+**Verifying this while the rescore was fresh surfaced a separate bug, now fixed:**
+`dashboard/src/pages/overall.astro` and `dashboard/src/pages/[competition].astro` both
+carried a static "Bet Points." footnote still naming five markets — result, over/under 2.5,
+3.5 and 4.5, both teams to score — with no mention of the 1.5 line or the Handicap. The
+stored qualification (`betPointsQualification`, read from the row the scorer wrote) was
+already correct; this was a second, hardcoded copy of the same fact that slice 1 missed.
+Both files now read the seven-market list. Not yet deployed — the dashboard has its own
+deploy step (`deploy-dashboard.yml`, by hand), separate from this rescore.
