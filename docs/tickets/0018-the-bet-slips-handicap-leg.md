@@ -92,7 +92,10 @@ the slip that now exists.
 - [x] One case proves the 1.5 line settles both ways, since a Prediction of 0-0 or 1-0 is
       the only kind that takes the under and the suite has not needed one before.
 - [x] A test asserts the stored qualification states seven markets, so the label cannot
-      drift from the slip.
+      drift from the slip. **Scope, found in slice 2:** this test covers the row the
+      scorer writes and nothing else. The market list also lived, hardcoded, in two
+      dashboard footnotes this slice never touched — the guarantee above is narrower than
+      it reads; see slice 2's note on the footnote bug it found.
 - [x] Over one seeded Season, every metric other than `bet_points` and `bet_hit_pct` is
       identical with and without the new legs, proving a change to one readable ranking is
       a change to one readable ranking.
@@ -108,9 +111,11 @@ date and seven after it.
 - [x] The rescore is rehearsed before it touches the live record, on the same terms as
       every other write against that record. A full copy of the live database was pulled
       into a throwaway Postgres (the `pg_dump`-into-throwaway-cluster shape `db:rehearse`
-      already uses) and `scoreMatchCompetitions` was run against the copy. 180 Bet
-      Points-family rows changed; every other metric came back byte-identical; a second run
-      against the rehearsed copy changed nothing further.
+      already uses) and `scoreMatchCompetitions` was run against the copy. All 180 Bet
+      Points-family rows were rewritten (the new qualification sentence touches `detail`
+      on every one — see the corrected note below on what "rewritten" does and does not
+      prove); every other metric came back byte-identical; a second run against the
+      rehearsed copy changed nothing further.
 - [x] Every listed Competition is rescored in the same pass. `main` was pushed to
       `origin/main` first (it had been sitting unpushed), then the existing `score.yml`
       workflow was dispatched by hand — the same mechanism the workflow already documents
@@ -130,22 +135,34 @@ date and seven after it.
       `test/score-match-season.test.ts`'s idempotency tests.
 - [x] Match Points and every probability metric are unchanged in the live record
       afterwards, checked rather than assumed. Queried directly post-rescore: every
-      `bet_points`/`bet_hit_pct` row (and their season-to-date twins) carries a
-      `scored_at` inside the run's execution window; every other metric — `match_points`,
-      `score_pct`, `outcome_pct`, `rps`, `brier`, `accuracy`, `coherence`, `gap_rate`,
-      `attempts_to_valid`, and all their season-to-date twins — carries a `scored_at` from
-      before the run, meaning `storeMetric`'s own `is distinct from` guard left every one
-      of those rows untouched.
-- [x] It is recorded here that hit rates move for everyone, that the direction differs by
-      Entrant, and that figures read before the rescore cannot be compared with figures
-      read after. A cautious slip gains the over 1.5 line and loses the Handicap. A bold
-      one gains both. That spread is the signal the change was made to produce. The rescore
-      itself is the evidence: all 180 Bet Points-family rows in the live record changed
-      value. Neither the rehearsal nor the live run recorded each row's individual
-      before-figure, so no specific old-vs-new pair is quoted here — but every row moving is
-      itself the property this bullet asks to be recorded. Treat any Bet Points or
-      `bet_hit_pct` figure read before this rescore as answering a different question from
-      the same figure read after it.
+      non-bet metric — `match_points`, `score_pct`, `outcome_pct`, `rps`, `brier`,
+      `accuracy`, `coherence`, `gap_rate`, `attempts_to_valid`, and all their
+      season-to-date twins — carries a `scored_at` from before the run, meaning
+      `storeMetric`'s own `is distinct from` guard left every one of those rows
+      untouched. (Every `bet_points`/`bet_hit_pct` row also carries a fresh `scored_at`,
+      but that alone is not evidence its *value* moved — see below.)
+- [x] It is recorded here that hit rates move for most Entrants, that the size of the move
+      differs by Entrant, and that figures read before the rescore cannot be compared with
+      figures read after. A cautious slip gains the over 1.5 line and loses the Handicap. A
+      bold one gains both. That gap between them is the signal the change was made to
+      produce.
+
+      **Corrected after review:** an earlier draft of this note claimed every Bet
+      Points-family row changed value, reasoning from `scored_at` alone. That reasoning is
+      wrong — `storeMetric` refreshes `scored_at` when `value`, `n` **or** `detail` differs,
+      and slice 1's new `BET_POINTS_QUALIFICATION` sentence lives in `detail` and changed
+      for every row, so every row was rewritten whether its point count moved or not.
+      `scored_at` moving is evidence of a write, not evidence of a value change.
+
+      Recomputed properly, from the per-market breakdown each `bet_points` row already
+      carries in its own `detail.fixtures[].slip`: of the 40 non-cumulative `bet_points`
+      rows in the live record, 39 changed raw value and exactly one did not —
+      `match-pd/2026-27-v2/qwen3.8-max`, PD Gameweek 2, stayed at 6, having won neither of
+      the two newly added markets anywhere in that row. For `bet_hit_pct`, 4 of the 40
+      rows carry an unchanged rate: the four Premier League Gameweek 1 seats
+      (`claude-opus-5`, `gemini-3.1-pro-preview`, `kimi-k3`, `minimax-m3`) that landed a
+      perfect slip both before and after — 5 of 5 and 7 of 7 both read 100%, which is a
+      property of a perfect slip, not of the two schemes agreeing.
 
 **Verifying this while the rescore was fresh surfaced a separate bug, now fixed:**
 `dashboard/src/pages/overall.astro` and `dashboard/src/pages/[competition].astro` both
