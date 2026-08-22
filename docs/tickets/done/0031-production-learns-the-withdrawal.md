@@ -2,7 +2,7 @@
 
 **What to build:** production holds the same schema the code reads and the same withdrawal
 dates the reads look for, before the first FPL run of the Season. Source:
-[spec 0023](../specs/0023-seven-seats-open-the-fpl-track.md), story 19.
+[spec 0023](../../specs/0023-seven-seats-open-the-fpl-track.md), story 19.
 
 **Blocked by:** 0028 — the migration and the entry door are its output.
 

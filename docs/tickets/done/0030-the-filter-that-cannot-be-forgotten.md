@@ -3,7 +3,7 @@
 **What to build:** a test that fails when an Entrant read on the FPL track omits the
 withdrawal filter, so that the read site written next Season by someone who never read
 ADR-0047 cannot reinstate three Base Models by inattention. Source:
-[spec 0023](../specs/0023-seven-seats-open-the-fpl-track.md), story 24.
+[spec 0023](../../specs/0023-seven-seats-open-the-fpl-track.md), story 24.
 
 **Blocked by:** 0028 and 0029 — every read site must be final before the check can be
 written against them.

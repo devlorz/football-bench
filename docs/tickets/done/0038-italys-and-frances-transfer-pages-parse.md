@@ -4,11 +4,11 @@
 country's English-Wikipedia transfer list behind curated club maps — with each page's
 `format` read off the real page, never guessed. Deliberately off the activation tickets'
 blocking path, on spec 0016 ticket 7's precedent: the section may trail into the Season.
-Source: [spec 0024](../specs/0024-serie-a-and-ligue-1-open.md), stories 11–15.
+Source: [spec 0024](../../specs/0024-serie-a-and-ligue-1-open.md), stories 11–15.
 Decisions:
-[ADR-0049](../adr/0049-serie-a-and-ligue-1-open-the-bundesliga-waits-on-hands-not-money.md),
-[ADR-0031](../adr/0031-squad-changes-join-the-match-context-for-2026-27-v2.md),
-[ADR-0018](../adr/0018-raw-signals-only-in-the-entrant-context.md) (never assert a fact
+[ADR-0049](../../adr/0049-serie-a-and-ligue-1-open-the-bundesliga-waits-on-hands-not-money.md),
+[ADR-0031](../../adr/0031-squad-changes-join-the-match-context-for-2026-27-v2.md),
+[ADR-0018](../../adr/0018-raw-signals-only-in-the-entrant-context.md) (never assert a fact
 nobody published).
 
 **Blocked by:** 0033 (the club maps key by the live source's spellings, which the

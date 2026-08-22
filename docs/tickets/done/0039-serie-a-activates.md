@@ -5,8 +5,8 @@ Entrants seated, the pre-cron checklist run in order, the dry run green, and the
 Gameweek whose derived deadline stood open at activation predicted and Locked before
 kickoff. An operator ticket: **the insert is the point the scheduled runs begin to spend,
 and it is the operator's act alone** (ADR-0049) — no implementing agent takes it. Source:
-[spec 0024](../specs/0024-serie-a-and-ligue-1-open.md), stories 23–29. Decisions:
-[ADR-0049](../adr/0049-serie-a-and-ligue-1-open-the-bundesliga-waits-on-hands-not-money.md),
+[spec 0024](../../specs/0024-serie-a-and-ligue-1-open.md), stories 23–29. Decisions:
+[ADR-0049](../../adr/0049-serie-a-and-ligue-1-open-the-bundesliga-waits-on-hands-not-money.md),
 the ADR-0036 banner (no hand-set Lock, ever again).
 
 **Blocked by:** 0034 (the league renders), 0035 (its staleness guard exists before its

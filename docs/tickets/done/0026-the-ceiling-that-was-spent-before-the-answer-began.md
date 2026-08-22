@@ -1,7 +1,7 @@
 # Ticket: The ceiling that was spent before the answer began
 
 `ENTRANT_MAX_OUTPUT_TOKENS` goes from 16,000 to 32,000, on evidence the Season's first FPL
-opening produced. Vocabulary: [CONTEXT.md](../../CONTEXT.md) — **Entrant**, **Repair**,
+opening produced. Vocabulary: [CONTEXT.md](../../../CONTEXT.md) — **Entrant**, **Repair**,
 **Gap**.
 
 **What was measured.** The opening of Gameweek 1 ran at 2026-08-20T18:22Z and refused: six

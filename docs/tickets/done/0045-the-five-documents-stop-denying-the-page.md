@@ -5,7 +5,7 @@ spans two Competitions and that a combined ranking is out of scope in any surfac
 is a footnote a reader sees on every league page, three pages away from the page that now does
 it. After this ticket the site and its documents agree, and ADR-0035 keeps everything it decided
 except the one sentence ADR-0051 replaced. Source:
-[spec 0025](../specs/0025-the-combined-ranking.md), "Documents updated in this change".
+[spec 0025](../../specs/0025-the-combined-ranking.md), "Documents updated in this change".
 
 **Blocked by:** Ticket 0044 — the footnote must not advertise a page that does not exist yet,
 and must not deny one that does.
@@ -20,10 +20,10 @@ The five, and what each currently says:
 
 | Where | What it says today |
 | --- | --- |
-| [ADR-0035](../adr/0035-the-match-track-grows-a-competition-dimension.md) | "no combined cross-league ranking is published" |
-| [ADR-0039](../adr/0039-the-dashboard-gives-every-competition-its-own-path.md) | "the footnote states the separation and no surface computes across it" |
-| [spec 0016](../specs/0016-competition-expansion.md) | Out of Scope: "A combined cross-league ranking, in any surface" |
-| [spec 0017](../specs/0017-the-dashboard-per-competition-shape.md) | Out of Scope: the same line |
+| [ADR-0035](../../adr/0035-the-match-track-grows-a-competition-dimension.md) | "no combined cross-league ranking is published" |
+| [ADR-0039](../../adr/0039-the-dashboard-gives-every-competition-its-own-path.md) | "the footnote states the separation and no surface computes across it" |
+| [spec 0016](../../specs/0016-competition-expansion.md) | Out of Scope: "A combined cross-league ranking, in any surface" |
+| [spec 0017](../../specs/0017-the-dashboard-per-competition-shape.md) | Out of Scope: the same line |
 | the per-league leaderboard's **What this is not.** footnote | "Each Competition is its own benchmark: no ranking spans two…" |
 
 **ADR-0035 is superseded in one sentence and stands in every other.** Its Competition dimension,

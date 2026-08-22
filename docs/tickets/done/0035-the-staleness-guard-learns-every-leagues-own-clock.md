@@ -5,10 +5,10 @@ League's alone — every listed Competition gets its own, dated from its own Gam
 deadline and asking whether its own feed is live — and the `FOOTBALL_DATA_SEASON`
 advance check grows to all eight files. The one piece of new machinery in this
 expansion, owed since spec 0016's ticket 8 recorded it as "the first thing to write for
-Serie A". Source: [spec 0024](../specs/0024-serie-a-and-ligue-1-open.md), stories
+Serie A". Source: [spec 0024](../../specs/0024-serie-a-and-ligue-1-open.md), stories
 17–19. Decisions:
-[ADR-0049](../adr/0049-serie-a-and-ligue-1-open-the-bundesliga-waits-on-hands-not-money.md),
-[ADR-0036](../adr/0036-a-new-competitions-schedule-results-and-lock-come-from-football-data-org.md)
+[ADR-0049](../../adr/0049-serie-a-and-ligue-1-open-the-bundesliga-waits-on-hands-not-money.md),
+[ADR-0036](../../adr/0036-a-new-competitions-schedule-results-and-lock-come-from-football-data-org.md)
 (whose consequence — "applied per Competition" — this finally implements).
 
 **Blocked by:** None — can start immediately.

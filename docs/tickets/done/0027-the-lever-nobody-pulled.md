@@ -3,7 +3,7 @@
 **What to build:** an opening attempt on the FPL track with one seat called at a time,
 made before any Base Model is withdrawn, so that the withdrawal list is decided against a
 Base Model that was asked politely rather than against one that was asked in a ten-wide
-burst. Source: [spec 0023](../specs/0023-seven-seats-open-the-fpl-track.md), the Gate.
+burst. Source: [spec 0023](../../specs/0023-seven-seats-open-the-fpl-track.md), the Gate.
 
 **Blocked by:** None — can start immediately.
 

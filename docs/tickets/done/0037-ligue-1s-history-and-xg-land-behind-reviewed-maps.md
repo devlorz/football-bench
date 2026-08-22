@@ -5,10 +5,10 @@
 two derived, human-reviewed identity maps. Eighteen clubs, not twenty, and nothing may
 assume otherwise. Demoable: an `FL1` context renders its history, league table,
 prior-Season points per game and xG. Source:
-[spec 0024](../specs/0024-serie-a-and-ligue-1-open.md), stories 9–10, 12–13, 20–22.
+[spec 0024](../../specs/0024-serie-a-and-ligue-1-open.md), stories 9–10, 12–13, 20–22.
 Decisions:
-[ADR-0049](../adr/0049-serie-a-and-ligue-1-open-the-bundesliga-waits-on-hands-not-money.md),
-[ADR-0037](../adr/0037-a-new-competition-plays-the-v2-context-minus-availability.md).
+[ADR-0049](../../adr/0049-serie-a-and-ligue-1-open-the-bundesliga-waits-on-hands-not-money.md),
+[ADR-0037](../../adr/0037-a-new-competition-plays-the-v2-context-minus-availability.md).
 
 **Blocked by:** 0033 (the captured `FL1` response), 0034 (the divisions and the check).
 Independent of 0036 — the two leagues' curation can run in parallel.
@@ -148,7 +148,7 @@ Independent of 0036 — the two leagues' curation can run in parallel.
       `continue` back above the `Date` check, which is the reviewed regression exactly:
       red at `promise resolved "undefined" instead of rejecting`._
 
-      _**This changes what every Competition stores, so it is [ADR-0050](../adr/0050-a-row-the-source-has-no-result-for-is-not-corruption.md)**
+      _**This changes what every Competition stores, so it is [ADR-0050](../../adr/0050-a-row-the-source-has-no-result-for-is-not-corruption.md)**
       rather than a note in one league's ticket._
 
       _The claim that this row is rare is now checked instead of asserted: of the **six

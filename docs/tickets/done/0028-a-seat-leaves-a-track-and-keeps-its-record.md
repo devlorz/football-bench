@@ -5,10 +5,10 @@ database. A withdrawn seat keeps its id, its Base Model, its attempts and its co
 gains the date it left. The FPL track then opens for the seats that stand, refuses a roster
 of the wrong size against its own expected count, and everything the operator reads before
 a Lock reads the same roster the run will call. The Match track is untouched. Source:
-[spec 0023](../specs/0023-seven-seats-open-the-fpl-track.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md) — **Season Roster**, **Entrant**, **Base Model**, **Track**,
+[spec 0023](../../specs/0023-seven-seats-open-the-fpl-track.md). Vocabulary:
+[CONTEXT.md](../../../CONTEXT.md) — **Season Roster**, **Entrant**, **Base Model**, **Track**,
 **Lock**, **Prompt Version**. Decision:
-[ADR-0047](../adr/0047-three-seats-leave-the-fpl-track-before-its-first-lock.md).
+[ADR-0047](../../adr/0047-three-seats-leave-the-fpl-track-before-its-first-lock.md).
 
 **Blocked by:** 0027 — the withdrawal list is that ticket's output.
 

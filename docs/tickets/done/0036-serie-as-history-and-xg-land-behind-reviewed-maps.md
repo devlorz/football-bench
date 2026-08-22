@@ -4,10 +4,10 @@
 Season (2025-26) of Italian first- and second-division history and one of Understat xG,
 behind two identity maps derived from the real feeds and reviewed by a person before any
 row lands. Demoable: an `SA` context renders its history, league table, prior-Season
-points per game and xG. Source: [spec 0024](../specs/0024-serie-a-and-ligue-1-open.md),
+points per game and xG. Source: [spec 0024](../../specs/0024-serie-a-and-ligue-1-open.md),
 stories 9–10, 12–13, 20–22. Decisions:
-[ADR-0049](../adr/0049-serie-a-and-ligue-1-open-the-bundesliga-waits-on-hands-not-money.md),
-[ADR-0037](../adr/0037-a-new-competition-plays-the-v2-context-minus-availability.md).
+[ADR-0049](../../adr/0049-serie-a-and-ligue-1-open-the-bundesliga-waits-on-hands-not-money.md),
+[ADR-0037](../../adr/0037-a-new-competition-plays-the-v2-context-minus-availability.md).
 
 **Blocked by:** 0033 (the captured `SA` response is the source of the live-source
 spellings), 0034 (the divisions and the check must exist before the backfill's first

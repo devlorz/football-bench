@@ -13,9 +13,9 @@ call that would have cost two cents. The provider's own ledger for the day settl
 $4.7119 billed across 248 generations, subtracting from the balance exactly as every
 screenshot along the way showed, with $1.61 still in the account when the refusals landed.
 
-Vocabulary: [CONTEXT.md](../../CONTEXT.md) — **Gap**, **Repair**, **Entrant**, **Base
+Vocabulary: [CONTEXT.md](../../../CONTEXT.md) — **Gap**, **Repair**, **Entrant**, **Base
 Model**. The runs behind this are recorded in
-[the Gameweek 2 report](../reports/2026-08-20-pd-gameweek-2-first-run-under-v2.md).
+[the Gameweek 2 report](../../reports/2026-08-20-pd-gameweek-2-first-run-under-v2.md).
 
 Slice 1 is first because it is the one that costs Predictions and its evidence is already
 collected. Slice 2 is smaller than it first looked — one field on a request body — and
@@ -109,7 +109,7 @@ close to the real cost rather than to the model's maximum.
       rationale, not a second quantity of thinking. Per-seat counts, the arithmetic
       closing them against the day's 248 generations, the four seats the 402s fell on and
       the ledger are in
-      [the completion-token report](../reports/2026-08-20-completion-tokens-per-seat.md),
+      [the completion-token report](../../reports/2026-08-20-completion-tokens-per-seat.md),
       because the export itself is a download and is not held here. The number is
       provisional and says so at the reader: under a five-minute window the next run's
       calls finish where these were cut, and the first uncensored maxima arrive with it.
@@ -133,7 +133,7 @@ balance cannot finish. It was written here as a consequence of naming the ceilin
 request with a stated ceiling can be priced before it is sent — but it is a second piece
 of work needing a credits read and a per-seat price table, and none of that belongs to a
 field on a request body. It is
-[ticket 0024](0024-a-run-that-knows-what-it-will-cost-before-it-starts.md), unstarted, and
+[ticket 0024](../0024-a-run-that-knows-what-it-will-cost-before-it-starts.md), unstarted, and
 this slice does not claim it.
 
 **Landed 2026-08-20.** Suites re-run for this slice: every test file importing
@@ -173,4 +173,4 @@ Retrying Gaps that have passed their Lock — a Gap is never back-filled. Changi
 counts as a Repair. The FPL track's own timeout behaviour beyond making the window
 reachable per call. Any change to the scheduler's cadence or to `predict.yml`. Pricing a
 Gameweek against the balance before it starts, which slice 2 makes possible and
-[ticket 0024](0024-a-run-that-knows-what-it-will-cost-before-it-starts.md) carries.
+[ticket 0024](../0024-a-run-that-knows-what-it-will-cost-before-it-starts.md) carries.

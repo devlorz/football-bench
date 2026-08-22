@@ -1,9 +1,9 @@
 # Ticket: The Fixture window widens to eleven Gameweeks
 
 Carried out of
-[spec 0022](../specs/0022-the-fixture-window-widens-to-eleven-gameweeks.md), whose source is
-[ADR-0046](../adr/0046-the-fixture-window-widens-to-eleven-gameweeks-before-the-first-fpl-lock.md).
-Vocabulary: [CONTEXT.md](../../CONTEXT.md) — **Chip**, **Double Gameweek**,
+[spec 0022](../../specs/0022-the-fixture-window-widens-to-eleven-gameweeks.md), whose source is
+[ADR-0046](../../adr/0046-the-fixture-window-widens-to-eleven-gameweeks-before-the-first-fpl-lock.md).
+Vocabulary: [CONTEXT.md](../../../CONTEXT.md) — **Chip**, **Double Gameweek**,
 **Blank Gameweek**, **Unscheduled**, **Entrant**.
 
 One ticket rather than several because it cannot be cut and stay green. Changing the

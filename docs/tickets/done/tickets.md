@@ -2,8 +2,8 @@
 
 Twelve tracer-bullet slices that build the recording half of the benchmark — everything that
 must be live before the first Gameweek of the 2026/27 Season. Source:
-[spec 0001](../specs/0001-match-track-write-path.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md). Decisions: [ADR 0001–0015](../adr/).
+[spec 0001](../../specs/0001-match-track-write-path.md). Vocabulary:
+[CONTEXT.md](../../../CONTEXT.md). Decisions: [ADR 0001–0015](../../adr/).
 
 Work the **frontier**: any ticket whose blockers are all done. After the first two, four
 tickets open at once.
@@ -359,4 +359,4 @@ Gap summary. What the run does not cover is the scheduler around the two runs:
 rather than here.
 
 Operating knowledge that had lived only in conversation is recorded in
-[the pre-cron checklist](../runbooks/pre-cron-checklist.md).
+[the pre-cron checklist](../../runbooks/pre-cron-checklist.md).

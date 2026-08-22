@@ -3,8 +3,8 @@
 **What to build:** the FPL page shows the FPL track's own roster and the Match page shows
 the Match track's, so a reader who compares the two is told there are two populations
 rather than left to infer one. Source:
-[spec 0023](../specs/0023-seven-seats-open-the-fpl-track.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md) — **Season Roster**, **Entrant**, **Track**.
+[spec 0023](../../specs/0023-seven-seats-open-the-fpl-track.md). Vocabulary:
+[CONTEXT.md](../../../CONTEXT.md) — **Season Roster**, **Entrant**, **Track**.
 
 **Blocked by:** 0028 — the column, the withdrawal list and the dates are its output.
 

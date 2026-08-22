@@ -5,7 +5,7 @@ DOM, no database and no fetch, plus the qualification sentence that must appear 
 table built from it. Hand it the four leagues' leaderboard bodies and it answers with the
 ranked rows, the covered leagues, the Fixture breakdown and which state the page is in.
 Nothing renders yet; everything that can be wrong is decided and pinned here. Source:
-[spec 0025](../specs/0025-the-combined-ranking.md), Implementation and Testing Decisions.
+[spec 0025](../../specs/0025-the-combined-ranking.md), Implementation and Testing Decisions.
 
 **Blocked by:** None — can start immediately.
 

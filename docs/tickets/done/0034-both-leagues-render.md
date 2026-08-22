@@ -4,10 +4,10 @@
 Prompt Versions, differing from the Premier League's rendering by exactly the league's
 name — with each league's divisions named, the division check grown to match, and each
 league's Season article listed for Head Coach changes. Source:
-[spec 0024](../specs/0024-serie-a-and-ligue-1-open.md), stories 1–7 and 16. Decisions:
-[ADR-0049](../adr/0049-serie-a-and-ligue-1-open-the-bundesliga-waits-on-hands-not-money.md),
-[ADR-0038](../adr/0038-one-prompt-template-one-prompt-version-per-competition.md),
-[ADR-0042/0043](../adr/) (the current template both leagues inherit from birth).
+[spec 0024](../../specs/0024-serie-a-and-ligue-1-open.md), stories 1–7 and 16. Decisions:
+[ADR-0049](../../adr/0049-serie-a-and-ligue-1-open-the-bundesliga-waits-on-hands-not-money.md),
+[ADR-0038](../../adr/0038-one-prompt-template-one-prompt-version-per-competition.md),
+[ADR-0042/0043](../../adr/) (the current template both leagues inherit from birth).
 
 **Blocked by:** None — can start immediately.
 

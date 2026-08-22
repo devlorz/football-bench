@@ -2,10 +2,10 @@
 
 Two tracer-bullet slices that put a price on hedging. The slip grows from five markets to
 seven, and one rescore gives every Competition's Bet Points the same meaning. Source:
-[spec 0018](../specs/0018-the-bet-slips-handicap-leg.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md). Decisions:
-[ADR-0040](../adr/0040-the-bet-slip-gains-a-handicap-leg-that-pays-only-for-covering.md),
-amending [ADR-0023](../adr/0023-a-second-readable-ranking-reads-a-bet-slip-off-the-predicted-score.md).
+[spec 0018](../../specs/0018-the-bet-slips-handicap-leg.md). Vocabulary:
+[CONTEXT.md](../../../CONTEXT.md). Decisions:
+[ADR-0040](../../adr/0040-the-bet-slip-gains-a-handicap-leg-that-pays-only-for-covering.md),
+amending [ADR-0023](../../adr/0023-a-second-readable-ranking-reads-a-bet-slip-off-the-predicted-score.md).
 
 Two slices and not more, deliberately. The legs and the sentence describing them land
 together, because a stored row labelled "five markets" over a seven-market slip is worse

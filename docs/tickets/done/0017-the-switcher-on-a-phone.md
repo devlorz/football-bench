@@ -1,9 +1,9 @@
 # Ticket — The Competition switcher on a phone
 
-Follows [ticket 0017](done/0017-the-dashboard-per-competition-shape.md), which built the
+Follows [ticket 0017](0017-the-dashboard-per-competition-shape.md), which built the
 switcher and recorded this under "Left standing". Source:
-[spec 0017](../specs/0017-the-dashboard-per-competition-shape.md). Decision:
-[ADR-0039](../adr/0039-the-dashboard-gives-every-competition-its-own-path.md).
+[spec 0017](../../specs/0017-the-dashboard-per-competition-shape.md). Decision:
+[ADR-0039](../../adr/0039-the-dashboard-gives-every-competition-its-own-path.md).
 
 Nothing is broken today. This ticket exists because the day it breaks is a day nobody will
 be reading ticket 0017 — and that reasoning is why the two claims it was first written

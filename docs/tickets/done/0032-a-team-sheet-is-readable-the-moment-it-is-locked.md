@@ -2,8 +2,8 @@
 
 **What to build:** `/fpl/squads` shows the Team Sheets of the latest Gameweek any of them
 was locked for, with the points arriving when the Gameweek settles. Source:
-[ADR-0048](../adr/0048-the-squads-page-shows-a-team-sheet-from-its-lock.md). Vocabulary:
-[CONTEXT.md](../../CONTEXT.md) — **Team Sheet**, **Manager State**, **Lock**, **Settled**.
+[ADR-0048](../../adr/0048-the-squads-page-shows-a-team-sheet-from-its-lock.md). Vocabulary:
+[CONTEXT.md](../../../CONTEXT.md) — **Team Sheet**, **Manager State**, **Lock**, **Settled**.
 
 **Blocked by:** None.
 

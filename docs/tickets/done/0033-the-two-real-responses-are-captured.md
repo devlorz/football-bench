@@ -5,9 +5,9 @@ responses for 2026-27, captured off the wire, archived in `raw_snapshots` under 
 source names, and joined to the recorded test fixtures — so that every identity map this
 expansion needs is derived from the live source's own spellings, and the parser is proven
 against the bytes the API really returns. Source:
-[spec 0024](../specs/0024-serie-a-and-ligue-1-open.md), stories 8 and 21. Decisions:
-[ADR-0049](../adr/0049-serie-a-and-ligue-1-open-the-bundesliga-waits-on-hands-not-money.md),
-[ADR-0036](../adr/0036-a-new-competitions-schedule-results-and-lock-come-from-football-data-org.md).
+[spec 0024](../../specs/0024-serie-a-and-ligue-1-open.md), stories 8 and 21. Decisions:
+[ADR-0049](../../adr/0049-serie-a-and-ligue-1-open-the-bundesliga-waits-on-hands-not-money.md),
+[ADR-0036](../../adr/0036-a-new-competitions-schedule-results-and-lock-come-from-football-data-org.md).
 
 Spec 0016's lesson, learned twice: a constructed fixture carried twelve wrong clubs of
 twenty, and a map drafted from it would have been "a guess wearing a fixture's clothes".

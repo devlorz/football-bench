@@ -4,8 +4,8 @@
 the operator, ten Entrants seated, the checklist in order, the dry run green, and the
 first open Gameweek predicted and Locked before kickoff. Independent of Serie A's
 activation: the two leagues open on their own clocks. Source:
-[spec 0024](../specs/0024-serie-a-and-ligue-1-open.md), stories 23–29. Decisions:
-[ADR-0049](../adr/0049-serie-a-and-ligue-1-open-the-bundesliga-waits-on-hands-not-money.md),
+[spec 0024](../../specs/0024-serie-a-and-ligue-1-open.md), stories 23–29. Decisions:
+[ADR-0049](../../adr/0049-serie-a-and-ligue-1-open-the-bundesliga-waits-on-hands-not-money.md),
 the ADR-0036 banner.
 
 **Blocked by:** 0034, 0035, 0037. Deliberately not blocked by 0038 — Squad Changes may
@@ -210,7 +210,7 @@ on a pasted number that cannot be asked for again._
 ### Cost
 
 Nine Fixtures times ten seats, at the $0.1845 per Fixture the
-[price report](../reports/2026-08-15-five-league-price.md) read off La Liga's Gameweek 1
+[price report](../../reports/2026-08-15-five-league-price.md) read off La Liga's Gameweek 1
 — **90 calls, about $1.66**, against the $56.46 per Season ADR-0049 committed for this
 Competition. Asked and granted before the insert, which is the point at which the spend
 became inevitable: the row is what makes the poll reach the source.

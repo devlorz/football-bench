@@ -4,7 +4,7 @@
 Match Points and Bet Points added up across every league that is scored, under the sort toggle
 they know from a league's leaderboard, with the Fixture count broken down league by league and
 the qualification underneath. It is reachable from the nav on every Match track page. Source:
-[spec 0025](../specs/0025-the-combined-ranking.md).
+[spec 0025](../../specs/0025-the-combined-ranking.md).
 
 **Blocked by:** Ticket 0043 — the page holds no arithmetic of its own, so there is nothing to
 render until the rule exists.
