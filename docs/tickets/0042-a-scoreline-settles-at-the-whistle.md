@@ -66,27 +66,27 @@ replaces `finished` has to be the feed's own statement that the match is over.
 
 ## Acceptance
 
-- [ ] A Fixture the feed reports over — whether it says so provisionally or with its later
+- [x] A Fixture the feed reports over — whether it says so provisionally or with its later
       confirmation — stores its result, and the two flags are read as either-or rather
       than combined as an `and not`: spec 0002's warning that `finished_provisional` may
       still be true once `finished` turns true is the reason that combination was wrong
       then and stays wrong now.
-- [ ] A Fixture in play stores nothing. A fetch run at half time finds a score in the feed
+- [x] A Fixture in play stores nothing. A fetch run at half time finds a score in the feed
       and must leave `fixtures.result` as it was.
-- [ ] The source-contradiction check that rejects a settled Fixture carrying no goals uses
+- [x] The source-contradiction check that rejects a settled Fixture carrying no goals uses
       the same predicate as the write, so a Fixture the feed calls over without a score is
       reported rather than silently passed over as unplayed.
-- [ ] A score that changes after it was first stored still updates the Fixture, and the
+- [x] A score that changes after it was first stored still updates the Fixture, and the
       next scoring run recomputes every figure from it. Provisional-then-corrected is the
       case this ticket makes ordinary, and it is the one that must not need a human.
 - [ ] The Premier League leaderboard publishes a ranking over the Fixtures of a Gameweek
       that have been played, while the rest of that Gameweek is still to come — the state
       Ligue 1 was already in on 2026-08-22 and the Premier League could not reach.
-- [ ] Spec 0002 story 2 is amended so the record and the code agree, and the amendment
+- [x] Spec 0002 story 2 is amended so the record and the code agree, and the amendment
       names what still waits for FPL's confirmation — the FPL track's per-player points,
       gated on `data_checked` — so the two gates are not later collapsed into one by
       somebody reading only the new sentence.
-- [ ] The test pinning "provisional alone is not scoreable" is inverted rather than
+- [x] The test pinning "provisional alone is not scoreable" is inverted rather than
       deleted, and a mid-match Fixture joins the same case, so the behaviour that replaces
       it is pinned by the test that used to forbid it.
 - [ ] Arsenal 3-0 Coventry City is in `fixtures.result` and on the leaderboard after one
