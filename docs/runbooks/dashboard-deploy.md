@@ -654,15 +654,19 @@ for BASE in \
   curl -sS -o /dev/null -w "unique    $BASE %{http_code}\n" "$BASE?rev=$(date +%s)"
 done
 # require: 500 from all four, and no canonical answering HIT from an age
-# older than the deploy. One that is -- the old entry still alive -- gets the
-# minute of polling the purge paragraph above asks for, and a redeploy if it
-# outlives the minute:
-BASE=https://football-bench.leelorz6.workers.dev/api/pl/leaderboard
+# older than the deploy. Only if one is -- the old entry still alive -- run
+# the minute of polling the purge paragraph above asks for, both tracks
+# every tick, because they hold separate entries. An entry that outlives
+# the minute is the signal to redeploy:
 for i in $(seq 12); do
   sleep 5
-  curl -sS -D- -o /dev/null "$BASE" | tr -d '\r' \
-    | grep -iE '^(HTTP|cf-cache-status|age:)' | tr '\n' ' '
-  echo "  $(date -u +%H:%M:%S)"
+  for BASE in \
+    https://football-bench.leelorz6.workers.dev/api/pl/leaderboard \
+    https://football-bench.leelorz6.workers.dev/api/fpl/leaderboard; do
+    curl -sS -D- -o /dev/null "$BASE" | tr -d '\r' \
+      | grep -iE '^(HTTP|cf-cache-status|age:)' | tr '\n' ' '
+    echo " <- $BASE $(date -u +%H:%M:%S)"
+  done
 done
 ```
 
