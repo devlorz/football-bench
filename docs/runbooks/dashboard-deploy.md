@@ -627,7 +627,7 @@ promise about the afternoon of 2026-08-16, when a stale 404 answered
 second. Fifteen seconds and "a second deploy" are two observations of the same
 mechanism, and nothing yet says which of the two that afternoon was: a
 deployment that did not reset the entry, or a slower path to wherever the
-poller asked ([ticket 0017](../tickets/0017-a-404-that-outlives-its-cause.md)
+poller asked ([ticket 0017](../tickets/done/0017-a-404-that-outlives-its-cause.md)
 declines to guess, and so does this).
 
 So the confirm steps below are the procedure and not a formality: poll the
