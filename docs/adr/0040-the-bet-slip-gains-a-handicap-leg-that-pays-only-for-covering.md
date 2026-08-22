@@ -1,5 +1,24 @@
 # The Bet Slip gains a Handicap leg that pays only for covering
 
+> Amended 2026-08-21: the slip is **seven** markets, not six. A fourth goal-total line at
+> 1.5 joins the three below it, so the slip states the match result, over/under 1.5, 2.5,
+> 3.5 and 4.5, both teams to score, and the Handicap. Bet Points run 0 to 7.
+>
+> Everything below stands as written and as decided. The 1.5 line is a goal total like the
+> other three, settled the same way against the same Predicted Score, and it does not touch
+> the Handicap leg this ADR is about. The Considered Options below still reject a second
+> *Handicap* line at 2.5; that is a different market and the rejection is untouched.
+>
+> What the amendment costs, because it cuts against the paragraph above it: over 1.5 is the
+> cheapest line on the board for the scoreline most Entrants name. Counted over the 3,145
+> matches stored for 2025-26, it lands 74.1% of the time, against 50.1% for the 2.5 line and
+> 32.4% for the Handicap's margin. A 1-1 Prediction takes over 1.5 and collects it three
+> times in four, which is the cheap-line behaviour recorded below as the flaw this ADR
+> answers. Set against that, the line makes a 0-0 or 1-0 Prediction cost something for the
+> first time, which no other market on the slip does. Both effects are real, and the slip now
+> carries one line pulling each way rather than only the Handicap pulling against four cheap
+> ones.
+
 The Bet Slip grows from five markets to six: a Handicap leg at 1.5 goals joins the match
 result, the three goal-total lines and both teams to score. Like every other leg it is
 read off the one Predicted Score the Entrant committed and nothing else — Entrants are

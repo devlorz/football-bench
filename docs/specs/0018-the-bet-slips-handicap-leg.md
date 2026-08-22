@@ -1,8 +1,8 @@
 # Spec 0018 — The Bet Slip's Handicap leg
 
 **Status:** ready-for-agent
-**Scope:** one leg added to the Bet Slip, the qualification sentence that describes it, and
-one rescore covering every Competition
+**Scope:** two markets added to the Bet Slip, the qualification sentence that describes
+them, and one rescore covering every Competition
 **Vocabulary:** [CONTEXT.md](../../CONTEXT.md) · **Decisions:**
 [ADR-0040](../adr/0040-the-bet-slip-gains-a-handicap-leg-that-pays-only-for-covering.md),
 amending [ADR-0023](../adr/0023-a-second-readable-ranking-reads-a-bet-slip-off-the-predicted-score.md)
@@ -48,9 +48,9 @@ rescored — every Competition together — so no Season holds two meanings of `
    from caution.
 2. As a reader, I want a Predicted Score that backs neither side to score nothing on the
    Handicap, so that hedging has a price rather than a consolation.
-3. As a reader, I want Bet Points to run zero to six per Fixture, so that the maximum
+3. As a reader, I want Bet Points to run zero to seven per Fixture, so that the maximum
    matches the markets actually stated.
-4. As a reader, I want the qualification sentence beside the ranking to say six markets
+4. As a reader, I want the qualification sentence beside the ranking to say seven markets
    and to say that the cheap lines are now weighed against one that pays only for calling
    a decisive result, so that the caveat I am given is the caveat that is true.
 5. As a reader, I want the Handicap's hit rate to appear beside the other markets in the
@@ -74,6 +74,11 @@ rescored — every Competition together — so no Season holds two meanings of `
     metric read off a pre-Lock commitment.
 12. As an operator, I want the leg to settle without pushes, so that it behaves like the
     goal-total lines: the line is a half and margins are integers.
+12a. As an operator, I want the goal-total lines to be 1.5, 2.5, 3.5 and 4.5, with the new
+    one settling exactly as the other three do, so that adding it is adding a number and
+    not a special case.
+12b. As a reader, I want a Predicted Score of 0-0 or 1-0 to cost something on the 1.5 line,
+    so that the very low scorelines are no longer free.
 
 ### The rescore
 
@@ -89,7 +94,7 @@ rescored — every Competition together — so no Season holds two meanings of `
 
 ### What the change costs, stated
 
-17. As a reader, I want `bet_hit_pct` to divide by six markets per settled slip, so that
+17. As a reader, I want `bet_hit_pct` to divide by seven markets per settled slip, so that
     the rate describes the slip that was actually placed.
 18. As an operator, I want it recorded that hit rates fall across the board after this
     change and that figures read before the rescore are not comparable with figures read
@@ -111,18 +116,23 @@ rescored — every Competition together — so no Season holds two meanings of `
 24. As a developer, I want the per-market breakdown asserted to carry the Handicap key
     alongside the existing five, so that the market list cannot silently drift.
 25. As a developer, I want a test that the qualification sentence stored with the rows
-    states six markets, so that the label cannot fall out of step with the slip.
+    states seven markets, so that the label cannot fall out of step with the slip.
 
 ## Implementation Decisions
 
-### One market, one line, read off the margin
+### Two markets: one read off the margin, one off the total
 
-The slip's construction gains a sixth leg. Its market name carries its line, as the
-goal-total legs do. Its position is the side the Predicted Score's margin backs, or the
-absence of a side; its settled value is the side the result's margin backs, or the same
-absence. The leg is won when a side was backed and the result backed the same one — the
-one place in the slip where equality of position and settled is not enough, because the
-shared value "neither" must not win.
+The slip's construction gains a Handicap leg and a fourth goal-total line at 1.5. Both
+market names carry their line, as the existing goal-total legs do.
+
+The 1.5 line needs no new machinery. It settles the way 2.5, 3.5 and 4.5 already settle,
+against the same Predicted Score, and adding it is adding a number to the list of lines.
+
+The Handicap is the one that needs care. Its position is the side the Predicted Score's
+margin backs, or the absence of a side; its settled value is the side the result's margin
+backs, or the same absence. The leg is won when a side was backed and the result backed
+the same one. It is the one place in the slip where equality of position and settled is
+not enough, because the shared value "neither" must not win.
 
 This is the only leg that can be lost without being wrong, and ADR-0040 records that
 asymmetry as its purpose rather than an accident.
@@ -136,7 +146,7 @@ constant, which is what keeps the leg derivable from the Predicted Score alone.
 ### The qualification sentence is rewritten, not extended
 
 `BET_POINTS_QUALIFICATION` currently states five markets and asserts that the slip rewards
-played percentages over boldness. Both halves stop being true. The replacement states six
+played percentages over boldness. Both halves stop being true. The replacement states seven
 markets, keeps the flat-and-oddsless caveat, keeps the sentence that only the probability
 layer's Paired Differences support a claim about forecasting skill, and replaces the
 boldness clause with what is now true: the cheap goal-total lines are weighed against one
@@ -146,7 +156,7 @@ of every row a ranking can be read off.
 ### `bet_hit_pct` moves underneath its own name
 
 The metric is won markets over bet markets, so its denominator follows the slip from five
-to six per settled Fixture with no code change of its own — and its per-market breakdown
+to seven per settled Fixture with no code change of its own — and its per-market breakdown
 gains the Handicap key. Which slips count is unchanged: a Fixture with no result and a
 Gapped Fixture stay out, for the reason the existing behaviour gives, that an absent slip
 would otherwise pull the rate down as though its markets had lost.
@@ -181,11 +191,13 @@ reader is told, and the stored row is where that claim lands.
 - **The four settlement paths**, each as its own seeded case: backed and covered the same
   way; backed and covered the other way; hedged against a decisive result; hedged against
   a tight result. The last two are the motivating behaviour and must score zero.
-- **The per-market breakdown** carries six keys, so a market cannot be added or lost
+- **The 1.5 line both ways.** A Prediction of 0-0 or 1-0 is the only kind that takes the
+  under, and no case in the suite has needed one before.
+- **The per-market breakdown** carries seven keys, so a market cannot be added or lost
   silently.
 - **`bet_hit_pct` over a known slip**, extending the existing case that fixes the
   denominator at five markets per settled slip.
-- **The qualification sentence** stored in the rows states six markets, on the same terms
+- **The qualification sentence** stored in the rows states seven markets, on the same terms
   the FPL dashboard's qualification test uses: the sentence a reader receives equals the
   sentence the record froze.
 - **Isolation**, as a single behavioural assertion: over one seeded Season, every metric
@@ -201,7 +213,8 @@ rehearsal tests show how a whole Season is scored and compared.
 ## Out of Scope
 
 - **A second Handicap line at 2.5.** ADR-0040 records it as addable later without
-  disturbing the first.
+  disturbing the first, and adding the 1.5 goal-total line does not change that: the two
+  are different markets that happen to share a number.
 - **Odds of any kind**, including a per-Fixture bookmaker handicap. Unchanged from
   ADR-0023.
 - **Match Points, the probability metrics, Coherence, Gap rate and attempts-to-valid.**
@@ -209,7 +222,7 @@ rehearsal tests show how a whole Season is scored and compared.
 - **The FPL track**, which has no Bet Slip.
 - **Any change to what an Entrant is asked.** No prompt, no context, no Prompt Version.
 - **Dashboard presentation.** The number and its qualification already flow; how a page
-  frames a six-market slip is its own decision if anyone wants one.
+  frames a seven-market slip is its own decision if anyone wants one.
 
 ## Further Notes
 
