@@ -311,6 +311,25 @@ describe("the dashboard read API", () => {
     expect((await get("/api/bl1/leaderboard")).status).toBe(404);
   });
 
+  test("carries a lifetime on the 404, so a miss cannot outlive its cause",
+    async () => {
+      const response = await get("/api/bl1/leaderboard");
+
+      expect(response.status).toBe(404);
+
+      // The incident this header exists for: `/api/pd/leaderboard` answered
+      // 404 from the edge for days after the deploy that created the route,
+      // because the 404 carried a content type and nothing else and the edge
+      // picked its own TTL (ticket 0017). A path that answers 404 today
+      // answers 200 the day its Competition is served, so the miss deserves
+      // a shorter lifetime than any answer the edge would have chosen.
+      expect(response.headers.get("cloudflare-cdn-cache-control"))
+        .toBe("max-age=60, stale-if-error=0");
+
+      // And the browser asks every load, like every other response here.
+      expect(response.headers.get("cache-control")).toBe("no-cache");
+    });
+
   test("lets no Competition's rows reach another's response", async () => {
     // The claim ADR-0035 exists for, asserted in both directions through the
     // seam a reader reads and under the select-only role the Worker holds.

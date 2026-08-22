@@ -105,6 +105,22 @@ const SCORED_CACHE = "max-age=300, stale-while-revalidate=3600, stale-if-error=0
 const FIXTURES_CACHE = "max-age=60, stale-if-error=0";
 
 /**
+ * The 404's own lifetime, and a short one, because a path that answers 404
+ * today answers 200 the day its Competition is served: with a content type
+ * and nothing else, the edge picked its own TTL and a miss outlived the
+ * deploy that made it wrong -- `/api/pd/leaderboard` answered a cached 404
+ * for days after the route existed (ticket 0017). Sixty seconds, the number
+ * `FIXTURES_CACHE` uses, and not `no-store`, because `worker.ts` opens the
+ * database connection before it routes, so an uncacheable 404 is a
+ * connection for every scanner and every typo. `stale-if-error=0` for the
+ * reason every other constant here carries it: without one of the three
+ * directives that disable it, an edge error would serve the cached miss
+ * indefinitely -- this incident's failure, rebuilt out of the parts that
+ * caused it the first time.
+ */
+const NOT_FOUND_CACHE = "max-age=60, stale-if-error=0";
+
+/**
  * One ranked row, which is not the same thing as one Entrant. The Season Roster
  * is ten of them and an Exhibition Run that has replayed is another, ranked in
  * the same table by ADR-0032 and told apart by `exhibition` alone. The type is
@@ -2497,6 +2513,10 @@ export async function handleDashboardRequest(
   }
   return new Response("Not found", {
     status: 404,
-    headers: { "content-type": "text/plain; charset=utf-8" }
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "cloudflare-cdn-cache-control": NOT_FOUND_CACHE,
+      "cache-control": BROWSER_CACHE
+    }
   });
 }
