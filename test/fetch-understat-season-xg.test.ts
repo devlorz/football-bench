@@ -572,9 +572,12 @@ describe("fetching Understat per-match xG", () => {
       // Every key a title and every title a key, compared as sets rather than
       // by resolving the feed's twenty: resolving proves only that nothing in
       // the feed is missing, and a twenty-first key naming a club Understat
-      // does not list would survive it.
+      // does not list would survive it. Equality, not a subset check — the
+      // map's full key set must be exactly this feed's twenty plus the three
+      // clubs promoted for 2026-27 (ticket 0041, independently derived from
+      // their own committed feed in the next test), nothing else.
       expect(Object.keys(understatTeamNamesOf("SA") ?? {}).sort())
-        .toEqual([...titles].sort());
+        .toEqual([...titles, "Frosinone", "Monza", "Venezia"].sort());
 
       const resolved = [...titles].map(
         (title) => resolveUnderstatTeamName("SA", title)
@@ -596,6 +599,101 @@ describe("fetching Understat per-match xG", () => {
       expect(resolveUnderstatTeamName("SA", "Inter")).toBe("Inter");
     });
 
+  // Ticket 0041: the 2026-08-22T06:00Z daily fetch refused
+  // `understat:2026-27:Serie_A` with 114 `unknown Understat team name`
+  // issues — three promoted clubs across thirty-eight Fixtures each.
+  // Serie A's 2026-27 calendar is already fully published on Understat, so
+  // this reads the whole season back from the committed feed rather than
+  // trusting a live one that will have moved by the time anyone reads this.
+  test("derives Serie A's 2026-27 twenty, promoted clubs and all, from the committed feed",
+    async () => {
+      const feed = JSON.parse(
+        await archivedBody("understat-2026-27-Serie_A.json.gz")
+      ) as { dates: Array<{ h: { title: string }; a: { title: string } }> };
+      const titles = new Set(feed.dates.flatMap(({ h, a }) => [h.title, a.title]));
+      expect(titles.size).toBe(20);
+
+      const resolved = [...titles].map(
+        (title) => resolveUnderstatTeamName("SA", title)
+      );
+      expect(resolved.filter((name) => name === undefined)).toEqual([]);
+
+      // The three that arrived this Season, checked against the nearest
+      // committed proof of their spelling: I1 2026-27 itself is one of the
+      // three files this ticket's own out-of-scope section says are not
+      // published yet (`300 Multiple Choices`), so I2 2025-26 — the division
+      // they were promoted out of — stands in for it.
+      const serieB = await archivedHomeTeams("football-data-2526-I2.csv.gz");
+      let promotedAppearances = 0;
+      for (const { h, a } of feed.dates) {
+        if (["Frosinone", "Monza", "Venezia"].includes(h.title)) promotedAppearances++;
+        if (["Frosinone", "Monza", "Venezia"].includes(a.title)) promotedAppearances++;
+      }
+      // The number this ticket opens with, checked against the committed feed
+      // rather than repeated as a claim: three clubs, thirty-eight Fixtures
+      // each, home or away.
+      expect(promotedAppearances).toBe(114);
+      for (const club of ["Frosinone", "Monza", "Venezia"]) {
+        expect(titles.has(club)).toBe(true);
+        expect(resolveUnderstatTeamName("SA", club)).toBe(club);
+        expect(serieB.has(club)).toBe(true);
+      }
+
+      // The relegated three stay in the map without appearing in 2026-27's
+      // twenty — the five-match form window still reaches back into 2025-26.
+      for (const club of ["Cremonese", "Pisa", "Verona"]) {
+        expect(resolveUnderstatTeamName("SA", club)).toBeDefined();
+        expect(titles.has(club)).toBe(false);
+      }
+    });
+
+  // The failure itself, driven end to end rather than just derived: before
+  // this ticket, these three names raised `unknown Understat team name` and
+  // no row landed. Same shape as the promoted-club test La Liga already has.
+  test("stores xG for Serie A's promoted clubs under joinable names",
+    async () => {
+      const body = leagueBody([
+        {
+          id: "50001",
+          datetime: "2026-08-23 18:45:00",
+          home: "Monza",
+          away: "Cagliari",
+          xg: ["1.21", "0.68"]
+        },
+        {
+          id: "50002",
+          datetime: "2026-08-23 20:45:00",
+          home: "Frosinone",
+          away: "Lecce",
+          xg: ["0.95", "1.30"]
+        },
+        {
+          id: "50003",
+          datetime: "2026-08-24 15:00:00",
+          home: "Venezia",
+          away: "Torino",
+          xg: ["0.77", "1.02"]
+        }
+      ]);
+
+      await fetchUnderstatSeasonXg({
+        database: client,
+        competition: "SA",
+        season: "2026-27",
+        http: async () => ({ status: 200, body })
+      });
+
+      const stored = await client.query(
+        `select home_team, away_team from understat_match_xg
+          order by understat_match_id`
+      );
+      expect(stored.rows).toEqual([
+        { home_team: "Monza", away_team: "Cagliari" },
+        { home_team: "Frosinone", away_team: "Lecce" },
+        { home_team: "Venezia", away_team: "Torino" }
+      ]);
+    });
+
   // Ligue 1's eighteen, read back against its own two feeds. Eighteen on each
   // side, which is the count this league actually has and the one a map
   // copied from Serie A's shape would fail.
@@ -611,8 +709,13 @@ describe("fetching Understat per-match xG", () => {
       expect(titles.size).toBe(18);
       expect(stored.size).toBe(18);
 
+      // Equality against this feed's eighteen plus the two clubs promoted for
+      // 2026-27 (ticket 0041) — named here, not derived here: neither key is
+      // read off a Ligue 1 feed that has named them (see the next two tests),
+      // so this line only pins the map's full key inventory, not their
+      // correctness.
       expect(Object.keys(understatTeamNamesOf("FL1") ?? {}).sort())
-        .toEqual([...titles].sort());
+        .toEqual([...titles, "Le Mans", "Troyes"].sort());
 
       const resolved = [...titles].map(
         (title) => resolveUnderstatTeamName("FL1", title)
@@ -629,6 +732,47 @@ describe("fetching Understat per-match xG", () => {
         .toBe("Paris SG");
       expect(resolveUnderstatTeamName("FL1", "Paris FC")).toBe("Paris FC");
     });
+
+  // Ticket 0041: Ligue 1 "has not failed yet and will" — its promoted pair
+  // has no entry, and once Understat names either of them the daily fetch
+  // refuses the way Serie A's already does. Unlike Serie A's, Ligue 1's
+  // 2026-27 calendar is not yet published on Understat: `runbooks/
+  // opening-a-competition.md` §4 names this exactly ("Understat opens a
+  // Season with an empty `dates`"). Committed 2026-08-22, one match played
+  // and no fixture list beyond it — which is why the pair below is pinned by
+  // football-data.co.uk's own spelling rather than derived from this feed.
+  test("Ligue 1's 2026-27 feed has not named its two promoted clubs yet",
+    async () => {
+      const feed = JSON.parse(
+        await archivedBody("understat-2026-27-Ligue_1.json.gz")
+      ) as { dates: Array<{ h: { title: string }; a: { title: string } }> };
+      const titles = new Set(feed.dates.flatMap(({ h, a }) => [h.title, a.title]));
+
+      expect(titles.has("Le Mans")).toBe(false);
+      expect(titles.has("Troyes")).toBe(false);
+      const map = understatTeamNamesOf("FL1") ?? {};
+      expect([...titles].every((title) => title in map)).toBe(true);
+
+      // What the map's two new keys resolve to, checked against the one
+      // committed source that can confirm them today: F2 2025-26, the Ligue 2
+      // both were promoted out of (`F1.csv` 2026-27 is not published yet).
+      const ligue2 = await archivedHomeTeams("football-data-2526-F2.csv.gz");
+      for (const club of ["Le Mans", "Troyes"]) {
+        expect(resolveUnderstatTeamName("FL1", club)).toBe(club);
+        expect(ligue2.has(club)).toBe(true);
+      }
+    });
+
+  // No end-to-end "stores xG under joinable names" test for this pair, unlike
+  // Serie A's: that shape needs a feed naming the club to prove the key
+  // against, and Ligue 1's does not yet (the test above). A synthetic feed
+  // built from these same two guessed keys would only assert the guess
+  // against itself — the tautology ticket 0036 hit and fixed by committing
+  // real feeds on both sides, not by asserting a fixture against its own
+  // input. `resolveUnderstatTeamName("FL1", "Le Mans")` and `"Troyes"`
+  // resolving to F2-2025-26 names is checked above and needs no fetch to
+  // prove; the fetch mechanism itself is already proven generically by the
+  // Premier League and Serie A tests in this file.
 
   // What the join rate cannot say, said here instead. `FL1`'s rate is 298 of
   // 306 against `PD`'s 379 of 380, and a low rate is exactly the shape a

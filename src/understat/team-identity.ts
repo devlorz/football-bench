@@ -98,22 +98,33 @@ const SERIE_A_TEAM_NAMES: Readonly<Record<string, string>> = {
   // Serie A's 2025-26 twenty, read off the live feeds rather than transcribed:
   // every key is a title in `getLeagueData/Serie_A/2025` and every value a
   // `HomeTeam` in `mmz4281/2526/I1.csv`, and the two sets are each exactly
-  // twenty with nothing left over on either side. Reviewed and approved
-  // 2026-08-21. Eighteen are the same string on both sides and cannot be
-  // wrong; the two that are not are the whole of what the review was asked to
-  // decide.
+  // twenty with nothing left over on either side. Eighteen are the same
+  // string on both sides and cannot be wrong; the two that are not are the
+  // whole of what the review was asked to decide.
   //
   // `AC Milan`→`Milan` is the one to look at twice, because the other Milan
   // club is in the same twenty: Understat calls it `Inter` and so does
   // football-data.co.uk, so the pair that would still read plausibly if it
   // were swapped is spelt apart on both sides.
   //
-  // 2026-27's promoted three are deliberately absent: Understat lists no
-  // 2026-27 Serie A match yet, and they arrive as `unknown Understat team
-  // name` at the first pre-Season fetch, which is where that failure belongs.
+  // Ticket 0041 added the three promoted for 2026-27 — `Frosinone`, `Monza`,
+  // `Venezia` — the same way: keys read off Understat's live feed
+  // (`getLeagueData/Serie_A/2026`, already the full season, committed as
+  // `test/fixtures/understat-2026-27-Serie_A.json.gz`), values off
+  // `mmz4281/2526/I2.csv` — the Serie B they were promoted out of, since
+  // `I1.csv` for 2026-27 is not published yet (this ticket's out-of-scope
+  // section). All three read the same on both sources, so there is no swap to
+  // misread, and the 2026-08-22T06:00Z daily fetch's 114 `unknown Understat
+  // team name` issues were exactly these three across thirty-eight Fixtures
+  // each — the derivation test checks that count against the committed feed
+  // directly rather than repeating it as a number.
+  //
   // The three relegated out of this twenty stay for the reason La Liga's do:
   // the five-match form window still reaches back into 2025-26, and every one
   // of those matches has an xG row keyed by these names.
+  //
+  // Reviewed and approved 2026-08-21 (the original twenty) and 2026-08-22
+  // (the three promoted).
   "AC Milan": "Milan",
   Atalanta: "Atalanta",
   Bologna: "Bologna",
@@ -121,11 +132,13 @@ const SERIE_A_TEAM_NAMES: Readonly<Record<string, string>> = {
   Como: "Como",
   Cremonese: "Cremonese",
   Fiorentina: "Fiorentina",
+  Frosinone: "Frosinone",
   Genoa: "Genoa",
   Inter: "Inter",
   Juventus: "Juventus",
   Lazio: "Lazio",
   Lecce: "Lecce",
+  Monza: "Monza",
   Napoli: "Napoli",
   "Parma Calcio 1913": "Parma",
   Pisa: "Pisa",
@@ -133,6 +146,7 @@ const SERIE_A_TEAM_NAMES: Readonly<Record<string, string>> = {
   Sassuolo: "Sassuolo",
   Torino: "Torino",
   Udinese: "Udinese",
+  Venezia: "Venezia",
   Verona: "Verona"
 };
 
@@ -141,8 +155,7 @@ const LIGUE_1_TEAM_NAMES: Readonly<Record<string, string>> = {
   // assumes otherwise. Read off the live feeds rather than transcribed: every
   // key is a title in `getLeagueData/Ligue_1/2025` and every value a
   // `HomeTeam` in `mmz4281/2526/F1.csv`, and the two sets are each exactly
-  // eighteen with nothing left over on either side. Reviewed and approved
-  // 2026-08-21.
+  // eighteen with nothing left over on either side.
   //
   // Seventeen are the same string on both sides and cannot be wrong. The one
   // that is not is `Paris Saint Germain`→`Paris SG`, and it is the whole of
@@ -151,15 +164,30 @@ const LIGUE_1_TEAM_NAMES: Readonly<Record<string, string>> = {
   // The two are spelt apart on each side, so a swap cannot be made by
   // agreeing with one source and misreading the other.
   //
-  // 2026-27's promoted two are deliberately absent for the reason Serie A's
-  // three are: Understat lists no 2026-27 Ligue 1 match yet, and they arrive
-  // as `unknown Understat team name` at the first pre-Season fetch. The two
-  // relegated out of this eighteen stay — the five-match form window still
-  // reaches back into 2025-26.
+  // Ticket 0041 added the two promoted for 2026-27 — `Le Mans` and `Troyes`
+  // — ahead of the failure rather than after it, but **not** derived the way
+  // Serie A's three were: Understat's `getLeagueData/Ligue_1/2026` had one
+  // match played and neither club named as of 2026-08-22, committed as
+  // `test/fixtures/understat-2026-27-Ligue_1.json.gz`. Both keys are instead
+  // transcribed from `mmz4281/2526/F2.csv` — the Ligue 2 both were promoted
+  // out of, since `F1.csv` for 2026-27 is not published yet (this ticket's
+  // out-of-scope section). `Troyes` is corroborated by Understat's own
+  // spelling the last time it played Ligue 1 (`getLeagueData/Ligue_1/2021`,
+  // checked live 2026-08-22); `Le Mans` has no Understat Ligue 1 history to
+  // check against and is recorded as an unverified judgement call, not a
+  // derived one — confirm it against the live feed once Understat actually
+  // names the club.
+  //
+  // The two relegated out of this eighteen stay — the five-match form window
+  // still reaches back into 2025-26.
+  //
+  // Reviewed and approved 2026-08-21 (the original eighteen) and 2026-08-22
+  // (the two promoted, `Le Mans` accepted as a deferred judgement call).
   Angers: "Angers",
   Auxerre: "Auxerre",
   Brest: "Brest",
   "Le Havre": "Le Havre",
+  "Le Mans": "Le Mans",
   Lens: "Lens",
   Lille: "Lille",
   Lorient: "Lorient",
@@ -173,7 +201,8 @@ const LIGUE_1_TEAM_NAMES: Readonly<Record<string, string>> = {
   "Paris Saint Germain": "Paris SG",
   Rennes: "Rennes",
   Strasbourg: "Strasbourg",
-  Toulouse: "Toulouse"
+  Toulouse: "Toulouse",
+  Troyes: "Troyes"
 };
 
 const BY_COMPETITION: Readonly<
