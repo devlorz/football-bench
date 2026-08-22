@@ -669,10 +669,30 @@ export interface StatCell {
 }
 
 /**
+ * How many Gameweeks a Season holds: the span the Chip strip draws whatever
+ * the record's own, and the last Gameweek there is for a Free Transfer count
+ * to open.
+ */
+export const SEASON_GAMEWEEKS = 38;
+
+/**
+ * The Free Transfers cell's label: the Gameweek the count opens, in the
+ * strip's own spelling — the stored count is what the next Gameweek opens
+ * with, not the headed one's allowance. The last Gameweek of a Season and
+ * the pre-Season null have no next Gameweek to name, so the tag drops and
+ * the count stays under the plain word. The reasons, and the cell width that
+ * shaped the wording, are recorded as ADR-0033's twelfth deviation.
+ */
+const freeTransfersLabel = (gw: number | null): string =>
+  gw !== null && gw < SEASON_GAMEWEEKS
+    ? `Free for ${gwTag(gw + 1)}`
+    : "Free transfers";
+
+/**
  * The six figures over a Team Sheet, labelled.
  *
- * Here and not in the page for the reason `validationRows` is: five of the six
- * labels are fixed words and the sixth names a Gameweek, the Chip cell says
+ * Here and not in the page for the reason `validationRows` is: four of the six
+ * labels are fixed words and the other two name a Gameweek, the Chip cell says
  * `None` in words rather than showing an empty box, and two of the figures
  * carry a currency the other four must not. Every one of those renders
  * perfectly while being wrong.
@@ -692,7 +712,7 @@ export const statStrip = (
   { label: "Season total", value: figure(entrant.totalPoints), tone: null },
   { label: "Squad value", value: pounds(entrant.squadValueTenths), tone: null },
   { label: "In the bank", value: pounds(entrant.bankTenths), tone: null },
-  { label: "Free transfers", value: figure(entrant.freeTransfers), tone: null },
+  { label: freeTransfersLabel(gw), value: figure(entrant.freeTransfers), tone: null },
   {
     label: "Chip",
     value: chipLabel(entrant.chipActive),
@@ -740,9 +760,6 @@ export const recordKicker = (
   fromGw === null || throughGw === null
     ? "Entrant record"
     : `Entrant record · ${spanPhrase(fromGw, throughGw)}${missingSuffix(missingGws)}`;
-
-/** How many Gameweeks the Chip strip draws, whatever the record's own span is. */
-export const SEASON_GAMEWEEKS = 38;
 
 /** The Gameweek the first set of Chips expires at the deadline of. */
 export const CHIP_EXPIRY_GW = 19;

@@ -69,7 +69,7 @@ of the `scores` rows where the scorer froze it.
 - Only Settled Gameweeks appear, and a missing Gameweek is announced rather than silently
   absent — the same two rules the rest of the record already obeys, restated in the handoff
   and binding on all three endpoints.
-- The implementation deviates from the design files in exactly eleven places: "Model stats"
+- The implementation deviates from the design files in exactly twelve places: "Model stats"
   is rendered "Entrant record", `.dark` is `data-theme`, the container query is a media
   query, the Race chart's panel has a 10px foot rather than the handoff's 20px, its
   Gameweek axis is an absolutely positioned label at every Gameweek up to eight of them,
@@ -172,6 +172,24 @@ of the `scores` rows where the scorer froze it.
   first Settled Gameweek. The Chip strip and the record page's own kicker say the same
   Gameweek a third and a fourth time, each where a reader is looking at the moment the hole
   falls in rather than only once at the top of the page.
+
+- The stat strip's Free transfers cell names the Gameweek the count opens — `Free for GW6`
+  over GW5's Sheet — the twelfth deviation. The handoff labels the cell plainly
+  `Free transfers`, and its prototype data never had an opening Gameweek in it, so the label
+  was never read against the one week where the count and the heading disagree by the whole
+  of the game's rule: the game grants no Free Transfer for the Gameweek an Entrant opens
+  in, the first one arrives for the Gameweek after, and a Manager State's count is what the
+  next Gameweek opens with. Five of the strip's six cells are facts about the Gameweek in
+  the heading and the sixth a fact about the one after it, all in the same row of the same
+  size in the same words — so the label names its own Gameweek, in the strip's own spelling,
+  rather than letting the figure read as the week on screen's allowance. The label keeps
+  only "free" and the tag: the full `Free transfers for GW6` wraps in a six-cell row, and
+  a wrapped label breaks the row. At the last Gameweek of a Season the tag drops and the
+  count stays under the plain word, because there is no Gameweek 39 for GW38's count to
+  open and a cell naming one would promise a Gameweek that does not exist; the pre-Season
+  strip keeps the plain word too, because its Gameweek is null and `GW` is a number-shaped
+  slot with no number in it. The figure is untouched — no migration, no change to what
+  `/fpl/squads` serves, no change to the reducer.
 
 - A club is named by the three-letter code FPL authors for it, stored on the player rows a
   Lock writes (migration 0029), because the design prints a code and never a name in the

@@ -580,10 +580,23 @@ describe("the stat strip over a Team Sheet", () => {
       { label: "Season total", value: "294", tone: null },
       { label: "Squad value", value: "£98.5", tone: null },
       { label: "In the bank", value: "£1.5", tone: null },
-      { label: "Free transfers", value: "5", tone: null },
+      { label: "Free for GW6", value: "5", tone: null },
       { label: "Chip", value: "None", tone: "off" }
     ]);
   });
+
+  test.each([[1, "Free for GW2"], [38, "Free transfers"], [null, "Free transfers"]])(
+    "labels the Free Transfers cell at gw %s",
+    (gw, label) => {
+      // The count is what the next Gameweek opens with, so the label names that
+      // Gameweek — at the opening one, the Gameweek on screen grants none. GW38
+      // and the pre-Season null have no next Gameweek to name, so the tag drops
+      // and the count stays under the plain word (ADR-0033's twelfth
+      // deviation).
+      const [, , , , freeTransfers] = statStrip(ENTRANT, gw);
+      expect(freeTransfers).toEqual({ label, value: "5", tone: null });
+    }
+  );
 
   test("brings the Chip cell up out of the dim when one is active", () => {
     const [, , , , , chip] =

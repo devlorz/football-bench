@@ -224,7 +224,8 @@ the next Gameweek.
 
 **Transfer**:
 Swapping one owned player for one unowned player. Each Gameweek grants one Free Transfer,
-bankable to five; going beyond the banked count costs a Hit.
+bankable to five — except the Gameweek an Entrant opens in, which grants none, the first
+arriving for the Gameweek after; going beyond the banked count costs a Hit.
 
 **Hit**:
 The -4 point penalty for a Transfer beyond the banked Free Transfers.
