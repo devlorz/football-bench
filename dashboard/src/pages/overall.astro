@@ -1,0 +1,290 @@
+---
+import Page from "../layouts/Page.astro";
+import { SEASON_ROSTER_SIZE } from "../../../src/season-roster.js";
+import { competitionRoutes } from "../competition-view.js";
+import { COMBINED_RANKING_QUALIFICATION } from "../overall-caveat.js";
+
+/**
+ * The one page with no Competition of its own (spec 0025). `routes` is the
+ * build-time list every other Match track page is built from too, read here
+ * only for the `{competition, api}` pairs the client fetches and for an
+ * anchor league the three Competition-scoped nav links (Leaderboard, Fixtures,
+ * Entrant record) can point at.
+ */
+const routes = competitionRoutes().map(({ props }) => props);
+// `PL` by the same literal `_redirects` sends `/`, `/fixtures` and
+// `/entrants` to, not `routes[0]` -- an anchor picked by array order would
+// silently follow `MATCH_PROMPTS` if its keys were ever reordered, and drift
+// from the redirect file with no edit to either.
+const anchor = routes.find(({ competition }) => competition === "PL")!;
+const fetches = routes.map(({ competition, api }) => ({
+  competition, url: `${api}/leaderboard`
+}));
+---
+<Page
+  title="Overall ranking — Football Bench, match track"
+  current="overall"
+  competition=""
+  competitionName="Overall"
+  competitionPath={anchor.path}
+>
+  {/*
+    As on a league's leaderboard: every heading, label, column header and both
+    explanations are in the built HTML, and only the figures wait on the
+    fetch.
+  */}
+  <section class="hero">
+    <div>
+      <h1>Every league, added up</h1>
+      <p>
+        Match Points and Bet Points summed raw across every league that is
+        Active and has scored, ranked the same way each league's own
+        leaderboard already ranks them.
+      </p>
+    </div>
+    <div class="soft stats">
+      <div>
+        <div class="stat-label">Leagues covered</div>
+        <div class="stat-value" id="stat-covered">&nbsp;</div>
+      </div>
+      <div>
+        <div class="stat-label">Settled fixtures</div>
+        <div class="stat-value" id="stat-settled">&nbsp;</div>
+      </div>
+    </div>
+  </section>
+
+  <p class="error" id="error" hidden>
+    The combined ranking could not be read. Nothing is being retried.
+  </p>
+
+  {/* No Competition is both Active and scored yet. Not the failure line --
+      nothing failed, there is simply nothing to sum. */}
+  <section class="preseason" id="nothing-covered" hidden>
+    <div>
+      <div class="kicker">No result yet</div>
+      <h2>The table fills once a league has been scored</h2>
+      <p>
+        No league covered here is both open and settled yet. Check back after
+        the first Gameweek of one of them is scored.
+      </p>
+    </div>
+  </section>
+
+  <section id="ranking">
+    <div class="rankbar">
+      <h2>Overall ranking</h2>
+      <span class="muted" id="sort-label">Sort by</span>
+      <div class="seg" role="group" aria-labelledby="sort-label">
+        <label class="seg-opt">
+          <input type="radio" name="sort" value="match" checked />
+          Match points
+        </label>
+        <label class="seg-opt">
+          <input type="radio" name="sort" value="bet" />
+          Bet points
+        </label>
+      </div>
+      <span class="ranknote muted" id="ranknote"></span>
+    </div>
+
+    <div class="lbbody" role="table" aria-label="Overall ranking">
+      <div class="lbhead" role="row">
+        <div role="columnheader">Rank</div>
+        <div role="columnheader">Base Model</div>
+        <div class="cell" role="columnheader">Match points</div>
+        <div class="cell" role="columnheader">Bet points</div>
+      </div>
+      <div id="rows" role="rowgroup">
+        {/* As many skeleton rows as the roster holds, read at build time so a
+            loading state never guesses a height and moves the page when the
+            data lands. */}
+        {Array.from({ length: SEASON_ROSTER_SIZE }).map(() => (
+          <div class="lbrow lbrow-skeleton" aria-hidden="true">
+            <div class="skeleton"></div>
+            <div class="skeleton"></div>
+            <div class="skeleton"></div>
+            <div class="skeleton"></div>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    {/* Not a number, so not the script's to write: every other sentence on
+        this page that qualifies a figure is in the built HTML, and this one
+        follows the same rule rather than being injected at render time. */}
+    <div class="qualifications">
+      <p>{COMBINED_RANKING_QUALIFICATION}</p>
+    </div>
+
+    <div class="footnotes">
+      <p>
+        <strong>Match Points.</strong> 5 for an exact scoreline, 3 for the right
+        goal difference, 2 for the right Outcome, 0 otherwise. Tiers are
+        exclusive.
+      </p>
+      <p>
+        <strong>Bet Points.</strong> One point per market that settles in the
+        Entrant's favour, read off the committed scoreline: result, over/under
+        2.5, 3.5 and 4.5, both teams to score.
+      </p>
+    </div>
+  </section>
+
+  {/* The build-time fetch list, carried into the module script below by
+      `define:vars` -- which, like `[competition].astro`'s own use of it,
+      implies `is:inline` and only works on a script Astro renders rather than
+      bundles. A bundled `type="module"` script cannot receive `define:vars`
+      itself, so this inline script's only job is to hand the list off on
+      `window` before that module script runs; module scripts are deferred,
+      so this always executes first. */}
+  <script is:inline define:vars={{ fetches }}>
+    window.__OVERALL_FETCHES__ = fetches;
+  </script>
+
+  {/* Bundled, not inline: this is the one script on the Match track that
+      imports `overallRanking`, the pure module holding all of this page's
+      arithmetic (spec 0025). Neither `overall-view.ts` nor
+      `overall-caveat.ts` reaches `openrouter-entrant.ts`, so nothing here
+      drags `zod` into the bundle -- see `entrant-link.ts`'s docstring for the
+      import this page must never gain. */}
+  <script>
+    import {
+      overallRanking, type OverallRanking, type OverallRow
+    } from "../overall-view.js";
+
+    const $ = (id: string): HTMLElement => document.getElementById(id)!;
+    const text = (node: HTMLElement, value: string) => { node.textContent = value; };
+
+    const SORTS = { match: "matchRanked", bet: "betRanked" } as const;
+    type Sort = keyof typeof SORTS;
+
+    const STATES = ["nothing-covered", "ranking"] as const;
+
+    const sortFromUrl = (): Sort => {
+      const asked = new URL(location.href).searchParams.get("sort");
+      return asked !== null && Object.hasOwn(SORTS, asked) ? asked as Sort : "match";
+    };
+
+    let sort = sortFromUrl();
+    let ranking: OverallRanking | null = null;
+
+    for (const input of document.querySelectorAll<HTMLInputElement>('input[name="sort"]')) {
+      input.checked = input.value === sort;
+      input.addEventListener("change", () => {
+        sort = input.value as Sort;
+        const url = new URL(location.href);
+        url.searchParams.set("sort", sort);
+        history.replaceState(null, "", url);
+        render();
+      });
+    }
+
+    const div = (className: string, value?: string, role?: string): HTMLDivElement => {
+      const node = document.createElement("div");
+      node.className = className;
+      if (value !== undefined) node.textContent = value;
+      if (role !== undefined) node.role = role;
+      return node;
+    };
+
+    const bar = (kind: string, value: number, max: number): HTMLDivElement => {
+      const track = div("bar bar-" + kind);
+      const fill = document.createElement("span");
+      fill.style.width = (max > 0 ? (value / max) * 100 : 0) + "%";
+      track.append(fill);
+      return track;
+    };
+
+    const valueCell = (kind: string, value: number, max: number): HTMLDivElement => {
+      const cell = div("cell", undefined, "cell");
+      cell.append(div("lb-value", String(value)), bar(kind, value, max));
+      return cell;
+    };
+
+    function renderRanking(covered: Extract<OverallRanking, { kind: "ranking" }>) {
+      const rows = covered[SORTS[sort]];
+      const most = (key: "matchPoints" | "betPoints") =>
+        Math.max(0, ...rows.map((row) => row[key]));
+      const mostMatch = most("matchPoints");
+      const mostBet = most("betPoints");
+
+      const fragment = document.createDocumentFragment();
+      rows.forEach((row: OverallRow, index: number) => {
+        const line = div("lbrow", undefined, "row");
+        const name = div("", undefined, "cell");
+        name.append(
+          div("lb-name", row.name),
+          div("lb-id", row.baseModelClass
+            ? row.slug + " · " + row.baseModelClass
+            : row.slug)
+        );
+        line.append(
+          div("lb-rank", String(index + 1), "cell"),
+          name,
+          valueCell("match", row.matchPoints, mostMatch),
+          valueCell("bet", row.betPoints, mostBet)
+        );
+        fragment.append(line);
+      });
+      $("rows").replaceChildren(fragment);
+
+      // The evidence line: the total and the per-league breakdown together,
+      // in the covered order, ending in the same clause every league page
+      // ends its own in (spec 0025).
+      const breakdown = covered.fixtures
+        .map(({ competition, settledFixtures }) => competition + " " + settledFixtures)
+        .join(" · ");
+      text($("ranknote"),
+        "n = " + covered.totalFixtures + " fixtures · " + breakdown
+        + " · ranks, does not prove");
+    }
+
+    function render() {
+      if (ranking === null) return;
+      for (const id of STATES) $(id).hidden = id !== ranking.kind;
+
+      text($("stat-covered"),
+        ranking.kind === "ranking" ? String(ranking.covered.length) : "0");
+      text($("stat-settled"),
+        ranking.kind === "ranking" ? String(ranking.totalFixtures) : "0");
+
+      if (ranking.kind === "ranking") renderRanking(ranking);
+    }
+
+    const fetches = (window as unknown as {
+      __OVERALL_FETCHES__: { competition: string; url: string }[];
+    }).__OVERALL_FETCHES__;
+
+    Promise.all(
+      fetches.map(({ competition, url }) =>
+        fetch(url).then((response) => {
+          if (!response.ok) throw new Error(String(response.status));
+          return response.json();
+        }).then((body) => {
+          // `response.json()` parses whatever bytes arrived -- an error
+          // envelope, `{}`, or a body with a field renamed reads as a covered
+          // set of zero rather than a failure unless the two fields
+          // `isCovered` reads unconditionally are checked here first. Without
+          // this, a shape a reader has never seen fails open into "nothing
+          // covered" instead of the failure line (spec 0025, ADR-0051).
+          if (typeof body?.active !== "boolean" || !Array.isArray(body?.entrants)) {
+            throw new Error("unreadable body");
+          }
+          return { competition, body };
+        })
+      )
+    )
+      .then((leaderboards) => {
+        ranking = overallRanking(leaderboards);
+        render();
+      })
+      .catch(() => {
+        // One league unreadable fails the whole page closed: a table missing
+        // a league silently would rank over a covered set it cannot name
+        // (spec 0025).
+        $("error").hidden = false;
+        for (const id of STATES) $(id).hidden = true;
+      });
+  </script>
+</Page>

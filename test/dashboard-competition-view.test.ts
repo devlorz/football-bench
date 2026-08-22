@@ -151,6 +151,13 @@ describe("the link to a page of a Competition", () => {
     expect(pageHref("/pd", "leaderboard")).toBe("/pd");
   });
 
+  test("points the Overall link at its one fixed path, whichever Competition's page it is on", () => {
+    // Not a page under any Competition's path (spec 0025): every league's copy
+    // of the nav links at the same one page, so the path argument is ignored.
+    expect(pageHref("/pd", "overall")).toBe("/overall");
+    expect(pageHref("/pl", "overall")).toBe("/overall");
+  });
+
   test("gives every built route its own copy of both pages under it", () => {
     // Written out rather than derived: a list that recomputed the href the way
     // the function does could not disagree with it, and disagreeing is the job.

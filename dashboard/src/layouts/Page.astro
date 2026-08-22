@@ -49,7 +49,11 @@ const LINKS = [
   { key: "fixtures", label: "Fixtures" },
   // "Entrant record" and not the design's "Model stats": the glossary forbids
   // the second and spec 0011 renames the page.
-  { key: "entrants", label: "Entrant record" }
+  { key: "entrants", label: "Entrant record" },
+  // Fourth link, built through the same `pageHref` as the other three. It
+  // does not join the `.seg` switcher below: that switcher's answers come
+  // from `SWITCHER` and are Competitions, and Overall is not one (spec 0025).
+  { key: "overall", label: "Overall" }
 ] as const;
 
 ---
@@ -118,7 +122,15 @@ const LINKS = [
         {SWITCHER.map(({ competition: code, path, competitionName }) => (
           <a
             class="seg-opt"
-            href={pageHref(path, current)}
+            href={pageHref(
+              path,
+              // Overall has no per-league copy for `pageHref` to hang the
+              // crossing off (it ignores `path` entirely, spec 0025), so a
+              // league picked from here falls back to that league's own
+              // leaderboard rather than every entry linking to `/overall`
+              // itself.
+              current === "overall" ? "leaderboard" : current
+            )}
             aria-current={code === competition ? "page" : undefined}
           >
             {competitionName}

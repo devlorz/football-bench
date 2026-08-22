@@ -3,8 +3,19 @@ import {
   retiredGameweekOf
 } from "../../src/predictions/openrouter-entrant.js";
 
-/** The Match track's three pages, which are the three links in the chrome. */
-export type MatchPage = "leaderboard" | "fixtures" | "entrants";
+/**
+ * The Match track's four pages, which are the four links in the chrome.
+ * "overall" is the one page with no Competition of its own — it sums every
+ * league rather than reading one (spec 0025).
+ */
+export type MatchPage = "leaderboard" | "fixtures" | "entrants" | "overall";
+
+/**
+ * The combined ranking's one path. Not a Competition's, so it is not built
+ * from a route path the way the other three pages are — it is fixed, and this
+ * is its one spelling (spec 0025).
+ */
+export const OVERALL_PATH = "/overall";
 
 /**
  * Where one Competition's copy of one page lives, built from that
@@ -17,9 +28,13 @@ export type MatchPage = "leaderboard" | "fixtures" | "entrants";
  * about where a page of a Competition is.
  *
  * The leaderboard is the Competition's own path rather than a page under it.
+ * `overall` ignores `path` entirely — every Competition's nav links at the
+ * same one page.
  */
 export const pageHref = (path: string, page: MatchPage): string =>
-  page === "leaderboard" ? path : `${path}/${page}`;
+  page === "leaderboard" ? path
+  : page === "overall" ? OVERALL_PATH
+  : `${path}/${page}`;
 
 /** One built page: the path a reader types and everything the page reads by. */
 export interface CompetitionRoute {

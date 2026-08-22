@@ -61,23 +61,25 @@ stays open, and nothing in the redirects file changes.
 
 ## Acceptance
 
-- [ ] `/overall` is built as a static page and answers on the deployed site.
-- [ ] It ranks every Season Roster seat by the sum of its figures over the covered leagues, in both
+- [ ] `/overall` is built as a static page and answers on the deployed site. Built locally
+      (`astro build` emits `dist/overall.html`); "on the deployed site" needs an actual deploy to
+      prove and stays open until then.
+- [x] It ranks every Season Roster seat by the sum of its figures over the covered leagues, in both
       columns, and the totals reconcile by hand with the four leaderboards.
-- [ ] The sort toggle works as the leaderboard's does, writes the choice to the URL with
+- [x] The sort toggle works as the leaderboard's does, writes the choice to the URL with
       `replaceState`, and survives a reload.
-- [ ] The evidence line shows the total and the per-league breakdown and ends in "ranks, does not
+- [x] The evidence line shows the total and the per-league breakdown and ends in "ranks, does not
       prove".
-- [ ] The qualification from ticket 0043 is rendered under the table and cannot be reached without
+- [x] The qualification from ticket 0043 is rendered under the table and cannot be reached without
       it.
-- [ ] A league that is Active with nothing scored is absent from the breakdown and from every total,
+- [x] A league that is Active with nothing scored is absent from the breakdown and from every total,
       and the page still publishes over the leagues that are scored.
-- [ ] A failed or unreadable response from any one league leaves the page showing its failure line
+- [x] A failed or unreadable response from any one league leaves the page showing its failure line
       and no table — verified by making one endpoint fail, not by reasoning about it.
-- [ ] A Season with nothing scored anywhere shows the fills-later sentence and not the failure line.
-- [ ] No Exhibition Run and no Reference Line appears in the table.
-- [ ] The page's structure is visible before the figures arrive.
-- [ ] A fourth nav link reaches it from all three Match track pages, and the Competition switcher is
+- [x] A Season with nothing scored anywhere shows the fills-later sentence and not the failure line.
+- [x] No Exhibition Run and no Reference Line appears in the table.
+- [x] The page's structure is visible before the figures arrive.
+- [x] A fourth nav link reaches it from all three Match track pages, and the Competition switcher is
       unchanged.
-- [ ] `overrides.css` gains no rule, the redirects file is unchanged, and `read-api.ts`, the scorer,
+- [x] `overrides.css` gains no rule, the redirects file is unchanged, and `read-api.ts`, the scorer,
       the scheduler and the schema are untouched.
