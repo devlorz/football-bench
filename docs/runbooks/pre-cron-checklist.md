@@ -243,11 +243,11 @@ feed becomes available.
 **Pin one observed completed-match FPL fixtures response after the first matchday.** The
 pre-Season archive contains only `finished = false` and `finished_provisional = false`, while
 FPL exposes no prior Season through this endpoint. Once at least one Fixture reports
-`finished`, archive that live response byte-for-byte, record its checksum, and add it as the
-completed-match regression fixture for result ingestion. Confirm that `finished` alone is the
-scoreability gate, including the observed state of `finished_provisional`, before trusting the
-10:00 UTC scorer. If the observed semantics disagree, stop and revise the decision rather than
-adapting the fixture.
+`finished` or `finished_provisional`, archive that live response byte-for-byte, record its
+checksum, and add it as the completed-match regression fixture for result ingestion. Confirm
+that either flag alone is the scoreability gate (ticket 0042) before trusting the 10:00 UTC
+scorer. If the observed semantics disagree, stop and revise the decision rather than adapting
+the fixture.
 
 **Measure the FPL context's real cost after Gameweek 1.** ADR-0041 widened
 `fpl/2026-27-v2` — the duties on every pool line, the Entrant's own record, and the Rationale

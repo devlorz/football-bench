@@ -53,9 +53,15 @@ and give the same answer as it would have then.
 
 1. As an operator, I want the daily fetch to record each Fixture's final score, so that there is
    something to judge Predictions against.
-2. As an operator, I want a Fixture treated as scoreable only when the feed reports it
-   `finished`; `finished_provisional` alone is never sufficient, so that bonus points and
-   defensive contributions have settled before anything is computed from them.
+2. As an operator, I want a Fixture treated as scoreable as soon as the feed reports it over —
+   `finished` or `finished_provisional`, read as either-or — so that a scoreline reaches the
+   Match track at the whistle rather than waiting on bonus points and defensive contributions,
+   which a scoreline never depends on. *(Amended 2026-08-22 by ticket 0042: the original
+   `finished`-only gate held per-player concerns that do not apply to a scoreline. What still
+   waits for FPL's confirmation is the FPL track's per-player points, gated separately on
+   `data_checked` — see [ADR-0020](../adr/0020-per-player-gameweek-performance-joins-the-fpl-context-for-2026-27-v2.md),
+   which this amendment does not reopen.)*
+
 3. As an operator, I want scoreability decided by what the feed reports rather than by what time
    the job ran, so that an early or delayed run cannot score a Gameweek that has not settled.
 4. As an auditor, I want the recorded result to carry the goals for each side and the derived
@@ -175,10 +181,17 @@ and give the same answer as it would have then.
 ### Results ingestion belongs here, not in the fetch ticket
 
 The FPL fetch gains the four fields it currently discards. The decision of *when* a result may
-be scored is read from `finished` alone. `finished_provisional` becoming true does not make a
-Fixture scoreable, and it may remain true after `finished` becomes true, so the two flags must
-not be combined as an `and not` gate. This is a scoring judgement specified here even though
+be scored is read from `finished` or `finished_provisional`, either-or: a scoreline is settled
+the moment the feed reports the match over by either flag, since neither bonus points nor
+defensive contributions — the only things `finished` alone was still waiting on — can move a
+scoreline. `finished_provisional` may remain true after `finished` turns true, so the two flags
+are never combined as an `and not` gate. This is a scoring judgement specified here even though
 the write happens in the fetch path.
+
+What still waits for FPL's own confirmation is the FPL track's per-player points, gated
+separately on `data_checked`; that gate is untouched by this amendment and stands on
+[ADR-0020](../adr/0020-per-player-gameweek-performance-joins-the-fpl-context-for-2026-27-v2.md)
+exactly as written.
 
 `fixtures.result` is populated as `{ home_goals, away_goals, outcome }` where outcome is `H`,
 `D` or `A` derived at write time. Storing the derived outcome rather than computing it on read
@@ -356,7 +369,7 @@ that re-running changes no row.
 
 **Outbound HTTP**, used only by results ingestion through the FPL fetch that already owns that
 seam. **The clock**, used only for `scored_at` — never for deciding what is scoreable, which is
-read from `finished` in stored data.
+read from `finished` or `finished_provisional` in stored data.
 
 The scorer makes no network calls, so it introduces no seam. Metric functions are pure and need
 none. The bootstrap is seeded from its inputs rather than from an injected RNG, so determinism
@@ -382,8 +395,9 @@ Tests run against a real Postgres, as everything else does.
 - **Deferred attribution** — a Fixture locked in one Gameweek and played in another scores into
   the first.
 - **Idempotency** — scoring twice leaves the row count and every value unchanged.
-- **Results ingestion** — `finished_provisional` alone is not scoreable, `finished` is
-  scoreable even when both flags are true, and a changed score updates the stored Fixture.
+- **Results ingestion** — `finished_provisional` alone is scoreable, a Fixture still in play
+  (neither flag true) is not, `finished` is scoreable whether or not `finished_provisional` has
+  caught up, and a changed score updates the stored Fixture.
 - **Observed FPL semantics** — the result logic can be built before the Season from the pinned
   `finished` contract and explicit boundary cases. After the first matchday, one live fixtures
   response containing completed matches is archived and pinned as a regression fixture. The

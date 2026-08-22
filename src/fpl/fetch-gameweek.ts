@@ -66,6 +66,18 @@ const bootstrapSchema = z.looseObject({
   elements: z.array(playerSchema)
 });
 
+/**
+ * The feed's own statement that the match is over, provisionally or
+ * finally — the two flags are read as either-or, never combined as an
+ * `and not`, since `finished_provisional` may still be true once `finished`
+ * turns true.
+ */
+function isOver(
+  fixture: { finished: boolean; finished_provisional: boolean }
+): boolean {
+  return fixture.finished || fixture.finished_provisional;
+}
+
 const fixtureSchema = z.looseObject({
   id: z.number().int().positive(),
   event: z.number().int().positive().nullable(),
@@ -77,14 +89,14 @@ const fixtureSchema = z.looseObject({
   team_h_score: z.number().int().nonnegative().nullable(),
   team_a_score: z.number().int().nonnegative().nullable()
 }).check(({ value: fixture, issues }) => {
-  // A finished Fixture without goals would be scoreable with nothing to score.
+  // An over Fixture without goals would be scoreable with nothing to score.
   for (const side of ["team_h_score", "team_a_score"] as const) {
-    if (fixture.finished && fixture[side] === null) {
+    if (isOver(fixture) && fixture[side] === null) {
       issues.push({
         code: "custom",
         input: fixture[side],
         path: [side],
-        message: `finished Fixture ${fixture.id} has no ${side}`
+        message: `over Fixture ${fixture.id} has no ${side}`
       });
     }
   }
@@ -94,15 +106,13 @@ const fixturesSchema = z.array(fixtureSchema);
 
 type Database = Pick<Client, "query">;
 
-/**
- * `finished` alone decides scoreability: `finished_provisional` may still be
- * true once `finished` turns true, so the two are never combined.
- */
-function settledResult(
+// Named for the flags, not for CONTEXT.md's Settled: that term is reserved
+// for a Gameweek whose per-player points FPL has declared final.
+function resultIfOver(
   fixture: z.infer<typeof fixtureSchema>
 ): string | null {
-  const { finished, team_h_score: home, team_a_score: away } = fixture;
-  if (!finished || home === null || away === null) {
+  const { team_h_score: home, team_a_score: away } = fixture;
+  if (!isOver(fixture) || home === null || away === null) {
     return null;
   }
   const result: FixtureResult = {
@@ -547,7 +557,7 @@ async function fetchFpl({
           fixture.awayTeam,
           fixture.kickoff_time,
           observedAt,
-          settledResult(fixture)
+          resultIfOver(fixture)
         ]
       );
     }

@@ -1202,7 +1202,7 @@ describe("fetching an FPL Gameweek", () => {
     });
   }
 
-  test("stores a result only for Fixtures the feed reports finished", async () => {
+  test("stores a result for a Fixture the feed reports over, provisionally or finally, but not one still in play", async () => {
     await fetchReportedFixtures(await fixturesReporting({
       1: {
         finished: true,
@@ -1227,6 +1227,22 @@ describe("fetching an FPL Gameweek", () => {
         finished_provisional: true,
         team_h_score: 1,
         team_a_score: 2
+      },
+      // In play at half time: the feed already carries a live score, which
+      // is not the test — neither flag says the match is over.
+      5: {
+        finished: false,
+        finished_provisional: false,
+        team_h_score: 1,
+        team_a_score: 0
+      },
+      // `finished` alone, `finished_provisional` not yet caught up to it —
+      // still scoreable, since the two flags are read as either-or.
+      6: {
+        finished: true,
+        finished_provisional: false,
+        team_h_score: 4,
+        team_a_score: 0
       }
     }));
 
@@ -1236,11 +1252,11 @@ describe("fetching an FPL Gameweek", () => {
     expect(stored.rows.map(({ fixture_id: fplId, result }) => [fplId, result]))
       .toEqual([
         [1, { home_goals: 2, away_goals: 1, outcome: "H" }],
-        [2, null],
+        [2, { home_goals: 1, away_goals: 1, outcome: "D" }],
         [3, { home_goals: 0, away_goals: 0, outcome: "D" }],
         [4, { home_goals: 1, away_goals: 2, outcome: "A" }],
         [5, null],
-        [6, null],
+        [6, { home_goals: 4, away_goals: 0, outcome: "H" }],
         [7, null],
         [8, null],
         [9, null],
@@ -1293,7 +1309,10 @@ describe("fetching an FPL Gameweek", () => {
       3: { team_h_score: 1.5 },
       // Settled with no goals is unreadable: it would silently leave a
       // scoreable Fixture without the result every metric reads.
-      4: { finished: true, team_h_score: 2, team_a_score: null }
+      4: { finished: true, team_h_score: 2, team_a_score: null },
+      // Over provisionally, not finally, and just as unreadable without a
+      // score: the check must use the same either-or predicate as the write.
+      6: { finished_provisional: true, team_a_score: 1 }
     });
     await expect(fetchFplGameweek({
       database: client,
@@ -1303,11 +1322,12 @@ describe("fetching an FPL Gameweek", () => {
       http: await reportedResponses(changedFixturesBody)
     })).rejects.toMatchObject({
       name: FplSourceValidationError.name,
-      // Feed order, not id order: ids 1, 4, 3 and 2 sit at these indices.
+      // Feed order, not id order: ids 1, 4, 3, 6 and 2 sit at these indices.
       issues: [
         { field: "0.finished" },
         { field: "1.team_a_score" },
         { field: "2.team_h_score" },
+        { field: "4.team_h_score" },
         { field: "5.finished_provisional" }
       ]
     });
