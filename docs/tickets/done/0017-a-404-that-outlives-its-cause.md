@@ -1,8 +1,8 @@
 # Ticket — A 404 that outlives its cause
 
 Found in production on 2026-08-16 while checking why La Liga's leaderboard showed the
-page's failure line. Related: [ADR-0029](../adr/0029-the-dashboard-deploys-as-one-worker-serving-both-the-assets-and-the-read-api.md),
-[runbook](../runbooks/dashboard-deploy.md), [spec 0017](../specs/0017-the-dashboard-per-competition-shape.md).
+page's failure line. Related: [ADR-0029](../../adr/0029-the-dashboard-deploys-as-one-worker-serving-both-the-assets-and-the-read-api.md),
+[runbook](../../runbooks/dashboard-deploy.md), [spec 0017](../../specs/0017-the-dashboard-per-competition-shape.md).
 
 ## What was observed
 
@@ -51,6 +51,14 @@ a deliberate lifetime and argues it.
       a 404 costs nothing to serve. That is the change that makes the choice free; it is
       not required to close this ticket, and `worker.ts` is deliberately wiring and nothing
       else, so it is a decision and not a tidy-up.
+
+The page path shares the if-chain's 404, and the lifetime with it.
+`run_worker_first` is `["/api/*"]` and a path that matches no asset falls
+through to the Worker — `not_found_handling` is unset, so there is no asset
+404 for it to answer with — which means `/bl1`, the unopened league the
+narrative's `/sa` has since become, answers this same `Not found`. Measured
+2026-08-23, after the fix deployed: `MISS → HIT → EXPIRED` at the minute, the
+sixty seconds holding on the page path too.
 
 ## 2 — The purge works, and nothing says how long it takes
 

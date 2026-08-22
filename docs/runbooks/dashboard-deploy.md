@@ -648,10 +648,22 @@ second says the Worker is:
 for BASE in \
   https://football-bench.leelorz6.workers.dev/api/pl/leaderboard \
   https://football-bench.leelorz6.workers.dev/api/fpl/leaderboard; do
-  curl -sS -o /dev/null -w "canonical $BASE %{http_code}\n" "$BASE"
+  curl -sS -D- -o /dev/null "$BASE" | tr -d '\r' \
+    | grep -iE '^(HTTP|cf-cache-status|age:)' | tr '\n' ' '
+  echo " <- canonical $BASE"
   curl -sS -o /dev/null -w "unique    $BASE %{http_code}\n" "$BASE?rev=$(date +%s)"
 done
-# require: 500 from all four
+# require: 500 from all four, and no canonical answering HIT from an age
+# older than the deploy. One that is -- the old entry still alive -- gets the
+# minute of polling the purge paragraph above asks for, and a redeploy if it
+# outlives the minute:
+BASE=https://football-bench.leelorz6.workers.dev/api/pl/leaderboard
+for i in $(seq 12); do
+  sleep 5
+  curl -sS -D- -o /dev/null "$BASE" | tr -d '\r' \
+    | grep -iE '^(HTTP|cf-cache-status|age:)' | tr '\n' ' '
+  echo "  $(date -u +%H:%M:%S)"
+done
 ```
 
 A 200 on either canonical URL with a 500 on its unique one means the deploy
