@@ -83,10 +83,11 @@ live, this one says how quickly a right answer arrives.
 
 - [x] The purge's latency is measured rather than assumed — a deploy, then the canonical URL
       polled until `cf-cache-status` stops answering from the old entry, timed. Measured
-      2026-08-23, deploying this ticket's fix: entries warmed minutes before the deploy were
-      unreachable on the first request after `wrangler deploy` returned, fourteen seconds
-      after it returned. A lower bound from one client at one POP, and it does not explain
-      08-16 — the runbook says both.
+      2026-08-23, redeploying the fix with the canonical URL polled twice a second through
+      the deploy: the old entry answered `HIT` until 6.2s before `wrangler deploy` returned
+      and the new version's empty cache answered `MISS` 5.7s before it returned — the
+      switch watched inside a half-second bracket, from one client at one POP. It does not
+      explain 08-16, and the runbook says both.
 - [x] The runbook carries the number, or carries the sentence saying it is unmeasured and
       what that costs. Either is honest; the current silence reads as instant.
 - [x] If one deployment is genuinely not enough, the emergency procedure says so and says

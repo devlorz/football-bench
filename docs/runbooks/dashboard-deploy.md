@@ -615,20 +615,23 @@ whole recovery path.
 is part of the cache key, so a new deployment starts from an empty cache. There
 is no zone here and therefore no zone purge; redeploying is the purge.
 
-**How long the purge takes to reach a reader: measured once, not assumed.** On
-2026-08-23, with the canonical URLs warmed into the cache minutes before a
-deploy, the first request after `wrangler deploy` returned — fourteen seconds
-after it returned — already answered from the new version's empty cache, and
-the warmed entries never answered again. Under fifteen seconds, and a lower
-bound: nothing was requested in between. One client at one POP, the deploying
-machine's, and one deploy — that is what a purge costs when it works, and not a
-promise about the afternoon of 2026-08-16, when a stale 404 answered
-`cf-cache-status: HIT` after one deploy and cleared within a minute of a
-second. Fifteen seconds and "a second deploy" are two observations of the same
-mechanism, and nothing yet says which of the two that afternoon was: a
-deployment that did not reset the entry, or a slower path to wherever the
-poller asked ([ticket 0017](../tickets/done/0017-a-404-that-outlives-its-cause.md)
-declines to guess, and so does this).
+**How long the purge takes to reach a reader: measured, with the transition
+watched.** On 2026-08-23 the same commit was deployed twice, the second time
+with the canonical URL polled twice a second from three seconds before the
+command started until two minutes after it returned. The old entry answered
+`HIT` until 6.2 seconds before `wrangler deploy` returned; the new version's
+empty cache answered `MISS` 5.7 seconds before it returned. The switch was
+watched inside that half-second bracket, and it beat the command's own exit —
+in that one observation, by the time the deploy command returns, the new
+version is already answering and there is no latency left to wait on. One
+client, one POP, one observed deploy: that is what a purge costs when it
+works, and not a promise about the afternoon of 2026-08-16, when a stale 404
+answered `cf-cache-status: HIT` after one deploy and cleared within a minute
+of a second. Both of 2026-08-23's deploys reset the entry at once, which
+makes the 16th's first deploy look like one that did not take — but fast
+purges do not prove what broke the slow one, and
+[ticket 0017](../tickets/done/0017-a-404-that-outlives-its-cause.md) declines
+to guess, and so does this.
 
 So the confirm steps below are the procedure and not a formality: poll the
 canonical URL and read `cf-cache-status` and `age`. An `age` older than the
