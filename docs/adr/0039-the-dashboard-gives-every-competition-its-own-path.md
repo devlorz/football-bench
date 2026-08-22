@@ -132,8 +132,10 @@ be read from the reader's current URL, which the built-HTML rule above forbids a
   by ADR-0051: on the one page with no per-league copy, `/overall`, an entry falls back to that
   league's leaderboard rather than to a second `/overall`.
 - The switcher has no design handoff, unlike every other control in either section. It is
-  assembled from `.seg` and the nav's `aria-current` and adds no CSS, which is what keeps the
-  deviation small enough to state in one line.
+  assembled from `.seg` and the nav's `aria-current`, and was built adding no CSS — a clause
+  this decision carried to keep the switcher off a design handoff, and one the ticket "The
+  Competition switcher on a phone" later ended by making `overrides.css` the switcher's
+  design. The account lives there.
 - CONTEXT.md gains **Active Competition**: a Competition the benchmark is running for a
   Season, distinct from one whose first Gameweek is merely unscored.
 - The FPL track is untouched, in paths, chrome and endpoints.

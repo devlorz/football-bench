@@ -162,7 +162,10 @@ connection to read nothing.
 
 A group of `<a>` elements in the Match track's page chrome, carrying `aria-current="page"` on
 the current Competition exactly as the nav links do, and wearing the `.seg` styling the
-Leaderboard's sort control already uses. No new CSS. Each link points at the same page of
+Leaderboard's sort control already uses. No new CSS. *(A clause the build deviated from the
+same day, and one the ticket "The Competition switcher on a phone" later ended by making
+`overrides.css` the switcher's design — that ticket is the account; see Testing
+Decisions.)* Each link points at the same page of
 another Competition, so the href is built from the current page's role and the target's code,
 not from the current URL string.
 
@@ -236,8 +239,8 @@ the build generates. No DOM and no database; the module is imported by the pages
 `test/dashboard-competition-view.test.ts`.
 
 Not covered by a test, deliberately: the `_redirects` file, whose three lines are
-configuration proved at deploy rather than in a unit test, and the CSS, of which there is
-none.
+configuration proved at deploy rather than in a unit test, and the CSS, of which this spec
+asked for none.
 
 **Both clauses were deviated from while building, and both deviations are stated in the
 tickets rather than left to be discovered.** Ticket 4's switcher adds a rule to
@@ -248,6 +251,10 @@ type-checks that file and a build with a wrong rule in it succeeds, so proving i
 deploy proves it after it has shipped. The deploy check exists —
 `docs/runbooks/dashboard-deploy.md` — and is what proves the platform applies them; the test
 proves only what the file says.
+
+**The first of those deviations has since stopped being one.** "The Competition switcher
+on a phone" made `overrides.css` the switcher's design and is the account of it; the
+no-CSS clause had done its work of keeping the switcher off a design handoff.
 
 ## Out of Scope
 

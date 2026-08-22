@@ -97,10 +97,10 @@ a:hover { color: var(--color-accent-700); }
    exists to answer, answered wrongly in the state every click passes through.
 
    So it is drawn here instead, from `aria-current` -- the attribute that
-   already says it, and the one the nav is marked with. ADR-0039 asks the
-   switcher to add no CSS, and that is a deviation stated in the ticket: the
-   clause is there to keep the switcher off a design handoff, and these are the
-   colours `.seg-opt:has(input:checked)` was handed off with, not a new look.
+   already says it, and the one the nav is marked with. ADR-0039 asked the
+   switcher to add no CSS; the ticket "The Competition switcher on a phone" is
+   where that clause ended and this sheet became the switcher's design, and it
+   is the one account of that.
 
    Both selectors are needed and neither is ceremony. `.nav` is in front to beat
    `.nav a[aria-current='page']` on the `color`, which otherwise paints accent
@@ -629,6 +629,29 @@ html {
     font-size: 15px;
   }
   .burger { display: inline-flex; order: 2; }
+
+  /* The switcher on a phone (ticket: The Competition switcher on a phone,
+     which with the chosen-segment rule above is this control's whole design).
+     A league's name is one line, and the control, not the document, gives
+     ground: `.seg-opt` is free to wrap its text in Modernist and at this
+     width that is what breaks "Premier League" across two lines inside its
+     own segment, so `nowrap` keeps each name whole and `overflow-x: auto`
+     makes the control the thing that scrolls -- the automatic minimum a
+     scroll container zeroes is what lets the row give it ground, and the
+     control's own row, which the wrap above gives it, is where the width
+     comes from. The padding is the focus ring's room: the scrollport clips
+     at its padding box and the ring stands 4px out -- its 2px offset gap
+     plus the 2px it is thick -- so 4px of padding with the negative block
+     margin returning the height keeps spec 0011's story 48 whole, 2px accent
+     at 2px offset on every segment.
+
+     Scoped to this breakpoint because above it the header is one flex line:
+     squeezed into it, the control hid a league with no scrollbar to say so
+     -- at 1024px, measured, "Serie A" was an S and "Ligue 1" was gone. Up
+     there the line is what it always was, wrapping a label where it runs
+     tight -- that band's own defect, and its own ticket. */
+  .nav .seg { overflow-x: auto; padding: 4px; margin-block: -4px; }
+  .nav .seg-opt { white-space: nowrap; }
 
   /* Clipped and not `display: none`: the design takes the column headers off a
      phone, and `display: none` would take them off the accessibility tree with

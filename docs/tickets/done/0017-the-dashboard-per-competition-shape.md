@@ -112,6 +112,8 @@ now, and the leaderboard says in words that the leagues are separate benchmarks.
       `aria-current` in the colours `:has(input:checked)` was already handed off with, so
       it adds no look; it needs `.nav` in front and its own `:hover` to outrank two
       Modernist selectors, measured in the browser and not counted off the sheet.
+      *(The deviation ended with "The Competition switcher on a phone", which made
+      `overrides.css` the switcher's design — that ticket is the account.)*
 - [x] The href-building is a pure function in the view module and is tested there for every
       combination of current page and target Competition.
 - [x] The Leaderboard's existing "What this is not" footnote gains the sentence saying each
@@ -124,7 +126,9 @@ now, and the leaderboard says in words that the leagues are separate benchmarks.
   760px behind the burger, and the switcher is a different element, so it stays. Two
   leagues wrap and nothing breaks; five will not fit, and spec 0017 says `SA`, `BL1` and
   `FL1` arrive "with no further work in this area" — which this makes false at the third
-  league, not at this one. Its own ticket, and it is CSS either way.
+  league, not at this one. Its own ticket, and it is CSS either way. *(That ticket is
+  "The Competition switcher on a phone"; the account of what it found and built lives
+  there.)*
 
 Crossing a Competition drops `?entrant=` on purpose, and ADR-0039 now says so rather than
 claiming the switcher carries it: ADR-0035 permits comparing an Entrant across leagues by
