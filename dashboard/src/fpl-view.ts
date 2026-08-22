@@ -645,6 +645,21 @@ export const transferCost = (
       ? "No Hit taken"
       : `−${hitPoints} Hit`;
 
+/* ── the Rationale under all of it ────────────────────────────────────────── */
+
+/**
+ * The panel's one body: the sentence the Entrant gave, or — where the record
+ * holds none — the line saying why. Null is a Roll Over and nothing else
+ * (ADR-0041): a Roll Over reached no legal action to explain, and an empty
+ * panel would read as a sentence the page lost.
+ *
+ * The label and the meta line around it are `rationale.ts`'s, spelled once
+ * for both tracks' pages.
+ */
+export const rationaleBody = (rationale: string | null): string =>
+  rationale ?? "The Gameweek Rolled Over — no legal action was reached, so "
+    + "there is no Rationale to read.";
+
 /** One cell of the design's six-cell stat strip. */
 export interface StatCell {
   label: string;

@@ -1,6 +1,7 @@
 ---
 import FplPage from "../../layouts/FplPage.astro";
 import { SEASON_ROSTER_SIZE } from "../../../../src/season-roster.js";
+import { RATIONALE_LABEL, RATIONALE_META } from "../../rationale.js";
 ---
 <FplPage
   title="Latest squads — Football Bench, FPL track"
@@ -148,6 +149,32 @@ import { SEASON_ROSTER_SIZE } from "../../../../src/season-roster.js";
             <div id="validation"></div>
           </div>
         </div>
+
+        {/* The Rationale the Sheet above was locked with (ADR-0041), in its
+            own full-width block beneath the two short ones rather than a
+            third column inside them: those are tabular and share a row, and a
+            paragraph of reasoning in a third of the width is a gutter. Behind
+            the same Why/Hide disclosure the Fixtures page's Predictions wear,
+            minus its "close the one already open" — this page holds one
+            Entrant's one sentence, and the picker replaces it by construction.
+            A Roll Over has no sentence to disclose, and the line saying so is
+            below the button rather than behind it: the page says it, rather
+            than opening a panel with nothing in it. */}
+        <div class="fplwhy" id="rationale-why-row">
+          <button
+            class="btn btn-ghost fx-why"
+            id="rationale-why"
+            type="button"
+            aria-expanded="false"
+            aria-controls="rationale"
+          >Why</button>
+        </div>
+        <div class="rationale" id="rationale" hidden>
+          <div class="kicker">{RATIONALE_LABEL}</div>
+          <div class="rationale-body" id="rationale-body"></div>
+          <div class="rationale-meta muted">{RATIONALE_META}</div>
+        </div>
+        <p class="fplnote" id="rationale-rolled" hidden></p>
       </div>
     </div>
   </section>
@@ -157,9 +184,9 @@ import { SEASON_ROSTER_SIZE } from "../../../../src/season-roster.js";
       tested there, and an inline script can import nothing. */}
   <script>
   import {
-    clubTag, figure, gwTag, opponentLabel, pounds, seatTeamSheet, sheetKicker,
-    sheetSubLine, statStrip, statusLine, transferCost, transfersHeading,
-    validationRows, type Seated
+    clubTag, figure, gwTag, opponentLabel, pounds, rationaleBody,
+    seatTeamSheet, sheetKicker, sheetSubLine, statStrip, statusLine,
+    transferCost, transfersHeading, validationRows, type Seated
   } from "../../fpl-view.js";
   import { entrantOf, entrantSlug } from "../../entrant-link.js";
   import { byId as $, el, text } from "../../dom.js";
@@ -338,6 +365,17 @@ import { SEASON_ROSTER_SIZE } from "../../../../src/season-roster.js";
 
     /* ── everything around it ───────────────────────────────────────────── */
 
+    /** The Rationale's disclosure, in the Fixtures page's own terms. */
+    const discloseRationale = (open: boolean): void => {
+      $("rationale").hidden = !open;
+      text($("rationale-why"), open ? "Hide" : "Why");
+      $("rationale-why").setAttribute("aria-expanded", String(open));
+    };
+
+    $("rationale-why").addEventListener("click", () => {
+      discloseRationale($("rationale").hidden);
+    });
+
     function renderStrip(body: FplSquadsBody, entrant: FplSquadsEntrant): void {
       $("strip").replaceChildren(
         ...statStrip(entrant, body.gw).map(({ label, value, tone }) => {
@@ -389,6 +427,30 @@ import { SEASON_ROSTER_SIZE } from "../../../../src/season-roster.js";
           return row;
         })
       );
+
+      // The one sentence for the Gameweek on screen, which moves with the
+      // page from week to week and with the picker without fetching. Three
+      // states, read off the record's own facts: a sentence behind Why; a
+      // Roll Over, which reached no legal action to explain (ADR-0041) and
+      // whose line stands where the disclosure would; and no Manager State at
+      // all — a Gameweek the Entrant Gapped (ADR-0011), which this page can
+      // show since ADR-0048 and which is neither, so nothing renders. The
+      // Roll Over is decided on `rolledOver` and not on the null beside it:
+      // a Gapped seat's null is the absence of a Gameweek, not one that
+      // rolled.
+      const rolled = entrant.rolledOver === true;
+      $("rationale-why-row").hidden = entrant.rationale === null;
+      $("rationale-rolled").hidden = !rolled;
+      if (entrant.rationale === null) {
+        discloseRationale(false);
+        if (rolled) text($("rationale-rolled"), rationaleBody(null));
+      } else {
+        text($("rationale-body"), entrant.rationale);
+        // "Why" names what it opens, as the Fixtures page's buttons do.
+        $("rationale-why").setAttribute(
+          "aria-label", `Why — ${entrant.name}, Gameweek ${body.gw}`
+        );
+      }
     }
 
     /* ── the page ───────────────────────────────────────────────────────── */

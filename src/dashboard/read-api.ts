@@ -1629,6 +1629,15 @@ export interface FplSquadsEntrant {
    * no rule of the game, and reporting it here would read as one.
    */
   lastViolation: ViolationKind | null;
+  /**
+   * The Rationale the action gave for this Gameweek's Squad (ADR-0041): the
+   * qualitative record beside the quantitative one, in the body so the panel
+   * that renders it switches with the picker and no fetch. Null only for a
+   * Roll Over, which reached no legal action to explain. Display only — never
+   * scored, and never shown back to any Entrant in a later context; a human
+   * reading a page is not a context.
+   */
+  rationale: string | null;
 }
 
 /**
@@ -1731,7 +1740,7 @@ async function fplSquads(query: Query, season: string): Promise<Response> {
             totals.value as total_points,
             state.squad, state.team_sheet, state.bank, state.free_transfers,
             state.chip_active, state.hits, state.attempts_used,
-            state.rolled_over,
+            state.rolled_over, state.rationale,
             previous.gw as previous_gw, previous.squad as previous_squad,
             refused.error_kind as last_violation
        from models m
@@ -1899,7 +1908,8 @@ async function fplSquads(query: Query, season: string): Promise<Response> {
       hitPoints: numberOrNull(row.hits),
       repairs: numberOrNull(row.attempts_used),
       rolledOver: row.rolled_over === null ? null : Boolean(row.rolled_over),
-      lastViolation: row.last_violation as ViolationKind | null
+      lastViolation: row.last_violation as ViolationKind | null,
+      rationale: row.rationale as string | null
     };
   });
 

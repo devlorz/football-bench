@@ -623,6 +623,14 @@ circle.fplline { fill: var(--fplline); stroke: none; }
 .fplin { font-family: var(--font-heading); font-weight: 800; }
 #transfer-cost { margin-top: 10px; }
 
+/* The Rationale under the two columns above it: the button is the Fixtures
+   page's own `fx-why` and the panel its `.rationale`, and only the row that
+   right-aligns the button and the gap above the pair are this page's. The
+   Roll Over line stands where the disclosure would, on its own. */
+.fplwhy { display: flex; margin-top: 32px; }
+.fplwhy + .rationale { margin-top: 10px; margin-bottom: 0; }
+#rationale-rolled { margin-top: 32px; }
+
 .fplvrow {
   display: flex;
   align-items: baseline;

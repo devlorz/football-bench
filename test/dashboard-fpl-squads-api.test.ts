@@ -322,6 +322,30 @@ describe("the FPL squads endpoint", () => {
     }
   });
 
+  test("carries the Gameweek's Rationale beside the Sheet it explains",
+    async () => {
+      // One more column on the Manager State read that is already there
+      // (ADR-0041): the sentence explains the decision, and the decision is
+      // what this page shows. Read at the Gameweek the body itself answers
+      // with, so the sentence is pinned to the week on screen and not to a
+      // number written here. Null reaches nothing at this Gameweek — every
+      // seat stored one — so the Roll Over has its own describe below.
+      const body = await squads();
+      const stored = new Map((await query(
+        `select model_id, rationale from manager_states
+          where season = $1 and gw = $2`,
+        [SEASON, body.gw]
+      )).map((row) => [String(row.model_id), row.rationale ?? null]));
+
+      for (const entrant of body.entrants) {
+        expect(entrant.rationale).toBe(stored.get(entrant.id));
+      }
+      // And the Gameweek holds sentences, so the equality above is not nine
+      // nulls agreeing with nine nulls.
+      expect(body.entrants.every(({ rationale }) => rationale !== null))
+        .toBe(true);
+    });
+
   test("reports a quiet Gameweek as no Transfers and no violation", async () => {
     // Nobody Transfers into Gameweek 5, and the honest answer to "what changed"
     // is nothing — not the fifteen a diff against an empty Squad would read.
@@ -704,6 +728,22 @@ describe("the FPL squads endpoint at a Gameweek that Rolled Over", () => {
       expect(rolled.transfersIn).toEqual([]);
       expect(rolled.transfersOut).toEqual([]);
     });
+
+  test("answers a Rolled Over Gameweek with no Rationale", async () => {
+    const body = await squads();
+
+    // Null only for a Roll Over (ADR-0041): a Gameweek that reached no legal
+    // action has no sentence to explain, and the panel reads the null as the
+    // Roll Over it is rather than as a record the page lost.
+    const rolled = body.entrants.find(({ id }) => id === "fpl/kimi")!;
+    expect(rolled.rolledOver).toBe(true);
+    expect(rolled.rationale).toBeNull();
+
+    // And the Gameweek's other Entrants carry theirs, so the null above is
+    // the Roll Over's own answer and not a column the read forgot.
+    const boosted = body.entrants.find(({ id }) => id === "fpl/grok")!;
+    expect(boosted.rationale).toBe("Bench Boost, standing pat otherwise.");
+  });
 
   test("carries the Chip an Entrant played that Gameweek", async () => {
     const boosted = (await squads()).entrants

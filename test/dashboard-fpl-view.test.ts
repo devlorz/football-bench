@@ -4,11 +4,12 @@ import {
   captainReturnTone, captainWearerBadge, chipLabel, chipLegend, chipsTag,
   chipStrip, chipStripKicker, clubTag, CHIP_EXPIRY_GW, deltaNote,
   gameweekSpan, gwTag, money, movement, operatorFooter, opponentLabel,
-  pounds, rankBand, recordKicker, seasonLabel, seatTeamSheet,
+  pounds, rationaleBody, rankBand, recordKicker, seasonLabel, seatTeamSheet,
   SEASON_GAMEWEEKS, settledGws, sheetKicker, sheetSubLine, spreadLabels,
   statStrip, statusLine, transferCost, transferGwLabel, transfersHeading,
   validationRows
 } from "../dashboard/src/fpl-view.js";
+import { RATIONALE_LABEL, RATIONALE_META } from "../dashboard/src/rationale.js";
 
 /**
  * Every step the FPL section takes between a response and what a reader sees:
@@ -457,6 +458,31 @@ describe("the Transfers below the Squad", () => {
     // not raise.
     expect(transferCost(0, 0)).toBe("No Transfers");
     expect(transferCost(0, null)).toBe("No Transfers");
+  });
+});
+
+describe("the Rationale panel", () => {
+  test("labels the sentence in the one spelling both tracks share", () => {
+    // The Fixtures page has carried this label since spec 0011 and the squads
+    // page since ticket 0047, and both read `rationale.ts`'s one constant —
+    // pinned here so the words cannot drift from the rule they state.
+    expect(RATIONALE_LABEL).toBe("Rationale · display only, never scored");
+    expect(RATIONALE_META).toBe("stored before the deadline");
+  });
+
+  test("carries the sentence through unchanged", () => {
+    expect(rationaleBody("Backing the armband against a soft run of fixtures."))
+      .toBe("Backing the armband against a soft run of fixtures.");
+  });
+
+  test("says a Roll Over rather than showing an empty panel", () => {
+    // Null is a Roll Over and nothing else (ADR-0041): a Gameweek that
+    // reached no legal action has no sentence to explain, and a blank panel
+    // would read as a sentence the page lost.
+    expect(rationaleBody(null)).toBe(
+      "The Gameweek Rolled Over — no legal action was reached, so there is "
+      + "no Rationale to read."
+    );
   });
 });
 

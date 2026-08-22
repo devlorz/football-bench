@@ -1,6 +1,7 @@
 ---
 import Page from "../../layouts/Page.astro";
 import { competitionRoutes } from "../../competition-view.js";
+import { RATIONALE_LABEL, RATIONALE_META } from "../../rationale.js";
 
 /**
  * One Fixtures page per Competition, from the list the read API serves.
@@ -74,8 +75,14 @@ const { competition, competitionName, path, api } = Astro.props;
   </div>
 
   {/* `define:vars` carries this Competition's endpoint, decided at build time,
-      as the leaderboard's script carries its own. */}
-  <script is:inline define:vars={{ fixturesUrl: `${api}/fixtures` }}>
+      as the leaderboard's script carries its own — and the Rationale
+      disclosure's two sentences, which are `rationale.ts`'s one spelling of
+      them rather than a second one an inline script could drift into. */}
+  <script is:inline define:vars={{
+    fixturesUrl: `${api}/fixtures`,
+    rationaleLabel: RATIONALE_LABEL,
+    rationaleMeta: RATIONALE_META
+  }}>
   (() => {
     const $ = (id) => document.getElementById(id);
 
@@ -170,7 +177,7 @@ const { competition, competitionName, path, api } = Astro.props;
       panel.id = panelId;
       panel.hidden = true;
       panel.append(
-        div("kicker", "Rationale · display only, never scored"),
+        div("kicker", rationaleLabel),
         div("rationale-body", prediction.rationale ?? ""),
         // Repairs and never "attempts": zero means the Prediction was valid on
         // the first attempt, not that it was never asked for. The Lock is
@@ -178,7 +185,7 @@ const { competition, competitionName, path, api } = Astro.props;
         div("rationale-meta muted",
           "context " + prediction.contextHash
           + " · Repairs " + prediction.repairs
-          + " · stored before the deadline")
+          + " · " + rationaleMeta)
       );
       button.addEventListener("click", () => disclose(button, panel));
       row.append(panel);
