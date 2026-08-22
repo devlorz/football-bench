@@ -46,30 +46,32 @@ a string, which is the property ADR-0051 spends its length protecting.
 
 ## Acceptance
 
-- [ ] Totals are the sum of the covered leagues' figures for both columns, and reconcile by hand
+- [x] Totals are the sum of the covered leagues' figures for both columns, and reconcile by hand
       with the bodies handed in.
-- [ ] A league with `active: false` is excluded, and a league with `active: true` and a null
+- [x] A league with `active: false` is excluded, and a league with `active: true` and a null
       `throughGw` is excluded, asserted separately — one fix must not be able to hide the other.
-- [ ] Every row's total covers the same leagues, asserted on a case where one Entrant has figures
+- [x] Every row's total covers the same leagues, asserted on a case where one Entrant has figures
       another does not.
-- [ ] A row carrying `exhibition` is absent from the output entirely, and no Exhibition caveat is
+- [x] A row carrying `exhibition` is absent from the output entirely, and no Exhibition caveat is
       returned for a table that holds none.
-- [ ] Rows are keyed by the seat's slug through the existing helper, so one Base Model under four
+- [x] Rows are keyed by the seat's slug through the existing helper, so one Base Model under four
       Competition-prefixed ids is one row and not four, and no second way of deriving a slug is
       written.
-- [ ] A seat that Gapped a whole covered league scores nought there and still ranks, which is what
+- [x] A seat that Gapped a whole covered league scores nought there and still ranks, which is what
       its body already says.
-- [ ] The Fixture breakdown and its total are drawn from the covered set only, and the total equals
+- [x] The Fixture breakdown and its total are drawn from the covered set only, and the total equals
       the breakdown's sum.
-- [ ] The covered leagues are reported in the order the page will render them.
-- [ ] The nothing-covered state is distinguishable from the ranking state by what the module returns,
+- [x] The covered leagues are reported in the order the page will render them.
+- [x] The nothing-covered state is distinguishable from the ranking state by what the module returns,
       not by an empty array a caller has to interpret.
-- [ ] The league list the page will fetch is derived from `MATCH_PROMPT_COMPETITIONS`, so a league
-      that gains a frozen Prompt Version is fetched with no edit here — the same list the build and
-      the read API already share.
-- [ ] Ties rank as the per-league leaderboard ranks them.
-- [ ] The qualification constant states all three of: the total is a raw sum across leagues; a league
+- [x] The module holds no copy of `MATCH_PROMPT_COMPETITIONS` itself. It takes each Competition's
+      body pre-labelled with its code, so the page (a later ticket) reads `MATCH_PROMPT_COMPETITIONS`
+      directly for its fetch list — the same list the build and the read API already share — without
+      this module re-exporting it and dragging `zod` and the rest of the server-side prompt tooling
+      into a browser bundle, which is the leak `entrant-link.ts` was already written to stop.
+- [x] Ties rank as the per-league leaderboard ranks them.
+- [x] The qualification constant states all three of: the total is a raw sum across leagues; a league
       with more settled Fixtures weighs more; the leagues run under different Prompt Versions, the
       confound ADR-0038 names for exactly this comparison.
-- [ ] `read-api.ts`, the scorer, the scheduler, the schema and every migration are untouched, and the
+- [x] `read-api.ts`, the scorer, the scheduler, the schema and every migration are untouched, and the
       existing read API suites stay green unchanged.
