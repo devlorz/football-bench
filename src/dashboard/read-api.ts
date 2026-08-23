@@ -278,15 +278,18 @@ async function scoredThrough(
 /**
  * The seats admitted to a Competition's Match track surfaces: the entered
  * seats (role = 'entrant') plus any replayed Exhibition Run whose
- * "ran after Gameweek N" label can be derived and when the Season has a scored
- * Gameweek (ADR-0032, ADR-0052).
+ * "ran after Gameweek N" label can be derived.
  *
- * Owned by ticket 0052 and shared across the leaderboard and entrant-record
- * endpoints today, with fixtures inheriting it in ticket 0053, so the
- * endpoints select through the same definition and cannot disagree about who
- * is on the page.
+ * Shared across the leaderboard, entrants and fixtures endpoints (ticket 0052,
+ * ticket 0053), so the three endpoints select through the same definition and
+ * cannot disagree about who is on the page.
  *
- * Expects $1 = season, $2 = competition, $3 = prompt_version, $4 = through_gw.
+ * Expects:
+ *   $1 = season
+ *   $2 = competition
+ *   $3 = prompt_version
+ *   $4 = admit_unscored (boolean: true on fixtures, false on scored surfaces)
+ *   $5 = through_gw (int or null)
  */
 const SEATS_CTE = `
   with seats as (
@@ -305,7 +308,8 @@ const SEATS_CTE = `
      where m.prompt_version = $3
        and (m.role = 'entrant'
             or (m.role = 'exhibition'
-                and ran_after.gw is not null and $4::int is not null))
+                and ran_after.gw is not null
+                and ($4::boolean or $5::int is not null)))
   )
 `;
 
@@ -319,18 +323,17 @@ const SEATS_CTE = `
  * the constant would answer that question with itself. The scorer's exported
  * constant is imported all the same, for the one documented exception below: a
  * scored Season with no ranking row anywhere, which has no stored string to
- * read and a visible ranking of noughts to caveat.
+ * read and would leave the header without its sentence.
+ *
+ * The evidence is the two metrics that qualify rows: Match Points and Bet
+ * Points. RPS is in the detail of the former and is read out of it, not
+ * joined a second time.
  */
 async function leaderboard(
   query: Query,
   season: string,
   competition: string
 ): Promise<Response> {
-  // Served and not open. The routes are the frozen Prompt Versions and the
-  // Season's leagues are `competitions` rows, so the two lists differ for as
-  // long as it takes to open a league someone has frozen a Prompt Version
-  // for — and in that window this path answers.
-  //
   // A successful response and not a status: every status the page can read is
   // its failure line, which tells a reader something is broken and that
   // nothing is being retried. Nothing is broken here.
@@ -441,13 +444,13 @@ async function leaderboard(
        left join scores points
          on points.model_id = s.id and points.competition = $2
         and points.season = $1
-        and points.track = 'match' and points.gw = $4
-        and points.metric = $5
+        and points.track = 'match' and points.gw = $5
+        and points.metric = $6
        left join scores bets
          on bets.model_id = s.id and bets.competition = $2
         and bets.season = $1
-        and bets.track = 'match' and bets.gw = $4
-        and bets.metric = $6
+        and bets.track = 'match' and bets.gw = $5
+        and bets.metric = $7
       order by s.id`,
     [
       season,
@@ -457,6 +460,9 @@ async function leaderboard(
       // (ADR-0038), so a constant here would answer every league with the
       // Premier League's roster and none of its own.
       matchPromptOf(competition).version,
+      // Scored surfaces require a scored Gameweek to rank an Exhibition Run
+      // (ADR-0052, ticket 0052).
+      false,
       throughGw,
       MATCH_POINTS_SEASON_TO_DATE_METRIC,
       BET_POINTS_SEASON_TO_DATE_METRIC
@@ -584,6 +590,12 @@ export interface SlotPrediction {
 export interface FixtureSlot {
   entrant: { id: string; name: string };
   prediction: SlotPrediction | null;
+  /**
+   * Present only on an Exhibition Run's slot, naming the Gameweek the run
+   * answered after. Roster slots omit the field so the no-Exhibition response
+   * is byte-identical to the baseline contract (ticket 0053, ADR-0052).
+   */
+  exhibition?: { ranAfterGw: number };
 }
 
 export interface FixtureView {
@@ -604,6 +616,12 @@ export interface FixturesBody {
   gw: number | null;
   deadlineAt: string | null;
   lockPassed: boolean;
+  /**
+   * Present exactly when an Exhibition slot is in the body, and omitted
+   * otherwise so the body is byte-identical when no Exhibition Run is seated
+   * (ticket 0053, ADR-0052).
+   */
+  exhibitionCaveat?: string;
   fixtures: FixtureView[];
 }
 
@@ -611,11 +629,11 @@ export interface FixturesBody {
  * The Gameweek in front of the reader, its Fixtures, and what all ten Entrants
  * committed before the Lock.
  *
- * The page never reads `throughGw` and this body does not carry it.
- * `throughGw` moves when the scorer runs; Predictions exist from the main run
- * six hours before the deadline, so for the whole of a played-but-unscored
- * Gameweek 1 a page gating on it would call committed Predictions pre-season
- * and hide the very thing it exists to show.
+ * The page never reads `throughGw` to select the Gameweek and this body does
+ * not carry it. `throughGw` moves when the scorer runs; Predictions exist from
+ * the main run six hours before the deadline, so for the whole of a
+ * played-but-unscored Gameweek 1 a page gating on it would call committed
+ * Predictions pre-season and hide the very thing it exists to show.
  */
 async function fixtures(
   query: Query,
@@ -680,18 +698,32 @@ async function fixtures(
     [season, gw, competition]
   );
 
-  // The same ten in the same order on every Fixture, which is what makes a
-  // Gap a slot rather than a shorter list.
-  // The Competition's own frozen Prompt Version, for the reason the
-  // leaderboard's roster join reads one: each Competition seats its own ten
-  // under one of its own (ADR-0038), so the constant would list every league's
-  // Fixtures against the Premier League's Entrants.
-  const roster = await query(
-    `-- roster: the match track's, per Competition (ADR-0038).
-     select id, name from models
-      where role = 'entrant' and prompt_version = $1 order by id`,
-    [matchPromptOf(competition).version]
+  // The roster's ten stay first and in id order on every Fixture, which is what
+  // makes a Gap a slot rather than a shorter list. Any admitted Exhibition Run
+  // joins conditionally as an eleventh slot below (ADR-0052).
+  //
+  // Shared through SEATS_CTE with the leaderboard and entrant record endpoints.
+  // Passing admit_unscored = true ($4) admits Exhibition runs without gating
+  // on `throughGw`: this page displays Predictions rather than scores, so an
+  // Exhibition Run that replayed a completed Gameweek is shown even before the
+  // scoring run has recorded throughGw.
+  const seats = await query(
+    `-- roster and exhibition seats: the match track's, per Competition (ADR-0038, ADR-0052).
+     ${SEATS_CTE}
+     select s.id, s.name, s.role, s.ran_after_gw
+       from seats s
+      order by case when s.role = 'entrant' then 0 else 1 end, s.id`,
+    [
+      season,
+      competition,
+      matchPromptOf(competition).version,
+      true,
+      null
+    ]
   );
+
+  const roster = seats.filter((seat) => seat.role === "entrant");
+  const exhibitions = seats.filter((seat) => seat.role === "exhibition");
 
   const predictions = await query(
     `select p.fixture_id, p.model_id, p.probs, p.pred_home, p.pred_away,
@@ -725,6 +757,46 @@ async function fixtures(
     });
   }
 
+  // The roster's ten remain first in id order on every Fixture. An Exhibition
+  // slot is appended ONLY where a Prediction exists: an unplayed or gapped
+  // Fixture keeps exactly the ten roster slots, because an empty slot means
+  // "asked before the Lock and did not answer" and an Exhibition Run was never
+  // asked before the Lock (ADR-0052).
+  const fixtureViews: FixtureView[] = rows.map((row) => ({
+    // `fplId` where the column is now `fixture_id`: this is the published
+    // shape a deployed dashboard build reads, and renaming a field in a JSON
+    // body is a change to the contract between two things that ship
+    // separately, not a rename. ADR-0035 renamed the column and left the
+    // dashboard's Competition shape to its own ADR; the field goes with that.
+    fplId: Number(row.fixture_id),
+    homeTeam: String(row.home_team),
+    awayTeam: String(row.away_team),
+    kickoffAt: new Date(row.kickoff_at as string | Date).toISOString(),
+    slots: [
+      ...roster.map((entrant) => ({
+        entrant: { id: String(entrant.id), name: String(entrant.name) },
+        // Null and not missing: an Entrant that did not answer must not be
+        // indistinguishable from one that answered badly.
+        prediction:
+          byFixtureAndEntrant.get(`${row.fixture_id}:${entrant.id}`) ?? null
+      })),
+      ...exhibitions.flatMap((exhibition) => {
+        const prediction =
+          byFixtureAndEntrant.get(`${row.fixture_id}:${exhibition.id}`);
+        if (!prediction) return [];
+        return [{
+          entrant: { id: String(exhibition.id), name: String(exhibition.name) },
+          prediction,
+          exhibition: { ranAfterGw: Number(exhibition.ran_after_gw) }
+        }];
+      })
+    ]
+  }));
+
+  const hasExhibition = fixtureViews.some(({ slots }) =>
+    slots.some(({ exhibition }) => exhibition !== undefined)
+  );
+
   const body: FixturesBody = {
     season,
     gw,
@@ -732,24 +804,11 @@ async function fixtures(
     // The one thing the instant is used for: it separates the pre-lock banner
     // from the committed view and never selects the Gameweek.
     lockPassed: deadline !== null && now >= deadline,
-    fixtures: rows.map((row) => ({
-      // `fplId` where the column is now `fixture_id`: this is the published
-      // shape a deployed dashboard build reads, and renaming a field in a JSON
-      // body is a change to the contract between two things that ship
-      // separately, not a rename. ADR-0035 renamed the column and left the
-      // dashboard's Competition shape to its own ADR; the field goes with that.
-      fplId: Number(row.fixture_id),
-      homeTeam: String(row.home_team),
-      awayTeam: String(row.away_team),
-      kickoffAt: new Date(row.kickoff_at as string | Date).toISOString(),
-      slots: roster.map((entrant) => ({
-        entrant: { id: String(entrant.id), name: String(entrant.name) },
-        // Null and not missing: an Entrant that did not answer must not be
-        // indistinguishable from one that answered badly.
-        prediction:
-          byFixtureAndEntrant.get(`${row.fixture_id}:${entrant.id}`) ?? null
-      }))
-    }))
+    // Present exactly when an Exhibition slot is in the body, and omitted
+    // otherwise so the body is byte-identical when no Exhibition Run is seated
+    // (ADR-0052, ticket 0053).
+    ...(hasExhibition ? { exhibitionCaveat: EXHIBITION_CAVEAT } : {}),
+    fixtures: fixtureViews
   };
   return json(body, FIXTURES_CACHE);
 }
@@ -912,20 +971,20 @@ async function entrants(
        left join scores points
          on points.model_id = s.id and points.competition = $2
         and points.season = $1
-        and points.track = 'match' and points.gw = $4
-        and points.metric = $5
+        and points.track = 'match' and points.gw = $5
+        and points.metric = $6
        left join scores bets
          on bets.model_id = s.id and bets.competition = $2
         and bets.season = $1
-        and bets.track = 'match' and bets.gw = $4 and bets.metric = $6
+        and bets.track = 'match' and bets.gw = $5 and bets.metric = $7
        left join scores rps
          on rps.model_id = s.id and rps.competition = $2
         and rps.season = $1
-        and rps.track = 'match' and rps.gw = $4 and rps.metric = $7
+        and rps.track = 'match' and rps.gw = $5 and rps.metric = $8
        left join scores gaps
          on gaps.model_id = s.id and gaps.competition = $2
         and gaps.season = $1
-        and gaps.track = 'match' and gaps.gw = $4 and gaps.metric = $8
+        and gaps.track = 'match' and gaps.gw = $5 and gaps.metric = $9
       -- The roster first in id order, then the Exhibition Runs (ADR-0052):
       -- the record page draws all its tabs off this array, and the Entrants'
       -- are where a reader expects them.
@@ -937,6 +996,9 @@ async function entrants(
       // each league seats its own ten under its own (ADR-0038), and the
       // constant would seat the Premier League's from every league.
       matchPromptOf(competition).version,
+      // Scored surfaces require a scored Gameweek to admit an Exhibition Run
+      // (ADR-0052, ticket 0052).
+      false,
       throughGw,
       MATCH_POINTS_SEASON_TO_DATE_METRIC,
       BET_POINTS_SEASON_TO_DATE_METRIC,

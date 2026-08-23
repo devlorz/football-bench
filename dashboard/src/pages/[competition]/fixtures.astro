@@ -2,6 +2,7 @@
 import Page from "../../layouts/Page.astro";
 import { competitionRoutes } from "../../competition-view.js";
 import { RATIONALE_LABEL, RATIONALE_META } from "../../rationale.js";
+import { EXHIBITION_LABEL_PREFIX } from "../../exhibition-view.js";
 
 /**
  * One Fixtures page per Competition, from the list the read API serves.
@@ -74,6 +75,12 @@ const { competition, competitionName, path, api } = Astro.props;
     ))}
   </div>
 
+  {/* Empty unless the fixtures hold an Exhibition Run, and never written from
+      here: the sentence is the API's, beside the row that needs it. */}
+  <div class="qualifications">
+    <p id="qual-exhibition"></p>
+  </div>
+
   {/* `define:vars` carries this Competition's endpoint, decided at build time,
       as the leaderboard's script carries its own — and the Rationale
       disclosure's two sentences, which are `rationale.ts`'s one spelling of
@@ -81,7 +88,8 @@ const { competition, competitionName, path, api } = Astro.props;
   <script is:inline define:vars={{
     fixturesUrl: `${api}/fixtures`,
     rationaleLabel: RATIONALE_LABEL,
-    rationaleMeta: RATIONALE_META
+    rationaleMeta: RATIONALE_META,
+    exhibitionLabelPrefix: EXHIBITION_LABEL_PREFIX
   }}>
   (() => {
     const $ = (id) => document.getElementById(id);
@@ -134,8 +142,16 @@ const { competition, competitionName, path, api } = Astro.props;
 
     function predictionRow(fixture, slot, index) {
       const row = div("fxrow", undefined, "row");
-      const { entrant, prediction } = slot;
-      row.append(div("fx-name", entrant.name, "cell"));
+      const { entrant, prediction, exhibition } = slot;
+      const name = div("fx-name", undefined, "cell");
+      name.append(div("", entrant.name));
+      // An Exhibition Run carries its derived label on its row (ADR-0052).
+      if (exhibition) {
+        name.append(
+          div("muted lb-id", exhibitionLabelPrefix + exhibition.ranAfterGw)
+        );
+      }
+      row.append(name);
 
       const split = div("fx-split", undefined, "cell");
       split.append(
@@ -202,9 +218,13 @@ const { competition, competitionName, path, api } = Astro.props;
       versus.className = "fx-v";
       versus.textContent = "v";
       teams.append(fixture.homeTeam + " ", versus, " " + fixture.awayTeam);
-      const filled = fixture.slots.filter((slot) => slot.prediction).length;
+      // The roster's predictions coverage on this fixture, never counting the
+      // Exhibition Run so the roster's figures remain identical with
+      // Exhibition rows present and absent (ADR-0052, ticket 0053).
+      const rosterSlots = fixture.slots.filter((slot) => !slot.exhibition);
+      const filled = rosterSlots.filter((slot) => slot.prediction).length;
       const tag = div("tag tag-neutral",
-        filled + " of " + fixture.slots.length + " predicted");
+        filled + " of " + rosterSlots.length + " predicted");
       title.append(
         teams,
         div("fx-when muted", when(fixture.kickoffAt)
@@ -220,7 +240,7 @@ const { competition, competitionName, path, api } = Astro.props;
         pending.append(
           div("fx-pending-mark"),
           document.createTextNode(
-            fixture.slots.length + " entrants pending · context not yet built")
+            rosterSlots.length + " entrants pending · context not yet built")
         );
         block.append(pending);
         return block;
@@ -286,6 +306,7 @@ const { competition, competitionName, path, api } = Astro.props;
       $("pending").hidden = committed || count === 0;
       $("empty").hidden = count > 0;
       $("fixtures").replaceChildren(...body.fixtures.map(fixtureBlock));
+      $("qual-exhibition").textContent = body.exhibitionCaveat ?? "";
     }
 
     // A relative path: the Worker route claims `/api/*` on this hostname, so

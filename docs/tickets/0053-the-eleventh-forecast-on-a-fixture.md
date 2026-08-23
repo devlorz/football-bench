@@ -12,7 +12,7 @@ Decision: [ADR-0052](../adr/0052-an-exhibition-run-shows-up-wherever-it-answered
 [0052](0052-the-record-behind-an-exhibition-runs-rank.md) — the shared row-selection condition
 lands there, and a second copy of it here is the thing that ticket exists to prevent.
 
-**Status:** ready-for-agent
+**Status:** done
 
 ---
 
@@ -41,16 +41,16 @@ surfaces exist and one reader's journey crosses them.
 
 ## Acceptance
 
-- [ ] A played Fixture the Exhibition Run answered carries its forecast as an eleventh slot,
+- [x] A played Fixture the Exhibition Run answered carries its forecast as an eleventh slot,
       after the roster's ten, which keep their order
-- [ ] A Fixture the Exhibition Run has not answered carries exactly the ten slots it carries
+- [x] A Fixture the Exhibition Run has not answered carries exactly the ten slots it carries
       today — whether the Fixture is unplayed or was played and Gapped
-- [ ] The Exhibition slot carries the "ran after Gameweek N" label, and the body carries the
+- [x] The Exhibition slot carries the "ran after Gameweek N" label, and the body carries the
       recall-versus-skill caveat exactly when such a slot is in it
-- [ ] The endpoint selects its rows through the condition ticket 0052 shared, not a copy
-- [ ] With no Exhibition Run seated, the body is byte-identical to what it answers today
-- [ ] Every roster figure on the page is identical with the Exhibition rows present and absent
-- [ ] One end-to-end pass proves a reader's journey: a Competition with an Exhibition Run that
+- [x] The endpoint selects its rows through the condition ticket 0052 shared, not a copy
+- [x] With no Exhibition Run seated, the body is byte-identical to what it answers today
+- [x] Every roster figure on the page is identical with the Exhibition rows present and absent
+- [x] One end-to-end pass proves a reader's journey: a Competition with an Exhibition Run that
       answered some Fixtures and not others returns the same row, under the same label, from
       the leaderboard, the Fixture page and the record — and returns no eleventh slot on the
       Fixtures it Gapped

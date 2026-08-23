@@ -1,13 +1,18 @@
 import pg from "pg";
 import { beforeAll, describe, expect, test } from "vitest";
-import { resetSchema } from "./schema-fixture.js";
+import {
+  insertOxAlpha, OX_ALPHA_FIXTURE, resetSchema
+} from "./schema-fixture.js";
 import { workerDriver } from "./worker-driver.js";
 import { seedSeason, type SeedStop } from "../src/seed-season.js";
 import {
-  handleDashboardRequest, type FixturesBody, type FixtureView, type Query
+  handleDashboardRequest, type EntrantsBody, type FixturesBody,
+  type FixtureView, type LeaderboardBody, type Query
 } from "../src/dashboard/read-api.js";
 import { argmaxOutcome, outcomeOf } from "../src/fixture-result.js";
 import { matchPromptOf } from "../src/predictions/openrouter-entrant.js";
+import { EXHIBITION_CAVEAT } from "../src/exhibition/recall-caveat.js";
+import { scoreMatchSeason } from "../src/predictions/score-match-gameweek.js";
 
 const { Client } = pg;
 
@@ -81,62 +86,46 @@ async function seed(
   await reader.query("set role dashboard_read");
 }
 
+/**
+ * A La Liga Gameweek, Fixtures and standing seat beside the Premier League's,
+ * proving competition isolation at every read (ADR-0035, ADR-0038).
+ */
+async function seedSpanishFixtures(writer: pg.Client): Promise<void> {
+  await writer.query(
+    `insert into competitions (competition, season) values ('PD', $1)`,
+    [SEASON]
+  );
+  await writer.query(
+    `insert into gameweeks (competition, season, gw, deadline_at)
+     values ('PD', $1, 5, $2), ('PD', $1, 15, $3)`,
+    [SEASON, "2026-09-12T17:30:00Z", "2026-11-20T17:30:00Z"]
+  );
+  await writer.query(
+    `insert into fixtures (
+       competition, season, fixture_id, gw, home_team, away_team, kickoff_at
+     ) values ('PD', $1, $2, 5, 'Real Betis', 'Sevilla', $4),
+              ('PD', $1, $3, 15, 'Girona', 'Osasuna', $5)`,
+    [
+      SEASON, SPANISH_FIXTURE, SPANISH_LATE_FIXTURE,
+      "2026-09-13T20:00:00Z", "2026-11-21T20:00:00Z"
+    ]
+  );
+  await writer.query(
+    `insert into models (
+       id, name, base_model, provider, prompt_version, role
+     ) values ($2, 'Spanish Claude', 'anthropic/claude-opus-4.5',
+               'anthropic', $1, 'entrant')`,
+    [matchPromptOf("PD").version, SPANISH_SEAT]
+  );
+}
+
 describe("the Fixtures endpoint on the design's Season", () => {
   const { writer, reader, query, fixtures } = connections();
 
   beforeAll(async () => {
     await seed(writer, reader, "the design's");
+    await seedSpanishFixtures(writer);
 
-    // A La Liga Gameweek, Fixture and seat beside the Premier League's, for the
-    // reason the leaderboard's suite carries their counterparts: a ranking, and
-    // a page of Fixtures, spans one Competition and never two (ADR-0035), and
-    // until a Season had a second league in it no query could be caught
-    // unioning them.
-    //
-    // Two Fixtures and not one, because the endpoint has two filters on
-    // `competition` and one Fixture cannot bite both. The Gameweek is selected
-    // as the earliest owning an unsettled Fixture, so a Gameweek *later* than
-    // the Premier League's is invisible to it and to the listing under it: a
-    // seed of one late Fixture proves the separation in La Liga's direction
-    // alone, and leaves the Premier League's answer identical with the filter
-    // dropped.
-    //
-    // So: one at Gameweek 5, earlier than every unsettled Premier League
-    // Fixture, which a Gameweek selection missing `competition` prefers -- it
-    // answers the Premier League with Gameweek 5. And one at Gameweek 15, the
-    // Gameweek the Premier League's own page is on, which a listing missing
-    // `competition` puts on that page beside its ten. Each bites one filter
-    // with the other intact.
-    //
-    // The seat carries the same `entrant` role as the nine, told apart by the
-    // Prompt Version each Competition freezes its own of (ADR-0038), so a
-    // roster read missing it seats ten.
-    await writer.query(
-      `insert into competitions (competition, season) values ('PD', $1)`,
-      [SEASON]
-    );
-    await writer.query(
-      `insert into gameweeks (competition, season, gw, deadline_at)
-       values ('PD', $1, 5, $2), ('PD', $1, 15, $3)`,
-      [SEASON, "2026-09-12T17:30:00Z", "2026-11-20T17:30:00Z"]
-    );
-    await writer.query(
-      `insert into fixtures (
-         competition, season, fixture_id, gw, home_team, away_team, kickoff_at
-       ) values ('PD', $1, $2, 5, 'Real Betis', 'Sevilla', $4),
-                ('PD', $1, $3, 15, 'Girona', 'Osasuna', $5)`,
-      [
-        SEASON, SPANISH_FIXTURE, SPANISH_LATE_FIXTURE,
-        "2026-09-13T20:00:00Z", "2026-11-21T20:00:00Z"
-      ]
-    );
-    await writer.query(
-      `insert into models (
-         id, name, base_model, provider, prompt_version, role
-       ) values ($2, 'Spanish Claude', 'anthropic/claude-opus-4.5',
-                 'anthropic', $1, 'entrant')`,
-      [matchPromptOf("PD").version, SPANISH_SEAT]
-    );
     // And the seat La Liga's restart retired (ADR-0042), which stands in the
     // record for the sake of the Gameweek it played and belongs to no roster
     // read. Same Competition, same `entrant` role -- the Prompt Version is the
@@ -207,7 +196,9 @@ describe("the Fixtures endpoint on the design's Season", () => {
 
       for (const fixture of body.fixtures) {
         expect(fixture.slots.map(({ entrant }) => entrant.id)).toEqual(ROSTER);
+        expect(fixture.slots.every((slot) => !("exhibition" in slot))).toBe(true);
       }
+      expect(body.exhibitionCaveat).toBeUndefined();
       const [slot] = body.fixtures[0]?.slots ?? [];
       expect(slot?.entrant.name).toEqual(expect.any(String));
     });
@@ -366,7 +357,6 @@ describe("the Fixtures endpoint on the design's Season", () => {
     }
   });
 });
-
 describe("the Fixtures endpoint before any Prediction run", () => {
   const { writer, reader, fixtures } = connections();
 
@@ -628,3 +618,260 @@ describe("the Fixtures endpoint on a Gameweek of other than ten Fixtures", () =>
     expect(body.fixtures).toHaveLength(9);
   });
 });
+
+describe("the Fixtures endpoint with an Exhibition Run seated", () => {
+  const { writer, reader, query, fixtures } = connections();
+
+  const EXHIBITION = OX_ALPHA_FIXTURE.id;
+  const EXHIBITION_GAP = 139;
+  const REPLAYED_AT = "2026-11-15T12:00:00Z";
+
+  let withoutExhibitionGw14: FixturesBody;
+  let withoutExhibitionGw15: FixturesBody;
+
+  const playedFixtures = async (): Promise<FixturesBody> => {
+    // Setting result = null on fixture 131 makes GW 14 the earliest unsettled
+    // Gameweek, while preserving stored match outcomes on all other fixtures
+    // (including the Gapped fixture 139 and answered fixtures 132..138) to prove
+    // the conditional slot behaviour on genuinely played matches (ADR-0052, ticket 0053).
+    await writer.query(
+      "update fixtures set result = null where season = $1 and fixture_id = 131",
+      [SEASON]
+    );
+    const body = await fixtures(BEFORE_LOCK);
+    await writer.query(
+      `update fixtures
+          set result = jsonb_build_object('home_goals', 2, 'away_goals', 1, 'outcome', 'H')
+        where season = $1 and fixture_id = 131`,
+      [SEASON]
+    );
+    return body;
+  };
+
+  beforeAll(async () => {
+    await seed(writer, reader, "the design's");
+    await seedSpanishFixtures(writer);
+
+    // Baseline assertions on both settled (GW 14) and unplayed (GW 15) fixtures
+    // without an Exhibition Run establish the pre-admission contract.
+    withoutExhibitionGw14 = await playedFixtures();
+    withoutExhibitionGw15 = await fixtures(BEFORE_LOCK);
+    expect(withoutExhibitionGw14.exhibitionCaveat).toBeUndefined();
+    expect(withoutExhibitionGw15.exhibitionCaveat).toBeUndefined();
+    for (const fixture of withoutExhibitionGw14.fixtures) {
+      expect(fixture.slots.every((slot) => !("exhibition" in slot))).toBe(true);
+    }
+    for (const fixture of withoutExhibitionGw15.fixtures) {
+      expect(fixture.slots.every((slot) => !("exhibition" in slot))).toBe(true);
+    }
+
+    // The Exhibition model stands in the catalog with role = 'exhibition' so
+    // SEATS_CTE can discover it and derive its ran_after_gw label.
+    await insertOxAlpha(writer);
+
+    // Stored predictions simulate an operator replay completed after Gameweek 14,
+    // deliberately leaving fixture 139 unpredicted to test the Gapped negative case.
+    await writer.query(
+      `insert into predictions (
+         model_id, season, fixture_id, probs, pred_home, pred_away, context_id,
+         attempts_used, predicted_at
+       )
+       select $2, $1, f.fixture_id,
+              case f.result ->> 'outcome'
+                when 'H' then '{"H":0.8,"D":0.1,"A":0.1}'::jsonb
+                when 'D' then '{"H":0.1,"D":0.8,"A":0.1}'::jsonb
+                else '{"H":0.1,"D":0.1,"A":0.8}'::jsonb
+              end,
+              (f.result ->> 'home_goals')::int,
+              (f.result ->> 'away_goals')::int,
+              c.id, 0, $3
+         from fixtures f
+         join contexts c
+           on c.season = f.season and c.track = 'match' and c.fixture_id = f.fixture_id
+        where f.season = $1 and coalesce(f.locked_in_gw, f.gw) = 14
+          and f.fixture_id <> $4`,
+      [SEASON, EXHIBITION, REPLAYED_AT, EXHIBITION_GAP]
+    );
+
+    // The read endpoint does not gate on throughGw, so predictions are published
+    // on played fixtures before any scoring run records throughGw.
+    const beforeScoringBody = await playedFixtures();
+    expect(beforeScoringBody.gw).toBe(14);
+    expect(beforeScoringBody.exhibitionCaveat).toBe(EXHIBITION_CAVEAT);
+    expect(beforeScoringBody.fixtures.some((f) => f.slots.some((s) => s.entrant.id === EXHIBITION))).toBe(true);
+
+    // Populate season-to-date scores across the competition so the cross-surface
+    // reader journey test can inspect the leaderboard and entrant records.
+    await scoreMatchSeason({
+      database: writer,
+      competition: "PL",
+      season: SEASON,
+      now: () => new Date("2026-11-16T10:00:00Z")
+    });
+
+    return async () => {
+      await writer.end();
+      await reader.end();
+    };
+  }, 60_000);
+
+  test("appends the Exhibition Run as an eleventh slot on played Fixtures it answered",
+    async () => {
+      const body = await playedFixtures();
+
+      expect(body.gw).toBe(14);
+      expect(body.exhibitionCaveat).toBe(EXHIBITION_CAVEAT);
+
+      const answered = body.fixtures.filter(({ fplId }) => fplId !== EXHIBITION_GAP);
+      expect(answered).toHaveLength(8);
+
+      for (const fixture of answered) {
+        // 9 roster slots + 1 exhibition slot = 10 slots
+        expect(fixture.slots).toHaveLength(ROSTER.length + 1);
+
+        // The roster's nine stay first and in id order with no exhibition field
+        const rosterSlots = fixture.slots.slice(0, ROSTER.length);
+        expect(rosterSlots.map(({ entrant }) => entrant.id)).toEqual(ROSTER);
+        expect(rosterSlots.every((slot) => !("exhibition" in slot))).toBe(true);
+
+        // The Exhibition slot is appended at the end
+        const exhibitionSlot = fixture.slots.at(-1)!;
+        expect(exhibitionSlot.entrant).toEqual({ id: EXHIBITION, name: "Ox Alpha" });
+        expect(exhibitionSlot.exhibition).toEqual({ ranAfterGw: 14 });
+        expect(exhibitionSlot.prediction).not.toBeNull();
+        expect(exhibitionSlot.prediction?.coherent).toBe(true);
+      }
+    });
+
+  test("leaves the Fixtures it Gapped with exactly the ten roster slots",
+    async () => {
+      const body = await playedFixtures();
+
+      const gapped = body.fixtures.find(({ fplId }) => fplId === EXHIBITION_GAP);
+      expect(gapped).toBeDefined();
+
+      // Exactly the roster slots (9 in this test seed), never an empty 10th slot
+      expect(gapped?.slots).toHaveLength(ROSTER.length);
+      expect(gapped?.slots.map(({ entrant }) => entrant.id)).toEqual(ROSTER);
+      expect(gapped?.slots.map(({ entrant }) => entrant.id)).not.toContain(EXHIBITION);
+      expect(gapped?.slots.every((slot) => !("exhibition" in slot))).toBe(true);
+    });
+
+  test("leaves unplayed Fixtures with exactly the ten roster slots",
+    async () => {
+      const body = await fixtures(BEFORE_LOCK);
+
+      expect(body.gw).toBe(15);
+      expect(body.exhibitionCaveat).toBeUndefined();
+
+      for (const fixture of body.fixtures) {
+        expect(fixture.slots).toHaveLength(ROSTER.length);
+        expect(fixture.slots.map(({ entrant }) => entrant.id)).toEqual(ROSTER);
+        expect(fixture.slots.every((slot) => !("exhibition" in slot))).toBe(true);
+      }
+
+      // Byte-identical to the response before the Exhibition Run was seeded
+      expect(JSON.stringify(body)).toBe(JSON.stringify(withoutExhibitionGw15));
+    });
+
+  test("moves no figure the roster is read on", async () => {
+    const body = await playedFixtures();
+
+    // Stripping the eleventh slot and caveat yields the EXACT baseline body, byte for byte
+    const roster = (published: FixturesBody): string => {
+      const { exhibitionCaveat: _caveat, ...rest } = published;
+      return JSON.stringify({
+        ...rest,
+        fixtures: published.fixtures.map((fixture) => ({
+          ...fixture,
+          slots: fixture.slots.filter(({ entrant }) => entrant.id !== EXHIBITION)
+        }))
+      });
+    };
+
+    expect(roster(body)).toBe(JSON.stringify(withoutExhibitionGw14));
+  });
+
+  test("keeps La Liga's fixtures out of reach of a Premier League run",
+    async () => {
+      const response = await handleDashboardRequest(
+        new Request("https://benchmark.example/api/pd/fixtures"),
+        query, SEASON, BEFORE_LOCK
+      );
+      expect(response.status).toBe(200);
+      const laLiga = await response.json() as FixturesBody;
+
+      expect(laLiga.exhibitionCaveat).toBeUndefined();
+      for (const fixture of laLiga.fixtures) {
+        expect(fixture.slots.map(({ entrant }) => entrant.id)).toEqual([SPANISH_SEAT]);
+        expect(fixture.slots.every((slot) => !("exhibition" in slot))).toBe(true);
+      }
+    });
+
+  test("shows Exhibition predictions on played fixtures even before scoring runs",
+    async () => {
+      // The endpoint passes 0 as $4 to SEATS_CTE rather than gating on throughGw:
+      // an Exhibition Run that answered a completed Gameweek is shown on that
+      // Gameweek's fixtures even when the scorer has not run (docstring, ADR-0052).
+      const body = await playedFixtures();
+      expect(body.gw).toBe(14);
+      expect(body.exhibitionCaveat).toBe(EXHIBITION_CAVEAT);
+
+      const answered = body.fixtures.filter(({ fplId }) => fplId !== EXHIBITION_GAP);
+      expect(answered).toHaveLength(8);
+      for (const fixture of answered) {
+        expect(fixture.slots).toHaveLength(ROSTER.length + 1);
+        expect(fixture.slots.at(-1)?.entrant.id).toBe(EXHIBITION);
+      }
+    });
+
+  test("completes the reader's cross-surface journey consistently across leaderboard, fixtures, and entrant record",
+    async () => {
+      // 1. Leaderboard
+      const lbResponse = await handleDashboardRequest(
+        new Request("https://benchmark.example/api/pl/leaderboard"),
+        query, SEASON, BEFORE_LOCK
+      );
+      expect(lbResponse.status).toBe(200);
+      const lbBody = await lbResponse.json() as LeaderboardBody;
+      const lbRow = lbBody.entrants.find(({ id }) => id === EXHIBITION);
+      expect(lbRow).toBeDefined();
+      expect(lbRow?.name).toBe("Ox Alpha");
+      expect(lbRow?.exhibition).toEqual({ ranAfterGw: 14 });
+      expect(lbBody.exhibitionCaveat).toBe(EXHIBITION_CAVEAT);
+
+      // 2. Entrant Record
+      const entResponse = await handleDashboardRequest(
+        new Request("https://benchmark.example/api/pl/entrants"),
+        query, SEASON, BEFORE_LOCK
+      );
+      expect(entResponse.status).toBe(200);
+      const entBody = await entResponse.json() as EntrantsBody;
+      const entRecord = entBody.entrants.find(({ id }) => id === EXHIBITION);
+      expect(entRecord).toBeDefined();
+      expect(entRecord?.name).toBe("Ox Alpha");
+      expect(entRecord?.exhibition).toEqual({ ranAfterGw: 14 });
+      expect(entRecord?.gaps).toBeNull();
+      const gw14Record = entRecord?.gameweeks.find(({ gw }) => gw === 14);
+      expect(gw14Record?.fixtures).toBe(9);
+      expect(gw14Record?.settled).toBe(8);
+      expect(gw14Record?.gaps).toBeNull();
+      expect(entBody.exhibitionCaveat).toBe(EXHIBITION_CAVEAT);
+
+      // 3. Fixtures page (GW 14)
+      const fxBody = await playedFixtures();
+      expect(fxBody.exhibitionCaveat).toBe(EXHIBITION_CAVEAT);
+
+      const answeredFx = fxBody.fixtures.find(({ fplId }) => fplId !== EXHIBITION_GAP);
+      const fxSlot = answeredFx?.slots.find(({ entrant }) => entrant.id === EXHIBITION);
+      expect(fxSlot).toBeDefined();
+      expect(fxSlot?.entrant).toEqual({ id: "exhibition/ox-alpha", name: "Ox Alpha" });
+      expect(fxSlot?.exhibition).toEqual({ ranAfterGw: 14 });
+
+      // Fixture it gapped has no slot for exhibition
+      const gappedFx = fxBody.fixtures.find(({ fplId }) => fplId === EXHIBITION_GAP);
+      expect(gappedFx?.slots.find(({ entrant }) => entrant.id === EXHIBITION)).toBeUndefined();
+      expect(gappedFx?.slots).toHaveLength(ROSTER.length);
+    });
+});
+

@@ -2,6 +2,7 @@
 import Page from "../layouts/Page.astro";
 import { SEASON_ROSTER_SIZE } from "../../../src/season-roster.js";
 import { competitionRoutes } from "../competition-view.js";
+import { EXHIBITION_LABEL_PREFIX } from "../exhibition-view.js";
 
 /**
  * One leaderboard per Competition, from the list the read API serves. A plain
@@ -245,7 +246,8 @@ const { competition, competitionName, path, api, retiredLabel } = Astro.props;
     // decision the block's markup was emitted on and read from the same prop —
     // so a page with no block cannot ask for one, and the endpoint that would
     // answer it 404s anyway.
-    retiredUrl: retiredLabel === null ? null : `${api}/retired`
+    retiredUrl: retiredLabel === null ? null : `${api}/retired`,
+    exhibitionLabelPrefix: EXHIBITION_LABEL_PREFIX
   }}>
   (() => {
     const $ = (id) => document.getElementById(id);
@@ -341,7 +343,7 @@ const { competition, competitionName, path, api, retiredLabel } = Astro.props;
             // own row. The Gameweek is the API's, derived from when the run
             // answered, so the page states it and computes none of it.
             entrant.exhibition
-              ? "ran after Gameweek " + entrant.exhibition.ranAfterGw
+              ? exhibitionLabelPrefix + entrant.exhibition.ranAfterGw
               : null
           ].filter(Boolean).join(" · "))
         );

@@ -166,6 +166,7 @@ const { competition, competitionName, path, api } = Astro.props;
   // bundled, so every import here is bytes every reader downloads.
   import { byId as $, svg } from "../../dom.js";
   import { entrantOf, entrantSlug } from "../../entrant-link.js";
+  import { exhibitionLabel } from "../../exhibition-view.js";
   import type {
     EntrantRecord, EntrantsBody
   } from "../../../../src/dashboard/read-api.js";
@@ -452,7 +453,7 @@ const { competition, competitionName, path, api } = Astro.props;
         (entrant.n === null ? "No settled fixtures" : entrant.n + " settled fixtures")
           + " · through GW " + data.throughGw,
         entrant.exhibition
-          ? "ran after Gameweek " + entrant.exhibition.ranAfterGw
+          ? exhibitionLabel(entrant.exhibition.ranAfterGw)
           : null
       ].filter(Boolean).join(" · ");
       $("kpi-bet").textContent =

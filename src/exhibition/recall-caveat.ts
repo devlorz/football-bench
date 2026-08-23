@@ -18,3 +18,17 @@ export const EXHIBITION_CAVEAT =
   + "Base Model may already know the results. Its figures cannot tell "
   + "forecasting skill from recall and support no claim of either, and they "
   + "enter no Comparison Anchor, complete case or published interval.";
+
+/**
+ * The standard prefix for an Exhibition Run's derived label across Match track
+ * surfaces (ADR-0032, ADR-0052).
+ */
+export const EXHIBITION_LABEL_PREFIX = "ran after Gameweek ";
+
+/**
+ * The standard label for an Exhibition Run's derived qualification on Match
+ * track surfaces, naming the Gameweek the run answered after (ADR-0032, ADR-0052).
+ */
+export function exhibitionLabel(ranAfterGw: number): string {
+  return `${EXHIBITION_LABEL_PREFIX}${ranAfterGw}`;
+}

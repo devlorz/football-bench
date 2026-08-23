@@ -342,6 +342,10 @@ describe("the Entrant a link names", () => {
     // page of both sections builds its markup with, so anything they gained an
     // import of would be bytes on every page at once.
     expect(read("../dashboard/src/dom.ts")).not.toMatch(/^\s*import\b/m);
+    // And the Exhibition recall caveat module, which exhibition-view.ts
+    // re-exports into the bundled script: keeping it free of imports ensures
+    // no heavy dependencies (like zod) leak into the bundle through this path.
+    expect(read("../src/exhibition/recall-caveat.ts")).not.toMatch(/^\s*import\b/m);
 
     const script = read(
       "../dashboard/src/pages/[competition]/entrants.astro"
@@ -353,7 +357,10 @@ describe("the Entrant a link names", () => {
     ].map(([, from]) => from);
 
     expect(followed).toEqual([
-      "../../chart-domain.js", "../../dom.js", "../../entrant-link.js"
+      "../../chart-domain.js",
+      "../../dom.js",
+      "../../entrant-link.js",
+      "../../exhibition-view.js"
     ]);
   });
 
