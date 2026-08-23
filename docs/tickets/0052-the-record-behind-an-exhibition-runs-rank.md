@@ -13,7 +13,7 @@ answered against the Fixtures the Gameweek's Lock owned. Source:
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done
 
 ---
 
@@ -42,21 +42,21 @@ rates reads as nought, which is the most flattering possible misreading of a wit
 
 ## Acceptance
 
-- [ ] An Exhibition Run holding Predictions in a Competition has a record at that Competition's
+- [x] An Exhibition Run holding Predictions in a Competition has a record at that Competition's
       entrant-record endpoint, carrying the same fields an Entrant's does
-- [ ] The row carries the "ran after Gameweek N" label, derived from its stored `predicted_at`
+- [x] The row carries the "ran after Gameweek N" label, derived from its stored `predicted_at`
       against the Gameweek deadlines and never from configuration
-- [ ] The recall-versus-skill caveat is present in the body exactly when a row carrying that
+- [x] The recall-versus-skill caveat is present in the body exactly when a row carrying that
       label is in it, and absent when none is
-- [ ] `rps` is published for the Exhibition row under the same conventions as the roster's
-- [ ] The Gap rate is withheld rather than computed, and the page renders a sentence naming the
+- [x] `rps` is published for the Exhibition row under the same conventions as the roster's
+- [x] The Gap rate is withheld rather than computed, and the page renders a sentence naming the
       withholding — never an empty cell in the rate's place
-- [ ] The record shows the Fixtures the row answered against the Fixtures the Gameweek's Lock
+- [x] The record shows the Fixtures the row answered against the Fixtures the Gameweek's Lock
       owned, taken from the figures already in the body
-- [ ] The condition deciding which rows the endpoint returns is written once and shared, so the
+- [x] The condition deciding which rows the endpoint returns is written once and shared, so the
       leaderboard and this endpoint cannot answer differently about who exists
 - [ ] With no Exhibition Run seated, the endpoint's body is byte-identical to what it answers
       today
-- [ ] Every roster figure — the Entrants' records, their order among themselves, the Comparison
+- [x] Every roster figure — the Entrants' records, their order among themselves, the Comparison
       Anchor, the published intervals and the Gap rates — is identical with the Exhibition rows
       present and absent, proven by comparing two runs of the same request

@@ -86,7 +86,7 @@ const { competition, competitionName, path, api } = Astro.props;
         <div class="soft">
           <div class="stat-label">Gaps</div>
           <div class="stat-value" id="kpi-gaps">&nbsp;</div>
-          <div class="muted stnote">Fixtures with no prediction stored</div>
+          <div class="muted stnote" id="kpi-gaps-note">Fixtures with no prediction stored</div>
         </div>
       </div>
 
@@ -144,6 +144,12 @@ const { competition, competitionName, path, api } = Astro.props;
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Empty unless the record holds an Exhibition Run, and never written from
+          here: the sentence is the API's, beside the row that needs it. */}
+      <div class="qualifications">
+        <p id="qual-exhibition"></p>
       </div>
     </div>
   </section>
@@ -381,8 +387,14 @@ const { competition, competitionName, path, api } = Astro.props;
           cell(week.outcome + " / " + week.settled, "num"),
           // No mean where nothing settled, which is not a nought.
           cell(week.rps === null ? "—" : week.rps.toFixed(3), "num strps"),
-          // Absence is as visible as poor performance.
-          cell(String(week.gaps), week.gaps > 0 ? "num danger" : "num muted")
+          // Absence is as visible as poor performance. An Exhibition Run withholds
+          // its Gap rate and shows what it answered against what the Lock owned.
+          week.gaps === null
+            ? cell(
+                week.settled + " / " + week.fixtures,
+                week.settled < week.fixtures ? "num danger" : "num muted"
+              )
+            : cell(String(week.gaps), week.gaps > 0 ? "num danger" : "num muted")
         );
         rows.append(row);
       }
@@ -431,14 +443,33 @@ const { competition, competitionName, path, api } = Astro.props;
       // The link is corrected to the Entrant actually on screen, which is what
       // writes the slug on a first visit that named none.
       remember(entrant.id);
-      $("kpi-match").textContent = String(entrant.matchPoints);
-      $("kpi-match-note").textContent =
-        entrant.n + " settled fixtures · through GW " + data.throughGw;
-      $("kpi-bet").textContent = String(entrant.betPoints);
+      const totalFixtures = entrant.gameweeks.reduce(
+        (sum, w) => sum + w.fixtures, 0
+      );
+      $("kpi-match").textContent =
+        entrant.matchPoints === null ? "—" : String(entrant.matchPoints);
+      $("kpi-match-note").textContent = [
+        (entrant.n === null ? "No settled fixtures" : entrant.n + " settled fixtures")
+          + " · through GW " + data.throughGw,
+        entrant.exhibition
+          ? "ran after Gameweek " + entrant.exhibition.ranAfterGw
+          : null
+      ].filter(Boolean).join(" · ");
+      $("kpi-bet").textContent =
+        entrant.betPoints === null ? "—" : String(entrant.betPoints);
       $("kpi-rps").textContent =
         entrant.rps === null ? "—" : entrant.rps.toFixed(3);
-      $("kpi-gaps").textContent = String(entrant.gaps);
-      $("kpi-gaps").classList.toggle("danger", (entrant.gaps ?? 0) > 0);
+      if (entrant.gaps === null) {
+        $("kpi-gaps").textContent = (entrant.n ?? 0) + " / " + totalFixtures;
+        $("kpi-gaps-note").textContent =
+          "Gap rate withheld · not asked before the Lock";
+        $("kpi-gaps").classList.toggle("danger", (entrant.n ?? 0) < totalFixtures);
+      } else {
+        $("kpi-gaps").textContent = String(entrant.gaps);
+        $("kpi-gaps-note").textContent = "Fixtures with no prediction stored";
+        $("kpi-gaps").classList.toggle("danger", entrant.gaps > 0);
+      }
+      $("qual-exhibition").textContent = data.exhibitionCaveat ?? "";
 
       renderChart(entrant, data.entrants);
       renderTiers(entrant);

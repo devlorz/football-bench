@@ -1,6 +1,6 @@
-import pg from "pg";
+import pg, { type Client as PgClient } from "pg";
 import { beforeAll, describe, expect, test } from "vitest";
-import { resetSchema } from "./schema-fixture.js";
+import { insertExhibition, resetSchema } from "./schema-fixture.js";
 import { workerDriver } from "./worker-driver.js";
 import { seedSeason, type SeedStop } from "../src/seed-season.js";
 import {
@@ -9,6 +9,7 @@ import {
 import {
   MATCH_PROMPT_VERSION, matchPromptOf
 } from "../src/predictions/openrouter-entrant.js";
+import { EXHIBITION_CAVEAT } from "../src/exhibition/recall-caveat.js";
 import {
   BET_POINTS_METRIC, BET_POINTS_SEASON_TO_DATE_METRIC,
   GAP_RATE_SEASON_TO_DATE_METRIC, MATCH_POINTS_METRIC,
@@ -31,6 +32,11 @@ const ROSTER = [
 
 /** The Gameweek the design's Season is scored through. */
 const THROUGH_GW = 14;
+
+/** The number of Fixtures the design's Season has settled: one short in the
+ * last Gameweek, because its Gapped Entrant pulled one Fixture out of play
+ * before it closed. */
+const SETTLED_FIXTURES = 13 * 10 + 9;
 
 /** The seed's Gapped Entrant. */
 const GAPPED = "minimax/v1";
@@ -131,64 +137,67 @@ async function fromGameweekRows(writer: pg.Client, entrant: string) {
   };
 }
 
+async function seedSpanishSeat(writer: PgClient): Promise<void> {
+  // A La Liga seat with a scored Season of its own beside the Premier
+  // League's, for the reason the other two suites carry their counterparts: a
+  // record spans one Competition and never two (ADR-0035), and until a Season
+  // had a second league in it no query could be caught unioning them.
+  //
+  // Scored *through a later Gameweek* than the Premier League's 14, because
+  // this endpoint reads the Gameweek before it reads anything else and takes
+  // the maximum: a La Liga row on an earlier Gameweek would leave the Premier
+  // League's answer identical with the filter dropped, and prove nothing.
+  //
+  // The seat carries the same `entrant` role as the nine and is told apart by
+  // the Prompt Version each Competition freezes its own of (ADR-0038), so a
+  // roster read missing that filter seats ten here and one over there.
+  await writer.query(
+    `insert into competitions (competition, season) values ('PD', $1)`,
+    [SEASON]
+  );
+  await writer.query(
+    `insert into gameweeks (competition, season, gw, deadline_at)
+     values ('PD', $1, $2, $3)`,
+    [SEASON, SPANISH_GW, "2027-01-15T17:30:00Z"]
+  );
+  await writer.query(
+    `insert into models (
+       id, name, base_model, provider, prompt_version, role
+     ) values ($2, 'Spanish Claude', 'anthropic/claude-opus-4.5',
+               'anthropic', $1, 'entrant')`,
+    [matchPromptOf("PD").version, SPANISH_SEAT]
+  );
+
+  // Written by hand rather than scored: what is being asserted is which rows
+  // a read reaches, and the shortest way to a La Liga row on Gameweek 20 is
+  // to write one. The per-Gameweek RPS row is what says the Season is scored
+  // through that Gameweek; the four cumulative rows are what the record is
+  // built from.
+  const week = (detail: object) => ({ gameweeks: [{ gw: SPANISH_GW, ...detail }] });
+  for (const [metric, value, n, detail] of [
+    [RPS_METRIC, 0.2, 2, null],
+    [MATCH_POINTS_SEASON_TO_DATE_METRIC, 8, 2,
+      week({ points: 8, fixtures: [{ points: 5 }, { points: 3 }] })],
+    [BET_POINTS_SEASON_TO_DATE_METRIC, 1, 2,
+      week({ points: 1, fixtures: [{ slip: [{ market: "result", won: true }] }] })],
+    [RPS_SEASON_TO_DATE_METRIC, 0.2, 2, week({ mean: 0.2 })],
+    [GAP_RATE_SEASON_TO_DATE_METRIC, 0, 2, week({ n: 2, gaps: [] })]
+  ] as const) {
+    await writer.query(
+      `insert into scores (
+         model_id, competition, season, gw, track, metric, value, n, detail
+       ) values ($1, 'PD', $2, $3, 'match', $4, $5, $6, $7)`,
+      [SPANISH_SEAT, SEASON, SPANISH_GW, metric, value, n, detail]
+    );
+  }
+}
+
 describe("the Entrant record endpoint on the design's Season", () => {
   const { writer, reader, get, entrants } = connections();
 
   beforeAll(async () => {
     await seed(writer, reader, "the design's");
-
-    // A La Liga seat with a scored Season of its own beside the Premier
-    // League's, for the reason the other two suites carry their counterparts: a
-    // record spans one Competition and never two (ADR-0035), and until a Season
-    // had a second league in it no query could be caught unioning them.
-    //
-    // Scored *through a later Gameweek* than the Premier League's 14, because
-    // this endpoint reads the Gameweek before it reads anything else and takes
-    // the maximum: a La Liga row on an earlier Gameweek would leave the Premier
-    // League's answer identical with the filter dropped, and prove nothing.
-    //
-    // The seat carries the same `entrant` role as the nine and is told apart by
-    // the Prompt Version each Competition freezes its own of (ADR-0038), so a
-    // roster read missing that filter seats ten here and one over there.
-    await writer.query(
-      `insert into competitions (competition, season) values ('PD', $1)`,
-      [SEASON]
-    );
-    await writer.query(
-      `insert into gameweeks (competition, season, gw, deadline_at)
-       values ('PD', $1, $2, $3)`,
-      [SEASON, SPANISH_GW, "2027-01-15T17:30:00Z"]
-    );
-    await writer.query(
-      `insert into models (
-         id, name, base_model, provider, prompt_version, role
-       ) values ($2, 'Spanish Claude', 'anthropic/claude-opus-4.5',
-                 'anthropic', $1, 'entrant')`,
-      [matchPromptOf("PD").version, SPANISH_SEAT]
-    );
-
-    // Written by hand rather than scored: what is being asserted is which rows
-    // a read reaches, and the shortest way to a La Liga row on Gameweek 20 is
-    // to write one. The per-Gameweek RPS row is what says the Season is scored
-    // through that Gameweek; the four cumulative rows are what the record is
-    // built from.
-    const week = (detail: object) => ({ gameweeks: [{ gw: SPANISH_GW, ...detail }] });
-    for (const [metric, value, n, detail] of [
-      [RPS_METRIC, 0.2, 2, null],
-      [MATCH_POINTS_SEASON_TO_DATE_METRIC, 8, 2,
-        week({ points: 8, fixtures: [{ points: 5 }, { points: 3 }] })],
-      [BET_POINTS_SEASON_TO_DATE_METRIC, 1, 2,
-        week({ points: 1, fixtures: [{ slip: [{ market: "result", won: true }] }] })],
-      [RPS_SEASON_TO_DATE_METRIC, 0.2, 2, week({ mean: 0.2 })],
-      [GAP_RATE_SEASON_TO_DATE_METRIC, 0, 2, week({ n: 2, gaps: [] })]
-    ] as const) {
-      await writer.query(
-        `insert into scores (
-           model_id, competition, season, gw, track, metric, value, n, detail
-         ) values ($1, 'PD', $2, $3, 'match', $4, $5, $6, $7)`,
-        [SPANISH_SEAT, SEASON, SPANISH_GW, metric, value, n, detail]
-      );
-    }
+    await seedSpanishSeat(writer);
 
     return async () => {
       await writer.end();
@@ -263,8 +272,8 @@ describe("the Entrant record endpoint on the design's Season", () => {
 
   test("sums the per-Gameweek series to the Season figures", async () => {
     for (const entrant of (await entrants()).entrants) {
-      const sum = (pick: (row: (typeof entrant.gameweeks)[number]) => number) =>
-        entrant.gameweeks.reduce((total, row) => total + pick(row), 0);
+      const sum = (pick: (row: (typeof entrant.gameweeks)[number]) => number | null) =>
+        entrant.gameweeks.reduce((total, row) => total + (pick(row) ?? 0), 0);
 
       expect(sum((row) => row.matchPoints)).toBe(entrant.matchPoints);
       expect(sum((row) => row.betPoints)).toBe(entrant.betPoints);
@@ -289,7 +298,7 @@ describe("the Entrant record endpoint on the design's Season", () => {
     const gapped = body.entrants.find(({ id }) => id === GAPPED);
 
     expect(gapped?.gaps).toBeGreaterThan(0);
-    const gap = gapped?.gameweeks.find((row) => row.gaps > 0);
+    const gap = gapped?.gameweeks.find((row) => (row.gaps ?? 0) > 0);
     // The Gameweek is still a row, with the Fixtures its Lock owned beside the
     // fewer the Entrant answered.
     expect(gap).toBeDefined();
@@ -297,7 +306,7 @@ describe("the Entrant record endpoint on the design's Season", () => {
     expect(gap!.rps).not.toBeNull();
     // The Fixtures it answered are fewer than the Fixtures its Lock owned, by
     // exactly the Gaps.
-    expect(gap!.settled).toBe(gap!.fixtures - gap!.gaps);
+    expect(gap!.settled).toBe(gap!.fixtures - gap!.gaps!);
   });
 
   test("keeps each Competition's Entrant records out of the other's response",
@@ -501,4 +510,368 @@ describe("the Entrant record endpoint before the Season starts", () => {
       expect(entrant.markets).toEqual([]);
     }
   });
+
+  test("keeps a replayed Exhibition Run off a Season with no ranking",
+    async () => {
+      // The same shape of row the leaderboard's pre-season case admits — a run
+      // holding one Prediction answered after Gameweek 1's deadline. The record
+      // page draws every seat it shows off this same array, and a run that
+      // joined after the fact was never entered for the Season: admitting it
+      // here would put it in a list every figure of which is null, with no
+      // ranked column to carry its label.
+      await insertExhibition(writer, {
+        id: "late-arrival/v1",
+        name: "Late Arrival",
+        baseModel: "late/base-model",
+        provider: "late"
+      });
+      await writer.query(
+        `insert into predictions (
+           model_id, season, fixture_id, probs, pred_home, pred_away,
+           context_id, attempts_used, predicted_at
+         )
+         select 'late-arrival/v1', $1, 1, '{"H":0.5,"D":0.3,"A":0.2}', 2, 1,
+                c.id, 0, $2
+           from contexts c
+          where c.season = $1 and c.track = 'match' and c.fixture_id = 1`,
+        [SEASON, "2026-08-16T09:00:00Z"]
+      );
+
+      const body = await entrants();
+
+      expect(body.throughGw).toBeNull();
+      expect(body.entrants.map(({ id }) => id)).toEqual(ROSTER);
+      // And nobody is labelled on a page that lists nobody, so nobody is what
+      // the caveat is about.
+      expect(body.exhibitionCaveat).toBeNull();
+    });
 });
+
+describe("the Entrant record endpoint with an Exhibition Run on the Season",
+  () => {
+    const { writer, reader, entrants } = connections();
+
+    /** The Exhibition Run's own row, and the one the label is derived against. */
+    const EXHIBITION = "late-arrival/v1";
+
+    /**
+     * A second Exhibition Run, interrupted and resumed across a deadline: two
+     * answers a week apart with Gameweek 15's Lock between them. One taken
+     * over the run's first answer would call its record Gameweek 14's while
+     * half its figures were answered after Gameweek 15 had been played.
+     */
+    const RESUMED = "resumed-arrival/v1";
+
+    const EXHIBITIONS = [EXHIBITION, RESUMED];
+
+    /**
+     * After Gameweek 14's deadline (Friday the 13th) and before Gameweek 15's:
+     * the instant a replay of every settled Gameweek would have been answered
+     * at.
+     */
+    const REPLAYED_AT = "2026-11-15T09:00:00Z";
+
+    /** A week later, with Gameweek 15's deadline passed in between. */
+    const RESUMED_AT = "2026-11-22T09:00:00Z";
+
+    /** The one settled Fixture the Exhibition Run left unanswered. */
+    const GAP_FIXTURE = 11;
+
+    /** Every roster figure as it stood before either Exhibition Run existed. */
+    let withoutExhibition: EntrantsBody;
+
+
+    /**
+     * Every Match row the scorer wrote for the roster, with `scored_at`
+     * dropped from the comparison: the stamp is the run's and moves whenever
+     * a row is rewritten, and the claim below is that the figures did not.
+     */
+    const rosterScores = async (): Promise<Map<string, string>> => {
+      const stored = await writer.query<{
+        model_id: string; gw: number; metric: string;
+      }>(
+        `select model_id, gw, metric, value, n, detail from scores
+          where season = $1 and track = 'match'
+            and model_id <> all ($2::text[])
+          order by model_id, gw, metric`,
+        [SEASON, EXHIBITIONS]
+      );
+      return new Map(stored.rows.map((row) => [
+        `${row.model_id} gw${row.gw} ${row.metric}`, JSON.stringify(row)
+      ]));
+    };
+
+    let scoresWithout: Map<string, string>;
+
+    beforeAll(async () => {
+      await seed(writer, reader, "the design's");
+
+      // The baseline is taken after a scoring run of its own, so that the run
+      // which admits the Exhibition Runs is the second and not the first — and
+      // proves a second one both re-derives `ran_after_gw` and writes the
+      // runs' rows.
+      await scoreMatchSeason({
+        database: writer,
+        competition: "PL",
+        season: SEASON,
+        now: () => new Date("2026-11-10T12:00:00Z")
+      });
+
+      await seedSpanishSeat(writer);
+
+      withoutExhibition = await entrants();
+      scoresWithout = await rosterScores();
+
+      // Two Exhibition Runs entered by replay: one over every settled Fixture
+      // bar one — the Gap ADR-0052 says a run holds when a replay fails on a
+      // match — and one resumed across a deadline with two more answers in
+      // it. Each Predicted Score leans to the side the result took, which is
+      // the recall the caveat is about.
+      for (const id of EXHIBITIONS) {
+        await insertExhibition(writer, {
+          id,
+          name: id,
+          baseModel: id.replace("/v1", "/base-model"),
+          provider: "late"
+        });
+      }
+      await writer.query(
+        `insert into predictions (
+           model_id, season, fixture_id, probs, pred_home, pred_away,
+           context_id, attempts_used, predicted_at
+         )
+         select $3, f.season, f.fixture_id,
+                jsonb_build_object(
+                  'H', case when f.result->>'outcome' = 'H'
+                            then 0.7 else 0.15 end,
+                  'D', case when f.result->>'outcome' = 'D'
+                            then 0.7 else 0.15 end,
+                  'A', case when f.result->>'outcome' = 'A'
+                            then 0.7 else 0.15 end),
+                (f.result->>'home_goals')::int +
+                  case when f.result->>'outcome' = 'H' then 1 else 0 end,
+                (f.result->>'away_goals')::int +
+                  case when f.result->>'outcome' = 'A' then 1 else 0 end,
+                c.id, 0, $2
+           from fixtures f
+           join contexts c
+             on c.season = f.season and c.track = 'match'
+            and c.fixture_id = f.fixture_id
+          where f.season = $1 and f.result is not null
+            and f.locked_in_gw <= $4 and f.fixture_id <> $5`,
+        [SEASON, REPLAYED_AT, EXHIBITION, THROUGH_GW, GAP_FIXTURE]
+      );
+      // Two answers on the resumed side of Gameweek 15's deadline, which is
+      // what makes the resumed run's label Gameweek 15's rather than 14's.
+      await writer.query(
+        `insert into predictions (
+           model_id, season, fixture_id, probs, pred_home, pred_away,
+           context_id, attempts_used, predicted_at
+         )
+         select $3, f.season, f.fixture_id,
+                jsonb_build_object(
+                  'H', case when f.result->>'outcome' = 'H'
+                            then 0.7 else 0.15 end,
+                  'D', case when f.result->>'outcome' = 'D'
+                            then 0.7 else 0.15 end,
+                  'A', case when f.result->>'outcome' = 'A'
+                            then 0.7 else 0.15 end),
+                (f.result->>'home_goals')::int +
+                  case when f.result->>'outcome' = 'H' then 1 else 0 end,
+                (f.result->>'away_goals')::int +
+                  case when f.result->>'outcome' = 'A' then 1 else 0 end,
+                c.id, 0, $2
+           from fixtures f
+           join contexts c
+             on c.season = f.season and c.track = 'match'
+            and c.fixture_id = f.fixture_id
+          where f.season = $1 and f.result is not null
+            and f.fixture_id = any($4::int[])`,
+        [SEASON, RESUMED_AT, RESUMED, [12, 13]]
+      );
+
+      await scoreMatchSeason({
+        database: writer,
+        competition: "PL",
+        season: SEASON,
+        now: () => new Date("2026-11-16T12:00:00Z")
+      });
+
+      return async () => {
+        await writer.end();
+        await reader.end();
+      };
+    }, 60_000);
+
+    test("admits the run and labels it by the Gameweek its last answer raced",
+      async () => {
+        const body = await entrants();
+
+        // The roster first and in id order, then the two runs — the record
+        // page draws all its tabs off this array, and the Entrants' are where
+        // a reader expects them.
+        expect(body.entrants.map(({ id }) => id)).toEqual([
+          ...ROSTER, EXHIBITION, RESUMED
+        ]);
+
+        const exhibition = body.entrants.find(({ id }) => id === EXHIBITION);
+        const resumed = body.entrants.find(({ id }) => id === RESUMED);
+        // A run that answered fourteen Gameweeks after the fourteenth was
+        // played, and one that answered two more after Gameweek 15's Lock
+        // had passed.
+        expect(exhibition?.exhibition).toEqual({ ranAfterGw: THROUGH_GW });
+        expect(resumed?.exhibition).toEqual({ ranAfterGw: 15 });
+
+        // And every Entrant is still an Entrant, carrying no label of its
+        // own.
+        const roster =
+          body.entrants.filter(({ id }) => !EXHIBITIONS.includes(id));
+        expect(roster.map(({ id }) => id)).toEqual(ROSTER);
+        expect(roster.every(({ exhibition: label }) => label === null))
+          .toBe(true);
+      });
+
+    test("publishes its season figures beside the field", async () => {
+      const body = await entrants();
+      const exhibition = body.entrants.find(({ id }) => id === EXHIBITION)!;
+
+      // Answered every settled Fixture bar the Gapped one, and every figure
+      // the leaderboard holds for it is the record's own.
+      expect(exhibition.n).toBe(SETTLED_FIXTURES - 1);
+      expect(exhibition.matchPoints).toBeGreaterThan(0);
+      expect(exhibition.betPoints).toBeGreaterThan(0);
+      // RPS is published under the caveat rather than hidden: the run must
+      // not quietly become a different record for one row.
+      expect(exhibition.rps).not.toBeNull();
+
+      // The per-Gameweek series is the Entrants' resolution and not a lesser
+      // one: one row per scored Gameweek, over the same x-domain, so the
+      // chart draws the run's line beside all nine.
+      expect(exhibition.gameweeks.map(({ gw }) => gw)).toEqual(
+        Array.from({ length: THROUGH_GW }, (_, index) => index + 1)
+      );
+
+      // A late answer can carry nothing from its own window, so what it
+      // answered late by name is the one the season totals write, and the
+      // per-Gameweek rows hold numbers rather than blanks wherever it
+      // answered.
+      const answered = exhibition.gameweeks.filter((row) => row.settled > 0);
+      expect(answered.length).toBe(THROUGH_GW);
+      for (const row of answered) {
+        expect(row.fixtures).toBeGreaterThan(0);
+        expect(row.rps).not.toBeNull();
+      }
+
+      // The Gapped Fixture's Gameweek still holds its row, with one fewer
+      // answer than the Lock owned.
+      const gapped = exhibition.gameweeks.find(
+        (row) => row.settled < row.fixtures
+      );
+      expect(gapped!.settled).toBe(gapped!.fixtures - 1);
+      expect(gapped!.rps).not.toBeNull();
+
+      // Every settled Fixture it answered carries its tier, and the markets
+      // carry a leg each for all but the Gapped one.
+      expect(exhibition.tiers.reduce((sum, { count }) => sum + count, 0))
+        .toBe(SETTLED_FIXTURES - 1);
+      expect(
+        exhibition.markets.reduce((sum, { n }) => sum + n, 0)
+      ).toBe(7 * (SETTLED_FIXTURES - 1));
+    });
+
+
+
+    test("withholds the Gap rate for it and only for it, stating as much",
+      async () => {
+        const body = await entrants();
+        const exhibition = body.entrants.find(({ id }) => id === EXHIBITION)!;
+        const resumed = body.entrants.find(({ id }) => id === RESUMED)!;
+
+        // A run never had a window to miss, and its row stands beside every
+        // Entrant's under the same headline figure — so the rate is withheld
+        // and replaced by the fact the rate was hiding, which the page reads
+        // off the numbers it already carries. Null is the body's spelling of
+        // withhold; an Entrant's rate is read as a number.
+        expect(exhibition.gaps).toBeNull();
+        expect(resumed.gaps).toBeNull();
+
+        // Every Entrant's figure is the scorer's and unchanged by this story,
+        // whatever a run answered or missed.
+        for (const entrant of body.entrants) {
+          if (EXHIBITIONS.includes(entrant.id)) continue;
+          expect(typeof entrant.gaps).toBe("number");
+        }
+
+        // The withholding is row by row too: a Gameweek holds its fixtures
+        // count, its settled count, and every other figure, with only the
+        // Gap cell blank — a blank is never a nought against a field that
+        // scored, and never the run's row reading as one that Gapped all
+        // fourteen.
+        for (const row of exhibition.gameweeks) {
+          expect(row.gaps).toBeNull();
+          expect(typeof row.fixtures).toBe("number");
+        }
+      });
+
+    test("carries the recall-versus-skill caveat the record now needs",
+      async () => {
+        const body = await entrants();
+
+        // One sentence, pinned in `recall-caveat.ts`, carried because the
+        // record holds two runs and not because this page said so yesterday.
+        expect(body.exhibitionCaveat).toBe(EXHIBITION_CAVEAT);
+
+        // And a record of the roster alone does not carry a caveat about
+        // somebody who is not in it. The same body, two runs earlier.
+        expect(withoutExhibition.exhibitionCaveat).toBeNull();
+      });
+
+    test("moves no figure the roster is read on", async () => {
+      const body = await entrants();
+
+      // Byte for byte over the roster: a run that may remember the results
+      // must be readable and must change nothing else, so the same request
+      // twice is the proof. Compared as text, so a `numeric` arriving as a
+      // string on one pass and a number on the other is a failure rather
+      // than a deep-equality that looks past it.
+      const roster = (published: EntrantsBody): string =>
+        JSON.stringify({
+          ...published,
+          exhibitionCaveat: null,
+          entrants:
+            published.entrants.filter(({ id }) => !EXHIBITIONS.includes(id))
+        });
+
+      expect(roster(body)).toBe(roster(withoutExhibition));
+      expect(body.entrants).toHaveLength(ROSTER.length + EXHIBITIONS.length);
+
+      // And underneath the body, the same claim about every row the scorer
+      // wrote for the roster — the Gap rates, the Paired Differences and the
+      // intervals this endpoint does not even read included. This is where a
+      // run standing as a Comparison Anchor, or emptying a complete case,
+      // would show up.
+      const after = await rosterScores();
+      const moved = [...after]
+        .filter(([key, row]) => scoresWithout.get(key) !== row)
+        .map(([key]) => key);
+
+      expect(moved).toEqual([]);
+      expect([...after.keys()]).toEqual([...scoresWithout.keys()]);
+    });
+
+    test("keeps La Liga's record out of reach of a run it does not hold",
+      async () => {
+        // The two runs belong to the Premier League's Prompt Version and the
+        // endpoint is scoped to its Competition at every join, so La Liga's
+        // record answers with its own one seat, no label and no caveat.
+        const laLiga = await entrants("/api/pd/entrants");
+
+        expect(laLiga.entrants.map(({ id }) => id)).toEqual([SPANISH_SEAT]);
+        expect(laLiga.entrants.map(({ exhibition: label }) => label))
+          .toEqual([null]);
+        expect(laLiga.exhibitionCaveat).toBeNull();
+      });
+
+
+  });
+

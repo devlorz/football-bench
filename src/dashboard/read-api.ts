@@ -276,6 +276,40 @@ async function scoredThrough(
 }
 
 /**
+ * The seats admitted to a Competition's Match track surfaces: the entered
+ * seats (role = 'entrant') plus any replayed Exhibition Run whose
+ * "ran after Gameweek N" label can be derived and when the Season has a scored
+ * Gameweek (ADR-0032, ADR-0052).
+ *
+ * Owned by ticket 0052 and shared across the leaderboard and entrant-record
+ * endpoints today, with fixtures inheriting it in ticket 0053, so the
+ * endpoints select through the same definition and cannot disagree about who
+ * is on the page.
+ *
+ * Expects $1 = season, $2 = competition, $3 = prompt_version, $4 = through_gw.
+ */
+const SEATS_CTE = `
+  with seats as (
+    select m.id, m.name, m.role,
+           ran_after.gw as ran_after_gw
+      from models m
+      left join lateral (
+        select max(predicted_at) as at from predictions
+         where model_id = m.id and competition = $2 and season = $1
+      ) last_prediction on true
+      left join lateral (
+        select max(gw) as gw from gameweeks
+         where competition = $2 and season = $1
+           and deadline_at < last_prediction.at
+      ) ran_after on true
+     where m.prompt_version = $3
+       and (m.role = 'entrant'
+            or (m.role = 'exhibition'
+                and ran_after.gw is not null and $4::int is not null))
+  )
+`;
+
+/**
  * Every ranked row Season-to-date — the ten Entrants and any Exhibition Run
  * that has replayed — both qualifications, the Exhibition caveat, and the
  * evidence the ranking rests on.
@@ -394,49 +428,38 @@ async function leaderboard(
   // no row, which is the same branch.
   const rows = await query(
     `-- roster: the match track's, per Competition (ADR-0038).
-     select m.id, m.name, m.role,
+     ${SEATS_CTE}
+     select s.id, s.name, s.role,
             m.config ->> 'baseModelClass' as base_model_class,
-            ran_after.gw as ran_after_gw,
+            s.ran_after_gw,
             points.value as match_points, points.n as n,
             points.detail ->> 'qualification' as match_qualification,
             bets.value as bet_points,
             bets.detail ->> 'qualification' as bet_qualification
-       from models m
-       left join lateral (
-         select max(predicted_at) as at from predictions
-          where model_id = m.id and competition = $6 and season = $1
-       ) last_prediction on true
-       left join lateral (
-         select max(gw) as gw from gameweeks
-          where competition = $6 and season = $1
-            and deadline_at < last_prediction.at
-       ) ran_after on true
+       from seats s
+       join models m on m.id = s.id
        left join scores points
-         on points.model_id = m.id and points.competition = $6
+         on points.model_id = s.id and points.competition = $2
         and points.season = $1
         and points.track = 'match' and points.gw = $4
-        and points.metric = $2
+        and points.metric = $5
        left join scores bets
-         on bets.model_id = m.id and bets.competition = $6
+         on bets.model_id = s.id and bets.competition = $2
         and bets.season = $1
         and bets.track = 'match' and bets.gw = $4
-        and bets.metric = $3
-      where m.prompt_version = $5
-        and (m.role = 'entrant'
-             or (m.role = 'exhibition'
-                 and ran_after.gw is not null and $4 is not null))
-      order by m.id`,
+        and bets.metric = $6
+      order by s.id`,
     [
       season,
-      MATCH_POINTS_SEASON_TO_DATE_METRIC,
-      BET_POINTS_SEASON_TO_DATE_METRIC,
-      throughGw,
+      competition,
       // The Competition's own frozen Prompt Version, and not the Premier
       // League's: each Competition seats its own ten under one of its own
       // (ADR-0038), so a constant here would answer every league with the
       // Premier League's roster and none of its own.
       matchPromptOf(competition).version,
-      competition
+      throughGw,
+      MATCH_POINTS_SEASON_TO_DATE_METRIC,
+      BET_POINTS_SEASON_TO_DATE_METRIC
     ]
   );
 
@@ -752,7 +775,8 @@ export interface EntrantGameweek {
   outcome: number;
   /** Null on a Gameweek the Entrant settled nothing in: a mean over none. */
   rps: number | null;
-  gaps: number;
+  /** Null for an Exhibition Run: withheld per EntrantRecord.gaps. */
+  gaps: number | null;
 }
 
 /** One leg of the Bet Slip over the Season, with both sides of its fraction. */
@@ -771,10 +795,23 @@ export interface TierCount {
 export interface EntrantRecord {
   id: string;
   name: string;
+  /**
+   * An Exhibition Run (ADR-0052) carries the Gameweek whose deadline passed
+   * before its last Prediction — derived exactly as the leaderboard derives
+   * it — and says which row the record's blank Gap rate is about. An Entrant
+   * carries it never.
+   */
+  exhibition: { ranAfterGw: number } | null;
   /** Null on a Season with nothing scored, as the leaderboard's are. */
   matchPoints: number | null;
   betPoints: number | null;
   rps: number | null;
+  /**
+   * Null for an Exhibition Run whatever the Season looks like: it never had a
+   * window to miss, and its row stands beside every Entrant's under the same
+   * headline figure. The body states the withholding rather than leaving the
+   * page to have to explain a blank.
+   */
   gaps: number | null;
   n: number | null;
   tiers: TierCount[];
@@ -791,6 +828,14 @@ export interface EntrantsBody {
   season: string;
   throughGw: number | null;
   entrants: EntrantRecord[];
+  /**
+   * The recall-versus-skill sentence, carried whenever the record holds an
+   * Exhibition Run (ADR-0052) and about every row of it — the KPI row shows
+   * the run's Match Points, Bet Points and RPS, so there is no ranked column
+   * the routing side could hang such a caveat on. Null for a record of the
+   * roster alone.
+   */
+  exhibitionCaveat: string | null;
 }
 
 /** The Match Points tiers, in the order the design's stacked bar stacks them. */
@@ -851,48 +896,52 @@ async function entrants(
   // the series is four rows per Entrant rather than four per Gameweek.
   //
   // Left joins for the same reason the leaderboard uses them: pre-season
-  // returns the ten entered Entrants with nothing beside them, and `gw = $6`
+  // returns the ten entered Entrants with nothing beside them, and `gw = $4`
   // is null there and matches no row.
   const rows = await query(
     `-- roster: the match track's, per Competition (ADR-0038).
-     select m.id, m.name,
+     ${SEATS_CTE}
+     select s.id, s.name, s.role,
+            s.ran_after_gw,
             points.value as match_points, points.n as n,
             points.detail as points_detail,
             bets.value as bet_points, bets.detail as bets_detail,
             rps.value as rps, rps.detail as rps_detail,
             gaps.detail as gaps_detail
-       from models m
+       from seats s
        left join scores points
-         on points.model_id = m.id and points.competition = $8
+         on points.model_id = s.id and points.competition = $2
         and points.season = $1
-        and points.track = 'match' and points.gw = $6
-        and points.metric = $2
+        and points.track = 'match' and points.gw = $4
+        and points.metric = $5
        left join scores bets
-         on bets.model_id = m.id and bets.competition = $8
+         on bets.model_id = s.id and bets.competition = $2
         and bets.season = $1
-        and bets.track = 'match' and bets.gw = $6 and bets.metric = $3
+        and bets.track = 'match' and bets.gw = $4 and bets.metric = $6
        left join scores rps
-         on rps.model_id = m.id and rps.competition = $8
+         on rps.model_id = s.id and rps.competition = $2
         and rps.season = $1
-        and rps.track = 'match' and rps.gw = $6 and rps.metric = $4
+        and rps.track = 'match' and rps.gw = $4 and rps.metric = $7
        left join scores gaps
-         on gaps.model_id = m.id and gaps.competition = $8
+         on gaps.model_id = s.id and gaps.competition = $2
         and gaps.season = $1
-        and gaps.track = 'match' and gaps.gw = $6 and gaps.metric = $5
-      where m.role = 'entrant' and m.prompt_version = $7
-      order by m.id`,
+        and gaps.track = 'match' and gaps.gw = $4 and gaps.metric = $8
+      -- The roster first in id order, then the Exhibition Runs (ADR-0052):
+      -- the record page draws all its tabs off this array, and the Entrants'
+      -- are where a reader expects them.
+      order by case when s.role = 'entrant' then 0 else 1 end, s.id`,
     [
       season,
-      MATCH_POINTS_SEASON_TO_DATE_METRIC,
-      BET_POINTS_SEASON_TO_DATE_METRIC,
-      RPS_SEASON_TO_DATE_METRIC,
-      GAP_RATE_SEASON_TO_DATE_METRIC,
-      throughGw,
+      competition,
       // This Competition's own frozen Prompt Version and never the constant:
       // each league seats its own ten under its own (ADR-0038), and the
       // constant would seat the Premier League's from every league.
       matchPromptOf(competition).version,
-      competition
+      throughGw,
+      MATCH_POINTS_SEASON_TO_DATE_METRIC,
+      BET_POINTS_SEASON_TO_DATE_METRIC,
+      RPS_SEASON_TO_DATE_METRIC,
+      GAP_RATE_SEASON_TO_DATE_METRIC
     ]
   );
 
@@ -920,9 +969,20 @@ async function entrants(
     ...new Set(records.flatMap(({ bets }) => legsOf(bets)).map((leg) => leg.market))
   ];
 
+  // The scored Gameweeks of the Season and the Fixtures each Lock owned, read
+  // off the roster's Gap rows — which exist for every scored Gameweek — so an
+  // Exhibition Run whose Gap rate is withheld shares the Entrants' x-domain
+  // without having to invent rows of its own.
+  const seasonWeeks = records
+    .find(({ gaps }) => gaps.length > 0)
+    ?.gaps.map(({ gw, n }) => ({ gw, fixtures: n })) ?? [];
+
   const body: EntrantsBody = {
     season,
     throughGw,
+    exhibitionCaveat: records.some(({ row }) => row.role === "exhibition")
+      ? EXHIBITION_CAVEAT
+      : null,
     entrants: records.map(({ row, points, bets, rps, gaps }) => {
       const settled = points.flatMap(({ fixtures }) => fixtures);
       const legs = legsOf(bets);
@@ -930,12 +990,15 @@ async function entrants(
       return {
         id: String(row.id),
         name: String(row.name),
+        exhibition: row.role === "exhibition"
+          ? { ranAfterGw: Number(row.ran_after_gw) }
+          : null,
         matchPoints: scoredOrNull(throughGw, row.match_points),
         betPoints: scoredOrNull(throughGw, row.bet_points),
         // A mean over no settled Fixture is not zero, which is why an Entrant
         // that settled nothing keeps a null here where its points read 0.
         rps: numberOrNull(row.rps),
-        gaps: throughGw === null
+        gaps: row.role === "exhibition" || throughGw === null
           ? null
           : gaps.reduce((total, week) => total + week.gaps.length, 0),
         n: scoredOrNull(throughGw, row.n),
@@ -953,19 +1016,20 @@ async function entrants(
             n: own.length
           };
         }),
-        gameweeks: gaps.map((week) => {
+        gameweeks: seasonWeeks.map((week) => {
           const own = at(points, week.gw);
           const scored = own?.fixtures ?? [];
+          const gapWeek = at(gaps, week.gw);
           return {
             gw: week.gw,
-            fixtures: week.n,
+            fixtures: week.fixtures,
             settled: scored.length,
             matchPoints: own?.points ?? 0,
             betPoints: at(bets, week.gw)?.points ?? 0,
             exact: scored.filter((fixture) => fixture.points === 5).length,
             outcome: scored.filter((fixture) => fixture.points > 0).length,
             rps: at(rps, week.gw)?.mean ?? null,
-            gaps: week.gaps.length
+            gaps: row.role === "exhibition" ? null : (gapWeek?.gaps.length ?? 0)
           };
         })
       };
