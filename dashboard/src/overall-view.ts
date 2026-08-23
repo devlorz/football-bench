@@ -25,13 +25,20 @@ export interface CompetitionLeaderboard {
   body: LeaderboardBody;
 }
 
-/** One ranked row: one Season Roster seat, summed across the covered leagues. */
+/** One ranked row: one seat, summed across the covered leagues. */
 export interface OverallRow {
   slug: string;
   name: string;
   baseModelClass: string | null;
   matchPoints: number;
   betPoints: number;
+  /**
+   * Whether this row is an Exhibition Run's (ADR-0052). A flag and not the
+   * per-league "ran after Gameweek N" the leaderboard carries: that label
+   * names one Competition's Gameweek and this row spans several, so the page
+   * says what the row is and leaves which Gameweek to the league it came from.
+   */
+  exhibition: boolean;
 }
 
 /** One covered league's contribution to the evidence line. */
@@ -68,29 +75,41 @@ const isCovered = ({ body }: CompetitionLeaderboard): boolean =>
  * `entrants` simply adds nothing there, which is the nought ADR-0051 asks
  * for rather than a shrunken set of leagues for that one row.
  *
- * An Exhibition Run's row (`exhibition` non-null) is dropped before it can be
- * summed at all -- it is Competition-scoped by construction and would be a
- * total over one league ranked beside totals over four.
+ * An Exhibition Run is summed and ranked like any other row (ADR-0052), and
+ * carries `exhibition` so the page can label it and show the caveat. What it
+ * does not carry is the league-by-league story: its Gameweek coverage need
+ * not be the roster's, and it may hold seats in fewer leagues than the sum
+ * spans, so its total can be over less than every other row's. The page says
+ * that in its qualification; the arithmetic does not correct for it, exactly
+ * as it does not correct for leagues of different sizes.
+ *
+ * Keyed apart from the roster's rows rather than by slug alone. One Base Model
+ * can hold an Entrant's seat in one league and an Exhibition Run's in another
+ * -- that is the ordinary way a late arrival is checked -- and a shared key
+ * would add the two into one row, publishing a total that is half a
+ * competitor's and half a replay's under a single name.
  */
 const summedRows = (covered: readonly CompetitionLeaderboard[]): OverallRow[] => {
   const rows = new Map<string, OverallRow>();
   for (const { body } of covered) {
     for (const entrant of body.entrants) {
-      if (entrant.exhibition !== null) continue;
+      const exhibition = entrant.exhibition !== null;
       const slug = entrantSlug(entrant.id);
+      const key = exhibition ? `exhibition:${slug}` : slug;
       // Name and Base Model Class are read off whichever covered league's
       // body names this slug first; every league seats the same Season
       // Roster (ADR-0038), so they do not vary between them.
-      const row = rows.get(slug) ?? {
+      const row = rows.get(key) ?? {
         slug,
         name: entrant.name,
         baseModelClass: entrant.baseModelClass,
         matchPoints: 0,
-        betPoints: 0
+        betPoints: 0,
+        exhibition
       };
       row.matchPoints += entrant.matchPoints ?? 0;
       row.betPoints += entrant.betPoints ?? 0;
-      rows.set(slug, row);
+      rows.set(key, row);
     }
   }
   return [...rows.values()];

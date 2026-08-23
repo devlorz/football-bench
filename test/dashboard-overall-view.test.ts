@@ -175,15 +175,15 @@ describe("a seat that Gapped a whole covered league", () => {
 });
 
 describe("an Exhibition Run", () => {
-  test("is absent from the output entirely", () => {
+  test("is summed and ranked like any other row, carrying the flag that labels it", () => {
     const leaderboards: CompetitionLeaderboard[] = [
       {
         competition: "PL",
         body: body({
           entrants: [
-            entrant({ id: "match/claude-opus-5" }),
+            entrant({ id: "match/claude-opus-5", matchPoints: 4 }),
             entrant({
-              id: "match/exhibition-run", name: "Exhibition Run",
+              id: "exhibition/ox-alpha", name: "Ox Alpha", matchPoints: 9,
               exhibition: { ranAfterGw: 3 }
             })
           ]
@@ -192,7 +192,43 @@ describe("an Exhibition Run", () => {
     ];
     const result = overallRanking(leaderboards);
     if (result.kind !== "ranking") throw new Error("expected a ranking");
-    expect(result.matchRanked.map((row) => row.slug)).toEqual(["claude-opus-5"]);
+    expect(result.matchRanked.map((row) => [row.slug, row.exhibition]))
+      .toEqual([["ox-alpha", true], ["claude-opus-5", false]]);
+  });
+
+  test("sums across leagues under its own key, never into the Entrant of the "
+    + "same Base Model", () => {
+    // The state section 3 of the runbook puts a candidate in: one Base Model
+    // seated as an Entrant in one league while a temporary Exhibition row
+    // answers in another. Two rows, two totals, one name -- and adding them
+    // would publish half a competitor and half a replay as one number.
+    const leaderboards: CompetitionLeaderboard[] = [
+      {
+        competition: "PL",
+        body: body({
+          entrants: [entrant({ id: "match/ox-alpha", matchPoints: 4 })]
+        })
+      },
+      {
+        competition: "PD",
+        body: body({
+          entrants: [
+            entrant({
+              id: "exhibition-pd/ox-alpha", name: "Ox Alpha", matchPoints: 9,
+              exhibition: { ranAfterGw: 2 }
+            }),
+            entrant({
+              id: "exhibition-sa/ox-alpha", name: "Ox Alpha", matchPoints: 1,
+              exhibition: { ranAfterGw: 1 }
+            })
+          ]
+        })
+      }
+    ];
+    const result = overallRanking(leaderboards);
+    if (result.kind !== "ranking") throw new Error("expected a ranking");
+    expect(result.matchRanked.map((row) => [row.slug, row.exhibition, row.matchPoints]))
+      .toEqual([["ox-alpha", true, 10], ["ox-alpha", false, 4]]);
   });
 });
 
