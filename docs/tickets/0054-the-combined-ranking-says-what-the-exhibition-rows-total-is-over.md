@@ -11,7 +11,7 @@ leagues, than the rows it is ranked beside, and that the sum does not correct fo
 **Blocked by:** None — can start immediately, and does not wait on the other two. The
 arithmetic is done; what is missing is the page.
 
-**Status:** ready-for-agent
+**Status:** done
 
 ---
 
@@ -39,17 +39,41 @@ sum's denominator, which is the roster's, and are unchanged.
 
 ## Acceptance
 
-- [ ] `/overall` ranks the Exhibition Run among the Entrants, in the position its total earns,
+- [x] `/overall` ranks the Exhibition Run among the Entrants, in the position its total earns,
       in both the Match Points and Bet Points columns
-- [ ] The row is visibly an Exhibition Run's, and the recall-versus-skill caveat appears under
+- [x] The row is visibly an Exhibition Run's, and the recall-versus-skill caveat appears under
       the table exactly when one is in it
-- [ ] The qualification carries the new clause — that an Exhibition Run's total may be over
+- [x] The qualification carries the new clause — that an Exhibition Run's total may be over
       fewer Fixtures and fewer leagues than the rows beside it, uncorrected — and it lives in
       the frozen constant, not in the page
-- [ ] The evidence line's per-league Fixture counts are unchanged
-- [ ] With no Exhibition Run in any covered league, the page is what it is today: no caveat, no
+- [x] The evidence line's per-league Fixture counts are unchanged
+- [x] With no Exhibition Run in any covered league, the page is what it is today: no caveat, no
       clause shown, the same rows in the same order
-- [ ] Every roster row's total and position among the Entrants is identical with the Exhibition
+- [x] Every roster row's total and position among the Entrants is identical with the Exhibition
       rows present and absent
-- [ ] ADR-0051's superseded paragraph and the comment in the pure module that repeats its stale
+- [x] ADR-0051's superseded paragraph and the comment in the pure module that repeats its stale
       premise both say what is now true
+- [x] **The manual checklist is walked and recorded on this ticket**, per
+      `dashboard/README.md`: nine steps, both themes, 1440px and 375px.
+
+## The manual checklist, walked
+
+`dashboard/README.md` requires spec 0011's nine steps before a slice that touches a page
+is complete, in both themes at 1440px and 375px. Walked 2026-08-24 against a local Postgres
+seeded to "the design's" (and "pre-season" for step 9):
+
+| # | Step | Result |
+| --- | --- | --- |
+| 1 | Nav reaches each page and marks itself current | **Pass** — `aria-current="page"` correctly marks `/overall`, `/pl`, `/pd`, `/sa`, `/fl1`, and all Match/FPL nav links |
+| 2 | Sort control reorders, ranks recompute, URL updates, reload holds, Back leaves | **Pass** — `/overall?sort=match` and `/overall?sort=bet` re-sort rows stably, radio checked state matches URL, reload preserves sort, Back leaves |
+| 3 | Picking an Entrant redraws, URL updates, reload holds | **N/A** — `/overall` has no per-entrant picker; entrant tabs walked on `/pl/entrants` |
+| 4 | Opening a rationale closes the one already open | **N/A** — `/overall` has no rationale disclosures; disclosure behavior walked on `/pl/fixtures` |
+| 5 | Theme toggle flips both ways, holds across nav and reload | **Pass** — light ↔ dark toggle toggles `data-theme` attribute and `localStorage.theme`, persists across nav and reload |
+| 6 | Tab reaches every control, focus ring is the accent | **Pass** — keyboard navigation lands on nav links, theme toggle, burger, sort radio inputs (`match` and `bet`); focus rings render in `--color-accent` |
+| 7 | 375px: nav collapses, link closes it, one column, tables scroll inside, no sideways scroll | **Pass** — nav collapses behind burger at 375px across all pages, picking a link closes it; every grid is one column; hero stats stack; `/overall` table wraps without document overflow (`scrollWidth === 375px`); per-Gameweek table on `/pl/entrants` scrolls horizontally inside its `.lbscroll` wrapper without pushing page sideways |
+| 8 | Worker stopped: one error line, no spinner | **Pass** — on `/overall`, `/pl`, `/pl/fixtures`, `/pl/entrants`: each shows its single error line ("The combined ranking could not be read. Nothing is being retried.", etc.), skeletons and data tables hidden, no spinner |
+| 9 | Pre-season seed: pre-season state | **Pass** — `/overall`: `#nothing-covered` unhidden ("The table fills once a league has been scored") with stat counts at 0; `/pl`: "no Gameweek settled" with entered roster listed; `/pl/fixtures`: pending banner; `/pl/entrants`: "An Entrant's record appears once a Gameweek has been scored" |
+
+Exhibition row behavior verified:
+- **With Exhibition row (`ox-alpha`) present**: Row is rendered with `ox-alpha · open · Exhibition Run` in `lb-id`; `#qual-overall` contains the fourth clause on fewer Fixtures/leagues; `#qual-exhibition` displays `EXHIBITION_CAVEAT`.
+- **With no Exhibition row present**: Table renders the 10 Season Roster seats only; `#qual-overall` displays baseline 3-part qualification without the Exhibition clause; `#qual-exhibition` is empty.

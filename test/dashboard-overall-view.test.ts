@@ -1,8 +1,13 @@
 import { describe, expect, test } from "vitest";
-import { COMBINED_RANKING_QUALIFICATION } from "../dashboard/src/overall-caveat.js";
+import {
+  COMBINED_RANKING_EXHIBITION_CLAUSE,
+  COMBINED_RANKING_QUALIFICATION,
+  COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION
+} from "../dashboard/src/overall-caveat.js";
 import {
   overallRanking, type CompetitionLeaderboard
 } from "../dashboard/src/overall-view.js";
+import { EXHIBITION_CAVEAT } from "../src/exhibition/recall-caveat.js";
 
 /**
  * The combined ranking's arithmetic, with no DOM, no database and no fetch:
@@ -35,10 +40,24 @@ const entrant = (over: Partial<CompetitionLeaderboard["body"]["entrants"][number
 });
 
 describe("the qualification", () => {
-  test("states the raw sum, the Fixture weighting and the Prompt Version confound", () => {
+  test("states the raw sum, the Fixture weighting and the Prompt Version confound without the Exhibition clause", () => {
     expect(COMBINED_RANKING_QUALIFICATION).toContain("raw sum");
     expect(COMBINED_RANKING_QUALIFICATION).toContain("weighs more");
     expect(COMBINED_RANKING_QUALIFICATION).toContain("Prompt Version");
+    expect(COMBINED_RANKING_QUALIFICATION).not.toContain("fewer Fixtures");
+    expect(COMBINED_RANKING_QUALIFICATION).not.toContain("fewer leagues");
+  });
+
+  test("the Exhibition qualification constant carries the fourth clause", () => {
+    expect(COMBINED_RANKING_EXHIBITION_CLAUSE).toContain("fewer Fixtures");
+    expect(COMBINED_RANKING_EXHIBITION_CLAUSE).toContain("fewer leagues");
+    expect(COMBINED_RANKING_EXHIBITION_CLAUSE).toContain("sum does not correct");
+
+    expect(COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION).toContain("raw sum");
+    expect(COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION).toContain("weighs more");
+    expect(COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION).toContain("Prompt Version");
+    expect(COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION).toContain("fewer Fixtures");
+    expect(COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION).toContain("fewer leagues");
   });
 });
 
@@ -175,15 +194,16 @@ describe("a seat that Gapped a whole covered league", () => {
 });
 
 describe("an Exhibition Run", () => {
-  test("is summed and ranked like any other row, carrying the flag that labels it", () => {
+  test("is summed and ranked like any other row, carrying the flag that labels it, the qualification clause and the caveat", () => {
     const leaderboards: CompetitionLeaderboard[] = [
       {
         competition: "PL",
         body: body({
+          exhibitionCaveat: EXHIBITION_CAVEAT,
           entrants: [
-            entrant({ id: "match/claude-opus-5", matchPoints: 4 }),
+            entrant({ id: "match/claude-opus-5", matchPoints: 4, betPoints: 2 }),
             entrant({
-              id: "exhibition/ox-alpha", name: "Ox Alpha", matchPoints: 9,
+              id: "exhibition/ox-alpha", name: "Ox Alpha", matchPoints: 9, betPoints: 1,
               exhibition: { ranAfterGw: 3 }
             })
           ]
@@ -194,6 +214,71 @@ describe("an Exhibition Run", () => {
     if (result.kind !== "ranking") throw new Error("expected a ranking");
     expect(result.matchRanked.map((row) => [row.slug, row.exhibition]))
       .toEqual([["ox-alpha", true], ["claude-opus-5", false]]);
+    expect(result.betRanked.map((row) => [row.slug, row.exhibition]))
+      .toEqual([["claude-opus-5", false], ["ox-alpha", true]]);
+    expect(result.qualification).toBe(COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION);
+    expect(result.exhibitionCaveat).toBe(EXHIBITION_CAVEAT);
+  });
+
+  test("preserves every roster row's total and position among Entrants with Exhibition rows present or absent", () => {
+    const rosterLeaderboards: CompetitionLeaderboard[] = [
+      {
+        competition: "PL",
+        body: body({
+          settledFixtures: 20,
+          entrants: [
+            entrant({ id: "match/claude-opus-5", matchPoints: 50, betPoints: 30 }),
+            entrant({ id: "match/gpt-5", name: "GPT-5", matchPoints: 40, betPoints: 45 })
+          ]
+        })
+      },
+      {
+        competition: "PD",
+        body: body({
+          settledFixtures: 10,
+          entrants: [
+            entrant({ id: "match-pd/2026-27-v2/claude-opus-5", matchPoints: 20, betPoints: 10 }),
+            entrant({ id: "match-pd/2026-27-v2/gpt-5", name: "GPT-5", matchPoints: 15, betPoints: 5 })
+          ]
+        })
+      }
+    ];
+
+    const withExhibitionLeaderboards: CompetitionLeaderboard[] = rosterLeaderboards.map(
+      (item) => ({
+        ...item,
+        body: {
+          ...item.body,
+          exhibitionCaveat: EXHIBITION_CAVEAT,
+          entrants: [
+            ...item.body.entrants,
+            item.competition === "PL"
+              ? entrant({
+                  id: "exhibition/ox-alpha", name: "Ox Alpha", matchPoints: 45, betPoints: 40,
+                  exhibition: { ranAfterGw: 10 }
+                })
+              : entrant({
+                  id: "exhibition-pd/ox-alpha", name: "Ox Alpha", matchPoints: 10, betPoints: 20,
+                  exhibition: { ranAfterGw: 5 }
+                })
+          ]
+        }
+      })
+    );
+
+    const baseline = overallRanking(rosterLeaderboards);
+    const withExhibition = overallRanking(withExhibitionLeaderboards);
+    if (baseline.kind !== "ranking" || withExhibition.kind !== "ranking") {
+      throw new Error("expected ranking");
+    }
+
+    const rosterFromWithExhibitionMatch = withExhibition.matchRanked.filter((r) => !r.exhibition);
+    const rosterFromWithExhibitionBet = withExhibition.betRanked.filter((r) => !r.exhibition);
+
+    expect(rosterFromWithExhibitionMatch).toEqual(baseline.matchRanked);
+    expect(rosterFromWithExhibitionBet).toEqual(baseline.betRanked);
+    expect(withExhibition.fixtures).toEqual(baseline.fixtures);
+    expect(withExhibition.totalFixtures).toEqual(baseline.totalFixtures);
   });
 
   test("sums across leagues under its own key, never into the Entrant of the "
@@ -229,6 +314,30 @@ describe("an Exhibition Run", () => {
     if (result.kind !== "ranking") throw new Error("expected a ranking");
     expect(result.matchRanked.map((row) => [row.slug, row.exhibition, row.matchPoints]))
       .toEqual([["ox-alpha", true, 10], ["ox-alpha", false, 4]]);
+  });
+});
+
+describe("without an Exhibition Run", () => {
+  test("carries baseline qualification without Exhibition clause and null caveat", () => {
+    const leaderboards: CompetitionLeaderboard[] = [
+      {
+        competition: "PL",
+        body: body({
+          exhibitionCaveat: null,
+          entrants: [
+            entrant({ id: "match/claude-opus-5", matchPoints: 4, betPoints: 2 }),
+            entrant({ id: "match/gpt-5", name: "GPT-5", matchPoints: 8, betPoints: 6 })
+          ]
+        })
+      }
+    ];
+    const result = overallRanking(leaderboards);
+    if (result.kind !== "ranking") throw new Error("expected a ranking");
+    expect(result.qualification).toBe(COMBINED_RANKING_QUALIFICATION);
+    expect(result.qualification).not.toContain(COMBINED_RANKING_EXHIBITION_CLAUSE);
+    expect(result.exhibitionCaveat).toBeNull();
+    expect(result.matchRanked.map((row) => row.slug)).toEqual(["gpt-5", "claude-opus-5"]);
+    expect(result.matchRanked.every((row) => !row.exhibition)).toBe(true);
   });
 });
 

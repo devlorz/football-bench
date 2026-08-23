@@ -8,6 +8,10 @@
 
 import type { LeaderboardBody } from "../../src/dashboard/read-api.js";
 import { entrantSlug } from "./entrant-link.js";
+import {
+  COMBINED_RANKING_QUALIFICATION,
+  COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION
+} from "./overall-caveat.js";
 
 /**
  * One Competition's leaderboard, labelled with the code it was fetched for.
@@ -57,6 +61,19 @@ export type OverallRanking =
       betRanked: OverallRow[];
       fixtures: OverallFixtures[];
       totalFixtures: number;
+      /**
+       * The qualification sentence under the table. When no Exhibition Run is
+       * in the ranking, this is the 3-part baseline qualification; when at least
+       * one is present, it carries the fourth clause stating that the Exhibition
+       * total may be over fewer Fixtures and fewer leagues uncorrected (ADR-0052).
+       */
+      qualification: string;
+      /**
+       * The recall-versus-skill caveat, present exactly when at least one
+       * Exhibition Run is in the combined ranking and null otherwise (ADR-0052).
+       * Read from the covered leaderboard bodies rather than imported.
+       */
+      exhibitionCaveat: string | null;
     };
 
 /**
@@ -142,6 +159,11 @@ export const overallRanking = (
   const fixtures = covered.map(({ competition, body }) => ({
     competition, settledFixtures: body.settledFixtures
   }));
+  const exhibitionCaveat =
+    covered.find(({ body }) => body.exhibitionCaveat !== null)?.body.exhibitionCaveat ?? null;
+  const qualification = exhibitionCaveat !== null
+    ? COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION
+    : COMBINED_RANKING_QUALIFICATION;
 
   return {
     kind: "ranking",
@@ -149,6 +171,8 @@ export const overallRanking = (
     matchRanked: rankedBy(rows, "matchPoints"),
     betRanked: rankedBy(rows, "betPoints"),
     fixtures,
-    totalFixtures: fixtures.reduce((sum, { settledFixtures }) => sum + settledFixtures, 0)
+    totalFixtures: fixtures.reduce((sum, { settledFixtures }) => sum + settledFixtures, 0),
+    qualification,
+    exhibitionCaveat
   };
 };

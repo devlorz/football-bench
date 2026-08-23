@@ -1,5 +1,9 @@
 # A combined ranking sums the leagues and publishes what that costs
 
+> Status: the "Exhibition Runs are excluded" paragraph below is superseded by ADR-0052,
+> which ranks Exhibition Runs at `/overall` with an `exhibition` flag under their own keys,
+> carrying the recall-versus-skill caveat and qualification clause. Every other decision stands.
+
 ADR-0035 made each Competition its own benchmark and closed with a sentence: "no combined
 cross-league ranking is published". This supersedes **that sentence and nothing else in that
 ADR**. A combined ranking is published, at `/overall`, as the raw sum of each Entrant's
@@ -23,11 +27,7 @@ seats the roster that stood at the Season's first Lock (ADR-0034, ADR-0038), so 
 what one Base Model is called in four leagues while `match-pd/2026-27-v2/claude-opus-5` is a
 storage key.
 
-**Exhibition Runs are excluded.** An Exhibition Run is Competition-scoped by its Prompt Version
-filter (ADR-0032) and exists in one league by construction; a row for one would be a total over
-one Competition ranked beside totals over four, which is the confound this page already
-tolerates between leagues and has no reason to invent inside a single column. Reference Lines
-are unchanged: they are never ranked anywhere, and this is nowhere in particular.
+**Exhibition Runs are excluded.** (Superseded by ADR-0052: Exhibition Runs are now ranked at `/overall` with an `exhibition` flag under their own keys.) Reference Lines are unchanged: they are never ranked anywhere, and this is nowhere in particular.
 
 Both columns are published — Match Points and Bet Points — under the `.seg` toggle the
 per-league leaderboard already uses. Publishing one would be a new claim that one of them
@@ -111,10 +111,13 @@ figure is computed in a browser from four rows that each carry their own. A cons
 repo's existing form for a sentence an ADR freezes, and the alternative — having the scorer write
 a combined row — would put two Competitions in one call to obtain a string.
 
-It must say three things: that the total is a raw sum across leagues; that a league with more
-settled Fixtures therefore weighs more; and that the leagues run under different Prompt Versions,
-which ADR-0038 named as a confound the moment anyone compares an Entrant across leagues. The four
-per-league qualifications keep their own meaning and are not restated here.
+It must say three things (amended to four by ADR-0052 when an Exhibition Run is present):
+that the total is a raw sum across leagues; that a league with more settled Fixtures
+therefore weighs more; and that the leagues run under different Prompt Versions, which
+ADR-0038 named as a confound the moment anyone compares an Entrant across leagues. ADR-0052
+adds the fourth clause when an Exhibition Run is in the table: that an Exhibition Run's total
+may be over fewer Fixtures and fewer leagues uncorrected. The four per-league qualifications
+keep their own meaning and are not restated here.
 
 ## Considered Options
 

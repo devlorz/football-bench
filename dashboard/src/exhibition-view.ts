@@ -3,5 +3,6 @@
  */
 export {
   EXHIBITION_LABEL_PREFIX,
+  EXHIBITION_RUN_LABEL,
   exhibitionLabel
 } from "../../src/exhibition/recall-caveat.js";

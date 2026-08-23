@@ -90,12 +90,13 @@ ranking, and nothing in this record supports that: the sum is raw, it is the num
 gets by adding the four pages by hand (ADR-0051), and a reader who can do that arithmetic has
 already been given every input.
 
-What the page must not do is let the row read as a competitor's. It carries the same label
-the leaderboards carry and `EXHIBITION_CAVEAT` under the table, and the qualification ADR-0051
-already requires gains one clause: that an Exhibition Run's total may be over fewer Fixtures,
-and in fewer leagues, than the rows it is ranked beside. The arithmetic does not correct for
-that, exactly as it does not correct for leagues of different sizes — ADR-0051 chose stating
-a confound over normalising it, and this is the same choice about the same table.
+What the page must not do is let the row read as a competitor's. It carries the label
+`Exhibition Run` (and not a single Gameweek label, since the row spans several) and
+`EXHIBITION_CAVEAT` under the table, and the qualification ADR-0051 already requires gains one
+clause: that an Exhibition Run's total may be over fewer Fixtures, and in fewer leagues, than
+the rows it is ranked beside. The arithmetic does not correct for that, exactly as it does
+not correct for leagues of different sizes — ADR-0051 chose stating a confound over normalising
+it, and this is the same choice about the same table.
 
 An Exhibition Run's row is keyed apart from the roster's rather than by slug alone. One Base
 Model can hold an Entrant's seat in one league and an Exhibition Run's in another — section 3
@@ -119,7 +120,8 @@ replay's under one name.
 - ADR-0051's "Exhibition Runs are excluded" paragraph is superseded whole — the exclusion and
   the stale premise it rested on. `overallRanking` drops the filter, `OverallRow` gains an
   `exhibition` flag so the page can label the row, and rows are keyed apart from the roster's.
-  ADR-0051's evidence line and qualification both gain the clause named above.
+  ADR-0051's qualification gains the clause named above; the evidence line's per-league counts
+  remain the roster's denominator and are unchanged (ticket 0054).
 - The Gap-rate withholding is the first figure this dashboard declines to publish for a row it
   otherwise publishes. It needs its own sentence in the record page, not an empty cell: an empty
   cell in a column of rates reads as nought, which is the most flattering possible misreading.
