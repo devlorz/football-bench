@@ -12,7 +12,7 @@ import { runFplGameweek } from "../src/fpl/run-fpl-gameweek.js";
 import { startFplTrack } from "../src/fpl/start-fpl-track.js";
 import { DEFAULT_HTTP_TIMEOUT_MS, type HttpFetcher } from "../src/http.js";
 import { MATCH_PROMPT_VERSION } from "../src/predictions/openrouter-entrant.js";
-import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
+import { FPL_ROSTER_SIZE } from "../src/season-roster.js";
 import {
   FPL_POOL, FPL_POOL_ALTERNATES, lockPool
 } from "./fpl-pool-fixture.js";
@@ -30,6 +30,14 @@ const { Client } = pg;
 const SEASON = "2026-27";
 const EXHIBITION = "exhibition/late";
 const EXHIBITION_BASE_MODEL = "vendor/late";
+
+/**
+ * The seats the FPL track opens with: the Season Roster less the three that
+ * left it (ADR-0047). Sliced off `BASE_MODELS` against the track's own size
+ * rather than counted out here, so the day a fourth seat is withdrawn this
+ * suite seeds the roster `startFplTrack` guards for without being edited.
+ */
+const FPL_BASE_MODELS = BASE_MODELS.slice(0, FPL_ROSTER_SIZE);
 
 /** Long after every deadline the Season has — where an Exhibition Run lives. */
 const AFTER_THE_SEASON = "2026-10-01T12:00:00Z";
@@ -186,7 +194,7 @@ describe("replaying the FPL track as an Exhibition Run", () => {
          ('2026-27', 2, '2026-08-28T17:30:00Z'),
          ('2026-27', 3, '2026-09-12T17:30:00Z')`
     );
-    for (const baseModel of BASE_MODELS) {
+    for (const baseModel of FPL_BASE_MODELS) {
       await client.query(
         `insert into models (
            id, name, base_model, provider, prompt_version, role
@@ -228,7 +236,7 @@ describe("replaying the FPL track as an Exhibition Run", () => {
   ];
 
   /**
-   * The real track: ten seats opened at Gameweek 1 and carried through 2 and
+   * The real track: the standing seats opened at Gameweek 1 and carried through 2 and
    * 3, each Gameweek settling behind them. This is what an Exhibition arrives
    * to — the donor bodies and the Gameweeks that have settled are the record it
    * replays against, and seeding them by hand would be a second opinion about
@@ -376,7 +384,7 @@ describe("replaying the FPL track as an Exhibition Run", () => {
     // Gameweek 3's body is the lowest-id Entrant's own frozen text with one
     // block replaced: every shared section is the donor's, byte for byte, and
     // the Manager State is what its own Gameweek 2 left behind.
-    const donor = await bodyOf(seatId(BASE_MODELS[0]!), 3);
+    const donor = await bodyOf(seatId(FPL_BASE_MODELS[0]!), 3);
     const afterTwo = await loadManagerState(client, {
       entrantId: EXHIBITION,
       season: SEASON,
