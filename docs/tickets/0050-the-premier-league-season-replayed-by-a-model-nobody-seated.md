@@ -12,7 +12,7 @@ the roster publishes stays exactly where it was. Decision:
 exist and the Base Model has to have answered once before it is asked a Season's worth of
 times.
 
-**Status:** ready-for-agent
+**Status:** done
 
 ---
 
@@ -45,22 +45,22 @@ later run. The Gap alert's roster filter already excludes the row.
 
 ## Acceptance
 
-- [ ] Running the job with only the model id covers every Settled Premier League Gameweek
+- [x] Running the job with only the model id covers every Settled Premier League Gameweek
       of the Season, resolving which ones those are from the record rather than from a
       range the operator names
-- [ ] Every Prediction references the existing shared `contexts` row — same id, same hash —
+- [x] Every Prediction references the existing shared `contexts` row — same id, same hash —
       so what this Base Model saw is verifiable against what the roster saw
-- [ ] Calls go out on the production path: pinned provider, fallbacks off, the Premier
+- [x] Calls go out on the production path: pinned provider, fallbacks off, the Premier
       League's frozen Prompt Version, three Repairs, the same failure taxonomy, logged in
       `attempts` under trigger `'manual'` with resolved provider, model, latency and tokens
-- [ ] A Fixture whose asking ended is a recorded Gap that alerts nobody and that a second
+- [x] A Fixture whose asking ended is a recorded Gap that alerts nobody and that a second
       run leaves alone
-- [ ] Re-running the job changes no answered Fixture and no recorded Gap, and asks again
+- [x] Re-running the job changes no answered Fixture and no recorded Gap, and asks again
       only where a repairable failure left its Repairs unspent
-- [ ] After the next scoring run the Premier League leaderboard shows the Exhibition Run
+- [x] After the next scoring run the Premier League leaderboard shows the Exhibition Run
       ranked among the Entrants, labelled with the Gameweek it ran after, with the caveat
       shown wherever it is described
-- [ ] Every roster figure — the Entrants' scores, their order among themselves, the
+- [x] Every roster figure — the Entrants' scores, their order among themselves, the
       Comparison Anchor, the published intervals and the Gap rates — is identical with the
       Exhibition rows present and absent
-- [ ] The combined ranking counts no Exhibition row, and the FPL track is untouched
+- [x] The combined ranking counts no Exhibition row, and the FPL track is untouched
