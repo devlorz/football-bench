@@ -206,8 +206,8 @@ describe("replaying the Match track as an Exhibition Run", () => {
     // says it saw — which is the whole of a sceptic's verification.
     expect(sent.get(1)).toBe(storedBody(1));
     expect(sent.get(2)).toBe(storedBody(2));
-    // Gameweek 2 has not settled, so its Fixture is unasked and unrecorded —
-    // the second half read from the tables rather than from the calls made.
+    // Gameweek 2 holds no played Fixture, so its Fixture is unasked and
+    // unrecorded — read from the tables rather than from the calls made.
     expect(sent.has(3)).toBe(false);
     expect(
       (await client.query(
@@ -257,6 +257,48 @@ describe("replaying the Match track as an Exhibition Run", () => {
         predicted_at: RAN_AT
       }
     ]);
+  });
+
+  test("answers the played half of a part-played Gameweek and leaves the rest", async () => {
+    // Gameweek 2's second Fixture is played while its first is still to come,
+    // which is the ordinary state of a round in progress — and the state the
+    // roster is already scored in. The Exhibition enters it on the Fixture
+    // that has a result and asks nothing about the one that has not.
+    await client.query(
+      `insert into fixtures (
+         season, fixture_id, gw, locked_in_gw, home_team, away_team, kickoff_at,
+         result
+       ) values (
+         '2026-27', 4, 2, 2, 'Leeds', 'Wolves', '2026-08-29T11:30:00Z',
+         jsonb_build_object('home_goals', 1, 'away_goals', 1, 'outcome', 'D')
+       )`
+    );
+    await storeContext(client, 2, 4);
+
+    const asked: number[] = [];
+    const gameweeks = await replayMatchExhibition({
+      database: client,
+      competition: "PL",
+      season: "2026-27",
+      exhibitionModelId: "exhibition/late",
+      concurrency: 2,
+      apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
+      now: () => RAN_AT,
+      http: async (_url, options) => {
+        const fixtureId = requestedFixtureId(options?.body ?? "{}");
+        asked.push(fixtureId);
+        return { status: 200, body: answeredPrediction(fixtureId) };
+      }
+    });
+
+    expect(gameweeks).toEqual([1, 2]);
+    expect(asked.sort()).toEqual([1, 2, 4]);
+    expect(
+      (await client.query(
+        `select count(*) as n from attempts where fixture_id = 3`
+      )).rows
+    ).toEqual([{ n: "0" }]);
   });
 
   test("replays La Liga's Gameweek 1 and files every write under PD", async () => {

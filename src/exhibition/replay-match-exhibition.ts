@@ -46,53 +46,55 @@ interface ReplayedFixture {
 }
 
 /**
- * Every Gameweek this replay covers: one that holds stored Match contexts and
- * whose Fixtures have all been played.
+ * Every Gameweek this replay walks: one that holds stored Match contexts and
+ * at least one Fixture that has been played.
  *
- * Settled is read off the record rather than off the clock (CONTEXT.md), and on
+ * Played is read off the record rather than off the clock (CONTEXT.md), and on
  * the Match track the record is `fixtures.result` — the same thing scoring
  * reads.
  *
- * A Fixture that has left the Gameweek it was locked into does not hold that
- * Gameweek open: `deferred` marks exactly that, monotonically, and it is set on
- * every Locked Fixture the feed withdraws (ADR-0024). Waiting for one to come
- * back would leave its Gameweek unreplayable for the rest of the Season, and
- * nothing is lost by not waiting — coverage is decided per Fixture and
- * resolved again on every run, so a withdrawal that is rescheduled and played
- * is picked up by the next one.
+ * A part-played round is walked rather than held back, and the Fixture is the
+ * unit of coverage throughout (ADR-0032, amended). Waiting for a whole round
+ * held the Exhibition to a stricter gate than the Entrants it is ranked beside:
+ * the scorer publishes a ranking over the Fixtures of a Gameweek that have been
+ * played while the rest are still to come, so a Gameweek the roster is already
+ * scored on was one the Exhibition could not enter. Nothing is lost by not
+ * waiting, and nothing is skipped: `remainingFixtures` asks only for a result
+ * that exists, coverage is resolved again on every run, and the Fixtures played
+ * later are picked up by the next one. It is the same mechanism a withdrawn
+ * Fixture already relied on — `deferred` marks a Fixture that left the Gameweek
+ * it was locked into (ADR-0024), and it never held its round open either.
  *
  * The run resolves this itself rather than taking a range: an operator naming
- * Gameweeks would be a second opinion about which of them are Settled.
+ * Gameweeks would be a second opinion about which of them were played.
  *
  * One Competition's, throughout. A Gameweek number names a round of one league
  * (ADR-0035), so a select over the Season alone would answer with La Liga's
- * Gameweek 1 and the Premier League's as if they were one — and hold one
- * league's round open on the other's unplayed Fixtures.
+ * Gameweek 1 and the Premier League's as if they were one.
  */
-async function settledGameweeks(
+async function playedGameweeks(
   database: Database,
   competition: string,
   season: string
 ): Promise<number[]> {
-  const settled = await database.query<{ gw: number }>(
+  const played = await database.query<{ gw: number }>(
     `select distinct c.gw
        from contexts c
       where c.competition = $1
         and c.season = $2
         and c.track = 'match'
-        and not exists (
+        and exists (
           select 1
             from fixtures f
            where f.competition = c.competition
              and f.season = c.season
              and coalesce(f.locked_in_gw, f.gw) = c.gw
-             and not f.deferred
-             and f.result is null
+             and f.result is not null
         )
       order by c.gw`,
     [competition, season]
   );
-  return settled.rows.map(({ gw }) => gw);
+  return played.rows.map(({ gw }) => gw);
 }
 
 /**
@@ -186,7 +188,7 @@ async function remainingFixtures(
 }
 
 /**
- * Every Settled Gameweek of one Competition, its stored Match contexts put to
+ * Every played Fixture of one Competition, its stored Match context put to
  * the named Exhibition row, returning the Gameweeks covered.
  *
  * The call path is the Entrants' own, unchanged (ADR-0032): the same request
@@ -213,7 +215,7 @@ async function replayCoveredGameweeks({
   );
 
   const covered: number[] = [];
-  const gameweeks = await settledGameweeks(database, competition, season);
+  const gameweeks = await playedGameweeks(database, competition, season);
   for (const gameweek of gameweeks) {
     const fixtures = await remainingFixtures(
       database,

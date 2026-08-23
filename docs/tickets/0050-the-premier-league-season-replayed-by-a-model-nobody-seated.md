@@ -12,13 +12,16 @@ the roster publishes stays exactly where it was. Decision:
 exist and the Base Model has to have answered once before it is asked a Season's worth of
 times.
 
-**Status:** done
+**Status:** in progress — the replay has run and is scored and published; the re-run
+no-op check is outstanding, and no Gap arose to observe
 
 ---
 
 ## What is already known
 
-No code changes here either. The job resolves the Settled Gameweeks itself, holds an
+One code change, and it is a gate being withdrawn rather than a feature: the job walks every
+Gameweek holding a played Fixture instead of only whole rounds (ADR-0032, amended
+2026-08-23). Everything else was already there — it resolves that coverage itself, holds an
 advisory lock so two operators cannot pay for the same calls, and asks again only where an
 ask was left unfinished.
 
@@ -45,17 +48,20 @@ later run. The Gap alert's roster filter already excludes the row.
 
 ## Acceptance
 
-- [x] Running the job with only the model id covers every Settled Premier League Gameweek
-      of the Season, resolving which ones those are from the record rather than from a
-      range the operator names
+- [x] Running the job with only the model id covers every played Premier League Fixture of
+      the Season, resolving which ones those are from the record rather than from a range
+      the operator names. Amended 2026-08-23: the whole-round gate is withdrawn and the
+      Fixture is the unit of coverage (ADR-0032), because the roster is already ranked from
+      its first settled Fixture and the Exhibition was being held to a stricter standard
+      than the seats it is ranked among
 - [x] Every Prediction references the existing shared `contexts` row — same id, same hash —
       so what this Base Model saw is verifiable against what the roster saw
 - [x] Calls go out on the production path: pinned provider, fallbacks off, the Premier
       League's frozen Prompt Version, three Repairs, the same failure taxonomy, logged in
       `attempts` under trigger `'manual'` with resolved provider, model, latency and tokens
-- [x] A Fixture whose asking ended is a recorded Gap that alerts nobody and that a second
+- [ ] A Fixture whose asking ended is a recorded Gap that alerts nobody and that a second
       run leaves alone
-- [x] Re-running the job changes no answered Fixture and no recorded Gap, and asks again
+- [ ] Re-running the job changes no answered Fixture and no recorded Gap, and asks again
       only where a repairable failure left its Repairs unspent
 - [x] After the next scoring run the Premier League leaderboard shows the Exhibition Run
       ranked among the Entrants, labelled with the Gameweek it ran after, with the caveat

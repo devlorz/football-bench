@@ -63,9 +63,9 @@ try {
     });
     console.log(
       gameweeks.length === 0
-        ? `${config.season} holds no Settled Gameweek for `
+        ? `${config.season} holds no played Fixture for `
           + `${config.exhibitionModelId} to replay.`
-        : `${config.exhibitionModelId} covered Settled Gameweeks `
+        : `${config.exhibitionModelId} covered Gameweeks `
           + `${gameweeks.join(", ")} of the ${config.season} Match track.`
     );
   }

@@ -74,3 +74,25 @@ Gameweek N" label wherever Exhibition results are shown.
 - Until the read-API extension lands, an Exhibition Run stores Predictions, Manager States
   and — from the next scoring run — `scores` rows, but appears on no surface: recorded,
   invisible, and waiting, which is the safe failure mode.
+
+## Amended 2026-08-23: the Fixture is the unit of coverage on the Match track
+
+The Match replay first walked only Gameweeks whose Fixtures had *all* been played. That gate
+is withdrawn: it walks every Gameweek holding a played Fixture, and answers the Fixtures that
+have a result.
+
+The gate was stricter than the standard the Exhibition is measured against. The scorer
+publishes a ranking over the Fixtures of a Gameweek that have been played while the rest of
+that round is still to come — an Entrant is on the leaderboard from the first settled Fixture.
+Holding the Exhibition back until the last kick-off of the round meant a Gameweek the roster
+was already ranked on was one the Exhibition could not enter, and the readable table it is
+ranked *among* them in was missing it for reasons that had nothing to do with what it
+answered.
+
+Nothing is skipped and nothing is asked twice. The Fixture-level selection was always there —
+a stored result is what makes a Fixture replayable — and coverage is resolved again on every
+run, so the Fixtures played later are picked up by the next one. It is the mechanism a
+withdrawn Fixture already relied on (ADR-0024): `deferred` never held its round open either.
+What changes is that a round in progress is now answered in more than one sitting, and the
+`predicted_at` of each Prediction still post-dates the Fixture it covers, which is what the
+"ran after Gameweek N" label and the recall caveat rest on.
