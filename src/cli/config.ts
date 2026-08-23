@@ -459,10 +459,19 @@ export function readFplExhibitionJobConfig(
  * alone. Shaped and checked here rather than in a CLI, so one job has one place
  * its input is read, and a code that is not one fails before a database is
  * opened or a Base Model is called.
+ *
+ * A shape and not a list: the `competition_code` domain
+ * (`migrations/0022_the_competition_dimension.sql`) names the five codes there
+ * are, and restating them here would be a second place to add the sixth. The
+ * shape has to admit every one of them, though, and the letters-only pattern
+ * this carried admitted three: `BL1` and `FL1` end in a digit, so the
+ * pre-flight and the preview refused Ligue 1 and the Bundesliga by their own
+ * names while every other job took them. Found 2026-08-23, aiming the
+ * single-model pre-flight at Ligue 1's Exhibition Run.
  */
 function readCompetition(environment: NodeJS.ProcessEnv): string {
   const competition = environment.COMPETITION?.trim().toUpperCase() || "PL";
-  if (!/^[A-Z]{2,3}$/.test(competition)) {
+  if (!/^[A-Z]{2,3}[0-9]?$/.test(competition)) {
     throw new Error("COMPETITION must be a Competition code such as PL or PD");
   }
   return competition;

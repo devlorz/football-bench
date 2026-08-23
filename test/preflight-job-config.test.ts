@@ -73,6 +73,20 @@ describe("the pre-flight job configuration", () => {
       EXPECTED_ENTRANT_COUNT: "10",
       OPENROUTER_API_KEY: "secret-from-environment"
     })).toThrow("COMPETITION must be a Competition code such as PL or PD");
+
+    // The two codes that end in a digit are Competitions like any other, and
+    // the letters-only shape this check used to carry refused them by name
+    // (`migrations/0022_the_competition_dimension.sql` lists all five).
+    for (const competition of ["FL1", "BL1"]) {
+      expect(readPreflightJobConfig({
+        DATABASE_URL: "postgresql://localhost/benchmark",
+        COMPETITION: competition,
+        SEASON: "2026-27",
+        FIXTURE_ID: "42",
+        EXPECTED_ENTRANT_COUNT: "10",
+        OPENROUTER_API_KEY: "secret-from-environment"
+      }).competition).toBe(competition);
+    }
   });
 
   test("aims at one Exhibition instead of counting a roster", () => {

@@ -68,5 +68,8 @@ later run. The Gap alert's roster filter already excludes the row.
       shown wherever it is described
 - [x] Every roster figure — the Entrants' scores, their order among themselves, the
       Comparison Anchor, the published intervals and the Gap rates — is identical with the
-      Exhibition rows present and absent
+      Exhibition rows present and absent. Measured across all four Competitions on
+      2026-08-23: every roster row still carries the `scored_at` of the 04:19–04:23 pass
+      that ran before any Exhibition row existed, and the scorer's conditional upsert
+      would have moved it had one value, `n` or `detail` differed
 - [x] The combined ranking counts no Exhibition row, and the FPL track is untouched
