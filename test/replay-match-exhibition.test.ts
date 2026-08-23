@@ -45,44 +45,55 @@ async function storeContext(
 }
 
 /** The six Fixtures La Liga's Gameweek 1 Lock owned, in football-data ids. */
-const LA_LIGA_GAMEWEEK_ONE = [101, 102, 103, 104, 105, 106];
+const LA_LIGA_ROUND = [101, 102, 103, 104, 105, 106];
 
 /**
- * La Liga's Gameweek 1 as the record holds it: six played Fixtures and the six
- * contexts the retired `match-pd/2026-27-v1` roster was shown. The contexts
- * carry no Prompt Version — the column does not exist
- * (`migrations/0001_initial.sql`) — so they stay replayable under the standing
- * one, which is the whole reason an Exhibition can still reach them.
+ * One La Liga round as the record holds it: six played Fixtures and the six
+ * contexts its roster was shown.
+ *
+ * The Gameweek is the caller's because which one it is decides whether an
+ * Exhibition may answer it at all. A context carries no Prompt Version — the
+ * column does not exist (`migrations/0001_initial.sql`) — so nothing in the
+ * row itself stops a replay reaching a round a retired template rendered;
+ * what stops it is the replay asking the Competition which Gameweek that is
+ * (ADR-0042).
  */
-async function seedLaLigaGameweekOne(database: pg.Client): Promise<void> {
+async function seedLaLiga(
+  database: pg.Client,
+  gameweek: number
+): Promise<void> {
   await database.query(
     `insert into gameweeks (competition, season, gw, deadline_at) values
-       ('PD', '2026-27', 1, '2026-08-15T17:00:00Z');
-     insert into fixtures (
+       ('PD', '2026-27', $1::int, '2026-08-15T17:00:00Z')`,
+    [gameweek]
+  );
+  await database.query(
+    `insert into fixtures (
        competition, season, fixture_id, gw, locked_in_gw, home_team, away_team,
        kickoff_at, result
      ) values
-       ('PD', '2026-27', 101, 1, 1, 'Alaves', 'Getafe',
+       ('PD', '2026-27', 101, $1, $1, 'Alaves', 'Getafe',
         '2026-08-15T17:30:00Z',
         jsonb_build_object('home_goals', 3, 'away_goals', 0, 'outcome', 'H')),
-       ('PD', '2026-27', 102, 1, 1, 'Sevilla', 'Rayo Vallecano',
+       ('PD', '2026-27', 102, $1, $1, 'Sevilla', 'Rayo Vallecano',
         '2026-08-15T19:30:00Z',
         jsonb_build_object('home_goals', 2, 'away_goals', 1, 'outcome', 'H')),
-       ('PD', '2026-27', 103, 1, 1, 'Racing Santander', 'Villarreal',
+       ('PD', '2026-27', 103, $1, $1, 'Racing Santander', 'Villarreal',
         '2026-08-16T15:00:00Z',
         jsonb_build_object('home_goals', 2, 'away_goals', 2, 'outcome', 'D')),
-       ('PD', '2026-27', 104, 1, 1, 'Espanyol', 'Levante',
+       ('PD', '2026-27', 104, $1, $1, 'Espanyol', 'Levante',
         '2026-08-16T17:00:00Z',
         jsonb_build_object('home_goals', 3, 'away_goals', 0, 'outcome', 'H')),
-       ('PD', '2026-27', 105, 1, 1, 'Deportivo La Coruna', 'Elche',
+       ('PD', '2026-27', 105, $1, $1, 'Deportivo La Coruna', 'Elche',
         '2026-08-17T19:00:00Z',
         jsonb_build_object('home_goals', 1, 'away_goals', 1, 'outcome', 'D')),
-       ('PD', '2026-27', 106, 1, 1, 'Atletico Madrid', 'Malaga',
+       ('PD', '2026-27', 106, $1, $1, 'Atletico Madrid', 'Malaga',
         '2026-08-19T19:00:00Z',
-        jsonb_build_object('home_goals', 0, 'away_goals', 2, 'outcome', 'A'))`
+        jsonb_build_object('home_goals', 0, 'away_goals', 2, 'outcome', 'A'))`,
+    [gameweek]
   );
-  for (const fixtureId of LA_LIGA_GAMEWEEK_ONE) {
-    await storeContext(database, 1, fixtureId, "PD");
+  for (const fixtureId of LA_LIGA_ROUND) {
+    await storeContext(database, gameweek, fixtureId, "PD");
   }
 }
 
@@ -301,8 +312,47 @@ describe("replaying the Match track as an Exhibition Run", () => {
     ).toEqual([{ n: "0" }]);
   });
 
-  test("replays La Liga's Gameweek 1 and files every write under PD", async () => {
-    await seedLaLigaGameweekOne(client);
+  test("leaves the Gameweek a retired Prompt Version owns whole", async () => {
+    // La Liga's Gameweek 1 belongs to `match-pd/2026-27-v1` and its ten seats
+    // with it (ADR-0042). The contexts are still there and still readable --
+    // nothing in the row says which template rendered it -- so what keeps the
+    // Exhibition off that round is this filter and nothing else. Answering it
+    // would put a figure on the v2 table that no v2 seat can have.
+    await seedLaLiga(client, matchPromptOf("PD").retired!.gw);
+    await insertExhibition(client, {
+      id: "exhibition-pd/late",
+      promptVersion: matchPromptOf("PD").version,
+      provider: "late-provider",
+      quantization: "fp8"
+    });
+
+    const asked: number[] = [];
+    const gameweeks = await replayMatchExhibition({
+      database: client,
+      competition: "PD",
+      season: "2026-27",
+      exhibitionModelId: "exhibition-pd/late",
+      concurrency: 2,
+      apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
+      now: () => RAN_AT,
+      http: async (_url, options) => {
+        asked.push(requestedFixtureId(options?.body ?? "{}"));
+        return { status: 200, body: answeredPrediction(101) };
+      }
+    });
+
+    expect(gameweeks).toEqual([]);
+    expect(asked).toEqual([]);
+    expect(
+      (await client.query(
+        "select count(*) as n from predictions where competition = 'PD'"
+      )).rows
+    ).toEqual([{ n: "0" }]);
+  });
+
+  test("replays a standing La Liga round and files every write under PD", async () => {
+    await seedLaLiga(client, 2);
     await insertExhibition(client, {
       id: "exhibition-pd/late",
       promptVersion: matchPromptOf("PD").version,
@@ -330,11 +380,11 @@ describe("replaying the Match track as an Exhibition Run", () => {
       }
     });
 
-    expect(gameweeks).toEqual([1]);
-    // La Liga's six and nobody else's: the Premier League's own settled
-    // Gameweek 1 sits in the same tables under the same number, and this run
+    expect(gameweeks).toEqual([2]);
+    // La Liga's six and nobody else's: the Premier League's own played
+    // Gameweek sits in the same tables under a number of its own, and this run
     // is not owed an ask on any of it.
-    expect(sent).toEqual(replayedBodies(LA_LIGA_GAMEWEEK_ONE));
+    expect(sent).toEqual(replayedBodies(LA_LIGA_ROUND));
     expect(
       (await client.query(
         `select competition, season, fixture_id, pred_home, pred_away
@@ -342,7 +392,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
           where model_id = 'exhibition-pd/late'
           order by fixture_id`
       )).rows
-    ).toEqual(LA_LIGA_GAMEWEEK_ONE.map((fixture_id) => ({
+    ).toEqual(LA_LIGA_ROUND.map((fixture_id) => ({
       competition: "PD",
       season: "2026-27",
       fixture_id,
@@ -356,10 +406,10 @@ describe("replaying the Match track as an Exhibition Run", () => {
           where model_id = 'exhibition-pd/late'
           order by fixture_id`
       )).rows
-    ).toEqual(LA_LIGA_GAMEWEEK_ONE.map((fixture_id) => ({
+    ).toEqual(LA_LIGA_ROUND.map((fixture_id) => ({
       competition: "PD",
       season: "2026-27",
-      gw: 1,
+      gw: 2,
       track: "match",
       fixture_id,
       ok: true,
@@ -368,7 +418,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
   });
 
   test("a Premier League replay sweeps no La Liga Gameweek in", async () => {
-    await seedLaLigaGameweekOne(client);
+    await seedLaLiga(client, 2);
     // A Gameweek number is one Competition's round (ADR-0035), and this is a
     // number the Premier League's Season does not reach: a run that reported
     // covering it read La Liga's record as its own.
@@ -465,6 +515,33 @@ describe("replaying the Match track as an Exhibition Run", () => {
     })).rejects.toThrow(
       "exhibition/fpl is at Prompt Version fpl/2026-27-v2, "
       + "not match/2026-27-v2"
+    );
+  });
+
+  test("refuses one league's row aimed at another league's Competition", async () => {
+    // The likelier typo than a wrong track: four leagues seat the same Base
+    // Model under four Prompt Versions, and the ids differ by one segment. A
+    // La Liga row named under `PL` is refused at the door and spends nothing.
+    await insertExhibition(client, {
+      id: "exhibition-pd/ox-alpha",
+      promptVersion: matchPromptOf("PD").version
+    });
+
+    await expect(replayMatchExhibition({
+      database: client,
+      competition: "PL",
+      season: "2026-27",
+      exhibitionModelId: "exhibition-pd/ox-alpha",
+      concurrency: 1,
+      apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
+      now: () => RAN_AT,
+      http: async () => {
+        throw new Error("a refused replay calls nothing");
+      }
+    })).rejects.toThrow(
+      `exhibition-pd/ox-alpha is at Prompt Version ${matchPromptOf("PD").version}, `
+      + `not ${matchPromptOf("PL").version}`
     );
   });
 

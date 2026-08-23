@@ -208,14 +208,25 @@ async function replayCoveredGameweeks({
   http,
   now
 }: ReplayMatchExhibitionOptions): Promise<number[]> {
+  const prompt = matchPromptOf(competition);
   const exhibition = await loadExhibition(
     database,
     exhibitionModelId,
-    matchPromptOf(competition).version
+    prompt.version
   );
 
   const covered: number[] = [];
-  const gameweeks = await playedGameweeks(database, competition, season);
+  // Not the Gameweek a retired Prompt Version owns whole (ADR-0042). Its
+  // contexts were rendered by a template no run reads again, and every seat
+  // that answered them is out of every run by the same decision -- La Liga's
+  // Gameweek 1 belongs to `match-pd/2026-27-v1` and its ten seats with it. An
+  // Exhibition is loaded at the Competition's *current* version, so answering
+  // that round would file an answer to the retired prompt under the only row
+  // at the new one, and put it on a table ADR-0042 keeps it off. The Gameweek
+  // is kept whole under its own label, and this run is not the thing that
+  // reopens it.
+  const gameweeks = (await playedGameweeks(database, competition, season))
+    .filter((gameweek) => gameweek !== prompt.retired?.gw);
   for (const gameweek of gameweeks) {
     const fixtures = await remainingFixtures(
       database,

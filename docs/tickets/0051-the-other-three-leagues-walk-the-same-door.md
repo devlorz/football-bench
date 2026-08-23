@@ -11,7 +11,8 @@ not one.
 **Blocked by:** [0050](0050-the-premier-league-season-replayed-by-a-model-nobody-seated.md)
 — the path is proven on one league before it is repeated on three.
 
-**Status:** ready-for-agent
+**Status:** in progress — all three are seated, replayed, scored and published; the
+per-league pre-flights and their reports are outstanding
 
 ---
 
@@ -46,15 +47,15 @@ cannot report.
 
 ## Acceptance
 
-- [ ] Three `models` rows exist, one per Competition, each at that Competition's frozen
+- [x] Three `models` rows exist, one per Competition, each at that Competition's frozen
       Prompt Version and identical to the Premier League row in every other column
-- [ ] A row is refused, with a message naming the mismatch, when a replay or a pre-flight
+- [x] A row is refused, with a message naming the mismatch, when a replay or a pre-flight
       is aimed at it under a Competition whose Prompt Version it does not carry — proven
       once rather than assumed
 - [ ] Each of the three passes a single-model pre-flight against a Fixture of its own
       league, and the three reports join the Premier League's in `docs/reports`
-- [ ] Each league's Settled Gameweeks are replayed, and re-running any of them is a no-op
-- [ ] All four readable rankings show the Exhibition Run ranked among that league's
+- [x] Each league's Settled Gameweeks are replayed, and re-running any of them is a no-op
+- [x] All four readable rankings show the Exhibition Run ranked among that league's
       Entrants under its "ran after Gameweek N" label, each label derived from the
       timestamps of that league's own Predictions
 - [ ] Every roster figure in all four Competitions is identical with the Exhibition rows

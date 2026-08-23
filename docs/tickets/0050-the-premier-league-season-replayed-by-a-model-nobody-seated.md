@@ -12,8 +12,7 @@ the roster publishes stays exactly where it was. Decision:
 exist and the Base Model has to have answered once before it is asked a Season's worth of
 times.
 
-**Status:** in progress — the replay has run and is scored and published; the re-run
-no-op check is outstanding, and no Gap arose to observe
+**Status:** done, less one line nothing can force: no Gap arose on the Premier League
 
 ---
 
@@ -60,8 +59,9 @@ later run. The Gap alert's roster filter already excludes the row.
       League's frozen Prompt Version, three Repairs, the same failure taxonomy, logged in
       `attempts` under trigger `'manual'` with resolved provider, model, latency and tokens
 - [ ] A Fixture whose asking ended is a recorded Gap that alerts nobody and that a second
-      run leaves alone
-- [ ] Re-running the job changes no answered Fixture and no recorded Gap, and asks again
+      run leaves alone — no Gap arose on the Premier League; all six Fixtures answered.
+      Ligue 1 produced two under ticket 0051 and they behaved as this line describes
+- [x] Re-running the job changes no answered Fixture and no recorded Gap, and asks again
       only where a repairable failure left its Repairs unspent
 - [x] After the next scoring run the Premier League leaderboard shows the Exhibition Run
       ranked among the Entrants, labelled with the Gameweek it ran after, with the caveat
