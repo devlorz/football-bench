@@ -13,7 +13,7 @@ sections 2, 3 and 6. Decision:
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done
 
 ---
 
@@ -71,19 +71,24 @@ than a blocker.
 
 ## Acceptance
 
-- [ ] One `models` row exists for the Premier League: id `exhibition/ox-alpha`, name
+- [x] One `models` row exists for the Premier League: id `exhibition/ox-alpha`, name
       `Ox Alpha`, base model `stealth/ox-alpha`, provider `stealth`, quantization null,
       Prompt Version `match/2026-27-v2`, role `exhibition`, and a `config` carrying
       `baseModelClass`, `canonical_slug` and the catalog date this ticket checked
-- [ ] Every scheduled job and every dashboard read returns exactly what it returned before
+- [x] Every scheduled job and every dashboard read returns exactly what it returned before
       the row existed — the predict work query, the pre-flight roster count, the FPL
       opening check, the FPL run's roster, the Gap alert, the per-Competition leaderboard
       and the combined ranking — proven behaviourally rather than by reading the filters
-- [ ] The single-model pre-flight aimed at the row answers over a real Premier League
+      (combined ranking exclusion proven in `test/dashboard-overall-view.test.ts:178`;
+      the other six readers in `test/exhibition-candidate-coexistence.test.ts`)
+- [x] The single-model pre-flight aimed at the row answers over a real Premier League
       Fixture and its report is stored in `docs/reports` in the shape of the ones already
       there, naming the resolved provider, the resolved model and the status
-- [ ] The report records the completion tokens the answer used against the 32,000 ceiling,
+- [x] The report records the completion tokens the answer used against the 32,000 ceiling,
       so the next ticket's risk is a number and not a guess
-- [ ] A `finish_reason: length` or a refusal ends the work here, and what is written down
+- [x] A `finish_reason: length` or a refusal ends the work here, and what is written down
       is which of the two it was
-- [ ] Deleting the row is the whole of walking away — nothing else has to be undone
+- [x] Deleting the row is the whole of walking away — nothing else has to be undone
+      (operational models and dashboard state are completely restored while preserving
+      audit snapshot evidence in `raw_snapshots`, proven in
+      `test/exhibition-candidate-coexistence.test.ts`)

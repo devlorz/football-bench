@@ -33,19 +33,42 @@ export async function insertExhibition(
     provider?: string;
     quantization?: string | null;
     promptVersion?: string;
+    config?: Record<string, unknown>;
   } = {}
 ): Promise<void> {
   await database.query(
     `insert into models (
-       id, name, base_model, provider, quantization, prompt_version, role
-     ) values ($1, $2, $3, $4, $5, $6, 'exhibition')`,
+       id, name, base_model, provider, quantization, prompt_version, role,
+       config
+     ) values ($1, $2, $3, $4, $5, $6, 'exhibition', $7)`,
     [
       row.id ?? "exhibition/late",
       row.name ?? "Late Arrival",
       row.baseModel ?? "vendor/late",
       row.provider ?? "vendor",
       row.quantization ?? null,
-      row.promptVersion ?? MATCH_PROMPT_VERSION
+      row.promptVersion ?? MATCH_PROMPT_VERSION,
+      JSON.stringify(row.config ?? {})
     ]
   );
 }
+
+export const OX_ALPHA_FIXTURE = {
+  id: "exhibition/ox-alpha",
+  name: "Ox Alpha",
+  baseModel: "stealth/ox-alpha",
+  provider: "stealth",
+  quantization: null,
+  promptVersion: MATCH_PROMPT_VERSION,
+  config: {
+    baseModelClass: "First-party",
+    canonical_slug: "stealth/ox-alpha",
+    catalog_checked_at: "2026-08-23"
+  }
+} as const;
+
+export async function insertOxAlpha(database: Database): Promise<void> {
+  await insertExhibition(database, OX_ALPHA_FIXTURE);
+}
+
+
