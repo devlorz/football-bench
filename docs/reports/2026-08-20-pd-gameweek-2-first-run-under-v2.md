@@ -20,7 +20,10 @@ read off `usage.cost` over La Liga's Gameweek 1 rather than off a price list
 grown since that measurement — base rates, xG rates on the Prior-Season line, two
 instruction sentences, and the Head Coach section — so the estimate carried into the run
 is **$2.60 to $2.90**, leaving somewhere near $3.30 for the Premier League's Gameweek 1
-and the FPL track's opening, both of which Lock on 2026-08-21T17:30Z.
+and the FPL track's opening, both of which Lock on 2026-08-21T17:30Z. (This estimate was
+written before the run; what this Gameweek actually cost is $3.9577, per
+[the 2026-08-25 price report](2026-08-25-five-league-price.md) — the packet had grown more
+than the estimate above allowed for.)
 
 **What paying twice would look like, and why it cannot happen.** The run's own query
 excludes any Fixture and seat that already holds a Prediction, so the scheduled run at

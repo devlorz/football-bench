@@ -248,3 +248,6 @@ without structural change.
   reviews (captures, derivations, the registry edits) can proceed without waiting.
 - The cost this spec's activation commits is recorded in ADR-0049: $126.57 per Season
   incremental, $266.79 per Season standing, at the price report's $0.1845 per Fixture.
+  Superseded 2026-08-25: ADR-0049's amendment and
+  [the 2026-08-25 price report](../reports/2026-08-25-five-league-price.md) correct the
+  standing figure to $415.01/Season.

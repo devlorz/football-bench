@@ -1,9 +1,31 @@
 # Serie A and Ligue 1 open, and the Bundesliga waits on hands, not money
 
+> Amended 2026-08-25 by ticket 0046. **The $0.1845/Fixture rate below, and the $266.79 and
+> $56.46 figures derived from it, are superseded: the corrected standing cost for the four
+> open Competitions is $415.01/Season**, per
+> [the 2026-08-25 price report](../reports/2026-08-25-five-league-price.md).
+>
+> What was wrong: $0.1845/Fixture was read off La Liga's Gameweek 1 on 2026-08-15, one
+> Gameweek before ADR-0042's restart and ADR-0043's additions grew every Competition's
+> packet. This ADR cited that report correctly; the report's own number had already gone
+> stale by the time this ADR spent it, and nothing re-measured it before the spend was
+> committed here.
+>
+> The corrected per-Fixture rates, read from real `attempts` rows played under each
+> Competition's current, unretired Prompt Version: $0.2982 (`PL`), $0.2827 (`PD`), $0.2695
+> (`SA`), $0.3003 (`FL1`) — 55.6% above the rate this ADR committed at.
+>
+> What does not change: the decision to open Serie A and Ligue 1, and to leave the
+> Bundesliga gated on curation capacity rather than money — neither turned on the exact
+> dollar figure, both turned on the price being acceptable at all, and $415.01 across four
+> Competitions is still the operator's call to make, not this amendment's. The Bundesliga's
+> $56.46 rests on the same stale rate and is unresolved until it opens and has its own
+> Gameweek to price.
+
 ADR-0035 gated the three remaining Competitions on two conditions and left the gate for
 the operator to take. Both conditions are answered: La Liga has completed a full
 fetch → Lock → predict → score cycle, and the per-Fixture cost is read off its Gameweek 1
-— $0.1845 per Fixture
+— $0.1845 per Fixture (superseded — see the banner above)
 ([the price report](../reports/2026-08-15-five-league-price.md)), which the report
 deliberately declined to call acceptable or not. This ADR is that call, for two of the
 three.
@@ -11,13 +33,14 @@ three.
 **Serie A (`SA`) and Ligue 1 (`FL1`) open for 2026-27.** At the report's rate that is
 $126.57 per Season more — 686 Fixtures, 380 Italian and 306 French — and it takes the
 match track's standing commitment to **$266.79 per Season across four Competitions**
-(1,446 Fixtures). Both numbers are this decision's to own: the increment is what it
-spends, the total is what stands committed after it.
+(1,446 Fixtures — superseded, $415.01, see the banner above). Both numbers are this
+decision's to own: the increment is what it spends, the total is what stands committed
+after it.
 
 **The Bundesliga (`BL1`) stays gated, and the reason is hands, not money.** Its price
-would be $56.46 per Season, which changes nothing above. What is scarce is curation: a
-Competition costs three identity maps of roughly twenty clubs each, every one reviewed by
-a person before its backfill may run
+would be $56.46 per Season (superseded, see the banner above), which changes nothing
+above. What is scarce is curation: a Competition costs three identity maps of roughly
+twenty clubs each, every one reviewed by a person before its backfill may run
 ([opening a Competition](../runbooks/opening-a-competition.md)), and at this decision's
 drafting the clocks read hours — Ligue 1's Gameweek 1 derived deadline is
 2026-08-21T17:15Z and Serie A's is 2026-08-22T15:00Z. Two leagues' curation under those

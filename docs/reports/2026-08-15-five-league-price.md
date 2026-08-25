@@ -1,5 +1,12 @@
 # The five-league price, read off La Liga's opening Gameweek
 
+> Superseded 2026-08-25 by ticket 0046. **The $0.1845/Fixture rate below was read the
+> Gameweek before ADR-0042's restart and ADR-0043's additions grew every packet; every
+> figure derived from it is stale.** Current-template rates and Season figures are in
+> [the 2026-08-25 price report](2026-08-25-five-league-price.md). This report's own
+> figures are left as written below — what was true on 2026-08-15 — and are not corrected
+> in place.
+
 **Read 2026-08-15** from `attempts` for `PD` Gameweek 1 — the first real Gameweek any
 Competition of this expansion has played. Ten Entrants, six Fixtures, 81 calls, all sixty
 Predictions written with no Gap.

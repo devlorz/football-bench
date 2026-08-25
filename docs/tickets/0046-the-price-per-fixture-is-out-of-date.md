@@ -66,19 +66,19 @@ and **has never been looked at**, while two things in the record say it should b
 
 ## Acceptance
 
-- [ ] The output side is measured the way the input side just was: completion and
+- [x] The output side is measured the way the input side just was: completion and
       reasoning tokens per successful call, per Competition and Gameweek, and the same for
       calls that produced nothing. Until this exists, no cost claim here is more than half
       a claim.
-- [ ] A report replaces the 2026-08-15 one rather than amending it, read off Gameweeks
+- [x] A report replaces the 2026-08-15 one rather than amending it, read off Gameweeks
       that ran on the **current** template, and states which Prompt Versions it covers so
       the next restart cannot silently invalidate it the way this one did.
-- [ ] ADR-0049 is amended with the corrected Season figure. It is a recorded decision
+- [x] ADR-0049 is amended with the corrected Season figure. It is a recorded decision
       carrying a number now known to be wrong; the amendment says what changed and why,
       and does not rewrite what was decided at the time.
-- [ ] The wasted-call rate is reported per seat, separating a seat that fails validation
+- [x] The wasted-call rate is reported per seat, separating a seat that fails validation
       from one that times out — they cost differently and are fixed differently.
-- [ ] Any figure this ticket publishes carries the query that produced it, with the value
+- [x] Any figure this ticket publishes carries the query that produced it, with the value
       beside it, the way tickets 0036 and 0037 do.
 
 ## What to consider, and what not to
