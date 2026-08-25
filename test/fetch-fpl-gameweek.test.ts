@@ -1345,3 +1345,119 @@ describe("fetching an FPL Gameweek", () => {
     }]);
   });
 });
+
+describe("reporting settled Gameweeks from daily fetch", () => {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+
+  beforeAll(async () => {
+    await client.connect();
+    await resetSchema(client);
+    return async () => {
+      await client.end();
+    };
+  });
+
+  beforeEach(async () => {
+    await client.query(
+      `truncate
+         fpl_players, fixtures, gameweeks, raw_snapshots
+       restart identity cascade`
+    );
+  });
+
+  async function checkSettled(
+    mutateFixtures?: (fixtures: Array<Record<string, unknown>>) => void,
+    mutateBootstrap?: (bootstrap: { events: Array<Record<string, unknown>> }) => void
+  ): Promise<number[]> {
+    const { responses, http } = await archivedFplSources();
+    if (mutateFixtures !== undefined) {
+      const fixtures = JSON.parse(
+        responses.get("https://fantasy.premierleague.com/api/fixtures/")!
+      );
+      mutateFixtures(fixtures);
+      responses.set(
+        "https://fantasy.premierleague.com/api/fixtures/",
+        JSON.stringify(fixtures)
+      );
+    }
+    if (mutateBootstrap !== undefined) {
+      const bootstrap = JSON.parse(
+        responses.get("https://fantasy.premierleague.com/api/bootstrap-static/")!
+      );
+      mutateBootstrap(bootstrap);
+      responses.set(
+        "https://fantasy.premierleague.com/api/bootstrap-static/",
+        JSON.stringify(bootstrap)
+      );
+    }
+    const result = await fetchFplDaily({
+      database: client,
+      season: "2026-27",
+      now: beforeFirstDeadline,
+      http
+    });
+    return result.settledGameweeks;
+  }
+
+  test.each([
+    {
+      name: "reports a Gameweek settled when all its fixtures report finished",
+      mutate: (fixtures: Array<Record<string, unknown>>) => {
+        for (const f of fixtures) {
+          if (f.event === 1) {
+            Object.assign(f, { finished: true, finished_provisional: true, team_h_score: 1, team_a_score: 0 });
+          }
+        }
+      },
+      expected: [1]
+    },
+    {
+      name: "does not report a Gameweek settled when any fixture is only finished_provisional",
+      mutate: (fixtures: Array<Record<string, unknown>>) => {
+        let first = true;
+        for (const f of fixtures) {
+          if (f.event === 1) {
+            Object.assign(f, { finished: !first, finished_provisional: true, team_h_score: 1, team_a_score: 0 });
+            first = false;
+          }
+        }
+      },
+      expected: []
+    },
+    {
+      name: "does not report a Gameweek settled when no fixtures are listed for it",
+      mutate: (fixtures: Array<Record<string, unknown>>) => {
+        for (const f of fixtures) {
+          if (f.event === 1) f.event = 2;
+        }
+      },
+      expected: []
+    },
+    {
+      name: "unscheduled fixtures do not prevent a Gameweek from settling",
+      mutate: (fixtures: Array<Record<string, unknown>>) => {
+        let first = true;
+        for (const f of fixtures) {
+          if (f.event === 1) {
+            if (first) {
+              Object.assign(f, { event: null, kickoff_time: null });
+              first = false;
+            } else {
+              Object.assign(f, { finished: true, finished_provisional: true, team_h_score: 1, team_a_score: 0 });
+            }
+          }
+        }
+      },
+      expected: [1]
+    }
+  ])("$name", async ({ mutate, expected }) => {
+    expect(await checkSettled(mutate)).toEqual(expected);
+  });
+
+  test("reports a Gameweek settled when FPL reports data_checked even if fixtures are not finished", async () => {
+    const settled = await checkSettled(undefined, (bootstrap) => {
+      bootstrap.events[0]!.data_checked = true;
+    });
+    expect(settled).toEqual([1]);
+  });
+});

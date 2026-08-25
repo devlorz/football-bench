@@ -1,7 +1,7 @@
--- Per-player Gameweek points, written only for a Gameweek FPL reports
--- `data_checked`. Absence of rows for a Gameweek is the record that its points
--- have not settled; it is what keeps an unchecked Gameweek distinguishable
--- from one in which every selected player scored zero.
+-- Per-player Gameweek points, written only for a Settled Gameweek (ADR-0053).
+-- Absence of rows for a Gameweek is the record that its points have not
+-- settled; it is what keeps an unsettled Gameweek distinguishable from one in
+-- which every selected player scored zero.
 --
 -- `minutes` is the appearance evidence the substitution rules need: a starter
 -- who did not play is one with a stored row and zero minutes, not one with a

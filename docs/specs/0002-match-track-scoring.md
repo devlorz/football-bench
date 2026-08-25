@@ -189,9 +189,7 @@ are never combined as an `and not` gate. This is a scoring judgement specified h
 the write happens in the fetch path.
 
 What still waits for FPL's own confirmation is the FPL track's per-player points, gated
-separately on `data_checked`; that gate is untouched by this amendment and stands on
-[ADR-0020](../adr/0020-per-player-gameweek-performance-joins-the-fpl-context-for-2026-27-v2.md)
-exactly as written.
+separately on confirmed Fixtures or `data_checked` ([ADR-0053](../adr/0053-fpl-points-settle-when-every-fixture-is-confirmed.md)).
 
 `fixtures.result` is populated as `{ home_goals, away_goals, outcome }` where outcome is `H`,
 `D` or `A` derived at write time. Storing the derived outcome rather than computing it on read

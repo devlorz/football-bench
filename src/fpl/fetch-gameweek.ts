@@ -71,11 +71,29 @@ const bootstrapSchema = z.looseObject({
  * finally — the two flags are read as either-or, never combined as an
  * `and not`, since `finished_provisional` may still be true once `finished`
  * turns true.
+ *
+ * Used by the Match track for scorelines. See ADR-0053 for the stricter
+ * per-player settlement predicate (`isGameweekSettled`).
  */
 function isOver(
   fixture: { finished: boolean; finished_provisional: boolean }
 ): boolean {
   return fixture.finished || fixture.finished_provisional;
+}
+
+/**
+ * A Gameweek settles when FPL reports `data_checked` or when every scheduled
+ * Fixture in it reports `finished` (bonus confirmed). See ADR-0053.
+ *
+ * A Gameweek with no Fixtures listed in the feed does not settle.
+ * Unscheduled Fixtures carry `event === null` and do not block settlement.
+ */
+function isGameweekSettled(
+  event: { data_checked: boolean },
+  fixtures: readonly { finished: boolean }[]
+): boolean {
+  return event.data_checked
+    || (fixtures.length > 0 && fixtures.every(({ finished }) => finished));
 }
 
 const fixtureSchema = z.looseObject({
@@ -136,7 +154,10 @@ export type FetchFplDailyOptions = Omit<FetchFplGameweekOptions, "gameweek">;
 export interface FetchFplDailyResult {
   gameweek: number | null;
   playerSnapshotStored: boolean;
-  /** Gameweeks FPL reports `data_checked`, never inferred from the clock. */
+  /**
+   * Gameweeks FPL reports `data_checked` or whose scheduled Fixtures all report
+   * `finished`, never inferred from the clock.
+   */
   settledGameweeks: number[];
 }
 
@@ -565,9 +586,12 @@ async function fetchFpl({
     return {
       gameweek: gameweek ?? null,
       playerSnapshotStored,
-      settledGameweeks: bootstrap.events.flatMap(
-        ({ id, data_checked: dataChecked }) => dataChecked ? [id] : []
-      )
+      settledGameweeks: bootstrap.events.flatMap((event) => {
+        const eventFixtures = fixtures.filter(
+          ({ event: gw }) => gw === event.id
+        );
+        return isGameweekSettled(event, eventFixtures) ? [event.id] : [];
+      })
     };
   } catch (error) {
     await database.query("rollback");

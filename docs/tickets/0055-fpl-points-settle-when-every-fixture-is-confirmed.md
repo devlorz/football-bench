@@ -5,7 +5,8 @@ as every Fixture in it reports `finished` — FPL's own per-Fixture statement th
 final — rather than waiting for the event-level `data_checked`. A Gameweek FPL has checked
 still settles, so the two are read as either-or. Source:
 [spec 0003](../specs/0003-fpl-track.md) stories 2 and 3, the first of which this ticket amends
-and the second of which it keeps.
+and the second of which it keeps. Decisions:
+[ADR-0053](../adr/0053-fpl-points-settle-when-every-fixture-is-confirmed.md).
 
 This is [ticket 0042](0042-a-scoreline-settles-at-the-whistle.md)'s reasoning applied to the
 track that ticket deliberately left alone — with the stricter flag, for the reason given below.
@@ -85,23 +86,23 @@ question, worth its own ticket, and it would not have published Gameweek 1 on it
       scored by one ordinary daily fetch, with no manual step and no backfill: Gameweek 1 of
       2026-27 reaches the FPL leaderboard, and its Squads page reads settled with points
       beside all seven Team Sheets.
-- [ ] A Gameweek FPL reports `data_checked` settles whatever its Fixtures say. The rehearsal,
+- [x] A Gameweek FPL reports `data_checked` settles whatever its Fixtures say. The rehearsal,
       the dry run and the Exhibition replay, which state settlement that way against archived
       bytes, pass unchanged.
-- [ ] A Gameweek in play settles nothing: a Fixture that is `finished_provisional` and not
+- [x] A Gameweek in play settles nothing: a Fixture that is `finished_provisional` and not
       `finished` leaves its Gameweek unsettled, so a bonus still to be awarded is never stored
       as a zero and corrected afterwards.
-- [ ] A Gameweek the feed lists no Fixture for does not settle.
-- [ ] A Fixture the feed has unscheduled does not hold its former Gameweek unsettled.
-- [ ] The test pinning that unchecked data creates no scoreable rows is amended rather than
+- [x] A Gameweek the feed lists no Fixture for does not settle.
+- [x] A Fixture the feed has unscheduled does not hold its former Gameweek unsettled.
+- [x] The test pinning that unchecked data creates no scoreable rows is amended rather than
       deleted, and gains the case this ticket turns over: unchecked at the event, confirmed at
       every Fixture, scoreable.
-- [ ] Spec 0003 story 2 is amended so the record and the code agree, and story 3 — settled-ness
+- [x] Spec 0003 story 2 is amended so the record and the code agree, and story 3 — settled-ness
       read from the feed rather than inferred from the clock — is still true of what replaces
       it. The amendment names the Match track's looser predicate and why this one is stricter.
-- [ ] An ADR records the decision and what it gives up: FPL's final data check, in exchange for
+- [x] An ADR records the decision and what it gives up: FPL's final data check, in exchange for
       a Gameweek that publishes when the numbers it publishes have stopped moving. It states
       that the Entrant context follows the same gate, so ADR-0020's rule — a Gameweek that has
       not settled is announced as absent, never estimated — reads the same before and after.
-- [ ] Migration 0011's comment names the gate the rows are now written under, so the table
+- [x] Migration 0011's comment names the gate the rows are now written under, so the table
       still explains itself to whoever reads it next.

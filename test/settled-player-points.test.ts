@@ -88,13 +88,38 @@ function liveBody(players: LivePlayer[]): string {
   });
 }
 
+async function fixturesWith(
+  patch: (fixture: {
+    event: number | null;
+    finished: boolean;
+    finished_provisional: boolean;
+    team_h_score: number | null;
+    team_a_score: number | null;
+  }) => void
+): Promise<string> {
+  const fixtures = JSON.parse(
+    await archivedBody("fpl-fixtures-2026-27.json.gz")
+  ) as Array<{
+    event: number | null;
+    finished: boolean;
+    finished_provisional: boolean;
+    team_h_score: number | null;
+    team_a_score: number | null;
+  }>;
+  for (const fixture of fixtures) {
+    patch(fixture);
+  }
+  return JSON.stringify(fixtures);
+}
+
 async function sources(
   bootstrap: string,
-  live: string
+  live: string,
+  fixtures?: string
 ): Promise<Map<string, string>> {
   return new Map([
     [BOOTSTRAP_URL, bootstrap],
-    [FIXTURES_URL, await archivedBody("fpl-fixtures-2026-27.json.gz")],
+    [FIXTURES_URL, fixtures ?? await archivedBody("fpl-fixtures-2026-27.json.gz")],
     [liveUrl(1), live],
     ["https://www.football-data.co.uk/mmz4281/2627/E0.csv", PREMIER_LEAGUE_CSV],
     ["https://www.football-data.co.uk/mmz4281/2627/E1.csv", CHAMPIONSHIP_CSV],
@@ -393,12 +418,74 @@ describe("collecting settled player Gameweek points", () => {
     expect(cumulative.rows).toEqual([{ value: 58, n: 1 }]);
   });
 
-  test("leaves a Gameweek FPL has not checked unscored", async () => {
-    // The archived bodies are pre-season: every Gameweek is unchecked even
-    // though the clock has passed Gameweek 1's deadline.
+  test("leaves a Gameweek whose fixtures are unplayed and unchecked unscored", async () => {
+    // The archived bodies are pre-season: every Gameweek is unchecked and
+    // every Fixture is unplayed, even though the clock has passed Gameweek 1's deadline.
     const requested = await runWith(await sources(
       await archivedBody("fpl-bootstrap-2026-27.json.gz"),
       liveBody([{ id: 1, minutes: 90, totalPoints: 7 }])
+    ));
+
+    expect(requested).not.toContain(liveUrl(1));
+    const points = await client.query(
+      "select count(*)::int as stored from fpl_player_points"
+    );
+    expect(points.rows).toEqual([{ stored: 0 }]);
+  });
+
+  test("stores per-player points when every Fixture in the Gameweek reports finished, even if data_checked is false", async () => {
+    // Bootstrap is unchecked (data_checked: false), but all Gameweek 1 fixtures
+    // report finished: true. Points must settle.
+    const bootstrapBody = await archivedBody("fpl-bootstrap-2026-27.json.gz");
+    const fixturesBody = await fixturesWith((f) => {
+      if (f.event === 1) {
+        Object.assign(f, { finished: true, finished_provisional: true, team_h_score: 1, team_a_score: 0 });
+      }
+    });
+
+    await runWith(await sources(
+      bootstrapBody,
+      liveBody([
+        { id: 1, minutes: 90, totalPoints: 7 },
+        { id: 5, minutes: 0, totalPoints: 0 }
+      ]),
+      fixturesBody
+    ));
+
+    const points = await client.query(
+      `select season, gw, fpl_id, minutes, total_points
+         from fpl_player_points
+        order by fpl_id`
+    );
+    expect(points.rows).toEqual([
+      {
+        season: "2026-27",
+        gw: 1,
+        fpl_id: 1,
+        minutes: 90,
+        total_points: 7
+      },
+      {
+        season: "2026-27",
+        gw: 1,
+        fpl_id: 5,
+        minutes: 0,
+        total_points: 0
+      }
+    ]);
+  });
+
+  test("leaves a Gameweek with fixtures in play (finished_provisional true but finished false) unscored", async () => {
+    const bootstrapBody = await archivedBody("fpl-bootstrap-2026-27.json.gz");
+    const fixturesBody = await fixturesWith((f) => {
+      if (f.event === 1) {
+        Object.assign(f, { finished: false, finished_provisional: true, team_h_score: 1, team_a_score: 0 });
+      }
+    });
+    const requested = await runWith(await sources(
+      bootstrapBody,
+      liveBody([{ id: 1, minutes: 90, totalPoints: 7 }]),
+      fixturesBody
     ));
 
     expect(requested).not.toContain(liveUrl(1));

@@ -129,6 +129,30 @@ describe("the archive replay fetcher", () => {
     expect(response.body).toBe("glm body");
   });
 
+  test("replays the live player points endpoint under its archived source", async () => {
+    const http = createArchiveReplayFetcher([
+      { source: "fpl_live:2026-27:1", body: "{\"elements\":[]}" }
+    ]);
+
+    const response = await http(
+      "https://fantasy.premierleague.com/api/event/1/live/"
+    );
+
+    expect(response.body).toBe("{\"elements\":[]}");
+  });
+
+  test("refuses the live player points endpoint when the archive holds no snapshot for it", async () => {
+    const http = createArchiveReplayFetcher([
+      { source: "fpl_fixtures", body: "[]" }
+    ]);
+
+    await expect(
+      http("https://fantasy.premierleague.com/api/event/1/live/")
+    ).rejects.toThrow(
+      "No archived snapshot for source fpl_live:<season>:1 (https://fantasy.premierleague.com/api/event/1/live/)"
+    );
+  });
+
   test("refuses a URL no archived snapshot covers, so a dry run cannot reach the network", async () => {
     const http = createArchiveReplayFetcher([
       { source: "fpl_fixtures", body: "[]" }

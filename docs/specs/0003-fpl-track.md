@@ -60,9 +60,12 @@ Over, and which rules it broke.
 
 1. As an operator, I want per-player Gameweek points fetched from FPL's live endpoint, so that
    an Entrant's Squad can be scored from the same numbers the real game uses.
-2. As an operator, I want a Gameweek's points treated as final only when FPL reports
-   `data_checked`, so that bonus points and defensive contributions have settled before any
-   Squad is scored from them.
+2. As an operator, I want a Gameweek's points treated as final as soon as every Fixture in it
+   reports `finished` — or when FPL reports `data_checked` — so that bonus points and defensive
+   contributions have settled before any Squad is scored from them. *(Amended 2026-08-25 by
+   ticket 0055: the original `data_checked`-only gate lagged behind the match feed when bonus was
+   already confirmed at every Fixture — see
+   [ADR-0053](../adr/0053-fpl-points-settle-when-every-fixture-is-confirmed.md).)*
 3. As an operator, I want the settled-ness read from the feed rather than inferred from the
    clock, so that an early or delayed run cannot score a Gameweek that is still moving.
 4. As an auditor, I want the raw live response archived like every other upstream body, so that
@@ -558,9 +561,11 @@ where an eligible bench player exists.
 ### Data the fetch must gain
 
 Per-player Gameweek points come from FPL's live endpoint for a Gameweek, archived like every
-other upstream body. A Gameweek's points are final when `events[].data_checked` is true — the
-FPL-track analogue of the `finished` rule in spec 0002, and read from the feed rather than
-inferred from a schedule.
+other upstream body. A Gameweek's points are final when every scheduled Fixture in it reports
+`finished` (bonus confirmed) or when `events[].data_checked` is true — read from the feed rather
+than inferred from a schedule. This is stricter than the Match track's `finished || finished_provisional`
+gate in spec 0002 because bonus points affect player totals, but looser than waiting for the
+event-level `data_checked` when all matches have concluded with confirmed bonus.
 
 `fpl_players` already captures prices per Gameweek under a Lock-enforced snapshot; Selling
 Price reads what the Entrant paid from its own Manager State rather than from that table, since
@@ -690,10 +695,9 @@ Sheet standing with Free Transfers accrued.
 **Persistence and the Lock,** against a real Postgres: Manager State insert-only, an action
 after the deadline refused, context stored and shared.
 
-**Points ingestion,** against the pinned `data_checked` contract: unchecked data creates no
-scoreable rows and checked data does. The current archive proves only the unchecked path; the
-first observed checked bootstrap and corresponding live-points response are a dated
-post-Gameweek 1 runbook action, not an implementation blocker.
+**Points ingestion,** against the confirmed-fixtures or `data_checked` contract (ADR-0053):
+unchecked and unplayed data creates no scoreable rows, while confirmed Fixtures or
+`data_checked` data does.
 
 **Scoring,** against hand-computed points including captain doubling, vice-captain promotion,
 Bench Boost, Triple Captain and Hits.

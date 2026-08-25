@@ -30,6 +30,26 @@ const FPL_SOURCE_BY_URL = new Map([
   ["https://fantasy.premierleague.com/api/fixtures/", "fpl_fixtures"]
 ]);
 
+const FPL_LIVE_URL =
+  /^https:\/\/fantasy\.premierleague\.com\/api\/event\/(\d+)\/live\/$/;
+
+function fplLiveSource(
+  url: string,
+  sources: Iterable<string>
+): string | null {
+  const match = FPL_LIVE_URL.exec(url);
+  if (match === null) {
+    return null;
+  }
+  const gw = match[1];
+  for (const source of sources) {
+    if (source.startsWith("fpl_live:") && source.endsWith(`:${gw}`)) {
+      return source;
+    }
+  }
+  return `fpl_live:<season>:${gw}`;
+}
+
 // `[A-Z]{1,2}\d` and not `[A-Z]\d`: England's codes are two characters and
 // Spain's are three (`SP1`, `SP2`). Under the narrower form a Spanish URL
 // matched nothing, so the replay reported "no archived snapshot source is
@@ -173,9 +193,11 @@ function openRouterSource(
 
 function archiveSource(
   url: string,
-  options: HttpRequestOptions | undefined
+  options: HttpRequestOptions | undefined,
+  sources: Iterable<string>
 ): string | null {
   return FPL_SOURCE_BY_URL.get(url)
+    ?? fplLiveSource(url, sources)
     ?? footballDataSource(url)
     ?? understatSource(url)
     ?? footballDataOrgSource(url)
@@ -196,7 +218,7 @@ export function createArchiveReplayFetcher(
     snapshots.map(({ source, body }) => [source, body])
   );
   return async (url, options) => {
-    const source = archiveSource(url, options);
+    const source = archiveSource(url, options, bodyBySource.keys());
     const body = source === null ? undefined : bodyBySource.get(source);
     if (body === undefined) {
       throw new ArchiveReplayMissError(url, source);

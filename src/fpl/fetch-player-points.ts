@@ -79,8 +79,8 @@ function liveUrl(gameweek: number): string {
 }
 
 /**
- * Stores one Gameweek's per-player points. The caller decides the Gameweek is
- * settled from `events[].data_checked`; this function never reads a clock.
+ * Stores one Gameweek's per-player points once settled (ADR-0053);
+ * this function never reads a clock.
  */
 export async function fetchFplPlayerPoints({
   database,
