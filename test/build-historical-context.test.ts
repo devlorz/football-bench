@@ -651,9 +651,10 @@ describe("building historical Match context", () => {
   // The uncurated case both sections share: absence is announced, and a
   // Competition with no stored divisions has lost no rows to be missing.
   // `XX` is outside the `competition_code` domain -- see
-  // `test/openrouter-entrant.test.ts`'s comment on the same choice: `BL1`
-  // still has no curated divisions today, but ADR-0054 is closing it
-  // (tickets 0057-0058), and this is a pure function over its arguments.
+  // `test/openrouter-entrant.test.ts`'s comment on the same choice: `BL1`'s
+  // divisions are now curated (ticket 0058, ADR-0054), so `XX` is what stays
+  // outside the domain to exercise this refusal, and this is a pure function
+  // over its arguments.
   test("announces base rates unavailable for a Competition with no divisions", () => {
     expect(buildHistoricalContext({
       competition: "XX",

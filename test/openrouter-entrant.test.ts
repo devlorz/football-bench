@@ -351,14 +351,12 @@ describe("the Match Prompt Version", () => {
   });
 
   // `XX`, a code outside the schema's `competition_code` domain entirely.
-  // This test named `SA` until Serie A opened, then `BL1` -- migration
-  // 0022's domain holds exactly five codes and `BL1` is, as this tree
-  // stands, still the one this repo has not opened: `matchPromptOf("BL1")`
-  // still throws here today. ADR-0054 commits to opening it (tickets
-  // 0057-0058), and once that lands every code the domain admits has a
-  // frozen Prompt Version -- there is no sixth code to move this test to
-  // next, so it stops depending on `BL1` now (ticket 0056) rather than
-  // dragging a rewrite of every site like it along behind that opening.
+  // This test named `SA` until Serie A opened, then `BL1` until ticket 0058
+  // opened it too (ADR-0054) -- migration 0022's domain holds exactly five
+  // codes and every one of them now has a frozen Prompt Version, so there is
+  // no sixth code to move this test to next. It stopped depending on `BL1`
+  // at ticket 0056, ahead of that opening, rather than dragging a rewrite of
+  // every site like it along behind it.
   // `matchPromptOf` reads a plain JS map and never touches the database, so
   // a code outside the domain exercises the same refusal without needing
   // one to exist. The other five registry-absence tests point back here

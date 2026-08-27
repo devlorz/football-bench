@@ -76,6 +76,106 @@ const INCOMING = 5;
 const APPOINTMENT = 6;
 
 /**
+ * Where an article's own column list moves the two dated fields -- vacancy
+ * and appointment -- off the common 0/3/6 layout, plus `incoming`, the name
+ * column beside them: the Bundesliga's Managerial changes table splits both
+ * dates into an announced date and the actual one, which the common layout
+ * has no room for, and that split also pushes `Incoming` off its common
+ * position. Named rather than numbered so each position is resolved against
+ * the same `columns` list the header is validated against: one registry
+ * entry, not two that can drift apart from each other.
+ *
+ * `vacancy` and `appointment` name the *actual* date -- when the seat truly
+ * fell vacant or was truly filled -- and not the day the move was announced,
+ * on the same reading `Date of vacancy` and `Date of appointment` already
+ * have on every other article.
+ */
+export interface HeadCoachChangeFields {
+  vacancy?: string;
+  incoming?: string;
+  appointment?: string;
+}
+
+function fieldIndex(
+  source: string,
+  columns: readonly string[],
+  name: string | undefined,
+  fallback: number
+): number {
+  if (name === undefined) {
+    return fallback;
+  }
+  const index = columns.indexOf(name);
+  if (index < 0) {
+    throw new HeadCoachSourceValidationError(source, [{
+      field: SECTION_HEADING,
+      detail: `no column named ${name} among ${columns.join(", ")}`
+    }]);
+  }
+  return index;
+}
+
+/**
+ * The table's header cells, one label per data column, whichever of the two
+ * shapes the article writes: one row, on four of the five articles, or a
+ * group row of `colspan` headings over a second row of their own sub-labels,
+ * on the Bundesliga's alone -- it splits both of its dated columns this way.
+ * A grouped column's label is `<group>/<sub-label>` rather than the
+ * sub-label alone, so the group word is part of what is pinned too and not a
+ * header cell that sits outside the check -- and so that the Bundesliga's two
+ * `Announced on` sub-labels, one under each group, come out as the two
+ * distinct strings `Exit date/Announced on` and `Incoming date/Announced on`
+ * rather than one label a `columns.indexOf` could resolve to the wrong one of.
+ *
+ * Single-row articles take this branch too, trivially: with no second row to
+ * draw from, every cell's span is 1 and each contributes its own label,
+ * which is `headerRows.flat()` restated for the one shape it used to assume.
+ *
+ * A third header row, or a group whose row-two sub-labels run out before its
+ * `colspan` does, is a shape change and stops the parse here rather than
+ * being quietly ignored or reaching a `cellText(undefined)` `TypeError` --
+ * the second is exactly the case this pipeline's own validation error exists
+ * to name instead of.
+ */
+function leafColumnLabels(
+  source: string,
+  headerRows: readonly string[][]
+): string[] {
+  const [row1, row2, ...extra] = headerRows;
+  if (extra.length > 0) {
+    throw new HeadCoachSourceValidationError(source, [{
+      field: SECTION_HEADING,
+      detail:
+        `expected at most two header rows, found ${headerRows.length}`
+    }]);
+  }
+  const labels: string[] = [];
+  let next = 0;
+  for (const cell of row1 ?? []) {
+    const span = colspanOf(cell);
+    if (span <= 1) {
+      labels.push(cellText(cell));
+      continue;
+    }
+    const group = cellText(cell);
+    for (let i = 0; i < span; i += 1) {
+      const subCell = (row2 ?? [])[next];
+      if (subCell === undefined) {
+        throw new HeadCoachSourceValidationError(source, [{
+          field: SECTION_HEADING,
+          detail:
+            `the "${group}" group header names ${span} columns but its `
+            + `second row names fewer`
+        }]);
+      }
+      labels.push(`${group}/${cellText(subCell)}`);
+      next += 1;
+    }
+  }
+  return labels;
+}
+
+/**
  * A section's table, from its opening `{|` to its closing `|}`, with the
  * citations taken out first. The heading is the article's own word for the
  * section, quoted by the caller and never translated.
@@ -222,6 +322,12 @@ function rowspanOf(cell: string): number {
  * disagree, and they only agreed because Ligue 1's list happens to be the same
  * length as the default. A league whose article carries one column more would
  * have had every row refused for a width nobody had stated.
+ *
+ * A cell's own `colspan` is expanded the same way its `rowspan` is carried
+ * down: the Bundesliga writes one merged date cell, `colspan=2`, wherever a
+ * club's announced date and actual date are the same day, rather than
+ * repeating the text. Both attributes read from the one cell that carries
+ * them, because a `rowspan` cell here never also spans columns.
  */
 function filledRows(
   source: string,
@@ -234,7 +340,8 @@ function filledRows(
   for (const [index, cells] of rows.entries()) {
     const row: string[] = [];
     let next = 0;
-    for (let column = 0; column < columns.length; column += 1) {
+    let column = 0;
+    while (column < columns.length) {
       const carry = carried.get(column);
       if (carry !== undefined) {
         row.push(carry.cell);
@@ -242,6 +349,7 @@ function filledRows(
         if (carry.remaining === 0) {
           carried.delete(column);
         }
+        column += 1;
         continue;
       }
       const cell = cells[next];
@@ -249,11 +357,16 @@ function filledRows(
         break;
       }
       next += 1;
-      row.push(cell);
-      const span = rowspanOf(cell);
-      if (span > 1) {
-        carried.set(column, { cell, remaining: span - 1 });
+      const span = colspanOf(cell);
+      const rowspan = rowspanOf(cell);
+      for (let filledColumn = column; filledColumn < column + span;
+        filledColumn += 1) {
+        row.push(cell);
+        if (rowspan > 1) {
+          carried.set(filledColumn, { cell, remaining: rowspan - 1 });
+        }
       }
+      column += span;
     }
     if (row.length !== columns.length || next !== cells.length) {
       issues.push({
@@ -338,7 +451,8 @@ export function parseHeadCoachChanges(
   source: string,
   wikitext: string,
   pinned: PinnedClubs,
-  columns: readonly string[] = SOURCE_COLUMNS
+  columns: readonly string[] = SOURCE_COLUMNS,
+  fields?: HeadCoachChangeFields
 ): HeadCoachChange[] {
   const issues: HeadCoachSourceIssue[] = [];
   const changes: HeadCoachChange[] = [];
@@ -346,10 +460,12 @@ export function parseHeadCoachChanges(
     sectionTable(source, [SECTION_HEADING], wikitext).wikitable
   );
 
-  // Flattened: this table's header is one row on all four articles, and a
-  // second one appearing is a shape change the label comparison should refuse
-  // rather than quietly ignore.
-  const labels = headerRows.flat().map(cellText);
+  // A group cell over two sub-labels on the Bundesliga's article, the one of
+  // the five that carries one, and plain flattening restated for the other
+  // four: either way, one label per data column, so a reordered or
+  // re-scoped table is still a refusal rather than a page of confidently
+  // transposed names.
+  const labels = leafColumnLabels(source, headerRows);
   if (labels.join("|") !== columns.join("|")) {
     throw new HeadCoachSourceValidationError(source, [{
       field: SECTION_HEADING,
@@ -358,6 +474,11 @@ export function parseHeadCoachChanges(
         + `received ${labels.join(", ")}`
     }]);
   }
+
+  const vacancyAt = fieldIndex(source, columns, fields?.vacancy, VACANCY);
+  const incomingAt = fieldIndex(source, columns, fields?.incoming, INCOMING);
+  const appointmentAt =
+    fieldIndex(source, columns, fields?.appointment, APPOINTMENT);
 
   for (const [index, row] of filledRows(source, rows, columns).entries()) {
     const club = resolveClub(row[CLUB] as string, pinned);
@@ -369,7 +490,7 @@ export function parseHeadCoachChanges(
       continue;
     }
     const vacancy = dateOf(
-      row[VACANCY] as string, `${SECTION_HEADING}.${index}.vacancy`, issues
+      row[vacancyAt] as string, `${SECTION_HEADING}.${index}.vacancy`, issues
     );
     const outgoing = cellText(row[OUTGOING] as string);
     const manner = cellText(row[MANNER] as string);
@@ -384,12 +505,12 @@ export function parseHeadCoachChanges(
       });
     }
 
-    const incoming = cellText(row[INCOMING] as string);
+    const incoming = cellText(row[incomingAt] as string);
     if (incoming === "") {
       continue;
     }
     const appointment = dateOf(
-      row[APPOINTMENT] as string,
+      row[appointmentAt] as string,
       `${SECTION_HEADING}.${index}.appointment`,
       issues
     );

@@ -164,6 +164,20 @@ const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
     sha256:
       "ea8046976d449d960fefd67a42856baad487a3d23ce5e486b0b840d2dd917be7",
     competitionName: "Ligue 1"
+  },
+  // Born on the current template like Serie A and Ligue 1 above, and frozen
+  // unused at its first Lock on the same terms. Read from this suite's render
+  // on 2026-08-27 with both of its render gates already open: the transfer
+  // window (ticket 0057) and the Head Coach season article (ticket 0058,
+  // `SEASON_ARTICLES`) were both written down before this pin was taken, so
+  // -- unlike `SA` and `FL1`, whose pins moved once each after their own
+  // gates opened -- this is a freeze taken whole and does not need a second
+  // reading.
+  BL1: {
+    version: "match-bl1/2026-27-v1",
+    sha256:
+      "3597a571d1bebc0d2e355f5c1e9df49a42ccfc963d3eee7e639daac1944b127e",
+    competitionName: "Bundesliga"
   }
 };
 

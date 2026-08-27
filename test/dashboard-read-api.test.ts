@@ -301,18 +301,41 @@ describe("the dashboard read API", () => {
   });
 
   test("answers a Competition it does not serve with a 404", async () => {
-    // This used to pair `xx` (a typo) against `bl1` (schema-admitted, still
-    // unopened as this tree stands) to show both fall through the same
+    // This used to pair `xx` (a typo) against `bl1` (schema-admitted, then
+    // still unopened) to show both fall through the same
     // `MATCH_PROMPT_COMPETITIONS` lookup in `read-api.ts` and land on one
-    // 404. `bl1` still has that property today, but ADR-0054 commits to
-    // closing it (tickets 0057-0058), and once it does the domain will hold
-    // no code the API leaves unserved -- there is no sixth to pair the typo
+    // 404. Ticket 0058 opened `bl1` (ADR-0054), and now the domain holds no
+    // code the API leaves unserved -- there is no sixth to pair the typo
     // against, and there will not be one again without a new Competition
-    // widening the domain itself. So this test stops depending on `bl1` now
-    // rather than waiting for that opening to break it (ticket 0056). The
-    // lookup is still the single list it always was: a typo takes the same
-    // branch an unserved code takes, so the typo alone still walks it.
+    // widening the domain itself. So this test stopped depending on `bl1` at
+    // ticket 0056, ahead of that opening, rather than waiting for it to
+    // break this test. The lookup is still the single list it always was: a
+    // typo takes the same branch an unserved code takes, so the typo alone
+    // still walks it.
     expect((await get("/api/xx/leaderboard")).status).toBe(404);
+  });
+
+  // The other half of what opening `bl1` (ticket 0058) means for this
+  // endpoint: it is served, and served with 200 rather than a 404, despite
+  // having no `competitions` row -- that row is 0060's, not this ticket's.
+  // `MATCH_PROMPT_COMPETITIONS` deciding what is *served* and `competitions`
+  // deciding what is *open* are two different gates, and this is the case
+  // that walks the first without ever reaching the second.
+  test("answers a Competition with no competitions row as an unopened "
+    + "league, not a 404", async () => {
+    const response = await get("/api/bl1/leaderboard");
+    expect(response.status).toBe(200);
+    expect(await response.json() as LeaderboardBody).toEqual({
+      season: SEASON,
+      active: false,
+      throughGw: null,
+      nextLock: null,
+      settledFixtures: 0,
+      matchPointsQualification: null,
+      betPointsQualification: null,
+      exhibitionCaveat: null,
+      entrants: []
+    });
   });
 
   test("carries a lifetime on the 404, so a miss cannot outlive its cause",

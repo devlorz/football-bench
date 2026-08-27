@@ -51,6 +51,10 @@ const BY_COMPETITION: Readonly<
   FL1: [
     { code: "F1", name: "Ligue 1" },
     { code: "F2", name: "Ligue 2" }
+  ],
+  BL1: [
+    { code: "D1", name: "Bundesliga" },
+    { code: "D2", name: "2. Bundesliga" }
   ]
 };
 

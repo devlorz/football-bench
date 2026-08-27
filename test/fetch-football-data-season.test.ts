@@ -699,9 +699,10 @@ describe("fetching football-data.co.uk results", () => {
   });
 
   // `XX`, outside the `competition_code` domain -- see
-  // `test/openrouter-entrant.test.ts`'s comment on the same choice: `BL1`
-  // still has no curated divisions today, but ADR-0054 is closing it
-  // (tickets 0057-0058), and `divisionsOf` never touches the database.
+  // `test/openrouter-entrant.test.ts`'s comment on the same choice: `BL1`'s
+  // divisions are now curated (ticket 0058, ADR-0054), so `XX` is what stays
+  // outside the domain to exercise this refusal, and `divisionsOf` never
+  // touches the database.
   test("refuses a Competition with no curated divisions", async () => {
     await expect(fetchFootballDataSeason({
       database: client,

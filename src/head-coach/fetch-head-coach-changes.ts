@@ -134,7 +134,7 @@ export async function fetchHeadCoachChanges({
   }
 
   const changes = parseHeadCoachChanges(
-    source, response.body, pinned, article.columns
+    source, response.body, pinned, article.columns, article.fields
   );
   // The same bytes, read a second time: who is in post is a state the record
   // holds beside the changes that explain it (ADR-0045), and both come off one

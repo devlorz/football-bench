@@ -1,3 +1,5 @@
+import type { HeadCoachChangeFields } from "./parse-head-coach-changes.js";
+
 /**
  * Where a Competition's Head Coach changes are published, per Season
  * (ADR-0044): English Wikipedia's season article, whose Head Coach changes
@@ -48,6 +50,17 @@ export interface HeadCoachSource {
    * read, not assumed to match whichever neighbour it resembles.
    */
   personnelColumns?: readonly string[];
+  /**
+   * Where this article's own `columns` moves the vacancy date, the
+   * appointment date, or the incoming-manager column off the common
+   * 0/1/2/3/5/6 layout, by the column name to resolve each against rather
+   * than a second, driftable index. Absent means the common layout. The
+   * Bundesliga is the first to need this: its table splits both the vacancy
+   * and the appointment into an announced date and the actual one, which
+   * pushes `Incoming` off its common position too and leaves the common six
+   * positions no room for either split.
+   */
+  fields?: HeadCoachChangeFields;
 }
 
 const SEASON_ARTICLES: Readonly<
@@ -80,6 +93,41 @@ const SEASON_ARTICLES: Readonly<
         "Date of appointment"
       ],
       personnelColumns: ["Team", "Chairman", "Manager"]
+    },
+    // Read off the article on 2026-08-27 (`wikipedia-2026-27-bundesliga.txt.gz`).
+    // Its Personnel and kits table leads `Team, Manager` like the Premier
+    // League's and La Liga's, so `personnelColumns` is left at the default.
+    // Its Managerial changes table is the one shape none of the other four
+    // share: `Exit date` and `Incoming date` each split into an announced
+    // date and the actual one, ten leaf columns rather than seven, so
+    // `vacancy` and `appointment` are pointed at the actual dates
+    // (`Exit date/Departed on`, `Incoming date/Arrived on`) and not the
+    // announced ones -- the same fact `Date of vacancy` and `Date of
+    // appointment` already state on every other article. Each leaf label is
+    // written `<group>/<sub-label>` rather than the sub-label alone
+    // (`leafColumnLabels`), because both groups head an `Announced on`
+    // column and the bare word would resolve `columns.indexOf` to whichever
+    // one came first.
+    BL1: {
+      name: "2026-27-bundesliga",
+      page: "2026–27 Bundesliga",
+      columns: [
+        "Team",
+        "Outgoing",
+        "Manner",
+        "Exit date/Announced on",
+        "Exit date/Departed on",
+        "Position in table",
+        "Incoming",
+        "Incoming date/Announced on",
+        "Incoming date/Arrived on",
+        "Ref."
+      ],
+      fields: {
+        vacancy: "Exit date/Departed on",
+        incoming: "Incoming",
+        appointment: "Incoming date/Arrived on"
+      }
     }
   }
 };

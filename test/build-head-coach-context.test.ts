@@ -204,8 +204,9 @@ describe("the Head Coach section", () => {
       .toBeUndefined();
     // `XX`, outside the `competition_code` domain -- see
     // `test/openrouter-entrant.test.ts`'s comment on the same choice: `BL1`
-    // still has no listed Season article today, but ADR-0054 is closing it
-    // (tickets 0057-0058), and `headCoachSource` never touches the database.
+    // is now listed (ticket 0058, ADR-0054), so `XX` is what stays outside
+    // the domain to exercise this refusal. `headCoachSource` never touches
+    // the database.
     expect(build([change({ club: "Liverpool" })], { competition: "XX" }))
       .toBeUndefined();
   });

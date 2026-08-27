@@ -305,8 +305,9 @@ describe("entering the Season Roster", () => {
   });
 
   // `XX`, outside the `competition_code` domain -- same choice, same reason,
-  // as `test/openrouter-entrant.test.ts`'s comment on this test's twin:
-  // `BL1` still works today but ADR-0054 is closing it (tickets 0057-0058).
+  // as `test/openrouter-entrant.test.ts`'s comment on this test's twin: `BL1`
+  // now has a frozen Prompt Version (ticket 0058, ADR-0054), so `XX` is what
+  // stays outside the domain to exercise this refusal.
   // `enterSeasonRoster` calls `matchPromptOf` before touching the database,
   // so the refusal below never reaches a domain-typed column.
   test("refuses a Competition with no frozen Prompt Version", async () => {

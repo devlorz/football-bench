@@ -72,10 +72,17 @@ export function parseDate(value: string): string | undefined {
 }
 
 /**
- * A cell's leading HTML attributes and the pipe that ends them, in the three
+ * A cell's leading HTML attributes and the pipe that ends them, in the four
  * shapes these pages write them: `rowspan="9" |`, the unquoted `rowspan=2|`
- * the Spanish tables prefer, and the hyphenated
- * `data-sort-value="Iraola, Andoni"|` every sortable name column carries.
+ * the Spanish tables prefer, the hyphenated
+ * `data-sort-value="Iraola, Andoni"|` every sortable name column carries, and
+ * the Bundesliga season article's Personnel table, which leads a sortable
+ * Team cell with the bare keyword `nowrap` ahead of `data-sort-value`.
+ * `nowrap` carries no `=` of its own and so needs naming as its own
+ * alternative rather than falling out of the `key=value` shape the other
+ * three write. `\b` rather than a required trailing space, because the same
+ * table also writes it immediately against the pipe, `nowrap|`, with no
+ * value after it at all.
  *
  * The second alternative is the empty attribute list a line opening `||`
  * leaves in front of its content, which MediaWiki reads as a cell with no
@@ -87,7 +94,8 @@ export function parseDate(value: string): string | undefined {
  * MediaWiki wherever it appears, but a prefix that is not attribute-shaped is
  * text, and eating it would silently shorten a name.
  */
-const CELL_ATTRIBUTES = /^\s*(?:[a-z-]+\s*=\s*(?:"[^"]*"|[^\s|]*)\s*)+\||^\s*\|/i;
+const CELL_ATTRIBUTES =
+  /^\s*(?:nowrap\b\s*|[a-z-]+\s*=\s*(?:"[^"]*"|[^\s|]*)\s*)+\||^\s*\|/i;
 
 /**
  * A cell with its wrapping stripped but its links intact: the flag and
@@ -116,6 +124,11 @@ export function cellSource(cell: string): string {
     // replace has not already taken out mispairs its braces and leaves raw
     // wikitext inside a Head Coach's name. Today only the flags are wrapped.
     .replace(/\{\{nobreak\|([^}]*)\}\}/gi, "$1")
+    // {{Abbr|Manner|Manner of departure}} -- the Bundesliga season article's
+    // way of putting a tooltip on a header cell. The first parameter is what
+    // the reader sees and the second is the tooltip text, never part of the
+    // label itself.
+    .replace(/\{\{abbr\|([^|}]*)\|[^}]*\}\}/gi, "$1")
     // {{sortname|Jan Paul|van Hecke|dab=footballer}} -- named parameters are
     // disambiguation for the link target and are never part of the name.
     .replace(/\{\{sortname\|([^}]*)\}\}/gi, (_, parameters: string) =>
