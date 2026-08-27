@@ -301,19 +301,23 @@ describe("the dashboard read API", () => {
   });
 
   test("answers a Competition it does not serve with a 404", async () => {
-    // A typo and a league nobody has frozen a Prompt Version for get the same
-    // answer: a missing thing, and not an empty league. `BL1` is in the
-    // schema's `competition_code` domain and has no frozen Prompt Version,
-    // which is the case one list for both the build and the API keeps from
-    // disagreeing. It read `SA` until Serie A was opened -- an unopened code
-    // is the point, so it has to be one no ticket is about to open.
+    // This used to pair `xx` (a typo) against `bl1` (schema-admitted, still
+    // unopened as this tree stands) to show both fall through the same
+    // `MATCH_PROMPT_COMPETITIONS` lookup in `read-api.ts` and land on one
+    // 404. `bl1` still has that property today, but ADR-0054 commits to
+    // closing it (tickets 0057-0058), and once it does the domain will hold
+    // no code the API leaves unserved -- there is no sixth to pair the typo
+    // against, and there will not be one again without a new Competition
+    // widening the domain itself. So this test stops depending on `bl1` now
+    // rather than waiting for that opening to break it (ticket 0056). The
+    // lookup is still the single list it always was: a typo takes the same
+    // branch an unserved code takes, so the typo alone still walks it.
     expect((await get("/api/xx/leaderboard")).status).toBe(404);
-    expect((await get("/api/bl1/leaderboard")).status).toBe(404);
   });
 
   test("carries a lifetime on the 404, so a miss cannot outlive its cause",
     async () => {
-      const response = await get("/api/bl1/leaderboard");
+      const response = await get("/api/xx/leaderboard");
 
       expect(response.status).toBe(404);
 

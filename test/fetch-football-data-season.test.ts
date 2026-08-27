@@ -698,14 +698,18 @@ describe("fetching football-data.co.uk results", () => {
     expect(matches.rows).toEqual([{ count: 0 }]);
   });
 
+  // `XX`, outside the `competition_code` domain -- see
+  // `test/openrouter-entrant.test.ts`'s comment on the same choice: `BL1`
+  // still has no curated divisions today, but ADR-0054 is closing it
+  // (tickets 0057-0058), and `divisionsOf` never touches the database.
   test("refuses a Competition with no curated divisions", async () => {
     await expect(fetchFootballDataSeason({
       database: client,
-      competition: "BL1",
+      competition: "XX",
       season: "2025-26",
       http: async () => {
         throw new Error("no request should be made");
       }
-    })).rejects.toThrow("Competition BL1 has no curated divisions");
+    })).rejects.toThrow("Competition XX has no curated divisions");
   });
 });

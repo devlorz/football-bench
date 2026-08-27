@@ -39,11 +39,25 @@ change to make and to assert.
 
 ## Acceptance
 
-- [ ] Every registry-absence test states its case with a code that stays unopened for as
+- [x] Every registry-absence test states its case with a code that stays unopened for as
       long as the assertion is meant to hold, and none of them depends on `BL1` in
       particular.
-- [ ] The read API's 404 test either keeps the valid-but-unserved case under a code that
+- [x] The read API's 404 test either keeps the valid-but-unserved case under a code that
       keeps that property, or records in the test itself why the case is gone and what
       still covers the typo.
-- [ ] No production code changes. The suite is green before and after, and the diff is
-      tests and comments only.
+- [x] No production code changes. The diff is tests and comments only (`git diff --stat`
+      touches only files under `test/` and this ticket). Nine test files carry the change
+      — the seven the ticket named plus `dashboard-entrants-api.test.ts` and
+      `dashboard-fixtures-api.test.ts`, found on review: both ran a `bl1` 404 case through
+      the same `MATCH_PROMPT_COMPETITIONS` lookup `dashboard-read-api.test.ts` does and
+      would have broken the same way. All nine are green before and after (218 tests). The
+      full suite is not green on `main` before this diff either:
+      `run-scheduled-fpl-gameweeks.test.ts` (10 tests) and `fpl-withdrawal-filter.test.ts`
+      (2 tests) fail on a clean checkout with "the FPL track needs 7 seats ... but 10 are
+      configured", unrelated to any file this ticket touches and confirmed present before
+      this diff by `git stash`.
+- Every new comment is written in decision tense (ADR-0054 *commits to* closing `BL1`,
+  tickets 0057-0058) rather than as a completed fact — `BL1` is still schema-admitted and
+  unopened as this tree stands, and `git log` shows no ticket after 0054 has landed yet.
+  The full reasoning lives once in `test/openrouter-entrant.test.ts`; the other sites
+  point back to it rather than repeat it.

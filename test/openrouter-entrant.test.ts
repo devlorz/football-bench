@@ -350,13 +350,22 @@ describe("the Match Prompt Version", () => {
       ].join("\n"));
   });
 
-  // `BL1`, because it is the code migration 0022's domain holds that no ticket
-  // has opened: the Bundesliga waits on hands, not money (ADR-0049). This test
-  // named `SA` until Serie A was opened, which is the drift a real unlisted
-  // code avoids.
+  // `XX`, a code outside the schema's `competition_code` domain entirely.
+  // This test named `SA` until Serie A opened, then `BL1` -- migration
+  // 0022's domain holds exactly five codes and `BL1` is, as this tree
+  // stands, still the one this repo has not opened: `matchPromptOf("BL1")`
+  // still throws here today. ADR-0054 commits to opening it (tickets
+  // 0057-0058), and once that lands every code the domain admits has a
+  // frozen Prompt Version -- there is no sixth code to move this test to
+  // next, so it stops depending on `BL1` now (ticket 0056) rather than
+  // dragging a rewrite of every site like it along behind that opening.
+  // `matchPromptOf` reads a plain JS map and never touches the database, so
+  // a code outside the domain exercises the same refusal without needing
+  // one to exist. The other five registry-absence tests point back here
+  // rather than repeat this.
   test("refuses a Competition with no frozen Prompt Version", () => {
-    expect(() => matchContext(FIXTURE, "", "BL1"))
-      .toThrow("Competition BL1 has no frozen Prompt Version");
+    expect(() => matchContext(FIXTURE, "", "XX"))
+      .toThrow("Competition XX has no frozen Prompt Version");
   });
 });
 

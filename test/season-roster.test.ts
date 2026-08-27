@@ -304,9 +304,14 @@ describe("entering the Season Roster", () => {
     expect(await entrants()).toHaveLength(0);
   });
 
+  // `XX`, outside the `competition_code` domain -- same choice, same reason,
+  // as `test/openrouter-entrant.test.ts`'s comment on this test's twin:
+  // `BL1` still works today but ADR-0054 is closing it (tickets 0057-0058).
+  // `enterSeasonRoster` calls `matchPromptOf` before touching the database,
+  // so the refusal below never reaches a domain-typed column.
   test("refuses a Competition with no frozen Prompt Version", async () => {
-    await expect(enterSeasonRoster(client, "BL1", SEASON)).rejects
-      .toThrow("Competition BL1 has no frozen Prompt Version");
+    await expect(enterSeasonRoster(client, "XX", SEASON)).rejects
+      .toThrow("Competition XX has no frozen Prompt Version");
     expect(await entrants()).toHaveLength(0);
   });
 

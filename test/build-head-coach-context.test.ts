@@ -202,7 +202,11 @@ describe("the Head Coach section", () => {
   test("is absent for a Season whose article is not listed", () => {
     expect(build([change({ club: "Liverpool" })], { season: "2030-31" }))
       .toBeUndefined();
-    expect(build([change({ club: "Liverpool" })], { competition: "BL1" }))
+    // `XX`, outside the `competition_code` domain -- see
+    // `test/openrouter-entrant.test.ts`'s comment on the same choice: `BL1`
+    // still has no listed Season article today, but ADR-0054 is closing it
+    // (tickets 0057-0058), and `headCoachSource` never touches the database.
+    expect(build([change({ club: "Liverpool" })], { competition: "XX" }))
       .toBeUndefined();
   });
 });

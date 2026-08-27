@@ -846,14 +846,19 @@ describe("fetching Understat per-match xG", () => {
       ]);
     });
 
+  // `XX`, outside the `competition_code` domain -- see
+  // `test/openrouter-entrant.test.ts`'s comment on the same choice: `BL1` is
+  // still missing from `UNDERSTAT_LEAGUES` today, but ADR-0054 is closing it
+  // (tickets 0057-0058), and this function never touches the database until
+  // after the lookup below.
   test("refuses a Competition with no Understat league", async () => {
     await expect(fetchUnderstatSeasonXg({
       database: client,
-      competition: "BL1",
+      competition: "XX",
       season: "2026-27",
       http: async () => {
         throw new Error("no request should be made");
       }
-    })).rejects.toThrow("Competition BL1 has no Understat league");
+    })).rejects.toThrow("Competition XX has no Understat league");
   });
 });

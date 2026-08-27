@@ -347,9 +347,13 @@ describe("the Entrant record endpoint on the design's Season", () => {
     async () => {
       // The same terms as the other two endpoints', which is now the whole of
       // the Match track: no default, and one lower-case spelling, so the edge
-      // holds one entry per league rather than four.
+      // holds one entry per league rather than four. `xx`, outside the
+      // `competition_code` domain, rather than `bl1` -- ticket 0056: `bl1`
+      // is schema-admitted and, as this tree stands, still unopened, but
+      // ADR-0054 is closing it (tickets 0057-0058) and this endpoint's
+      // 404 would then stop covering an unserved-but-admitted code.
       expect((await get("/api/entrants")).status).toBe(404);
-      expect((await get("/api/bl1/entrants")).status).toBe(404);
+      expect((await get("/api/xx/entrants")).status).toBe(404);
       expect((await get("/api/PL/entrants")).status).toBe(404);
       expect((await get("/api/pl/entrants/1")).status).toBe(404);
     });

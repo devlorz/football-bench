@@ -335,8 +335,13 @@ describe("the Fixtures endpoint on the design's Season", () => {
 
       // The same terms as the leaderboard's: no default, and one lower-case
       // spelling, so the edge holds one entry per league rather than four.
+      // `xx`, outside the `competition_code` domain, rather than `bl1` --
+      // ticket 0056: `bl1` is schema-admitted and, as this tree stands,
+      // still unopened, but ADR-0054 is closing it (tickets 0057-0058) and
+      // this endpoint's 404 would then stop covering an unserved-but-
+      // admitted code.
       expect(await get("/api/fixtures")).toBe(404);
-      expect(await get("/api/bl1/fixtures")).toBe(404);
+      expect(await get("/api/xx/fixtures")).toBe(404);
       expect(await get("/api/PL/fixtures")).toBe(404);
       expect(await get("/api/pl/fixtures/1")).toBe(404);
     });
