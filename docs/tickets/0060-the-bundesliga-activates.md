@@ -13,8 +13,8 @@ banner (no hand-set Lock, ever again).
 **Blocked by:** 0058 (the league renders and its Prompt Version is frozen), 0059 (its
 history and xG are curated and reviewed).
 
-**Status:** activated — boxes 1, 2 and 4 green; 3 is open, by operator decision (see box
-3); 5 and 6 wait on the Lock at 2026-08-28T17:00Z
+**Status:** activated — boxes 1, 2, 3 and 4 green; 5 and 6 wait on the Lock at
+2026-08-28T17:00Z
 
 ---
 
@@ -46,9 +46,9 @@ check, then the dry run.
       (`pre-cron-checklist.md` grown from eight files to ten, and its own now-stale
       2026-08-21 "cannot be advanced yet" text corrected in the same edit — `git diff`
       that file for both). Secrets, the insert, `roster:enter` and the advance check all
-      held. **The checklist's own §5 rehearsal step did not**, and box 3 records why —
-      naming that here rather than only inside box 3, the way box 1 read short in ticket
-      0040 until review caught it. `npm run fetch` (the command `fetch.yml` itself runs)
+      held. **The checklist's own §5 rehearsal step did not, on the day** — box 3 records
+      why it failed and how it was made to pass, naming that here rather than only
+      inside box 3, the way box 1 read short in ticket 0040 until review caught it. `npm run fetch` (the command `fetch.yml` itself runs)
       was hand-run in the same session to populate `BL1`'s archive snapshots and, per
       §5's own stated purpose, to confirm the Understat alias mapping against the live
       feed: it resolved every `BL1` club and every present-Gameweek match in
@@ -67,25 +67,58 @@ check, then the dry run.
 - [x] `roster:enter` seats ten Entrants under `match-bl1/2026-27-v1`. Run 2026-08-27,
       after the insert: 50 Entrants total across the five listed Competitions. See the
       query below — `match-bl1/2026-27-v1` names exactly ten.
-- [ ] A `COMPETITION=BL1` dry run is green against the archived snapshots before the first
+- [x] A `COMPETITION=BL1` dry run is green against the archived snapshots before the first
       Lock: every club name resolves, every present section renders, expected Gaps match.
-      **Open, unresolved as of 2026-08-27, by the operator's explicit choice not to block
-      on it** — not backdated and not written off, since the Lock (2026-08-28T17:00Z) has
-      not passed. `prepareArchivedGameweek` calls `runDailyFetch` unhandled
-      (`prepare-archived-gameweek.ts:104`), so the same missing `D1.csv` above — an
-      `ArchiveReplayMissError` with no snapshot captured, then a `FootballDataSourceValidationError`
-      once the `300` body from the hand-run fetch was captured as one — crashes the
-      rehearsal before it reaches a verdict, with or without a prior fetch. That is a
-      reason the rehearsal tool could be fixed (making `runDailyFetch`'s failure here as
-      isolable as it already is in production) or worked around, not a reason it cannot
-      be; neither was attempted in this ticket. What was done instead: direct read-only
-      queries (below) confirmed everything the real predict/Lock path reads — 306
-      `fixtures` rows, correct Gameweek deadlines, the frozen Prompt Version, the seated
-      roster, prior-Season `historical_matches`/xG from ticket 0059 — is already correct,
-      and that `D1` carries nothing for Gameweek 1's context since zero Bundesliga matches
-      have been played this Season. Given that, and the Lock still about a day off (read
-      2026-08-27T14:40Z), the operator chose to let scheduled `predict.yml` run for real
-      rather than block activation on fixing this rehearsal gap first.
+      **Green, 2026-08-27, before the Lock.** Run against the archive with the Season
+      variable production actually holds:
+
+      ```bash
+      set -a; . ./.env; set +a
+      COMPETITION=BL1 GAMEWEEK=1 npm run --silent dry-run
+      ```
+
+      ```
+      Archive: 61 snapshots, 77 Entrants, observed 2026-08-27T14:23:39.767Z
+      BL1 2026-27 Gameweek 1
+      Deadline:    2026-08-28T17:00:00.000Z
+      Ran at:      2026-08-28T11:00:00.000Z (deadline-6h)
+      Contexts:    9
+      Predictions: 0 (expected 0)
+      Gaps:        90 (expected 90)
+      Dry run matched the archive's expected outcome.
+      ```
+
+      All three of the box's clauses: nine Contexts built, which is every club name
+      resolving — an unresolved one raises rather than renders; every present section
+      rendered; and 90 Gaps against 90 expected.
+
+      **The recorded cause was wrong, and the correction is the point. Found by review.**
+      This box first read "open, unresolved" over a diagnosis naming
+      `prepareArchivedGameweek`'s unhandled `runDailyFetch` call
+      (`prepare-archived-gameweek.ts:104`). That call is unhandled, and the sentence
+      about it is true, but it is not what failed the rehearsal: the run that failed had
+      `FOOTBALL_DATA_SEASON` set forward to `2026-27`, and at that value the fetch asks
+      for `2627/D1.csv`, which football-data.co.uk has not published and answers with the
+      `300 Multiple Choices` body box 1 records. The parser refuses that body —
+      `football_data:2026-27:D1.header.Div: required column is missing`, and five more —
+      exactly as it should. Reproduced both ways on 2026-08-27: forward to `2026-27` it
+      raises that error, and at `.env`'s own `2025-26` it is the green run above.
+
+      So no tool needed fixing, and the guard that catches this is the process one, not a
+      code one: [the pre-cron checklist](../runbooks/pre-cron-checklist.md) §4 already
+      says `FOOTBALL_DATA_SEASON` does not advance until every file names its own
+      division, and `D1` is the one file across five Competitions that still does not. A
+      rehearsal run past that rule is asking the archive for bytes the source has never
+      published, which is a wrong question rather than a broken tool. Adding a catch
+      inside `prepareArchivedGameweek` would have made that wrong question answer quietly
+      — the one thing a rehearsal must never do.
+
+      **What this rehearsal does not cover, stated rather than implied:** 90 Gaps means
+      the archive holds no `BL1` answer to replay, so what is proven is the context path
+      — nine packets built from the real builder over archived bytes — and not the
+      answering path. That is inherent to a first activation and was equally true of
+      Serie A's and Ligue 1's; the answering path is first exercised by the scheduled run
+      itself, or by a `preflight` nobody has spent here.
 - [x] The Bundesliga opens at the first Gameweek whose derived deadline had not passed at
       activation; earlier Gameweeks, if any, arrive as Locked history with no Fixture queued
       for prediction. **Gameweek 1.** The `competitions` insert landed 2026-08-27, with
