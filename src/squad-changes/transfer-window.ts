@@ -12,8 +12,8 @@
  * The three shapes English Wikipedia publishes a country's transfer list in.
  * England is two wikitables, `Transfers` and `Loans`, with a date column and a
  * fee column; Italy is one wikitable of England's columns whose fee column
- * carries the loans; Spain and France are one section per club holding two
- * `{{fs player}}` lists and neither column.
+ * carries the loans; Spain, France and Germany are one section per club
+ * holding two `{{fs player}}` lists and neither column.
  */
 export type TransferListFormat =
   | "twoTables"
@@ -114,19 +114,22 @@ const TRANSFER_WINDOWS: Readonly<Record<string, readonly TransferWindow[]>> = {
       format: "oneTable"
     }
   ],
-  // France is the one country of the four whose transfer list states no window
-  // dates at all -- neither the summer 2026 page nor the winter one before it
-  // says when the window it lists opened or shut. These come from the LFP's
-  // own announcements instead, which are the dates the page is a list of:
-  // 15 June to 1 September 2026 for the summer (`lfp.fr/article/
-  // les-dates-du-mercato-2026-2027`, read 2026-08-21), and 1 January to
-  // 1 February 2027 for the winter, announced in the same article. `since` is
-  // the previous window's close, 2 February 2026, from the LFP's 2025-2026
-  // article. France's winter dates are therefore announced rather than
-  // customary, which no other country's are. Its title is not: like every
-  // other winter title here it is frozen from the naming convention the
-  // previous editions used, and both winter 2026-27 pages answered 404 on
-  // 2026-08-21, so neither is verifiable until it is created.
+  // France was the first country whose transfer list states no window dates
+  // at all -- neither the summer 2026 page nor the winter one before it says
+  // when the window it lists opened or shut (Germany's is the same, below).
+  // France's dates come from the LFP's own announcements instead, which are
+  // the dates the page is a list of: 15 June to 1 September 2026 for the
+  // summer (`lfp.fr/article/les-dates-du-mercato-2026-2027`, read 2026-08-21),
+  // and 1 January to 1 February 2027 for the winter, announced in the same
+  // article. `since` is the previous window's close, 2 February 2026, from
+  // the LFP's 2025-2026 article. France's winter dates are therefore
+  // announced rather than customary, which no other country's are -- Germany's
+  // page states no dates either, but only its summer window has an archivable
+  // announcement behind it; its winter reverts to customary. France's title
+  // is not announced: like every other winter title here it is frozen from
+  // the naming convention the previous editions used, and both winter 2026-27
+  // pages answered 404 on 2026-08-21, so neither is verifiable until it is
+  // created.
   FL1: [
     {
       name: "france-summer-2026",
@@ -158,6 +161,38 @@ const TRANSFER_WINDOWS: Readonly<Record<string, readonly TransferWindow[]>> = {
       name: "spain-winter-2026-27",
       page: "List of Spanish football transfers winter 2026–27",
       since: new Date("2026-09-01T00:00:00Z"),
+      opensOn: new Date("2027-01-01T00:00:00Z"),
+      closesOn: new Date("2027-02-02T00:00:00Z"),
+      format: "clubSections"
+    }
+  ],
+  // Germany's page states no window dates either, exactly as France's does not
+  // -- its lead names only which two divisions are listed. Unlike France, only
+  // the summer window's dates are announced; the winter 2026-27 window is
+  // customary, on the same terms as England's, Spain's and Italy's, because no
+  // announcement for it is archivable yet the way the summer one is.
+  //
+  // The summer dates are `bundesliga.com`'s own announcement, both pinned as
+  // `test/fixtures/bundesliga-transfer-centre-*.html.gz` and checked against
+  // in `test/fetch-squad-changes.test.ts`: "The Bundesliga's summer transfer
+  // window is open from 1 July to 31 August 2026" (the "Summer 2026" transfer
+  // centre article, read 2026-08-27) gives `opensOn`/`closesOn`, and "The
+  // Bundesliga's winter transfer window closed at 8pm CET on Monday,
+  // 2 February" (the "January 2026" article) gives `since` -- the same
+  // 2 February every other country's summer window carries.
+  BL1: [
+    {
+      name: "germany-summer-2026",
+      page: "List of German football transfers summer 2026",
+      since: new Date("2026-02-02T00:00:00Z"),
+      opensOn: new Date("2026-07-01T00:00:00Z"),
+      closesOn: new Date("2026-08-31T00:00:00Z"),
+      format: "clubSections"
+    },
+    {
+      name: "germany-winter-2026-27",
+      page: "List of German football transfers winter 2026–27",
+      since: new Date("2026-08-31T00:00:00Z"),
       opensOn: new Date("2027-01-01T00:00:00Z"),
       closesOn: new Date("2027-02-02T00:00:00Z"),
       format: "clubSections"

@@ -138,12 +138,15 @@ this codebase that is not twenty rows. Nothing counts to twenty, but a reviewer 
 derived map should know what the total is meant to be before they read it.
 
 **A country's transfer list need not state its own window dates.** England's, Spain's and
-Italy's all open with a lead that does; France's says only which league it lists, and its
-winter edition before it says no more. France's dates are the LFP's own announcement
-instead (`lfp.fr/article/les-dates-du-mercato-2026-2027`), which makes France the one
-country whose *winter* dates are announced rather than customary.
+Italy's all open with a lead that does; France's and Germany's do not — France's says only
+which league it lists, and Germany's names only which two divisions it lists. France's
+dates are the LFP's own announcement instead (`lfp.fr/article/les-dates-du-mercato-2026-2027`),
+for both windows, which makes France the one country whose *winter* dates are announced
+rather than customary. Germany's summer dates are `bundesliga.com`'s own announcement
+instead; its winter is customary, on the same terms as England's, Spain's and Italy's,
+because no equivalent announcement for it is archivable yet.
 
-The winter page for a Season does not exist in August, for any of the four. Its title is
+The winter page for a Season does not exist in August, for any of the five. Its title is
 frozen from the naming convention the previous ones used
 (`List of Spanish football transfers winter 2026–27`, en dash) and is not verifiable
 until it is created.

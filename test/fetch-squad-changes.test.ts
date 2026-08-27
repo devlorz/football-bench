@@ -882,6 +882,28 @@ const frenchPage = (): Promise<string> => pinnedPage(
   "wikipedia-transfers-france-summer-2026.txt.gz", FRENCH_PAGE_SHA256
 );
 
+/** The Bundesliga's eighteen, as football-data.org spells them. */
+const GERMAN_CLUBS = [
+  "1. FC Köln", "1. FC Union Berlin", "1. FSV Mainz 05",
+  "Bayer 04 Leverkusen", "Borussia Dortmund", "Borussia Mönchengladbach",
+  "Eintracht Frankfurt", "FC Augsburg", "FC Bayern München", "FC Schalke 04",
+  "Hamburger SV", "RB Leipzig", "SC Freiburg", "SC Paderborn 07",
+  "SV 07 Elversberg", "SV Werder Bremen", "TSG 1899 Hoffenheim",
+  "VfB Stuttgart"
+];
+
+const GERMAN_PAGE_URL =
+  "https://en.wikipedia.org/w/index.php"
+  + "?title=List_of_German_football_transfers_summer_2026&action=raw";
+
+/** The real page, fetched on 2026-08-27 and pinned. */
+const GERMAN_PAGE_SHA256 =
+  "0c34450d253299a69966fe20adfd278b5a3bcaf4a930b4d5462cc6bac8c451fa";
+
+const germanPage = (): Promise<string> => pinnedPage(
+  "wikipedia-transfers-germany-summer-2026.txt.gz", GERMAN_PAGE_SHA256
+);
+
 /**
  * Every `[[article]]` and `[[article|displayed]]` a page writes, as the pairs
  * they are. Pairs and not two sets: what a map value claims is that this
@@ -916,7 +938,8 @@ describe("the derived Wikipedia club maps", () => {
 
   test.each([
     ["SA", "football-data-org-2026-27-SA-recorded.json.gz", 20],
-    ["FL1", "football-data-org-2026-27-FL1-recorded.json.gz", 18]
+    ["FL1", "football-data-org-2026-27-FL1-recorded.json.gz", 18],
+    ["BL1", "football-data-org-2026-27-BL1-recorded.json.gz", 18]
   ])("%s's keys are exactly the clubs the live source names",
     async (competition, fixture, clubs) => {
       const recorded = JSON.parse(await archivedBody(fixture)) as {
@@ -938,7 +961,8 @@ describe("the derived Wikipedia club maps", () => {
   // fails even though both strings are on the page. **Found by review.**
   test.each([
     ["SA", () => italianPage()] as const,
-    ["FL1", () => frenchPage()] as const
+    ["FL1", () => frenchPage()] as const,
+    ["BL1", () => germanPage()] as const
   ])("%s's article and displayed name are one link the page writes",
     async (competition, page) => {
       const links = clubLinksOn(await page());
@@ -952,7 +976,7 @@ describe("the derived Wikipedia club maps", () => {
   // Neither field may repeat. Two clubs sharing an article would resolve the
   // same rows twice, and two sharing a displayed name would make a bare
   // heading — which is the whole of France's identity — ambiguous.
-  test.each(["SA", "FL1"])("%s pairs each club with its own two strings",
+  test.each(["SA", "FL1", "BL1"])("%s pairs each club with its own two strings",
     (competition) => {
       const clubs = mapOf(competition);
 
@@ -962,19 +986,22 @@ describe("the derived Wikipedia club maps", () => {
         .toBe(clubs.length);
     });
 
-  test("Ligue 1's displayed names are exactly the page's own section headings",
-    async () => {
+  test.each([
+    ["FL1", () => frenchPage(), "==Ligue 1==", "==Ligue 2=="] as const,
+    ["BL1", () => germanPage(), "==Bundesliga==", "==2. Bundesliga=="] as const
+  ])("%s's displayed names are exactly the page's own section headings",
+    async (competition, page, topHeading, nextHeading) => {
       // The other direction, on the side the map is joined to: a heading left
-      // over would be a club the map does not hold, and this page heads its
+      // over would be a club the map does not hold, and both pages head their
       // sections in bare text, so the displayed name is the whole join.
-      const page = await frenchPage();
-      const ligue1 = page.slice(
-        page.indexOf("==Ligue 1=="), page.indexOf("==Ligue 2==")
+      const body = await page();
+      const section = body.slice(
+        body.indexOf(topHeading), body.indexOf(nextHeading)
       );
-      const headings = [...ligue1.matchAll(/^===\s*(.+?)\s*===$/gm)]
+      const headings = [...section.matchAll(/^===\s*(.+?)\s*===$/gm)]
         .map(([, heading]) => heading as string).sort();
 
-      expect(headings).toEqual(mapOf("FL1")
+      expect(headings).toEqual(mapOf(competition)
         .map(([, { name }]) => name).sort());
     });
 
@@ -988,9 +1015,9 @@ describe("the derived Wikipedia club maps", () => {
    * `Palermo FC|Palermo` is a link the page really writes, unique on both
    * fields, inside the table, leaving the parsed row count at 342 and the
    * rendered samples untouched — every check here passed it. What refuses it is
-   * the rule the derivation actually followed: nineteen of Serie A's twenty and
-   * sixteen of Ligue 1's eighteen are the article title outright, and these are
-   * the rest. **Found by review.**
+   * the rule the derivation actually followed: nineteen of Serie A's twenty,
+   * sixteen of Ligue 1's eighteen and sixteen of the Bundesliga's eighteen are
+   * the article title outright, and these are the rest. **Found by review.**
    */
   const REVIEWED_EXCEPTIONS: Readonly<
     Record<string, Readonly<Record<string, string>>>
@@ -999,10 +1026,14 @@ describe("the derived Wikipedia club maps", () => {
     FL1: {
       "Racing Club de Lens": "RC Lens",
       "Stade Rennais FC 1901": "Stade Rennais FC"
+    },
+    BL1: {
+      "FC Bayern München": "FC Bayern Munich",
+      "SV 07 Elversberg": "SV Elversberg"
     }
   };
 
-  test.each(["SA", "FL1"])(
+  test.each(["SA", "FL1", "BL1"])(
     "%s's articles are the live source's own spelling but for the reviewed few",
     (competition) => {
       const differing = mapOf(competition)
@@ -1213,6 +1244,97 @@ describe("parsing France's window, published as one section per club", () => {
       promoted,
       "clubSections"
     )).toThrow(/no section for Montpellier HSC/);
+  });
+});
+
+describe("parsing Germany's window, published as one section per club", () => {
+  const parse = (wikitext: string, clubs = GERMAN_CLUBS) =>
+    parseSquadChanges(
+      "wikipedia:squad-changes:germany-summer-2026",
+      wikitext,
+      pinnedClubs("BL1", clubs),
+      "clubSections"
+    );
+
+  test("reads both directions from headings the page does not link",
+    async () => {
+      // `===VfB Stuttgart===` — bare text, so the displayed name is the only
+      // identity the heading carries, exactly as on the French and Spanish
+      // pages.
+      const changes = parse(await germanPage());
+
+      expect(movement(changes, "VfB Stuttgart", "in")).toEqual([
+        [null, "Bilal El Khannouss", "Leicester City", null, false],
+        [null, "Dženan Pejčinović", "VfL Wolfsburg", null, false],
+        [null, "Grischa Prömel", "TSG Hoffenheim", null, false],
+        [null, "Marius Funk", "Energie Cottbus", null, false],
+        [null, "Leo Sauer", "Feyenoord", null, false]
+      ]);
+      expect(movement(changes, "VfB Stuttgart", "out")).toEqual([
+        [null, "Noah Darvich", "SV Elversberg", null, true],
+        [null, "Alexander Nübel", "Bayern Munich", null, true],
+        [null, "Florian Hellstern", "Greuther Fürth", null, true],
+        [null, "Laurin Ulrich", "SC Paderborn", null, true],
+        [null, "Jovan Milošević", "Braga", null, false]
+      ]);
+    });
+
+  test("records both sides of a move between two Bundesliga clubs",
+    async () => {
+      const changes = parse(await germanPage());
+
+      expect(movement(changes, "Borussia Mönchengladbach", "out"))
+        .toContainEqual([null, "Rocco Reitz", "RB Leipzig", null, false]);
+      expect(movement(changes, "RB Leipzig", "in")).toContainEqual(
+        [null, "Rocco Reitz", "Borussia Mönchengladbach", null, false]
+      );
+    });
+
+  test("reads the loan marker from the move, not from the career behind it",
+    async () => {
+      const changes = parse(await germanPage());
+
+      // "to Hannover 96, previously on loan" — a permanent departure whose
+      // sentence says loan, and the shape that called thirty Spanish rows
+      // loans before `currentMove` cut the sentence at its first clause.
+      expect(movement(changes, "FC Bayern München", "out")).toContainEqual(
+        [null, "Noël Aséko Nkili", "Hannover 96", null, false]
+      );
+      expect(movement(changes, "FC Bayern München", "out")).toContainEqual(
+        [null, "Felipe Chávez", "1. FC Magdeburg", null, true]
+      );
+    });
+
+  test("skips the 2. Bundesliga sections the page lists beside Bundesliga's",
+    async () => {
+      const changes = parse(await germanPage());
+
+      expect(changes.every(({ club }) => GERMAN_CLUBS.includes(club)))
+        .toBe(true);
+      // VfL Wolfsburg heads a 2. Bundesliga section on this page and moved
+      // players in it.
+      expect(changes.some(({ club }) => club === "VfL Wolfsburg")).toBe(false);
+    });
+
+  test("fails naming a club the page carries no section for", async () => {
+    // Greuther Fürth is on this page, under `==2. Bundesliga==`, headed by its
+    // bare short name `===Greuther Fürth===` -- not the full name the article
+    // link everywhere else on the page spells out, `SpVgg Greuther Fürth`. A
+    // relegated club derived by article rather than by the page's own bare
+    // heading would fail here rather than render as a club that stood still.
+    const relegated = new Map(pinnedClubs("BL1", GERMAN_CLUBS));
+    relegated.set("SpVgg Greuther Fürth", {
+      article: "SpVgg Greuther Fürth",
+      name: "SpVgg Greuther Fürth"
+    });
+    const page = await germanPage();
+
+    expect(() => parseSquadChanges(
+      "wikipedia:squad-changes:germany-summer-2026",
+      page,
+      relegated,
+      "clubSections"
+    )).toThrow(/no section for SpVgg Greuther Fürth/);
   });
 });
 
@@ -1469,6 +1591,128 @@ describe("fetching a third and a fourth Competition's Squad Changes", () => {
     });
 });
 
+describe("fetching a fifth Competition's Squad Changes", () => {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+
+  beforeAll(async () => {
+    await client.connect();
+    await resetSchema(client);
+
+    return async () => {
+      await client.end();
+    };
+  });
+
+  beforeEach(async () => {
+    await client.query(
+      "truncate squad_changes, fixtures, gameweeks, raw_snapshots "
+      + "restart identity cascade"
+    );
+    // Both Competitions carry a Gameweek 1, which is the whole hazard: the
+    // number is shared and the partition is not. The Bundesliga's own
+    // Gameweek 1 deadline is the real one ADR-0054 read off football-data.org.
+    await client.query(
+      `insert into gameweeks (competition, season, gw, deadline_at) values
+         ('PL', '2026-27', 1, '2026-08-21T17:30:00Z'),
+         ('BL1', '2026-27', 1, '2026-08-28T17:00:00Z')`
+    );
+    for (const [index, club] of GERMAN_CLUBS.entries()) {
+      await client.query(
+        `insert into fixtures (
+           competition, season, fixture_id, gw, home_team, away_team, kickoff_at
+         ) values ('BL1', $1, $2, 1, $3, $4, '2026-08-28T18:30:00Z')`,
+        [
+          "2026-27",
+          index + 1,
+          club,
+          GERMAN_CLUBS[(index + 1) % GERMAN_CLUBS.length]
+        ]
+      );
+    }
+  });
+
+  const germanFetcher = async () => {
+    const body = await germanPage();
+    const requested: string[] = [];
+    return {
+      requested,
+      http: async (url: string) => {
+        requested.push(url);
+        return { status: 200, body };
+      }
+    };
+  };
+
+  test("stores the Bundesliga's window under its own Competition", async () => {
+    const { http, requested } = await germanFetcher();
+
+    const result = await fetchSquadChanges({
+      database: client,
+      competition: "BL1",
+      season: "2026-27",
+      http,
+      now: () => new Date("2026-08-27T09:00:00Z")
+    });
+
+    expect(requested).toEqual([GERMAN_PAGE_URL]);
+    expect(result).toMatchObject({ stored: true, gameweek: 1 });
+    const stored = await client.query(
+      `select competition, gw, direction, counterpart_club, fee, dated_on, loan
+         from squad_changes
+        where club = 'FC Bayern München' and player = 'Felipe Chávez'`
+    );
+    expect(stored.rows).toEqual([{
+      competition: "BL1",
+      gw: 1,
+      direction: "out",
+      counterpart_club: "1. FC Magdeburg",
+      fee: null,
+      dated_on: null,
+      loan: true
+    }]);
+    const archived = await client.query<{ source: string }>(
+      "select source from raw_snapshots"
+    );
+    expect(archived.rows).toEqual([{
+      source: "wikipedia:squad-changes:germany-summer-2026"
+    }]);
+  });
+
+  test("leaves the Premier League's Gameweek 1 partition untouched", async () => {
+    // The write path's own delete-then-insert is keyed by Gameweek, and both
+    // leagues number theirs from 1. Unscoped, this fetch empties the Premier
+    // League's window on its way past and the section it feeds goes on reading
+    // as an absence rather than as a loss.
+    await client.query(
+      `insert into squad_changes (
+         competition, season, gw, club, direction, player, counterpart_club,
+         fee, loan, dated_on, observed_at
+       ) values (
+         'PL', '2026-27', 1, 'Spurs', 'in', 'Sandro Tonali',
+         'Newcastle United', '£92.5m', false, '2026-07-06',
+         '2026-08-14T09:00:00Z'
+       )`
+    );
+
+    await fetchSquadChanges({
+      database: client,
+      competition: "BL1",
+      season: "2026-27",
+      http: (await germanFetcher()).http,
+      now: () => new Date("2026-08-27T09:00:00Z")
+    });
+
+    const partitions = await client.query(
+      `select competition, count(*)::int as rows
+         from squad_changes group by competition order by competition`
+    );
+    expect(partitions.rows).toEqual([
+      { competition: "BL1", rows: 319 },
+      { competition: "PL", rows: 1 }
+    ]);
+  });
+});
+
 /**
  * The LFP's own announcements, captured on 2026-08-21 because France's window
  * dates come from nowhere else — its transfer list states none, where the other
@@ -1553,3 +1797,76 @@ describe("France's window dates, against the LFP announcements they came from",
       ]);
     });
   });
+
+/**
+ * `bundesliga.com`'s own transfer-centre articles, captured on 2026-08-27
+ * because Germany's window dates come from nowhere else -- its transfer list
+ * states none, the same as France's. Every other source in this pipeline is
+ * archived; without these bytes the numbers in `TRANSFER_WINDOWS` that no
+ * committed file backs would be a dead link away from unverifiable, and those
+ * dates sit inside a frozen sha. Unlike France, only the summer window has an
+ * announcement to archive -- no equivalent article for winter 2026-27 exists
+ * yet, so its dates stay customary and untested here, on the same terms as
+ * England's, Spain's and Italy's winters.
+ */
+const BUNDESLIGA_PAGES = {
+  "summer-2026": {
+    fixture: "bundesliga-transfer-centre-summer-2026.html.gz",
+    sha256:
+      "5968b7186c29a11aa86be6926c4eb1109e4d91ce3a9aecd303528148283cb789"
+  },
+  "january-2026": {
+    fixture: "bundesliga-transfer-centre-january-2026.html.gz",
+    sha256:
+      "6b22ac7a4c9e496f07e3ff00106e0d9ba5ecb04a4b6ed810f7d85f78d461c641"
+  }
+} as const;
+
+async function bundesligaDescription(
+  page: keyof typeof BUNDESLIGA_PAGES
+): Promise<string> {
+  const { fixture, sha256 } = BUNDESLIGA_PAGES[page];
+  const body = await pinnedPage(fixture, sha256);
+  const match = body.match(/<meta name="description" content="([^"]*)"/);
+  if (match === null) {
+    throw new Error(`${fixture} carries no description meta tag`);
+  }
+  return match[1] as string;
+}
+
+describe("Germany's window dates, against the bundesliga.com announcements "
+  + "they came from", () => {
+  test("the summer 2026 window opens 1 July and shuts 31 August", async () => {
+    expect(await bundesligaDescription("summer-2026")).toContain(
+      "The Bundesliga's summer transfer window is open from 1 July to "
+      + "31 August 2026."
+    );
+  });
+
+  test("the summer window's `since` is the previous window's close",
+    async () => {
+      expect(await bundesligaDescription("january-2026")).toContain(
+        "The Bundesliga's winter transfer window closed at 8pm CET on "
+        + "Monday, 2 February."
+      );
+    });
+
+  // Read through the page title, which is how the archive replay reaches a
+  // window too: the announcement above and the constant below have to be the
+  // same dates, or the sentence is evidence for something nobody uses. Only
+  // the summer window is checked -- the winter window's dates are customary,
+  // not announced, and have no source to check against.
+  test("the summer dates written down are the dates announced", () => {
+    const summer = transferWindowByPage(
+      "List of German football transfers summer 2026"
+    );
+
+    expect([
+      summer?.since, summer?.opensOn, summer?.closesOn
+    ].map((date) => date?.toISOString())).toEqual([
+      "2026-02-02T00:00:00.000Z",
+      "2026-07-01T00:00:00.000Z",
+      "2026-08-31T00:00:00.000Z"
+    ]);
+  });
+});

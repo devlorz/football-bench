@@ -214,13 +214,88 @@ const LIGUE_1: Readonly<Record<string, WikipediaClub>> = {
   "Toulouse FC": { article: "Toulouse FC", name: "Toulouse" }
 };
 
+/**
+ * The Bundesliga's eighteen, keyed by football-data.org's club names and
+ * derived on 2026-08-27 by the method ticket 6 settled on: every key is a
+ * `homeTeam.name` in `competitions/BL1/matches?season=2026` and every `name`
+ * a section heading under `==Bundesliga==` on `List of German football
+ * transfers summer 2026`. Both sides are exactly eighteen with nothing left
+ * over.
+ *
+ * The page heads its sections in bare text -- `===Schalke 04===` -- exactly
+ * as France's does and every Spanish winter edition, so the `name` is what
+ * resolves a club here, and the `article` is carried for the day a heading is
+ * linked. Nine of the eighteen `name`s are the live source's own spelling;
+ * the other nine are the page's shorter football-shorthand for the same club
+ * -- `Union Berlin`, `Mainz 05`, `Bayer Leverkusen`, `Bayern Munich`,
+ * `Schalke 04`, `SC Paderborn`, `Werder Bremen`, `TSG Hoffenheim` -- each
+ * confirmed rather than guessed by finding the page's own link to the club
+ * elsewhere on the page (a counterpart cell, a reserve-side mention):
+ * `[[1. FC Union Berlin|Union Berlin]]`, `[[1. FSV Mainz 05|Mainz 05]]`,
+ * `[[Bayer 04 Leverkusen|Bayer Leverkusen]]`, `[[FC Bayern Munich|Bayern
+ * Munich]]`, `[[FC Schalke 04|Schalke 04]]`, `[[SC Paderborn 07|SC
+ * Paderborn]]`, `[[SV Werder Bremen|Werder Bremen]]`, `[[TSG 1899 Hoffenheim|
+ * TSG Hoffenheim]]`, and a bare `[[SV Elversberg]]` for `SV 07 Elversberg`.
+ *
+ * Sixteen of the eighteen `article`s are the live source's spelling outright.
+ * The two that are not are the same two judgement calls the `name`s above
+ * needed a link to confirm: `FC Bayern München` links as `FC Bayern Munich`,
+ * English Wikipedia's article title rather than the German one, and
+ * `SV 07 Elversberg` links as `SV Elversberg`, the page dropping the "07"
+ * every other Elversberg mention on the page also drops.
+ *
+ * No pair is ambiguous against another. `FC Bayern München` and `Bayer 04
+ * Leverkusen` do share "Bayer" as a prefix, but neither the page's headings
+ * (`Bayern Munich`, `Bayer Leverkusen`) nor the articles (`FC Bayern Munich`,
+ * `Bayer 04 Leverkusen`) are ever written bare -- each always carries its own
+ * disambiguating word -- and no third club on either side is any spelling of
+ * either name. Köln's, Union Berlin's and Mönchengladbach's "1." or umlaut
+ * spellings have no second candidate on either side either.
+ */
+const BUNDESLIGA: Readonly<Record<string, WikipediaClub>> = {
+  "1. FC Köln": { article: "1. FC Köln", name: "1. FC Köln" },
+  "1. FC Union Berlin": {
+    article: "1. FC Union Berlin",
+    name: "Union Berlin"
+  },
+  "1. FSV Mainz 05": { article: "1. FSV Mainz 05", name: "Mainz 05" },
+  "Bayer 04 Leverkusen": {
+    article: "Bayer 04 Leverkusen",
+    name: "Bayer Leverkusen"
+  },
+  "Borussia Dortmund": { article: "Borussia Dortmund", name: "Borussia Dortmund" },
+  "Borussia Mönchengladbach": {
+    article: "Borussia Mönchengladbach",
+    name: "Borussia Mönchengladbach"
+  },
+  "Eintracht Frankfurt": {
+    article: "Eintracht Frankfurt",
+    name: "Eintracht Frankfurt"
+  },
+  "FC Augsburg": { article: "FC Augsburg", name: "FC Augsburg" },
+  "FC Bayern München": { article: "FC Bayern Munich", name: "Bayern Munich" },
+  "FC Schalke 04": { article: "FC Schalke 04", name: "Schalke 04" },
+  "Hamburger SV": { article: "Hamburger SV", name: "Hamburger SV" },
+  "RB Leipzig": { article: "RB Leipzig", name: "RB Leipzig" },
+  "SC Freiburg": { article: "SC Freiburg", name: "SC Freiburg" },
+  "SC Paderborn 07": { article: "SC Paderborn 07", name: "SC Paderborn" },
+  "SV 07 Elversberg": { article: "SV Elversberg", name: "SV Elversberg" },
+  "SV Werder Bremen": { article: "SV Werder Bremen", name: "Werder Bremen" },
+  "TSG 1899 Hoffenheim": {
+    article: "TSG 1899 Hoffenheim",
+    name: "TSG Hoffenheim"
+  },
+  "VfB Stuttgart": { article: "VfB Stuttgart", name: "VfB Stuttgart" }
+};
+
 const WIKIPEDIA_CLUBS: Readonly<
   Record<string, Readonly<Record<string, WikipediaClub>>>
 > = {
   PL: PREMIER_LEAGUE,
   PD: LA_LIGA,
   SA: SERIE_A,
-  FL1: LIGUE_1
+  FL1: LIGUE_1,
+  BL1: BUNDESLIGA
 };
 
 /**
