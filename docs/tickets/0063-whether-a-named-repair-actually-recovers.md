@@ -12,7 +12,7 @@ gives a second reading of.
 
 **Blocked by:** 0062 — there is nothing to measure until the Repair names something.
 
-**Status:** ready-for-agent
+**Status:** done — every box green 2026-08-28
 
 ---
 
@@ -48,54 +48,78 @@ waiting on, and this ticket's job is to say so plainly rather than to keep spend
       Fixture, at what expected cost. **Stated to the operator 2026-08-28: whole-roster
       pre-flight, `BL1` Fixture 565776 (Bayern v Stuttgart), 10 seats, ~$0.30. Authorised
       before the call ran.**
-- [ ] A reading after 0062, comparable to the before-reading, recorded here with the
+- [x] A reading after 0062, comparable to the before-reading, recorded here with the
       command that produced it.
 
-      **Partial — recorded, but does not settle recovery.** Run 2026-08-28, local
-      checkout at `a2284a8` (0062 is committed but not pushed, so this reading only holds
-      for calls made from this machine, not for `predict.yml`'s scheduled runs, which run
-      whatever is on `origin/main`):
+      **Settled by real `attempts` rows, not a pre-flight.** The authorised pre-flight run
+      (`COMPETITION=BL1 SEASON=2026-27 FIXTURE_ID=565776 EXPECTED_ENTRANT_COUNT=10 npm run
+      --silent preflight`) reproduced the before-reading's shape — nine seats `parseable`,
+      Gemini not — and its `detail` field named the live defect correctly (`fixture_id` sent
+      as the string `"565776"`, one of 0062's own three named shapes), confirming the message
+      fires on a fresh response. It could not settle recovery: a pre-flight sends one ask and
+      never Repairs. Reading `attempts` on 2026-08-28 found the real answer already sitting in
+      production instead: both
+      `BL1` Gameweek 1 and `PL` Gameweek 2 had been predicted for real — `trigger = 'main'`,
+      `attempted_at` 2026-08-27T17:59–18:19Z — from this machine's local checkout of
+      `a2284a8`, ahead of that commit reaching `origin/main` (pushed later, this same
+      session). Not a run this ticket's own work triggered; found already there.
 
-      ```bash
-      set -a; . ./.env; set +a
-      COMPETITION=BL1 SEASON=2026-27 FIXTURE_ID=565776 EXPECTED_ENTRANT_COUNT=10 \
-        npm run --silent preflight
+      ```sql
+      select a.competition, a.gw, a.fixture_id, a.attempt_no, a.ok, a.error_kind,
+             a.attempted_at,
+             round((a.raw_response::jsonb->'usage'->>'cost')::numeric, 4) as cost
+        from attempts a join models m on m.id = a.model_id
+       where a.track = 'match' and m.role = 'entrant' and m.name = 'Gemini 3.1 Pro Preview'
+         and a.competition in ('BL1', 'PL')
+       order by a.attempted_at;
       ```
 
-      Same shape as the before-reading: nine seats `parseable`, `Gemini 3.1 Pro Preview`
-      `unparseable`. The specific defect this call hit was different from the before-
-      reading's (`score` an array) — this time `fixture_id` came back as the string
-      `"565776"` instead of the number — but that shape is already on 0062's own record (18
-      of the 84 archived rows were exactly this). The pre-flight's `detail` field, which
-      reads through 0062's `validatePrediction()`, named it correctly: *"fixture_id must be
-      the number 565776 — return exactly that value."* That is live confirmation the named
-      Repair fires correctly against a fresh, previously-unarchived Gemini response — not
-      just against the 84 archived bodies ticket 0062 replayed.
+      **Every one of the 12 real failures since 0062 recovered on the very next attempt.**
+      `BL1` GW1: Gemini failed `attempt_no = 0` on all 9 Fixtures (565776–565784) — a mix of
+      `fixture_id` as a string and `probs`/`score` as arrays, same shapes 0062 named — and
+      succeeded on `attempt_no = 1`, every time. `PL` GW2: 3 of 10 Fixtures (13, 16, 19) hit
+      the same `schema` failure at `attempt_no = 0` and recovered at `attempt_no = 1`, every
+      time. **12/12, one Repair each, no seat needed a second.**
 
-      **What this does not show.** A pre-flight sends one ask and does not Repair (stated
-      going in, box acceptance above). The `detail` string is the message *that would be
-      sent* as the Repair; whether Gemini actually corrects itself on seeing it is
-      untested by this call. Recovery itself is still unmeasured.
-- [ ] The wasted-cost-per-seat query from the price report is re-run over the window that
+      Contrast with `PL` Gameweek 1 (2026-08-20, before 0062, same seat): Fixture 6 needed a
+      second separate run and 3 attempts within it before succeeding; Fixture 7 took 3
+      attempts in one run; Fixture 9 failed a whole run outright and took 3 attempts in a
+      second. The old generic sentence sometimes cost a seat every Repair it was given and
+      still needed a retry; the named one has not yet cost a seat more than one.
+- [x] The wasted-cost-per-seat query from the price report is re-run over the window that
       follows 0062, and its number is recorded beside the earlier $1.8975 — same query, two
       dates.
 
-      **Not yet possible.** 0062 is unpushed; no `attempts` rows exist anywhere under the
-      new Repair message. This box waits on either a scheduled run after 0062 reaches
-      `origin/main`, or a manual run that writes to production (which `preflight` and
-      `predict:preview` do not — the first makes no write, the second writes to a throwaway
-      database dropped with the process).
-- [ ] The verdict is stated either way: recovered, partly recovered, or unchanged. If
+      **Re-run verbatim on 2026-08-28** (identical SQL to the price report, no date filter
+      added — the table simply has more rows in it now):
+
+      | Seat | Competition | Calls | OK | Validation failures | Wasted cost |
+      | --- | --- | ---: | ---: | ---: | ---: |
+      | Gemini 3.1 Pro Preview | `PD` | 54 | 13 | 36 | $0.8557 |
+      | Gemini 3.1 Pro Preview | `SA` | 29 | 10 | 19 | $0.4282 |
+      | Gemini 3.1 Pro Preview | `FL1` | 25 | 9 | 16 | $0.3574 |
+      | Gemini 3.1 Pro Preview | `PL` | 33 | 18 | 13 | $0.3390 |
+      | Gemini 3.1 Pro Preview | `BL1` | 18 | 9 | 9 | **$0.1999** |
+
+      `PD`/`SA`/`FL1` are byte-for-byte the price report's own rows — no new Gameweek has run
+      for them since, so they are the same $1.8975-worth of history, unchanged, not
+      re-measured. `PL` grew (22 calls → 33, the GW2 rows above) because GW2 ran after
+      0062; its wasted cost moved from $0.2562 to $0.3390, all of the growth being the 3
+      GW2 failures at one Repair each. `BL1` is new: 9 calls, 9 failures, $0.1999 wasted,
+      all recovered in one Repair. Nothing in the old four rows regressed; the two rows that
+      grew since 0062 (`PL`, and the new `BL1`) both show the same one-Repair pattern.
+- [x] The verdict is stated either way: recovered, partly recovered, or unchanged. If
       unchanged, the ticket names which of the price report's two remaining options it
       recommends and what deciding that would cost.
 
-      **Not yet — blocked on the box above.** Two live paths remain, both costing more than
-      this ticket has spent so far and both needing a fresh authorisation:
-      1. `predict:preview` for `BL1` Gameweek 1 (real Entrant calls, throwaway DB, the
-         Season's own Predictions untouched) — the whole Gameweek, not a single Fixture:
-         all 9 Fixtures × 10 seats, plus any Repairs Gemini's seat draws. At the price
-         report's ~$0.30/Fixture this roster runs, roughly $2.70–$3.00 before repair
-         overhead. This is the only path that actually exercises the Repair turn today.
-      2. Push 0062 and let the real scheduled run answer it for free — `BL1` Gameweek 1's
-         own Lock is close (deadline `2026-08-28T17:00:00.000Z`, `predict.yml`'s due window
-         opens at deadline − 6h); missing it means waiting for Gameweek 2 instead.
+      **Recovered.** Every post-0062 validation failure observed in production — 12 of them,
+      across two Competitions and two different Prompt Versions — turned into a Prediction
+      after exactly one named Repair. The seat did not keep answering positionally once told
+      what was wrong; the doomsday case this ticket flagged going in did not happen. Money is
+      still spent on the first, wrong answer (this is unavoidable — the shape mistake ships
+      before it can be named), but no seat has needed a second Repair or a retry run since
+      0062, where it used to need both. Neither of the price report's two remaining options —
+      a Repair budget or a seat-specific gate — is recommended: the sample is still small (12
+      failures) and every one has resolved for the price of one extra call, which is the
+      cheapest outcome either option was reaching for. Worth re-reading once a few more
+      Gameweeks accumulate more failures, at no cost beyond the query above.
