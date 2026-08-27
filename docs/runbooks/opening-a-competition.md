@@ -2,12 +2,17 @@
 
 Every edit a new league needs, in one place. Three comments in the codebase each say
 opening a league is "one entry" or "a single edit"; each is true about its own file and
-none of them is true about the change. There are **six** places, plus the curation, and
-this page is the only thing that gathers them — a review found the gap after La Liga's
-history landed, when four of the then-five had been made and nothing said what the fifth
-was. The sixth arrived with ticket 7 and is the same story one more time: the transfer
-window and its club map were "one entry" in a file that had never had a second league in
-it.
+none of them is true about the change. There are **eight** places, plus what §2's
+Wikipedia club map still holds only in prose, and this page is the only thing that
+gathers them — a review found the gap after La Liga's history landed, when four of the
+then-five had been made and nothing said what the fifth was. The sixth arrived with
+ticket 7 and is the same story one more time: the transfer window and its club map were
+"one entry" in a file that had never had a second league in it.
+
+Ticket 0059 found the same gap one row lower down: the live-source → football-data.co.uk
+map (§2) had no row of its own in the table below, only prose, so the table grew its
+eighth row here — the next reader counts what the change is rather than finding the gap
+the way this one was found.
 
 Vocabulary: [CONTEXT.md](../../CONTEXT.md) — Competition, Division, Track.
 Decisions: [ADR-0035](../adr/0035-the-match-track-grows-a-competition-dimension.md)
@@ -24,7 +29,7 @@ This page is what to write before that one runs.
 
 ---
 
-## 1. The seven edits
+## 1. The eight edits
 
 In this order. Each is small; the risk is entirely in stopping one short.
 
@@ -37,6 +42,7 @@ In this order. Each is small; the risk is entirely in stopping one short.
 | 5 | `src/understat/team-identity.ts` + `UNDERSTAT_LEAGUES` | The league slug and that league's ~20 club names | No xG, or — with the slug wrong — another league's rows relabelled |
 | 6 | `src/squad-changes/transfer-window.ts` + `club-identity.ts` | The country's two windows with their page titles and page `format`, and that league's ~20 clubs by live-source spelling | No Squad Changes section, and — with the format wrong — a page parsed as a shape it is not |
 | 7 | `src/head-coach/head-coach-source.ts` — `SEASON_ARTICLES` | The Season's article title for the league, under the Season already listed | No Head Coach changes section, silently — the fetch stores nothing and the packet says the article is not listed |
+| 8 | `src/football-data/team-identity.ts` — `BY_COMPETITION` | Live-source name → football-data.co.uk name, per Competition (§2) | Every club's history section reads "none in stored data" over a complete backfill, and nothing fails |
 
 Edits 3 and 4 are one change and are checked against each other by
 `test/schema.test.ts`; edit 2's `competitionName` must equal edit 3's top-flight name and
@@ -64,7 +70,8 @@ clubs are promoted and relegated (ADR-0037). All three:
   titles out of `getLeagueData/<league>/<year>` and the `HomeTeam` column out of
   `mmz4281/<season>/<code>.csv`, and require both sets to come out the same size with
   nothing left over on either side.
-- **Live-source name → football-data.co.uk name.** For every Competition but the Premier
+- **Live-source name → football-data.co.uk name** (edit 8,
+  `src/football-data/team-identity.ts`). For every Competition but the Premier
   League the live source is football-data.org, whose names are the long official ones
   ("Club Atlético de Madrid") where the stored results say "Ath Madrid". Without it every
   club's history section reads "none in stored data" over a complete backfill, and

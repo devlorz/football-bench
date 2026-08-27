@@ -205,13 +205,51 @@ const LIGUE_1_TEAM_NAMES: Readonly<Record<string, string>> = {
   Troyes: "Troyes"
 };
 
+const BUNDESLIGA_TEAM_NAMES: Readonly<Record<string, string>> = {
+  // The Bundesliga's 2025-26 eighteen, read off the live feeds rather than
+  // transcribed: every key is a title in `getLeagueData/Bundesliga/2025` and
+  // every value a `HomeTeam` in `mmz4281/2526/D1.csv`, and the two sets are
+  // each exactly eighteen with nothing left over on either side.
+  //
+  // Seven are the same string on both sides and cannot be wrong: Augsburg,
+  // Bayern Munich, Freiburg, Hoffenheim, Union Berlin, Werder Bremen,
+  // Wolfsburg. The other eleven differ, and two pairs of those eleven share
+  // a source-side stem a wrong mapping would still read as plausible:
+  // `Bayer Leverkusen`/`Bayern Munich` (`Leverkusen`↔`Bayern Munich`, the
+  // same German mix-up the football-data.org map has) and
+  // `Borussia Dortmund`/`Borussia M.Gladbach` (`Dortmund`↔`M'gladbach`).
+  // `FC Cologne`→`FC Koln` is the other pair a substring derivation could
+  // not answer on its own.
+  //
+  // Reviewed and approved 2026-08-27, before the backfill it governs ran.
+  Augsburg: "Augsburg",
+  "Bayer Leverkusen": "Leverkusen",
+  "Bayern Munich": "Bayern Munich",
+  "Borussia Dortmund": "Dortmund",
+  "Borussia M.Gladbach": "M'gladbach",
+  "Eintracht Frankfurt": "Ein Frankfurt",
+  "FC Cologne": "FC Koln",
+  "FC Heidenheim": "Heidenheim",
+  Freiburg: "Freiburg",
+  "Hamburger SV": "Hamburg",
+  Hoffenheim: "Hoffenheim",
+  "Mainz 05": "Mainz",
+  "RasenBallsport Leipzig": "RB Leipzig",
+  "St. Pauli": "St Pauli",
+  "Union Berlin": "Union Berlin",
+  "VfB Stuttgart": "Stuttgart",
+  "Werder Bremen": "Werder Bremen",
+  Wolfsburg: "Wolfsburg"
+};
+
 const BY_COMPETITION: Readonly<
   Record<string, Readonly<Record<string, string>>>
 > = {
   PL: PREMIER_LEAGUE_TEAM_NAMES,
   PD: LA_LIGA_TEAM_NAMES,
   SA: SERIE_A_TEAM_NAMES,
-  FL1: LIGUE_1_TEAM_NAMES
+  FL1: LIGUE_1_TEAM_NAMES,
+  BL1: BUNDESLIGA_TEAM_NAMES
 };
 
 /**

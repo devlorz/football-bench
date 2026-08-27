@@ -63,7 +63,7 @@ describe("a context packet holds one Competition's data", () => {
          understat_match_xg, fpl_players
        restart identity cascade`
     );
-    for (const competition of ["PL", "PD", "SA", "FL1"]) {
+    for (const competition of ["PL", "PD", "SA", "FL1", "BL1"]) {
       await client.query(
         "insert into competitions (competition, season) values ($1, $2)",
         [competition, SEASON]
@@ -89,7 +89,9 @@ describe("a context packet holds one Competition's data", () => {
          ('SA', $1, 'Premier League', $2, 'Roma', 'Lazio', 1, 0),
          ('SA', $1, 'Premier League', $3, 'Milan', 'Inter', 3, 2),
          ('FL1', $1, 'Premier League', $2, 'Paris SG', 'Paris FC', 2, 0),
-         ('FL1', $1, 'Premier League', $3, 'Lille', 'Lens', 1, 1)`,
+         ('FL1', $1, 'Premier League', $3, 'Lille', 'Lens', 1, 1),
+         ('BL1', $1, 'Premier League', $2, 'Bayern Munich', 'RB Leipzig', 6, 0),
+         ('BL1', $1, 'Premier League', $3, 'Freiburg', 'Augsburg', 1, 3)`,
       [SEASON, EARLIER, LATER]
     );
     // Each contaminant is stored under one Competition and names the *other*
@@ -122,7 +124,12 @@ describe("a context packet holds one Competition's data", () => {
          ('SA', $1, 'sa-contaminant-fl1', $2, 'Paris Saint Germain', 'Paris FC',
           9.9, 9.9),
          ('FL1', $1, 'fl1-contaminant-sa', $2, 'Roma', 'Lazio', 9.9, 9.9),
-         ('FL1', $1, 'fl1-own', $3, 'Lille', 'Lens', 3.3, 0.4)`,
+         ('FL1', $1, 'fl1-own', $3, 'Lille', 'Lens', 3.3, 0.4),
+         ('FL1', $1, 'fl1-contaminant-bl1', $2, 'Bayern Munich',
+          'RasenBallsport Leipzig', 9.9, 9.9),
+         ('BL1', $1, 'bl1-contaminant-fl1', $2, 'Paris Saint Germain',
+          'Paris FC', 9.9, 9.9),
+         ('BL1', $1, 'bl1-own', $3, 'Freiburg', 'Augsburg', 1.8, 1.2)`,
       [SEASON, EARLIER, LATER]
     );
   });
@@ -135,6 +142,7 @@ describe("a context packet holds one Competition's data", () => {
       const laLiga = await loadMatchContextData(client, "PD", SEASON, 1);
       const serieA = await loadMatchContextData(client, "SA", SEASON, 1);
       const ligue1 = await loadMatchContextData(client, "FL1", SEASON, 1);
+      const bundesliga = await loadMatchContextData(client, "BL1", SEASON, 1);
 
       expect(premierLeague.historicalMatches.map((match) => match.home_team))
         .toEqual(["Arsenal", "Liverpool"]);
@@ -144,6 +152,8 @@ describe("a context packet holds one Competition's data", () => {
         .toEqual(["Roma", "Milan"]);
       expect(ligue1.historicalMatches.map((match) => match.home_team))
         .toEqual(["Paris SG", "Lille"]);
+      expect(bundesliga.historicalMatches.map((match) => match.home_team))
+        .toEqual(["Bayern Munich", "Freiburg"]);
     });
 
   test("xG from another Competition never reaches a form line", async () => {
@@ -151,6 +161,7 @@ describe("a context packet holds one Competition's data", () => {
     const laLiga = await loadMatchContextData(client, "PD", SEASON, 1);
     const serieA = await loadMatchContextData(client, "SA", SEASON, 1);
     const ligue1 = await loadMatchContextData(client, "FL1", SEASON, 1);
+    const bundesliga = await loadMatchContextData(client, "BL1", SEASON, 1);
 
     // The Competition's own xG lands, which is what makes the two absences
     // below mean something: without it this test would also pass against a
@@ -159,6 +170,7 @@ describe("a context packet holds one Competition's data", () => {
     expect(xgOf(laLiga, "Betis")).toBe(2.5);
     expect(xgOf(serieA, "Milan")).toBe(2.2);
     expect(xgOf(ligue1, "Lille")).toBe(3.3);
+    expect(xgOf(bundesliga, "Freiburg")).toBe(1.8);
 
     expect(xgOf(premierLeague, "Arsenal")).toBeUndefined();
     expect(xgOf(laLiga, "Vallecano")).toBeUndefined();
@@ -171,6 +183,10 @@ describe("a context packet holds one Competition's data", () => {
     // 1's: both directions of the pair this ticket adds, not just the new
     // league reading clean.
     expect(xgOf(ligue1, "Paris SG")).toBeUndefined();
+    // The Bundesliga's pair, added with this ticket the same way: Ligue 1
+    // holds a contaminant aimed at the Bundesliga's form line, and the
+    // Bundesliga holds one aimed at Ligue 1's, checked above.
+    expect(xgOf(bundesliga, "Bayern Munich")).toBeUndefined();
   });
 
   test("a non-PL packet renders its history and no availability section",
@@ -197,6 +213,9 @@ describe("a context packet holds one Competition's data", () => {
       );
       const ligue1 = buildMatchContext(
         fixture, await loadMatchContextData(client, "FL1", SEASON, 1)
+      );
+      const bundesliga = buildMatchContext(
+        fixture, await loadMatchContextData(client, "BL1", SEASON, 1)
       );
 
       expect(laLiga).toContain(HISTORICAL_SECTION);
@@ -235,5 +254,14 @@ describe("a context packet holds one Competition's data", () => {
       );
       expect(ligue1).not.toContain("Serie A table");
       expect(ligue1).not.toContain("Premier League table");
+
+      // And the fifth about all four before it.
+      expect(bundesliga).toContain(
+        "Bundesliga table: no result has been played yet this Season."
+      );
+      expect(bundesliga).not.toContain("La Liga table");
+      expect(bundesliga).not.toContain("Ligue 1 table");
+      expect(bundesliga).not.toContain("Serie A table");
+      expect(bundesliga).not.toContain("Premier League table");
     });
 });

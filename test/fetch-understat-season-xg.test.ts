@@ -763,6 +763,44 @@ describe("fetching Understat per-match xG", () => {
       }
     });
 
+  // The Bundesliga's eighteen, read back against its own two feeds. Unlike
+  // Serie A and Ligue 1, this map carries no ticket-0041 shape: it opened
+  // clean, so the key set is exactly this feed's eighteen and nothing more.
+  test("derives the Bundesliga's eighteen from the two feeds it was read off",
+    async () => {
+      const feed = JSON.parse(
+        await archivedBody("understat-2025-26-Bundesliga.json.gz")
+      ) as { dates: Array<{ h: { title: string }; a: { title: string } }> };
+      const titles = new Set(feed.dates.flatMap(({ h, a }) => [h.title, a.title]));
+
+      const stored = await archivedHomeTeams("football-data-2526-D1.csv.gz");
+
+      expect(titles.size).toBe(18);
+      expect(stored.size).toBe(18);
+
+      expect(Object.keys(understatTeamNamesOf("BL1") ?? {}).sort())
+        .toEqual([...titles].sort());
+
+      const resolved = [...titles].map(
+        (title) => resolveUnderstatTeamName("BL1", title)
+      );
+      expect(resolved.filter((name) => name === undefined)).toEqual([]);
+      expect(new Set(resolved).size).toBe(18);
+      expect([...new Set(resolved)].sort()).toEqual([...stored].sort());
+
+      // The two hazard pairs, named rather than left to the set arithmetic --
+      // a swap of either leaves every count above unchanged, since both
+      // sides of each pair stay in the same eighteen-member value set.
+      expect(resolveUnderstatTeamName("BL1", "Bayer Leverkusen"))
+        .toBe("Leverkusen");
+      expect(resolveUnderstatTeamName("BL1", "Bayern Munich"))
+        .toBe("Bayern Munich");
+      expect(resolveUnderstatTeamName("BL1", "Borussia Dortmund"))
+        .toBe("Dortmund");
+      expect(resolveUnderstatTeamName("BL1", "Borussia M.Gladbach"))
+        .toBe("M'gladbach");
+    });
+
   // No end-to-end "stores xG under joinable names" test for this pair, unlike
   // Serie A's: that shape needs a feed naming the club to prove the key
   // against, and Ligue 1's does not yet (the test above). A synthetic feed
@@ -846,11 +884,65 @@ describe("fetching Understat per-match xG", () => {
       ]);
     });
 
+  // The Bundesliga's join rate is 306 of 306 -- every stored result pairs,
+  // every score agrees, and every date agrees too. No date drift like Ligue
+  // 1's eight: Understat files each Bundesliga kick-off at its real slot
+  // rather than one nominal time per matchday.
+  test("agrees with Understat on every Bundesliga result and date", async () => {
+    const feed = JSON.parse(
+      await archivedBody("understat-2025-26-Bundesliga.json.gz")
+    ) as {
+      dates: Array<{
+        datetime: string;
+        h: { title: string }; a: { title: string };
+        goals: { h: string; a: string };
+      }>;
+    };
+    const rows = (await archivedBody("football-data-2526-D1.csv.gz"))
+      .split(/\r?\n/).filter((line) => line.length > 0);
+    const column = new Map(
+      (rows[0]?.split(",") ?? []).map((name, index) => [name, index])
+    );
+    const field = (row: string[], name: string): string =>
+      row[column.get(name) ?? -1] ?? "";
+
+    const understat = new Map(feed.dates.map((match) => [
+      `${resolveUnderstatTeamName("BL1", match.h.title)}`
+      + `|${resolveUnderstatTeamName("BL1", match.a.title)}`,
+      { date: match.datetime.slice(0, 10), score: `${match.goals.h}-${match.goals.a}` }
+    ]));
+
+    const unpaired: string[] = [];
+    const disagreed: string[] = [];
+    const differentDate: string[] = [];
+    for (const row of rows.slice(1).map((line) => line.split(","))) {
+      const home = field(row, "HomeTeam");
+      const away = field(row, "AwayTeam");
+      const match = understat.get(`${home}|${away}`);
+      if (match === undefined) {
+        unpaired.push(`${home} v ${away}`);
+        continue;
+      }
+      if (match.score !== `${field(row, "FTHG")}-${field(row, "FTAG")}`) {
+        disagreed.push(`${home} v ${away}`);
+      }
+      const [day, month, year] = field(row, "Date").split("/");
+      if (match.date !== `${year}-${month}-${day}`) {
+        differentDate.push(`${home} v ${away}`);
+      }
+    }
+
+    expect(rows.slice(1)).toHaveLength(306);
+    expect(unpaired).toEqual([]);
+    expect(disagreed).toEqual([]);
+    expect(differentDate).toEqual([]);
+  });
+
   // `XX`, outside the `competition_code` domain -- see
-  // `test/openrouter-entrant.test.ts`'s comment on the same choice: `BL1` is
-  // still missing from `UNDERSTAT_LEAGUES` today, but ADR-0054 is closing it
-  // (tickets 0057-0058), and this function never touches the database until
-  // after the lookup below.
+  // `test/openrouter-entrant.test.ts`'s comment on the same choice: `PL`,
+  // `PD`, `SA`, `FL1` and `BL1` are the only Competitions `UNDERSTAT_LEAGUES`
+  // knows, and this function never touches the database until after the
+  // lookup below.
   test("refuses a Competition with no Understat league", async () => {
     await expect(fetchUnderstatSeasonXg({
       database: client,

@@ -167,11 +167,54 @@ const LIGUE_1: TeamNames = {
   "Toulouse FC": "Toulouse"
 };
 
+/**
+ * The Bundesliga's eighteen, derived rather than transcribed: every key is a
+ * `homeTeam.name` in the recorded `competitions/BL1/matches?season=2026`
+ * response and every value a `HomeTeam` football-data.co.uk stored for
+ * 2025-26 — fifteen in `D1` and the three promoted clubs in `D2` (Schalke 04,
+ * Paderborn, Elversberg). The two sets are each exactly eighteen with nothing
+ * left over on either side. Reviewed and approved 2026-08-27, before the
+ * backfill it governs was read through.
+ *
+ * `RB Leipzig`→`RB Leipzig` is the only identical string on both sides; the
+ * other seventeen drop a prefix (`FC Schalke 04`→`Schalke 04`), a legal form
+ * (`VfB Stuttgart`→`Stuttgart`), or reword the club entirely
+ * (`Hamburger SV`→`Hamburg`). What the review was actually asked to decide is
+ * two pairs that share a source-side stem: `Borussia Dortmund`/
+ * `Borussia Mönchengladbach`, where a swap still reads as a real Bundesliga
+ * pairing (`Dortmund`↔`M'gladbach`), and `Bayer 04 Leverkusen`/
+ * `FC Bayern München` — the pair every casual fan mixes up
+ * (`Leverkusen`↔`Bayern Munich`). `1. FC Köln`/`1. FC Union Berlin` share the
+ * weaker `1. FC` stem but resolve to unrelated cities, so a swap there is
+ * caught on sight.
+ */
+const BUNDESLIGA: TeamNames = {
+  "1. FC Köln": "FC Koln",
+  "1. FC Union Berlin": "Union Berlin",
+  "1. FSV Mainz 05": "Mainz",
+  "Bayer 04 Leverkusen": "Leverkusen",
+  "Borussia Dortmund": "Dortmund",
+  "Borussia Mönchengladbach": "M'gladbach",
+  "Eintracht Frankfurt": "Ein Frankfurt",
+  "FC Augsburg": "Augsburg",
+  "FC Bayern München": "Bayern Munich",
+  "FC Schalke 04": "Schalke 04",
+  "Hamburger SV": "Hamburg",
+  "RB Leipzig": "RB Leipzig",
+  "SC Freiburg": "Freiburg",
+  "SC Paderborn 07": "Paderborn",
+  "SV 07 Elversberg": "Elversberg",
+  "SV Werder Bremen": "Werder Bremen",
+  "TSG 1899 Hoffenheim": "Hoffenheim",
+  "VfB Stuttgart": "Stuttgart"
+};
+
 const BY_COMPETITION: Readonly<Record<string, TeamNames>> = {
   PL: PREMIER_LEAGUE,
   PD: LA_LIGA,
   SA: SERIE_A,
-  FL1: LIGUE_1
+  FL1: LIGUE_1,
+  BL1: BUNDESLIGA
 };
 
 /**

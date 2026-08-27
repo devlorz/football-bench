@@ -662,6 +662,57 @@ describe("fetching football-data.co.uk results", () => {
         .toBe("Rennes");
     });
 
+  // The Bundesliga's eighteen, checked the same way and against the same
+  // bytes. Two pairs share a source-side stem a wrong mapping would still
+  // read as plausible -- `Borussia Dortmund`/`Borussia Mönchengladbach` and
+  // `Bayer 04 Leverkusen`/`FC Bayern München` -- so both are named below
+  // rather than left to the set arithmetic, the same way Ligue 1's Paris
+  // pair is.
+  test("maps the Bundesliga's eighteen from the response the map was derived from",
+    async () => {
+      const recorded = JSON.parse(
+        await archivedBody("football-data-org-2026-27-BL1-recorded.json.gz")
+      ) as { matches: Array<{
+        homeTeam: { name: string }; awayTeam: { name: string };
+      }> };
+      const clubs = new Set(recorded.matches.flatMap(
+        ({ homeTeam, awayTeam }) => [homeTeam.name, awayTeam.name]
+      ));
+
+      const topFlight = await archivedHomeTeams("football-data-2526-D1.csv.gz");
+      const secondDivision = await archivedHomeTeams("football-data-2526-D2.csv.gz");
+
+      const names = teamNamesOf("BL1");
+      expect(Object.keys(names ?? {}).sort()).toEqual([...clubs].sort());
+
+      const values = Object.values(names ?? {});
+      expect(new Set(values).size).toBe(18);
+      expect(values.filter((name) => topFlight.has(name))).toHaveLength(15);
+      // Which three of `D1` this map leaves behind, not how many: the three
+      // relegated out of it, and no others.
+      expect([...topFlight].filter((name) => !values.includes(name)).sort())
+        .toEqual(["Heidenheim", "St Pauli", "Wolfsburg"]);
+      expect(values.filter((name) => secondDivision.has(name)).sort())
+        .toEqual(["Elversberg", "Paderborn", "Schalke 04"]);
+      expect(values.filter(
+        (name) => !topFlight.has(name) && !secondDivision.has(name)
+      )).toEqual([]);
+
+      expect(resolveFootballDataTeamName(names, "RB Leipzig"))
+        .toBe("RB Leipzig");
+      // The two hazard pairs, named rather than left to the set arithmetic: a
+      // swap of either would leave every count above unchanged, since both
+      // sides of each pair stay in the same eighteen-member value set.
+      expect(resolveFootballDataTeamName(names, "Borussia Dortmund"))
+        .toBe("Dortmund");
+      expect(resolveFootballDataTeamName(names, "Borussia Mönchengladbach"))
+        .toBe("M'gladbach");
+      expect(resolveFootballDataTeamName(names, "Bayer 04 Leverkusen"))
+        .toBe("Leverkusen");
+      expect(resolveFootballDataTeamName(names, "FC Bayern München"))
+        .toBe("Bayern Munich");
+    });
+
   // The per-file division check, over the mistake that is actually available:
   // football-data.co.uk answers a season it has no file for by redirecting to
   // a near-miss filename — `2627/SP1.csv` currently lands on Portugal's

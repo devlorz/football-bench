@@ -46,10 +46,105 @@ left unset and nothing refuses one that is stated and wrong.
 
 ## Acceptance
 
-- [ ] Both maps are derived from the real feeds, each pair of sets the same size with
+- [x] Both maps are derived from the real feeds, each pair of sets the same size with
       nothing left over, and reviewed by a person before any backfill runs.
-- [ ] The prior Season's results and per-match xG are stored under `BL1`, and the counts of
+
+      *Understat name → football-data.co.uk name* (18/18): `getLeagueData/Bundesliga/2025`
+      (fetched live, archived byte-for-byte as
+      `test/fixtures/understat-2025-26-Bundesliga.json.gz`, 453,761 bytes,
+      sha256 `c0a30b3e91fc…`) against `HomeTeam` in `mmz4281/2526/D1.csv`
+      (`test/fixtures/football-data-2526-D1.csv.gz`, 159,944 bytes, sha256
+      `618301a4b399…`). Seven of the eighteen are the same string on both sides.
+      **Unlike the first pass of this ticket claimed, this league is not free of
+      hazard pairs** — two share a source-side stem a wrong mapping would still read
+      as plausible: `Bayer Leverkusen`/`Bayern Munich` (`Leverkusen`↔`Bayern Munich`,
+      the classic German mix-up) and `Borussia Dortmund`/`Borussia M.Gladbach`
+      (`Dortmund`↔`M'gladbach`). Both are asserted by name in
+      `test/fetch-understat-season-xg.test.ts`, not left to the set arithmetic.
+
+      *Live-source name → football-data.co.uk name* (18/18): `competitions/BL1/matches?season=2026`
+      (already committed as `test/fixtures/football-data-org-2026-27-BL1-recorded.json.gz`
+      by ticket 0057) against `D1` (fifteen stayers) and
+      `D2` (`test/fixtures/football-data-2526-D2.csv.gz`, 157,989 bytes, sha256
+      `8bfb275286d7…`; three promoted — Schalke 04, Paderborn, Elversberg). The same
+      two hazard pairs recur here in their long official spelling
+      (`Bayer 04 Leverkusen`/`FC Bayern München`, `Borussia Dortmund`/
+      `Borussia Mönchengladbach`), asserted by name in
+      `test/fetch-football-data-season.test.ts`. `1. FC Köln`/`1. FC Union Berlin`
+      share the weaker `1. FC` stem but resolve to unrelated cities, so a swap there
+      is caught on sight rather than needing its own assertion.
+
+      Both tables were shown to the user for review before any code was written or the
+      backfill ran; approved 2026-08-27. The stem-hazard miss above was caught by a
+      Standards review after that approval and fixed in the same sitting — the map
+      values themselves did not change, only what the comments and tests say about
+      them.
+
+- [x] The prior Season's results and per-match xG are stored under `BL1`, and the counts of
       each are recorded in this ticket the way Serie A's and Ligue 1's were.
-- [ ] A real packet is read whole over the stored rows: the league table renders, every
+
+      `HISTORICAL_COMPETITION=BL1 HISTORICAL_SEASON=2025-26 npm run fetch:history` and
+      `fetch:xg-history` run by the user 2026-08-27 against `DATABASE_URL` — the
+      production Supabase pooler; there is no other `DATABASE_URL` for this project's
+      backfill scripts to write to, and this ticket does not pretend otherwise. Counts
+      below read from that same database, 2026-08-27:
+
+      ```sql
+      select division, count(*)::int as rows from historical_matches
+       where competition = 'BL1' and season = '2025-26' group by division;
+      select count(*)::int as rows from understat_match_xg
+       where competition = 'BL1' and season = '2025-26';
+      ```
+
+      612 `historical_matches` rows (306 `Bundesliga`, 306 `2. Bundesliga`) and 306
+      `understat_match_xg` rows.
+
+- [x] A real packet is read whole over the stored rows: the league table renders, every
       club's history section resolves, and the xG join rate is stated rather than assumed.
-- [ ] The runbook's table lists the live-source → football-data.co.uk map as its own row.
+
+      Read directly against the production historical/xG rows with a synthetic `asOf`
+      past the 2025-26 Season's close (`loadMatchContextData` itself needs a `BL1`
+      Gameweek row, which does not exist yet — activation is ticket 0060's job, not this
+      one's, so `context:show` cannot do this read either). Bayern Munich renders 1st,
+      Dortmund 2nd, RB Leipzig 3rd in the 2025-26 table.
+
+      Two checks, not one club spot-checked twice: a live-source-spelling check (Bayern
+      Munich v RB Leipzig, FC Koln v Union Berlin — both `D1` clubs, both resolve full
+      prior-Season position, base rates, last-five form and head-to-head with real
+      shots/xG lines) and a **promoted-club** check, which the first pass of this ticket
+      got wrong by using Wolfsburg — a club *relegated out of* `D1`, not promoted into
+      the current roster, so it proves nothing about the `D2` half of the map. Re-run
+      against Paderborn v Elversberg, both actually promoted for 2026-27: both render
+      `Bundesliga history: none in stored data; promoted from the 2. Bundesliga` and
+      `promoted: yes`, with five `2. Bundesliga` form lines each — the Championship's
+      shape for `PL`, on `D2`'s terms. Their xG lines correctly read `unavailable`:
+      Understat's `Bundesliga` feed covers only the top flight, the same known gap
+      Ligue 1's Le Mans has for `Ligue 2`.
+
+      Base rates, read the same way:
+
+      ```sql
+      select count(*)::int as matches,
+             round(100.0 * avg((home_goals > away_goals)::int), 1) as home_pct,
+             round(100.0 * avg((home_goals = away_goals)::int), 1) as draw_pct,
+             round(100.0 * avg((home_goals < away_goals)::int), 1) as away_pct,
+             round(avg(home_goals + away_goals), 2) as goals
+        from historical_matches
+       where competition = 'BL1' and season = '2025-26' and division = 'Bundesliga';
+      ```
+
+      306 matches, 43.8% / 24.5% / 31.7%, 3.24 goals — the line the packet prints.
+
+      The xG join rate is **306 of 306** — every stored `D1` result pairs with an
+      Understat row (joined on UTC kick-off date and both names through the map, the
+      same key `joinXg` uses), every score agrees, every date agrees. No date-drift tail
+      like Ligue 1's eight: Understat files each Bundesliga kick-off at its real slot
+      rather than one nominal time per matchday, checked pair-by-pair over the whole
+      Season (`test/fetch-understat-season-xg.test.ts`, "agrees with Understat on every
+      Bundesliga result and date").
+
+- [x] The runbook's table lists the live-source → football-data.co.uk map as its own row.
+
+      `docs/runbooks/opening-a-competition.md` §1 grows an eighth row
+      (`src/football-data/team-identity.ts` — `BY_COMPETITION`), and §2's own bullet for
+      that map now cross-references it as edit 8.
