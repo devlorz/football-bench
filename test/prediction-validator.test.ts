@@ -83,6 +83,145 @@ describe("Prediction validation", () => {
     });
   });
 
+  test("names probs sent as an array instead of an object", () => {
+    expect(validatePrediction(JSON.stringify({
+      fixture_id: 1,
+      probs: [0.43, 0.27, 0.3],
+      score: { home: 1, away: 1 },
+      rationale: ""
+    }), 1)).toEqual({
+      ok: false,
+      kind: "schema",
+      message: "probs must be an object with keys H, D and A — received an array."
+    });
+  });
+
+  test("names score sent as an array instead of an object", () => {
+    expect(validatePrediction(JSON.stringify({
+      fixture_id: 1,
+      probs: { H: 0.6, D: 0.24, A: 0.16 },
+      score: [1, 1],
+      rationale: ""
+    }), 1)).toEqual({
+      ok: false,
+      kind: "schema",
+      message: "Predicted Score must be an object with keys home and away — received an array."
+    });
+  });
+
+  test("names both containers when probs and score are both arrays", () => {
+    expect(validatePrediction(JSON.stringify({
+      fixture_id: 564637,
+      probs: [0.43, 0.27, 0.3],
+      score: [1, 1],
+      rationale: ""
+    }), 564637)).toEqual({
+      ok: false,
+      kind: "schema",
+      message: [
+        "probs must be an object with keys H, D and A — received an array.",
+        "Predicted Score must be an object with keys home and away — received an array."
+      ].join("\n")
+    });
+  });
+
+  test("names a missing probs field without claiming it was an array", () => {
+    expect(validatePrediction(JSON.stringify({
+      fixture_id: 1,
+      score: { home: 1, away: 1 },
+      rationale: ""
+    }), 1)).toEqual({
+      ok: false,
+      kind: "schema",
+      message: "probs must be an object with keys H, D and A — received nothing."
+    });
+  });
+
+  test("names a null score without claiming it was an array", () => {
+    expect(validatePrediction(JSON.stringify({
+      fixture_id: 1,
+      probs: { H: 0.6, D: 0.24, A: 0.16 },
+      score: null,
+      rationale: ""
+    }), 1)).toEqual({
+      ok: false,
+      kind: "schema",
+      message: "Predicted Score must be an object with keys home and away — received null."
+    });
+  });
+
+  test("names a probs sent as a bare string without claiming it was an array", () => {
+    expect(validatePrediction(JSON.stringify({
+      fixture_id: 1,
+      probs: "nope",
+      score: { home: 1, away: 1 },
+      rationale: ""
+    }), 1)).toEqual({
+      ok: false,
+      kind: "schema",
+      message: "probs must be an object with keys H, D and A — received a string."
+    });
+  });
+
+  test("names a fixture_id sent with the wrong type", () => {
+    expect(validatePrediction(JSON.stringify({
+      fixture_id: "564638",
+      probs: { H: 0.51, D: 0.26, A: 0.23 },
+      score: { home: 2, away: 1 },
+      rationale: ""
+    }), 564638)).toEqual({
+      ok: false,
+      kind: "schema",
+      message: "fixture_id must be the number 564638 — return exactly that value."
+    });
+  });
+
+  test("names a fixture_id echoed with the wrong value", () => {
+    expect(validatePrediction(JSON.stringify({
+      fixture_id: 2,
+      probs: { H: 0.6, D: 0.24, A: 0.16 },
+      score: { home: 2, away: 1 },
+      rationale: ""
+    }), 1)).toEqual({
+      ok: false,
+      kind: "schema",
+      message: "fixture_id must be the number 1 — return exactly that value."
+    });
+  });
+
+  test.each([
+    { label: "negative", fixtureId: -5 },
+    { label: "zero", fixtureId: 0 }
+  ])("names a fixture_id that is $label rather than falling to the general fallback", ({ fixtureId }) => {
+    expect(validatePrediction(JSON.stringify({
+      fixture_id: fixtureId,
+      probs: { H: 0.6, D: 0.24, A: 0.16 },
+      score: { home: 2, away: 1 },
+      rationale: ""
+    }), 1)).toEqual({
+      ok: false,
+      kind: "schema",
+      message: "fixture_id must be the number 1 — return exactly that value."
+    });
+  });
+
+  test("names every defect when arrays and a wrong fixture_id combine", () => {
+    expect(validatePrediction(JSON.stringify({
+      fixture_id: "564638",
+      probs: [0.51, 0.26, 0.23],
+      score: [2, 1],
+      rationale: ""
+    }), 564638)).toEqual({
+      ok: false,
+      kind: "schema",
+      message: [
+        "fixture_id must be the number 564638 — return exactly that value.",
+        "probs must be an object with keys H, D and A — received an array.",
+        "Predicted Score must be an object with keys home and away — received an array."
+      ].join("\n")
+    });
+  });
+
   test("names every independently repairable schema problem", () => {
     expect(validatePrediction(JSON.stringify({
       fixture_id: 1,

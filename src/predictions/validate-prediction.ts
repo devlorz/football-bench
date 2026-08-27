@@ -21,8 +21,54 @@ const validationMessages = {
   probabilitiesRange:
     "Probabilities H, D and A must each be between 0 and 1.",
   score: "Predicted Score goals must be non-negative integers.",
-  probabilitiesSum: "Probabilities H, D and A must sum to 1 within ±0.001."
+  probabilitiesSum: "Probabilities H, D and A must sum to 1 within ±0.001.",
+  probsContainer: (received: string) =>
+    `probs must be an object with keys H, D and A — received ${received}.`,
+  scoreContainer: (received: string) =>
+    `Predicted Score must be an object with keys home and away — received ${received}.`,
+  fixtureId: (expectedFixtureId: number) =>
+    `fixture_id must be the number ${expectedFixtureId} — return exactly that value.`
 };
+
+/**
+ * What was actually sent in place of an object, read off the parsed JSON
+ * rather than assumed: the 84-row record this Repair was built for is almost
+ * all arrays, but a missing key, `null` or a bare string produce the same
+ * zod issue and deserve their own word, not a borrowed one.
+ */
+function describeReceived(value: unknown): string {
+  if (value === undefined) {
+    return "nothing";
+  }
+  if (value === null) {
+    return "null";
+  }
+  if (Array.isArray(value)) {
+    return "an array";
+  }
+  return `a ${typeof value}`;
+}
+
+function fieldOf(value: unknown, key: string): unknown {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)[key]
+    : undefined;
+}
+
+/**
+ * A container issue is the whole field mistyped: one `invalid_type` issue
+ * sitting at the field's own path, rather than a range or integer issue
+ * nested one level down inside it. It says nothing about what stood in the
+ * field's place — `describeReceived` reads that back out of the parsed JSON.
+ */
+function isContainerIssue(
+  issues: readonly { path: readonly PropertyKey[]; code: string }[]
+): boolean {
+  return issues.length > 0
+    && issues.every(
+      (issue) => issue.path.length === 1 && issue.code === "invalid_type"
+    );
+}
 
 export interface ValidPrediction {
   fixtureId: number;
@@ -76,18 +122,27 @@ export function validatePrediction(
 
   const parsed = predictionSchema.safeParse(value);
   if (!parsed.success) {
+    const fixtureIdIssues = parsed.error.issues.filter(
+      ({ path }) => path[0] === "fixture_id"
+    );
     const probabilityIssues = parsed.error.issues.filter(
       ({ path }) => path[0] === "probs"
     );
     const scoreIssues = parsed.error.issues.filter(
       ({ path }) => path[0] === "score"
     );
-    const probabilitiesFailed = probabilityIssues.length > 0
+    // fixture_id has no sub-fields, so every issue zod can raise on it — a
+    // wrong type, a non-integer, zero or negative — sits at this same path
+    // and is equally the one defect a Repair here corrects: send back the
+    // number you were given.
+    const fixtureIdFailed = fixtureIdIssues.length > 0;
+    const probabilitiesRangeFailed = probabilityIssues.length > 0
       && probabilityIssues.every(
         (issue) =>
           issue.code === "too_small" || issue.code === "too_big"
       );
-    const scoreFailed = scoreIssues.length > 0
+    const probabilitiesContainerFailed = isContainerIssue(probabilityIssues);
+    const scoreRangeFailed = scoreIssues.length > 0
       && scoreIssues.every(
         (issue) =>
           (
@@ -95,14 +150,32 @@ export function validatePrediction(
             || (issue.code === "invalid_type" && issue.expected === "int")
           )
       );
-    const everyIssueNamed =
-      probabilityIssues.length + scoreIssues.length
-      === parsed.error.issues.length
-      && (probabilityIssues.length === 0 || probabilitiesFailed)
-      && (scoreIssues.length === 0 || scoreFailed);
+    const scoreContainerFailed = isContainerIssue(scoreIssues);
+    const namedIssueCount =
+      (fixtureIdFailed ? fixtureIdIssues.length : 0)
+      + (probabilitiesRangeFailed || probabilitiesContainerFailed
+        ? probabilityIssues.length
+        : 0)
+      + (scoreRangeFailed || scoreContainerFailed ? scoreIssues.length : 0);
+    const everyIssueNamed = namedIssueCount === parsed.error.issues.length;
     const namedProblems = [
-      ...(probabilitiesFailed ? [validationMessages.probabilitiesRange] : []),
-      ...(scoreFailed ? [validationMessages.score] : [])
+      ...(fixtureIdFailed
+        ? [validationMessages.fixtureId(expectedFixtureId)]
+        : []),
+      ...(probabilitiesContainerFailed
+        ? [validationMessages.probsContainer(
+          describeReceived(fieldOf(value, "probs"))
+        )]
+        : probabilitiesRangeFailed
+        ? [validationMessages.probabilitiesRange]
+        : []),
+      ...(scoreContainerFailed
+        ? [validationMessages.scoreContainer(
+          describeReceived(fieldOf(value, "score"))
+        )]
+        : scoreRangeFailed
+        ? [validationMessages.score]
+        : [])
     ];
     return {
       ok: false,
@@ -116,7 +189,7 @@ export function validatePrediction(
     return {
       ok: false,
       kind: "schema",
-      message: validationMessages.schema(expectedFixtureId)
+      message: validationMessages.fixtureId(expectedFixtureId)
     };
   }
 

@@ -13,7 +13,7 @@ Repairs on both tracks), and the
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** done — every box green 2026-08-27
 
 ---
 
@@ -67,15 +67,92 @@ the freeze, this ticket stops and becomes a decision about amending used Version
 
 ## Acceptance
 
-- [ ] **First, and recorded in this ticket:** whether the Repair message is inside any
+- [x] **First, and recorded in this ticket:** whether the Repair message is inside any
       frozen Prompt Version's sha. If it is, nothing else here is built and the ticket
       records what decision would be needed instead.
-- [ ] A Repair for a wrong container names it: an array where an object with `home` and
+
+      **Confirmed not sat: the Repair is outside every pin.** `MATCH_PROMPT_SHA256` and its
+      four siblings in `src/predictions/openrouter-entrant.ts` hash one thing —
+      `buildMatchContext`'s render, the initial packet a Fixture sends before any Entrant
+      has answered (documented at `openrouter-entrant.ts:83-98`: "the sha is over a fully
+      rendered context... hashed `buildMatchContext` over the suite's own Fixture and its
+      own Competition data"). `predictionRepairMessage` lives in
+      `src/predictions/validate-prediction.ts` and is never passed to that function or
+      hashed by it — `attempt-match-calls.ts:513-522` pushes it as a later `user` turn onto
+      an already-started conversation, after the assistant's own invalid reply. So the
+      Repair text sits outside the freeze ADR-0026/0042 govern, and this ticket proceeds as
+      an implementation, not a Prompt Version amendment.
+- [x] A Repair for a wrong container names it: an array where an object with `home` and
       `away` belongs, an array where `H`, `D` and `A` belong, and a `fixture_id` that is
       the wrong value or the wrong type each produce a sentence a reader can act on.
-- [ ] The two messages the validator names today are unchanged for the inputs that produce
+
+      Three new messages in `validate-prediction.ts`: `probsContainer(received)`,
+      `scoreContainer(received)`, and `fixtureId(expectedFixtureId)` — the last covers the
+      wrong-type case (a zod `invalid_type` issue on `fixture_id`), the wrong-value case (a
+      well-typed `fixture_id` that fails the post-parse equality check), and every other
+      shape zod can raise on that field (non-integer, zero, negative), since the correction
+      is the same sentence regardless of what was wrong. Detection reuses the existing
+      per-field issue grouping: a container issue is the whole field mistyped — one
+      `invalid_type` issue at path length 1, never confused with a range/element issue one
+      level deeper. Combinations (e.g. both containers wrong, or a container plus
+      `fixture_id`) name every defect, newline-joined, exactly as the two pre-existing
+      messages already combined.
+
+      **Caught by review, corrected before this box shipped:** the first pass hardcoded
+      "not an array of positional values" into both container messages, on the unstated
+      assumption that `invalid_type` at path length 1 always meant an array — it doesn't. A
+      missing `probs` key, `score: null` and a bare `probs: "nope"` all produce the identical
+      zod issue (`{path:["probs"],code:"invalid_type"}`) and would have gotten the same
+      "not an array" sentence, which is false for three of those four shapes and would have
+      spent one of ADR-0010's three Repair turns telling the Base Model to fix something it
+      never did. `describeReceived` now reads the actual value back out of the parsed JSON
+      — "received an array", "received null", "received nothing", "received a string" — so
+      the sentence never claims more than what was sent. The `fixtureId` message was
+      trimmed the same way, from "not a string or a different value" (also an overclaim,
+      and one that left `fixture_id: -5` and `fixture_id: 0` — well-typed, just out of
+      range — falling through to the general fallback, contrary to this box's own "wrong
+      value or the wrong type" wording) to "return exactly that value", which is true for
+      every shape zod can report on that field. `fixtureIdFailed` now matches any issue on
+      `fixture_id` rather than only `invalid_type`, which is safe unconditionally: the field
+      has no sub-schema, so every issue zod raises on it sits at that same path.
+- [x] The two messages the validator names today are unchanged for the inputs that produce
       them today — other seats see those, and this ticket is not about them.
-- [ ] Replayed over the 84 archived bodies, every one now receives a message naming its own
+
+      `probabilitiesRange` and `score` are untouched strings, and the pre-existing test
+      "does not misname a wrong-type field as a range failure" (string-typed `H` and
+      `home`) still passes unmodified — that shape stays on the general fallback exactly as
+      before, because it was never one of the 84 rows.
+- [x] Replayed over the 84 archived bodies, every one now receives a message naming its own
       defect, and the general fallback is reached by none of them. The count is recorded
       here beside the query that read it.
-- [ ] No Prompt Version's sha moves. No prompt template text changes.
+
+      Read 2026-08-27 against production, same selection the ticket opened with:
+
+      ```sql
+      select a.raw_response, a.fixture_id, a.competition
+        from attempts a
+        join models m on m.id = a.model_id
+       where a.track = 'match' and m.role = 'entrant' and not a.ok
+         and a.error_kind in ('schema', 'probs_sum')
+         and m.name = 'Gemini 3.1 Pro Preview';
+      ```
+
+      Each row's `raw_response` parsed with `parseOpenRouterResponse` and replayed through
+      the new `validatePrediction` with its own `fixture_id`:
+
+      ```
+      { "total": 84, "named": 84, "fallback": 0, "unparsed": 0 }
+      ```
+
+      All 84 now name their own defect; none reaches
+      `validationMessages.schema(expectedFixtureId)`, the generic fallback. Re-run after the
+      review correction above, grouped by message: every array-shaped `probs`/`score` row
+      still reads "received an array" — the record holds no missing-key or `null` case, so
+      the honest wording and the old hardcoded one happen to agree on these 84 rows, which
+      is exactly why the review's counterexamples had to be constructed rather than found
+      here.
+- [x] No Prompt Version's sha moves. No prompt template text changes.
+
+      `openrouter-entrant.ts` is untouched by this ticket — the only file changed is
+      `validate-prediction.ts` (plus its test), which the first box establishes sits
+      outside every pin.
