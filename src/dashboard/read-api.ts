@@ -292,6 +292,8 @@ async function scoredThrough(
  *   $5 = through_gw (int or null)
  */
 const SEATS_CTE = `
+  -- roster: the match track's, per Competition (ADR-0038) -- every caller
+  -- passes matchPromptOf(competition).version as $3, never the FPL track's.
   with seats as (
     select m.id, m.name, m.role,
            ran_after.gw as ran_after_gw

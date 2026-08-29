@@ -8,11 +8,19 @@ import {
 } from "../src/fpl/run-scheduled-fpl-gameweeks.js";
 import { startFplTrack } from "../src/fpl/start-fpl-track.js";
 import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
-import { SEASON_ROSTER_SIZE } from "../src/season-roster.js";
+import { FPL_ROSTER_SIZE } from "../src/season-roster.js";
 import { DEFAULT_HTTP_TIMEOUT_MS, type HttpFetcher } from "../src/http.js";
 import { FPL_POOL } from "./fpl-pool-fixture.js";
 
 const { Client } = pg;
+
+/**
+ * The seats the FPL track opens with: the Season Roster less the three that
+ * left it (ADR-0047). Sliced off `BASE_MODELS` against the track's own size
+ * rather than counted out here, so the day a fourth seat is withdrawn this
+ * suite seeds the roster `startFplTrack` guards for without being edited.
+ */
+const FPL_BASE_MODELS = BASE_MODELS.slice(0, FPL_ROSTER_SIZE);
 
 function seatId(baseModel: string): string {
   return `fpl/${baseModel.split("/")[1]}`;
@@ -93,7 +101,7 @@ describe("scheduled FPL Gameweek runs", () => {
          ('2026-27', 2, '2026-08-28T17:30:00Z'),
          ('2026-27', 3, '2026-09-12T17:30:00Z')`
     );
-    for (const baseModel of BASE_MODELS) {
+    for (const baseModel of FPL_BASE_MODELS) {
       await client.query(
         `insert into models (
            id, name, base_model, provider, prompt_version, role
@@ -180,7 +188,7 @@ describe("scheduled FPL Gameweek runs", () => {
     });
 
     expect(runs).toHaveLength(1);
-    expect(timeouts).toHaveLength(SEASON_ROSTER_SIZE);
+    expect(timeouts).toHaveLength(FPL_ROSTER_SIZE);
     expect(timeouts.every((timeout) => timeout === 600_000)).toBe(true);
   });
 
@@ -216,7 +224,7 @@ describe("scheduled FPL Gameweek runs", () => {
     expect(runs).toHaveLength(1);
     expect(runs.map(({ gameweek }) => gameweek)).toEqual([2]);
     // The count is the money: one call per seat, not two.
-    expect(script.calls()).toBe(SEASON_ROSTER_SIZE);
+    expect(script.calls()).toBe(FPL_ROSTER_SIZE);
   });
 
   test("runs a Gameweek when its Lock is six hours away", async () => {
@@ -241,12 +249,12 @@ describe("scheduled FPL Gameweek runs", () => {
       outcome: {
         kind: "played",
         gameweek: 2,
-        played: BASE_MODELS.map(seatId),
+        played: FPL_BASE_MODELS.map(seatId),
         standing: [],
         missing: []
       }
     }]);
-    expect(script.calls()).toBe(BASE_MODELS.length);
+    expect(script.calls()).toBe(FPL_BASE_MODELS.length);
     const ledger = await client.query<{
       gw: number;
       attempt_count: number;
@@ -371,7 +379,7 @@ describe("scheduled FPL Gameweek runs", () => {
     expect(runs).toHaveLength(1);
     expect(runs[0]!.outcome).toMatchObject({
       kind: "played",
-      standing: BASE_MODELS
+      standing: FPL_BASE_MODELS
         .map(seatId)
         .filter((id) => id !== "fpl/base-04")
     });
@@ -455,7 +463,7 @@ describe("scheduled FPL Gameweek runs", () => {
 
   test("keeps an incomplete run open for the next poll to fill", async () => {
     await openTheTrack();
-    const down = BASE_MODELS[0]!;
+    const down = FPL_BASE_MODELS[0]!;
 
     // One provider fails and the rest of the roster plays. Nothing throws — a
     // that never answered is an Entrant that produced nothing, not a broken
