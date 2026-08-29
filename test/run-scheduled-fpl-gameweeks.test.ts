@@ -298,7 +298,7 @@ describe("scheduled FPL Gameweek runs", () => {
     });
 
     expect(runs.map(({ gameweek }) => gameweek)).toEqual([2]);
-    expect(script.calls()).toBe(BASE_MODELS.length);
+    expect(script.calls()).toBe(FPL_BASE_MODELS.length);
   });
 
   test("does not run a Gameweek the ledger has already completed", async () => {
