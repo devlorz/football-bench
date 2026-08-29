@@ -222,19 +222,32 @@ const BUNDESLIGA_TEAM_NAMES: Readonly<Record<string, string>> = {
   // not answer on its own.
   //
   // Reviewed and approved 2026-08-27, before the backfill it governs ran.
+  //
+  // Ticket 0059 added the three promoted for 2026-27 — `Schalke 04`,
+  // `Paderborn`, `Elversberg` — the same way Serie A's and Ligue 1's were:
+  // keys read off Understat's live feed (`getLeagueData/Bundesliga/2026`,
+  // checked 2026-08-30), values off `mmz4281/2526/D2.csv` — the 2. Bundesliga
+  // they were promoted out of, since `D1.csv` for 2026-27 is not published
+  // yet. All three read the same on both sources, so there is no swap to
+  // misread. The three relegated out of this eighteen — `FC Heidenheim`,
+  // `St. Pauli`, `Wolfsburg` — stay for the reason the other leagues' do: the
+  // five-match form window still reaches back into 2025-26.
   Augsburg: "Augsburg",
   "Bayer Leverkusen": "Leverkusen",
   "Bayern Munich": "Bayern Munich",
   "Borussia Dortmund": "Dortmund",
   "Borussia M.Gladbach": "M'gladbach",
   "Eintracht Frankfurt": "Ein Frankfurt",
+  Elversberg: "Elversberg",
   "FC Cologne": "FC Koln",
   "FC Heidenheim": "Heidenheim",
   Freiburg: "Freiburg",
   "Hamburger SV": "Hamburg",
   Hoffenheim: "Hoffenheim",
   "Mainz 05": "Mainz",
+  Paderborn: "Paderborn",
   "RasenBallsport Leipzig": "RB Leipzig",
+  "Schalke 04": "Schalke 04",
   "St. Pauli": "St Pauli",
   "Union Berlin": "Union Berlin",
   "VfB Stuttgart": "Stuttgart",

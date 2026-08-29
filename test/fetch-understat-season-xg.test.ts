@@ -763,9 +763,10 @@ describe("fetching Understat per-match xG", () => {
       }
     });
 
-  // The Bundesliga's eighteen, read back against its own two feeds. Unlike
-  // Serie A and Ligue 1, this map carries no ticket-0041 shape: it opened
-  // clean, so the key set is exactly this feed's eighteen and nothing more.
+  // The Bundesliga's eighteen, read back against its own two feeds. It opened
+  // clean the way Serie A's did — the key set is exactly this feed's eighteen
+  // plus the three clubs promoted for 2026-27 (ticket 0059, independently
+  // checked in the next test), nothing else.
   test("derives the Bundesliga's eighteen from the two feeds it was read off",
     async () => {
       const feed = JSON.parse(
@@ -779,7 +780,7 @@ describe("fetching Understat per-match xG", () => {
       expect(stored.size).toBe(18);
 
       expect(Object.keys(understatTeamNamesOf("BL1") ?? {}).sort())
-        .toEqual([...titles].sort());
+        .toEqual([...titles, "Elversberg", "Paderborn", "Schalke 04"].sort());
 
       const resolved = [...titles].map(
         (title) => resolveUnderstatTeamName("BL1", title)
@@ -799,6 +800,29 @@ describe("fetching Understat per-match xG", () => {
         .toBe("Dortmund");
       expect(resolveUnderstatTeamName("BL1", "Borussia M.Gladbach"))
         .toBe("M'gladbach");
+    });
+
+  // Ticket 0059: the 2026-08-30 daily fetch refused `understat:2026-27:BL1`
+  // with `unknown Understat team name` for three promoted clubs. Unlike Ligue
+  // 1's, Bundesliga's 2026-27 calendar is already fully published on
+  // Understat (`D1.csv` 2026-27 is not, the same gap Serie A's and Ligue 1's
+  // promoted clubs hit), so this is checked against football-data.co.uk's
+  // `D2.csv` — the 2. Bundesliga they were promoted out of — the way Serie
+  // A's and Ligue 1's were.
+  test("resolves the Bundesliga's three 2026-27 promoted clubs against 2. Bundesliga",
+    async () => {
+      const bundesliga2 = await archivedHomeTeams("football-data-2526-D2.csv.gz");
+      for (const club of ["Elversberg", "Paderborn", "Schalke 04"]) {
+        expect(resolveUnderstatTeamName("BL1", club)).toBe(club);
+        expect(bundesliga2.has(club)).toBe(true);
+      }
+
+      // The three relegated out of the eighteen stay in the map without
+      // appearing in 2026-27's twenty-one -- the five-match form window
+      // still reaches back into 2025-26.
+      for (const club of ["FC Heidenheim", "St. Pauli", "Wolfsburg"]) {
+        expect(resolveUnderstatTeamName("BL1", club)).toBeDefined();
+      }
     });
 
   // No end-to-end "stores xG under joinable names" test for this pair, unlike
