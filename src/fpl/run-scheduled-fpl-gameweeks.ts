@@ -22,6 +22,8 @@ export interface RunScheduledFplGameweeksOptions {
   entrantCallTimeoutMs: number;
   http: HttpFetcher;
   now: () => Date;
+  /** How far before the Lock a Gameweek becomes due, in hours. */
+  runLeadHours?: number;
   onCompletedRun?: (run: CompletedFplRun) => void;
 }
 
@@ -51,8 +53,10 @@ export interface CompletedFplRun {
 const FPL_SCHEDULER_LOCK_KEY = 8150529;
 
 /**
- * How far before the Lock the FPL action run starts. The same six hours the
- * Match track's main run uses, against the same deadline (ADR-0006).
+ * How far before the Lock the FPL action run starts, in hours. The same six
+ * the Match track's main run uses, against the same deadline (ADR-0006), and
+ * the default an operator overrides with `FPL_RUN_LEAD_HOURS` when a Gameweek
+ * has to be played by hand earlier than the schedule would reach it.
  *
  * There is no second, later run to match the Match track's fill. A fill exists
  * there because Predictions are insert-only and a Gap can only be closed by
@@ -60,7 +64,7 @@ const FPL_SCHEDULER_LOCK_KEY = 8150529;
  * holds it, so the retry this ledger performs on a failed run is the same
  * thing. An operator who wants one before the Lock runs the Gameweek again.
  */
-const FPL_RUN_LEAD_TIME = "6 hours";
+export const DEFAULT_FPL_RUN_LEAD_HOURS = 6;
 
 /**
  * Runs whichever FPL Gameweeks are due, at most one process at a time.
@@ -89,6 +93,7 @@ export async function runScheduledFplGameweeks({
   entrantCallTimeoutMs,
   http,
   now,
+  runLeadHours = DEFAULT_FPL_RUN_LEAD_HOURS,
   onCompletedRun
 }: RunScheduledFplGameweeksOptions): Promise<CompletedFplRun[]> {
   return whileHoldingLock(database, FPL_SCHEDULER_LOCK_KEY, async () => {
@@ -117,7 +122,7 @@ export async function runScheduledFplGameweeks({
             or existing.season is not null
           )
         order by g.gw`,
-      [season, observedAt, FPL_RUN_LEAD_TIME, startedAt]
+      [season, observedAt, `${runLeadHours} hours`, startedAt]
     );
     const completed: CompletedFplRun[] = [];
 

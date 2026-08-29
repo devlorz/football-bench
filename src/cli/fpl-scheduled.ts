@@ -3,10 +3,14 @@ import { nodeHttpFetcher } from "../http.js";
 import {
   runScheduledFplGameweeks
 } from "../fpl/run-scheduled-fpl-gameweeks.js";
-import { readScheduledFplJobConfig } from "./config.js";
+import {
+  readFplRunLeadHours,
+  readScheduledFplJobConfig
+} from "./config.js";
 
 const { Client } = pg;
 const config = readScheduledFplJobConfig(process.env);
+const runLeadHours = readFplRunLeadHours(process.env);
 const database = new Client({ connectionString: config.databaseUrl });
 
 await database.connect();
@@ -17,6 +21,7 @@ try {
     concurrency: config.concurrency,
     apiKey: config.openRouterApiKey,
     entrantCallTimeoutMs: config.entrantCallTimeoutMs,
+    runLeadHours,
     http: nodeHttpFetcher,
     now: () => new Date(),
     onCompletedRun: ({ gameweek, outcome }) => {

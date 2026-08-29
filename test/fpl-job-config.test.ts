@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  readFplRunLeadHours,
   readFplStartJobConfig,
   readScheduledFplJobConfig
 } from "../src/cli/config.js";
@@ -53,6 +54,19 @@ describe("the FPL job configuration", () => {
       SEASON: "2026",
       OPENROUTER_API_KEY: "secret-from-environment"
     })).toThrow("SEASON must use YYYY-YY format");
+  });
+
+  test("the run's lead on the Lock is an operator knob", () => {
+    // Six hours unless the operator says otherwise, and the same refusal every
+    // other number in this file gets: a window read as NaN would take the whole
+    // queue out silently, and a Gameweek that is never due is a Gameweek nobody
+    // plays.
+    expect(readFplRunLeadHours({})).toBe(6);
+    expect(readFplRunLeadHours({ FPL_RUN_LEAD_HOURS: "12" })).toBe(12);
+    expect(() => readFplRunLeadHours({ FPL_RUN_LEAD_HOURS: "0" }))
+      .toThrow("FPL_RUN_LEAD_HOURS must be a positive integer");
+    expect(() => readFplRunLeadHours({ FPL_RUN_LEAD_HOURS: "six" }))
+      .toThrow("FPL_RUN_LEAD_HOURS must be a positive integer");
   });
 
   test("the Entrant call's timeout is an operator knob on both FPL jobs", () => {

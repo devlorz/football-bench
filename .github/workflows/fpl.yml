@@ -45,6 +45,9 @@ jobs:
       # Unset is the fetcher's two minutes, which three of nine seats died
       # at on every run of the dry opening (spec 0010).
       ENTRANT_CALL_TIMEOUT_MS: ${{ vars.ENTRANT_CALL_TIMEOUT_MS }}
+      # Unset is six hours, the lead the Match track's main run takes against
+      # the same deadline. Raising it here starts every Gameweek earlier.
+      FPL_RUN_LEAD_HOURS: ${{ vars.FPL_RUN_LEAD_HOURS }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

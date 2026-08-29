@@ -1,4 +1,7 @@
 import { resolveDryRunInstant } from "../dry-run/dry-run-clock.js";
+import {
+  DEFAULT_FPL_RUN_LEAD_HOURS
+} from "../fpl/run-scheduled-fpl-gameweeks.js";
 import { DEFAULT_HTTP_TIMEOUT_MS } from "../http.js";
 import {
   DEFAULT_ENTRANT_CALL_TIMEOUT_MS
@@ -338,6 +341,25 @@ export function readScheduledFplJobConfig(
     // what the whole track is.
     FPL_ROSTER_SIZE,
     DEFAULT_HTTP_TIMEOUT_MS
+  );
+}
+
+/**
+ * How far before the Lock a scheduled FPL run picks a Gameweek up, in hours.
+ *
+ * Read on its own rather than folded into `ScheduledFplJobConfig`, which the
+ * opening reads too: the opening is handed its Gameweek by the operator and
+ * has no window to widen, so a lead time there would be a knob that does
+ * nothing. Hours rather than an interval string because the value reaches
+ * Postgres as one, and an integer is a shape this file can already refuse.
+ */
+export function readFplRunLeadHours(
+  environment: NodeJS.ProcessEnv
+): number {
+  return readPositiveInteger(
+    environment,
+    "FPL_RUN_LEAD_HOURS",
+    DEFAULT_FPL_RUN_LEAD_HOURS
   );
 }
 

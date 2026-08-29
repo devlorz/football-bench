@@ -3,6 +3,7 @@ import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { resetSchema } from "./schema-fixture.js";
 import { BASE_MODELS } from "./fpl-seat-fixture.js";
 import {
+  DEFAULT_FPL_RUN_LEAD_HOURS,
   runScheduledFplGameweeks
 } from "../src/fpl/run-scheduled-fpl-gameweeks.js";
 import { startFplTrack } from "../src/fpl/start-fpl-track.js";
@@ -140,11 +141,13 @@ describe("scheduled FPL Gameweek runs", () => {
   async function schedule({
     at,
     http,
-    entrantCallTimeoutMs = DEFAULT_HTTP_TIMEOUT_MS
+    entrantCallTimeoutMs = DEFAULT_HTTP_TIMEOUT_MS,
+    runLeadHours = DEFAULT_FPL_RUN_LEAD_HOURS
   }: {
     at: string;
     http: HttpFetcher;
     entrantCallTimeoutMs?: number;
+    runLeadHours?: number;
   }): Promise<
     Awaited<ReturnType<typeof runScheduledFplGameweeks>>
   > {
@@ -154,6 +157,7 @@ describe("scheduled FPL Gameweek runs", () => {
       concurrency: 3,
       apiKey: "test-key",
       entrantCallTimeoutMs,
+      runLeadHours,
       now: () => new Date(at),
       http
     });
@@ -260,6 +264,33 @@ describe("scheduled FPL Gameweek runs", () => {
       completed: true,
       last_error: null
     }]);
+  });
+
+  test("widens the window an operator asks for a wider one", async () => {
+    // The knob exists for a Gameweek played by hand: six hours before the Lock
+    // is when the schedule reaches it, and an operator who wants it sooner has
+    // nothing else to move -- the queue is deadline-relative, so without this
+    // the only earlier run is a code change.
+    await openTheTrack();
+    const script = answering(STAND_PAT);
+
+    // Gameweek 2 locks at 17:30, so twelve hours out is 05:30 and the default
+    // six would leave the queue empty at that instant.
+    const unwidened = await schedule({
+      at: "2026-08-28T05:30:00Z",
+      http: script.http
+    });
+    expect(unwidened).toEqual([]);
+    expect(script.calls()).toBe(0);
+
+    const runs = await schedule({
+      at: "2026-08-28T05:30:00Z",
+      runLeadHours: 12,
+      http: script.http
+    });
+
+    expect(runs.map(({ gameweek }) => gameweek)).toEqual([2]);
+    expect(script.calls()).toBe(BASE_MODELS.length);
   });
 
   test("does not run a Gameweek the ledger has already completed", async () => {
