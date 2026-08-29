@@ -239,7 +239,8 @@ describe("applying migrations", () => {
       "0032_head_coach_changes.sql",
       "0033_the_head_coach_in_post.sql",
       "0034_a_seat_leaves_a_track_without_leaving_the_record.sql",
-      "0035_the_italian_and_french_divisions.sql"
+      "0035_the_italian_and_french_divisions.sql",
+      "0036_the_german_divisions.sql"
     ]);
 
     // Relabelled, not rewritten: every row of every rekeyed table comes back
@@ -326,7 +327,8 @@ describe("applying migrations", () => {
       "0032_head_coach_changes.sql",
       "0033_the_head_coach_in_post.sql",
       "0034_a_seat_leaves_a_track_without_leaving_the_record.sql",
-      "0035_the_italian_and_french_divisions.sql"
+      "0035_the_italian_and_french_divisions.sql",
+      "0036_the_german_divisions.sql"
     ]);
     const backfill = await client.query<{
       observed_at: Date;
