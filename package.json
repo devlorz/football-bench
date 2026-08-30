@@ -18,6 +18,7 @@
     "preflight": "tsx src/cli/preflight.ts",
     "match:rehearse": "tsx src/cli/rehearse-scoring.ts",
     "match:score": "tsx src/cli/score.ts",
+    "fpl:score": "tsx src/cli/fpl-score.ts",
     "predict": "tsx src/cli/predict.ts",
     "predict:scheduled": "tsx src/cli/predict-scheduled.ts",
     "test": "vitest run",
