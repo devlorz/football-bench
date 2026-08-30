@@ -12,7 +12,9 @@ import {
 import { argmaxOutcome, outcomeOf } from "../src/fixture-result.js";
 import { matchPromptOf } from "../src/predictions/openrouter-entrant.js";
 import { EXHIBITION_CAVEAT } from "../src/exhibition/recall-caveat.js";
-import { scoreMatchSeason } from "../src/predictions/score-match-gameweek.js";
+import {
+  matchPoints, scoreMatchSeason
+} from "../src/predictions/score-match-gameweek.js";
 
 const { Client } = pg;
 
@@ -274,6 +276,85 @@ describe("the Fixtures endpoint on the design's Season", () => {
       expect(prediction?.repairs).toBe(stored.rows[0]?.attempts_used);
       expect(prediction?.rationale).toBe(stored.rows[0]?.rationale);
       expect(prediction?.contextHash).toBe(stored.rows[0]?.hash);
+    });
+
+  test("answers an earlier Gameweek when one is asked for, and offers the list",
+    async () => {
+      const current = await fixtures();
+
+      // Every Gameweek with something to show, and the one in front of the
+      // reader is the last of them on the design's Season.
+      expect(current.gws).toEqual(
+        Array.from({ length: 15 }, (_, index) => index + 1)
+      );
+      expect(current.gw).toBe(15);
+
+      const asked = async (gw: string): Promise<FixturesBody> => {
+        const response = await handleDashboardRequest(
+          new Request(`https://benchmark.example/api/pl/fixtures?gw=${gw}`),
+          query, SEASON, BEFORE_LOCK
+        );
+        expect(response.status).toBe(200);
+        return await response.json() as FixturesBody;
+      };
+
+      // Gameweek 3's ten Fixtures, its own Lock, and not Gameweek 15's.
+      const third = await asked("3");
+      expect(third.gw).toBe(3);
+      expect(third.fixtures.map(({ fplId }) => fplId))
+        .toEqual(Array.from({ length: 10 }, (_, index) => 21 + index));
+      expect(third.deadlineAt).not.toBe(current.deadlineAt);
+      expect(third.lockPassed).toBe(true);
+      expect(third.gws).toEqual(current.gws);
+
+      // A Gameweek that is not one of this Competition's, and something that
+      // is not a number at all: both are the same as not asking. The body
+      // names the Gameweek it answered with, so nothing is silently wrong.
+      expect((await asked("99")).gw).toBe(15);
+      expect((await asked("abc")).gw).toBe(15);
+    });
+
+  test("carries a settled Fixture's result and what each Prediction earned",
+    async () => {
+      const response = await handleDashboardRequest(
+        new Request("https://benchmark.example/api/pl/fixtures?gw=3"),
+        query, SEASON, BEFORE_LOCK
+      );
+      const scored = await response.json() as FixturesBody;
+      const fixture = scored.fixtures[0];
+
+      expect(fixture?.result).not.toBeNull();
+      const result = fixture!.result!;
+
+      // Every Prediction on the Fixture is worth what the scorer's own
+      // function says it is worth, and never a rule spelled a second time here.
+      for (const { prediction } of fixture!.slots) {
+        if (prediction === null) continue;
+        expect(prediction.points).toBe(
+          matchPoints(prediction.predHome, prediction.predAway, {
+            home_goals: result.homeGoals,
+            away_goals: result.awayGoals,
+            outcome: result.outcome
+          })
+        );
+      }
+
+      // The four tiers are exclusive, so every figure is one of four values.
+      const points = fixture!.slots
+        .map(({ prediction }) => prediction?.points)
+        .filter((value) => value !== undefined && value !== null);
+      expect(points.length).toBeGreaterThan(0);
+      for (const value of points) expect([5, 3, 2, 0]).toContain(value);
+
+      // The Gameweek in front of the reader has not been played: no result on
+      // it, and no points either, rather than a nought that reads as a miss.
+      const current = await fixtures();
+      for (const unplayed of current.fixtures) {
+        expect(unplayed.result).toBeNull();
+        for (const { prediction } of unplayed.slots) {
+          if (prediction !== null) expect(prediction.points).toBeNull();
+        }
+      }
     });
 
   test("carries the cache lifetime the Fill run moves on", async () => {

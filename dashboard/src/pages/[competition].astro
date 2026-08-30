@@ -34,31 +34,6 @@ const { competition, competitionName, path, api, retiredLabel } = Astro.props;
     means. Only the figures wait on the fetch, so a reader sees the structure of
     the page before its data.
   */}
-  <section class="hero">
-    <div>
-      <h1>One set of fixtures, one lock</h1>
-      <p>
-        Every Entrant sees the same context for every {competitionName} Fixture
-        and commits a scoreline plus a probability distribution before the
-        Gameweek deadline. Nothing is written after the Lock.
-      </p>
-    </div>
-    <div class="soft stats">
-      <div>
-        <div class="stat-label">Season</div>
-        <div class="stat-value" id="stat-season">&nbsp;</div>
-      </div>
-      <div>
-        <div class="stat-label">Scored fixtures</div>
-        <div class="stat-value" id="stat-settled">&nbsp;</div>
-      </div>
-      <div>
-        <div class="stat-label">Through</div>
-        <div class="stat-value" id="stat-through">&nbsp;</div>
-      </div>
-    </div>
-  </section>
-
   <p class="error" id="error" hidden>
     The leaderboard could not be read. Nothing is being retried.
   </p>
@@ -385,10 +360,10 @@ const { competition, competitionName, path, api, retiredLabel } = Astro.props;
     }
 
     function render() {
-      // Three states, named once. Which one it is decides what is shown, what
-      // is drawn and what the hero says, and each of those reads the name
-      // rather than asking the body again -- a second derivation is a fourth
-      // state waiting to disagree with the first three.
+      // Three states, named once. Which one it is decides what is shown and
+      // what is drawn, and each of those reads the name rather than asking the
+      // body again -- a second derivation is a fourth state waiting to
+      // disagree with the first three.
       //
       // A Competition the Season has not opened reads as pre-season on every
       // other field in the body -- no scored Gameweek, no Entrant, no Lock --
@@ -410,11 +385,6 @@ const { competition, competitionName, path, api, retiredLabel } = Astro.props;
         : "ranking";
 
       for (const id of STATES) $(id).hidden = id !== state;
-
-      text($("stat-season"), seasonLabel(body.season));
-      text($("stat-settled"), String(body.settledFixtures));
-      text($("stat-through"),
-        state === "ranking" ? "GW " + body.throughGw : "—");
 
       if (state === "preseason") renderPreSeason();
       if (state === "ranking") renderRanking();

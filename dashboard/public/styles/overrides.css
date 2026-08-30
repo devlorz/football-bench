@@ -366,6 +366,15 @@ html {
   padding: 40px 0 22px;
 }
 .fxhero h1 { font-size: 38px; letter-spacing: -0.01em; margin: 0; }
+.gwpick {
+  margin-top: 12px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 2px solid var(--color-divider);
+  padding: 6px 10px;
+}
 .fxlock { border-left: 2px solid var(--color-divider); padding-left: 20px; }
 .fxlock-time {
   font-family: var(--font-heading);
@@ -401,7 +410,23 @@ html {
   align-items: baseline;
   gap: 18px;
   margin-bottom: 14px;
+  cursor: pointer;
+  list-style: none;
 }
+/* `display: flex` already drops the marker everywhere but WebKit. */
+.fx-title::-webkit-details-marker { display: none; }
+/* The chevron sits after the tag, which `margin-left: auto` has already
+   pushed right, so it lands at the far edge of the heading. */
+.fx-title::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin-left: 14px;
+  border-right: 2px solid color-mix(in srgb, var(--color-text) 55%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--color-text) 55%, transparent);
+  transform: rotate(45deg);
+}
+.fx[open] > .fx-title::after { transform: rotate(-135deg); }
 .fx-teams {
   font-family: var(--font-heading);
   font-weight: 800;
@@ -409,7 +434,40 @@ html {
   letter-spacing: -0.02em;
 }
 .fx-v { color: var(--color-accent); }
+/* The result reads as loud as the teams do -- it is the answer the page's
+   whole table is being marked against. */
+.fx-final {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  padding: 2px 10px;
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+}
 .fx-when { font-size: 12px; }
+/* The collapsed Fixture's summary of what was committed. Hidden once the
+   Fixture is open, where the table under it says the same thing per Entrant. */
+.fx-consensus { display: flex; flex-wrap: wrap; gap: 4px; }
+.fx[open] > .fx-title > .fx-consensus { display: none; }
+/* `--share` is the fraction of the roster that named this scoreline, set on
+   the chip itself: both the fill and the ink scale with it, so the line the
+   Entrants agreed on is the one that separates from the ground and a scoreline
+   one model named alone stays quiet. Two channels and not one -- a tint alone
+   is too faint to read as emphasis at four in nine. */
+.fx-tally {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 7px;
+  white-space: nowrap;
+  background: color-mix(in srgb,
+    var(--color-accent) calc(var(--share, 0) * 55%), transparent);
+  /* The floor is measured rather than picked: 65% is where the quietest chip
+     clears 4.5:1 against its own tint in the light theme, which is the one of
+     the two that runs the ink closer to its ground. The tint below carries the
+     emphasis; the ink only has to stay readable while it does. */
+  color: color-mix(in srgb,
+    var(--color-text) calc(65% + var(--share, 0) * 35%), var(--color-bg));
+}
 .fx-title .tag { margin-left: auto; }
 
 .fxhead,
@@ -419,6 +477,20 @@ html {
   gap: 16px;
   align-items: center;
 }
+/* The settled shape: one more column, for what each Predicted Score earned. */
+.fxtable-scored .fxhead,
+.fxtable-scored .fxrow {
+  grid-template-columns: 190px 1fr 96px 116px 96px;
+}
+.fx-points {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 18px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.fx-tier { font-family: var(--font-body); font-weight: 400; font-size: 11px; }
 .fxtable .fxhead { padding: 0 0 8px; }
 .fxrow { padding: 9px 0; border-bottom: 2px solid var(--color-divider); }
 .fx-name {
@@ -630,6 +702,18 @@ html {
   }
   .burger { display: inline-flex; order: 2; }
 
+  /* The two controls ride the brand's row rather than a row of their own: at
+     this width they are the only things on it, and a full-width strip holding
+     two 32px buttons is a row of nothing. The switcher is what moves down --
+     it is the widest thing in the header and already scrolls -- so the order
+     is brand and tools, then the switcher, then the menu when it is open.
+     The basis is 0 and not `auto`: flex breaks lines on an item's content
+     width before it shrinks anything, so a brand basing itself on its own two
+     names fills the row and pushes the tools off it whatever `min-width` says.
+     At 0 the brand claims nothing and then grows into what the tools leave. */
+  .nav-brand { flex: 1 1 0; min-width: 0; flex-wrap: wrap; row-gap: 2px; }
+  .navtools { align-self: center; }
+
   /* The switcher on a phone (ticket: The Competition switcher on a phone,
      which with the chosen-segment rule above is this control's whole design).
      A league's name is one line, and the control, not the document, gives
@@ -650,7 +734,14 @@ html {
      -- at 1024px, measured, "Serie A" was an S and "Ligue 1" was gone. Up
      there the line is what it always was, wrapping a label where it runs
      tight -- that band's own defect, and its own ticket. */
-  .nav .seg { overflow-x: auto; padding: 4px; margin-block: -4px; }
+  .nav .seg {
+    overflow-x: auto;
+    padding: 4px;
+    margin-block: -4px;
+    /* Its own row, under the brand and the tools. */
+    order: 1;
+    flex-basis: 100%;
+  }
   .nav .seg-opt { white-space: nowrap; }
 
   /* Clipped and not `display: none`: the design takes the column headers off a
@@ -727,6 +818,7 @@ html {
   .fx-split { order: 1; flex-basis: 100%; }
   .fxbar { max-width: none; }
   .fx-coherence { order: 2; flex-basis: 100%; }
+  .fx-points { font-size: 15px; }
   .rationale { order: 3; flex-basis: 100%; }
 
   .sthero h1 { font-size: 30px; }

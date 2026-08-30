@@ -1,6 +1,8 @@
 import { FPL_PROMPT_VERSION } from "../context/build-fpl-track-context.js";
 import { EXHIBITION_CAVEAT } from "../exhibition/recall-caveat.js";
-import { argmaxOutcome, outcomeOf, type Probs } from "../fixture-result.js";
+import {
+  argmaxOutcome, outcomeOf, type FixtureResult, type Outcome, type Probs
+} from "../fixture-result.js";
 import {
   chipsRemaining, sellingPrice, VIOLATION_KINDS, type Chip, type ChipsUsed,
   type Position, type SquadEnvelope, type TeamSheet,
@@ -18,7 +20,7 @@ import {
   BET_POINTS_METRIC, BET_POINTS_QUALIFICATION,
   BET_POINTS_SEASON_TO_DATE_METRIC, GAP_RATE_SEASON_TO_DATE_METRIC,
   MATCH_POINTS_METRIC, MATCH_POINTS_QUALIFICATION,
-  MATCH_POINTS_SEASON_TO_DATE_METRIC, RPS_METRIC,
+  MATCH_POINTS_SEASON_TO_DATE_METRIC, matchPoints, RPS_METRIC,
   RPS_SEASON_TO_DATE_METRIC, type BetLeg
 } from "../predictions/score-match-gameweek.js";
 import { MAX_REPAIRS } from "../repairs.js";
@@ -586,6 +588,17 @@ export interface SlotPrediction {
   contextHash: string;
   /** `predictions.attempts_used`, which is 0 for a Prediction valid first time. */
   repairs: number;
+  /**
+   * What this Predicted Score earned against the settled result -- 5, 3, 2 or
+   * 0 -- and null while the Fixture has no result.
+   *
+   * Read from `matchPoints`, the scorer's own function, rather than a second
+   * rule written here: the page and the leaderboard cannot disagree about what
+   * a scoreline was worth if there is only one place that decides it. It is
+   * not read from the stored score row, which does not exist until the scorer
+   * runs -- and a result the page can see is a result the page can state.
+   */
+  points: number | null;
 }
 
 /** A Gap is a slot with nothing in it, and never a missing entry. */
@@ -605,6 +618,8 @@ export interface FixtureView {
   homeTeam: string;
   awayTeam: string;
   kickoffAt: string;
+  /** The settled result, and null while the feed has not declared one. */
+  result: { homeGoals: number; awayGoals: number; outcome: Outcome } | null;
   slots: FixtureSlot[];
 }
 
@@ -624,6 +639,14 @@ export interface FixturesBody {
    * (ticket 0053, ADR-0052).
    */
   exhibitionCaveat?: string;
+  /**
+   * Every Gameweek of this Competition holding a Fixture the listing below
+   * would show, ascending. It is what the page's picker is built from, so the
+   * page never guesses a Gameweek that has no page — and it is the same
+   * predicate the listing uses, because a Gameweek offered and then rendered
+   * empty is worse than one not offered.
+   */
+  gws: number[];
   fixtures: FixtureView[];
 }
 
@@ -641,7 +664,15 @@ async function fixtures(
   query: Query,
   season: string,
   competition: string,
-  now: Date
+  now: Date,
+  /**
+   * The Gameweek the reader asked for, or null for the one in front of them.
+   * A number that is not one of this Competition's Gameweeks falls back to
+   * that same default rather than 404ing: the body names the Gameweek it
+   * answered with, so a reader who typed one that does not exist is told which
+   * one they are looking at instead of being shown an error page.
+   */
+  requestedGw: number | null
 ): Promise<Response> {
   // The rule, in one statement: the earliest Gameweek owning a Fixture that is
   // not deferred and has no result, and the last Gameweek by number when every
@@ -675,24 +706,41 @@ async function fixtures(
              and (not deferred or locked_in_gw is not null))
        ) as gw
      )
-     select current.gw, gameweeks.deadline_at
-       from current
-       left join gameweeks
-         on gameweeks.competition = $2 and gameweeks.season = $1
-        and gameweeks.gw = current.gw`,
+     select current.gw from current`,
     [season, competition]
   );
-  const gw = numberOrNull(current?.gw);
-  const deadline = current?.deadline_at == null
+
+  // Every Gameweek with something to show, by the listing's own predicate.
+  const offered = await query(
+    `select distinct coalesce(locked_in_gw, gw) as gw from fixtures
+      where competition = $2 and season = $1
+        and (not deferred or locked_in_gw is not null)
+      order by 1`,
+    [season, competition]
+  );
+  const gws = offered.map((row) => Number(row.gw));
+
+  const gw = requestedGw !== null && gws.includes(requestedGw)
+    ? requestedGw
+    : numberOrNull(current?.gw);
+
+  // Read for the Gameweek that was selected and not the one the rule found:
+  // the Lock on the page has to be the Lock of the Fixtures under it.
+  const [week] = gw === null ? [] : await query(
+    `select deadline_at from gameweeks
+      where competition = $3 and season = $1 and gw = $2`,
+    [season, gw, competition]
+  );
+  const deadline = week?.deadline_at == null
     ? null
-    : new Date(current.deadline_at as string | Date);
+    : new Date(week.deadline_at as string | Date);
 
   // A deferred Fixture that was Locked stays on the page: its Predictions were
   // committed under this Gameweek's Lock and are what a reader came for. One
   // that left the schedule before any run reached it is not in the Gameweek at
   // all, and would read as ten Gaps.
   const rows = await query(
-    `select fixture_id, home_team, away_team, kickoff_at from fixtures
+    `select fixture_id, home_team, away_team, kickoff_at, result from fixtures
       where competition = $3 and season = $1
         and coalesce(locked_in_gw, gw) = $2
         and (not deferred or locked_in_gw is not null)
@@ -740,7 +788,10 @@ async function fixtures(
     [season, gw, competition]
   );
 
-  const byFixtureAndEntrant = new Map<string, SlotPrediction>();
+  // Everything but `points`, which is not the Prediction's alone: it needs the
+  // Fixture's result, and that is joined on below where the slot is built.
+  const byFixtureAndEntrant =
+    new Map<string, Omit<SlotPrediction, "points">>();
   for (const row of predictions) {
     const probs = row.probs as Probs;
     byFixtureAndEntrant.set(`${row.fixture_id}:${row.model_id}`, {
@@ -764,36 +815,60 @@ async function fixtures(
   // Fixture keeps exactly the ten roster slots, because an empty slot means
   // "asked before the Lock and did not answer" and an Exhibition Run was never
   // asked before the Lock (ADR-0052).
-  const fixtureViews: FixtureView[] = rows.map((row) => ({
-    // `fplId` where the column is now `fixture_id`: this is the published
-    // shape a deployed dashboard build reads, and renaming a field in a JSON
-    // body is a change to the contract between two things that ship
-    // separately, not a rename. ADR-0035 renamed the column and left the
-    // dashboard's Competition shape to its own ADR; the field goes with that.
-    fplId: Number(row.fixture_id),
-    homeTeam: String(row.home_team),
-    awayTeam: String(row.away_team),
-    kickoffAt: new Date(row.kickoff_at as string | Date).toISOString(),
-    slots: [
-      ...roster.map((entrant) => ({
-        entrant: { id: String(entrant.id), name: String(entrant.name) },
-        // Null and not missing: an Entrant that did not answer must not be
-        // indistinguishable from one that answered badly.
-        prediction:
-          byFixtureAndEntrant.get(`${row.fixture_id}:${entrant.id}`) ?? null
-      })),
-      ...exhibitions.flatMap((exhibition) => {
-        const prediction =
-          byFixtureAndEntrant.get(`${row.fixture_id}:${exhibition.id}`);
-        if (!prediction) return [];
-        return [{
-          entrant: { id: String(exhibition.id), name: String(exhibition.name) },
-          prediction,
-          exhibition: { ranAfterGw: Number(exhibition.ran_after_gw) }
-        }];
-      })
-    ]
-  }));
+  const fixtureViews: FixtureView[] = rows.map((row) => {
+    const result = (row.result ?? null) as FixtureResult | null;
+    // One slot's Prediction, scored where there is a result to score it
+    // against. Every slot of a Fixture reads the same result, so the branch is
+    // the Fixture's and not the Entrant's.
+    const scored = (prediction: Omit<SlotPrediction, "points"> | undefined) =>
+      prediction === undefined ? null : {
+        ...prediction,
+        points: result === null
+          ? null
+          : matchPoints(prediction.predHome, prediction.predAway, result)
+      };
+
+    return {
+      // `fplId` where the column is now `fixture_id`: this is the published
+      // shape a deployed dashboard build reads, and renaming a field in a JSON
+      // body is a change to the contract between two things that ship
+      // separately, not a rename. ADR-0035 renamed the column and left the
+      // dashboard's Competition shape to its own ADR; the field goes with that.
+      fplId: Number(row.fixture_id),
+      homeTeam: String(row.home_team),
+      awayTeam: String(row.away_team),
+      kickoffAt: new Date(row.kickoff_at as string | Date).toISOString(),
+      // The stored shape is snake_case because the scorer reads it; the body
+      // is camelCase because every other field of it is. `outcome` is carried
+      // rather than re-derived: it was decided at write time (spec 0002).
+      result: result === null ? null : {
+        homeGoals: result.home_goals,
+        awayGoals: result.away_goals,
+        outcome: result.outcome
+      },
+      slots: [
+        ...roster.map((entrant) => ({
+          entrant: { id: String(entrant.id), name: String(entrant.name) },
+          // Null and not missing: an Entrant that did not answer must not be
+          // indistinguishable from one that answered badly.
+          prediction:
+            scored(byFixtureAndEntrant.get(`${row.fixture_id}:${entrant.id}`))
+        })),
+        ...exhibitions.flatMap((exhibition) => {
+          const prediction =
+            scored(byFixtureAndEntrant.get(`${row.fixture_id}:${exhibition.id}`));
+          if (prediction === null) return [];
+          return [{
+            entrant: {
+              id: String(exhibition.id), name: String(exhibition.name)
+            },
+            prediction,
+            exhibition: { ranAfterGw: Number(exhibition.ran_after_gw) }
+          }];
+        })
+      ]
+    };
+  });
 
   const hasExhibition = fixtureViews.some(({ slots }) =>
     slots.some(({ exhibition }) => exhibition !== undefined)
@@ -810,6 +885,7 @@ async function fixtures(
     // otherwise so the body is byte-identical when no Exhibition Run is seated
     // (ADR-0052, ticket 0053).
     ...(hasExhibition ? { exhibitionCaveat: EXHIBITION_CAVEAT } : {}),
+    gws,
     fixtures: fixtureViews
   };
   return json(body, FIXTURES_CACHE);
@@ -2622,7 +2698,14 @@ export async function handleDashboardRequest(
       return await leaderboard(query, season, competition);
     }
     if (endpoint === "fixtures") {
-      return await fixtures(query, season, competition, now);
+      // `?gw=` and nothing else. Anything unparseable is null, which is the
+      // same as not asking: the rule below picks the Gameweek in front of the
+      // reader, as it did before this parameter existed.
+      const asked = new URL(request.url).searchParams.get("gw");
+      const requested = asked !== null && /^\d+$/.test(asked)
+        ? Number(asked)
+        : null;
+      return await fixtures(query, season, competition, now, requested);
     }
     if (endpoint === "entrants") {
       return await entrants(query, season, competition);

@@ -28,6 +28,12 @@ const { competition, competitionName, path, api } = Astro.props;
     <div>
       <div class="kicker" id="gw-label">&nbsp;</div>
       <h1>Fixtures and predictions</h1>
+      {/* A `<select>` and not a row of links: the Gameweeks are one choice out
+          of a list only the fetch knows the length of, and the native control
+          is the one that already works with a keyboard and on a phone. Hidden
+          in the built HTML because it has no options until the body arrives,
+          and it stays hidden where there is only one Gameweek to offer. */}
+      <select class="gwpick" id="gw-pick" aria-label="Gameweek" hidden></select>
     </div>
     <div class="fxlock">
       <div class="stat-label">Lock</div>
@@ -137,6 +143,13 @@ const { competition, competitionName, path, api } = Astro.props;
       return bar;
     };
 
+    // The scorer's four tiers, named. `matchPoints` decides the number and this
+    // says what the number was for -- 5 is also the right goal difference and
+    // also the right outcome, so each tier is named by the highest it reached.
+    const TIERS = {
+      5: "Scoreline", 3: "Goal diff", 2: "Outcome", 0: "Missed"
+    };
+
     const probabilityText = (probs) =>
       ["H", "D", "A"].map((outcome) => probs[outcome].toFixed(2)).join(" / ");
 
@@ -163,6 +176,17 @@ const { competition, competitionName, path, api } = Astro.props;
         div("fx-score",
           prediction.predHome + "–" + prediction.predAway, "cell")
       );
+
+      // Only where the Fixture has settled. An empty column under a heading
+      // that says Match points would read as nought scored rather than as a
+      // Fixture that has not been played.
+      if (fixture.result) {
+        const points = div("fx-points", undefined, "cell");
+        const figure = div(prediction.points === 0 ? "danger" : "",
+          String(prediction.points));
+        points.append(figure, div("muted fx-tier", TIERS[prediction.points]));
+        row.append(points);
+      }
 
       const coherence = div("fx-coherence", undefined, "cell");
       // The argmax of the probabilities against the Outcome the committed
@@ -209,10 +233,14 @@ const { competition, competitionName, path, api } = Astro.props;
     }
 
     function fixtureBlock(fixture) {
-      const block = document.createElement("article");
+      // `<details>` and not a button plus a hidden panel: collapsing a Fixture
+      // is exactly what the element is, and closed by default is its default.
+      // A page of ten Fixtures opens as ten headings rather than ten tables.
+      const block = document.createElement("details");
       block.className = "fx";
 
-      const title = div("fx-title");
+      const title = document.createElement("summary");
+      title.className = "fx-title";
       const teams = div("fx-teams");
       const versus = document.createElement("span");
       versus.className = "fx-v";
@@ -225,12 +253,55 @@ const { competition, competitionName, path, api } = Astro.props;
       const filled = rosterSlots.filter((slot) => slot.prediction).length;
       const tag = div("tag tag-neutral",
         filled + " of " + rosterSlots.length + " predicted");
+
+      // What the roster committed, counted, so a collapsed Fixture still says
+      // where the Entrants agreed and where they split. Commonest first, and
+      // ties keep roster order -- the slots are in id order on every Fixture,
+      // so two scorelines named the same number of times come out the same way
+      // on every render rather than in whatever order a sort happened to pick.
+      const counts = new Map();
+      for (const slot of rosterSlots) {
+        if (!slot.prediction) continue;
+        const line =
+          slot.prediction.predHome + "\u2013" + slot.prediction.predAway;
+        counts.set(line, (counts.get(line) ?? 0) + 1);
+      }
+      // One chip per scoreline, tinted by the share of the roster that named
+      // it: the more Entrants agreed, the further the chip is from the page's
+      // ground and the harder it is to miss. The share is of the Predictions
+      // stored and not of the seats, so a Gap does not quietly dilute every
+      // chip on a Fixture nobody was asked twice about.
+      const tallies = [...counts]
+        .sort(([, a], [, b]) => b - a)
+        .map(([line, count]) => {
+          const chip = div("fx-tally", line + " \u00d7" + count);
+          chip.style.setProperty("--share", String(count / filled));
+          return chip;
+        });
+      title.append(teams);
+      // The result beside the teams, and nothing where there is none: a
+      // Fixture that has not been played says so by having no score, not by
+      // showing a dash that could be read as nil-nil.
+      if (fixture.result) {
+        const final = div("fx-final",
+          fixture.result.homeGoals + "\u2013" + fixture.result.awayGoals);
+        final.setAttribute("aria-label", "Result " + fixture.homeTeam + " "
+          + fixture.result.homeGoals + ", " + fixture.awayTeam + " "
+          + fixture.result.awayGoals);
+        title.append(final);
+      }
       title.append(
-        teams,
         div("fx-when muted", when(fixture.kickoffAt)
-          + " · fpl_id " + fixture.fplId),
-        tag
+          + " · fpl_id " + fixture.fplId)
       );
+      // Nothing where nothing was committed: the pending line below already
+      // says that, and an empty summary would be a second way of saying it.
+      if (tallies.length > 0) {
+        const consensus = div("fx-consensus");
+        consensus.append(...tallies);
+        title.append(consensus);
+      }
+      title.append(tag);
       block.append(title);
 
       // Every slot empty is the pending state for this Fixture, and it is
@@ -259,9 +330,16 @@ const { competition, competitionName, path, api } = Astro.props;
       head.append(
         div("", "Entrant", "columnheader"),
         div("", "Home / Draw / Away", "columnheader"),
-        div("", "Score", "columnheader"),
-        div("", "Coherent", "columnheader")
+        div("", "Score", "columnheader")
       );
+      // Five columns on a settled Fixture and four on one still to play. The
+      // class is what the grid reads, so the header and its rows cannot end up
+      // counting different numbers of columns.
+      if (fixture.result) {
+        table.classList.add("fxtable-scored");
+        head.append(div("", "Match points", "columnheader"));
+      }
+      head.append(div("", "Coherent", "columnheader"));
       table.append(head);
 
       // Every Entrant, in the same order on every Fixture. A Gap is a slot with
@@ -283,7 +361,22 @@ const { competition, competitionName, path, api } = Astro.props;
       return block;
     }
 
+    // Rebuilt on every body rather than once: it costs a dozen options and
+    // removes the question of whether this body is the first one.
+    function renderPicker(body) {
+      const pick = $("gw-pick");
+      pick.replaceChildren(...body.gws.map((gw) => {
+        const option = document.createElement("option");
+        option.value = String(gw);
+        option.textContent = "Gameweek " + gw;
+        option.selected = gw === body.gw;
+        return option;
+      }));
+      pick.hidden = body.gws.length < 2;
+    }
+
     function render(body) {
+      renderPicker(body);
       $("gw-label").textContent =
         body.gw === null ? "No gameweek" : "Gameweek " + body.gw;
       $("lock-time").textContent =
@@ -311,17 +404,29 @@ const { competition, competitionName, path, api } = Astro.props;
 
     // A relative path: the Worker route claims `/api/*` on this hostname, so
     // nothing is cross-origin and no origin was a build input.
-    fetch(fixturesUrl)
-      .then((response) => {
-        if (!response.ok) throw new Error(String(response.status));
-        return response.json();
-      })
-      .then(render)
-      .catch(() => {
-        // One line, and nothing retries.
-        $("error").hidden = false;
-        $("fixtures").replaceChildren();
-      });
+    //
+    // `gw` is omitted on the first load so the URL is the one the edge already
+    // holds, and the Gameweek in front of the reader stays the page's default.
+    function load(gw) {
+      $("error").hidden = true;
+      fetch(gw === null ? fixturesUrl : fixturesUrl + "?gw=" + gw)
+        .then((response) => {
+          if (!response.ok) throw new Error(String(response.status));
+          return response.json();
+        })
+        .then(render)
+        .catch(() => {
+          // One line, and nothing retries.
+          $("error").hidden = false;
+          $("fixtures").replaceChildren();
+        });
+    }
+
+    $("gw-pick").addEventListener("change", (event) => {
+      load(Number(event.target.value));
+    });
+
+    load(null);
   })();
   </script>
 </Page>
