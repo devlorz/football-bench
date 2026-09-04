@@ -5,9 +5,9 @@
 -- still labelled matchday 6, this one included, as the whole label's
 -- deadline: every one of Gameweek 6's ten Fixtures was Locked and
 -- predicted against 2026-09-03 17:30Z -- twelve to fourteen days before the
--- other nine actually kick off (2026-09-15 through 2026-09-17). Ninety
--- Predictions, ten seats across the nine, were made on stale team news that
--- far ahead of the sides they described stepping onto a pitch.
+-- other nine actually kick off (2026-09-15 through 2026-09-17). Fifty-nine
+-- Predictions -- ten seats across the nine, thirty-one of the pairs Gapped --
+-- were made on stale team news that far ahead of the sides they described stepping onto a pitch.
 --
 -- Ticket 0064 fixes the fetch so this cannot recur: a brought-forward
 -- Fixture that has not itself opened attaches to the Gameweek whose window
@@ -18,7 +18,7 @@
 -- The nine, not the ten, named once. Real Sociedad-Celta was genuinely
 -- brought forward and genuinely played on the 3rd; its Prediction was made
 -- under a Lock that correctly described it, so it keeps that Lock and its
--- ten Predictions. The nine are selected by the record, not by a typed
+-- Predictions (eight; two seats Gapped it). The nine are selected by the record, not by a typed
 -- list of ids: `locked_in_gw = 6 and kickoff_at > 2026-09-04T00:00Z` names
 -- them and excludes Real Sociedad-Celta on both counts. That boundary is
 -- written as an explicit UTC instant rather than a bare date literal,
@@ -50,9 +50,9 @@
 -- table-owner connection 0022's `drop trigger ... on fixtures` already
 -- needed; nothing new is asked of whoever runs `db:migrate`.
 --
--- $1.71 of the ninety withdrawn Predictions (Gameweek 6's share for the
--- nine) is sunk. Gameweek 5's run grows by nine Fixtures on 2026-09-11.
--- `attempts` keeps its 135 rows for the nine under Gameweek 6: a ledger
+-- $1.62 of Gameweek 6's $1.91 -- the nine Fixtures' 129 calls, whether or
+-- not a call produced one of the 59 Predictions withdrawn -- is sunk. Gameweek 5's run grows by nine Fixtures on 2026-09-11.
+-- `attempts` keeps its 129 rows for the nine under Gameweek 6: a ledger
 -- entry for calls that no longer have a Prediction standing behind them,
 -- which is why this comment exists for whoever reads that ledger next.
 --

@@ -53,9 +53,10 @@
 > written, and the deadline derivation grouped kickoffs by label and so let one moved
 > Fixture drag its whole round's Lock forward with it.
 >
-> What is decided: the nine early Predictions per seat are withdrawn and the nine
+> What is decided: every Prediction standing on the nine early Fixtures — fifty-nine,
+> ten seats with thirty-one Gaps among them — is withdrawn and the nine
 > Fixtures are re-Locked into Gameweek 5 (ticket 0065). Real Sociedad–Celta keeps its Lock
-> and its ten Predictions — they preceded a Lock that preceded its kick-off, and it has
+> and its eight Predictions — they preceded a Lock that preceded its kick-off, and it has
 > been played. The nine also satisfied every promise the record makes, and ADR-0013's
 > reasoning — equally stale for every seat, Paired Differences untouched — would have let
 > them stand; the first draft of this note did let them stand. They are withdrawn all the
@@ -67,9 +68,9 @@
 > seventy-seven minutes from the moment the decision was taken, with Gameweek 4's own run
 > already overdue and unrescuable past it. This is the one recorded exception to
 > ADR-0013's insert-only rule and to ADR-0015's immutable `locked_in_gw`, lifted inside
-> one migration and restored by it. What it costs, stated: $1.71 of the $1.91 is sunk;
+> one migration and restored by it. What it costs, stated: $1.62 of the $1.91 is sunk;
 > Gameweek 5 becomes a Double Gameweek of twenty and its run costs accordingly; the
-> `attempts` ledger keeps 135 rows for Gameweek 6 whose Predictions no longer exist, and
+> `attempts` ledger keeps 129 rows for Gameweek 6 whose Predictions no longer exist, and
 > Gameweek 6 holds one Fixture for the rest of the Season. No `deferred` flag marks any
 > of it, because nothing moved after a Lock; the migration's comment and this note are
 > the record.
