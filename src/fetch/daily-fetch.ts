@@ -1,7 +1,9 @@
 import type { Client } from "pg";
 import { fetchFootballDataSeason } from "../football-data/fetch-season.js";
 import {
-  fetchFootballDataOrgCompetition
+  fetchFootballDataOrgCompetition,
+  type MovedAttachment,
+  type RefusedAttachment
 } from "../football-data-org/fetch-competition.js";
 import {
   fetchFplDaily,
@@ -20,6 +22,8 @@ import {
 } from "../head-coach/fetch-head-coach-changes.js";
 import { errorText } from "../error-text.js";
 import type { HttpFetcher } from "../http.js";
+
+export type { MovedAttachment, RefusedAttachment };
 
 type Database = Pick<Client, "query">;
 
@@ -72,6 +76,8 @@ export interface DailyFetchResult {
   xg: DailyXgOutcome;
   squadChanges: DailySquadChangeOutcome;
   headCoachChanges: DailyHeadCoachOutcome;
+  movedAttachments: MovedAttachment[];
+  refusedAttachments: RefusedAttachment[];
 }
 
 export class StaleFootballDataSeasonError extends Error {
@@ -221,10 +227,12 @@ export async function runDailyFetch({
   // cost another league its schedule, and the run still fails loudly at the
   // end. Opening a league is the `competitions` insert and nothing here.
   const listed = await listedCompetitions(database, season);
+  const movedAttachments: MovedAttachment[] = [];
+  const refusedAttachments: RefusedAttachment[] = [];
   // The Premier League alone keeps the FPL API for its schedule (ADR-0036).
   for (const competition of listed.filter((code) => code !== "PL")) {
     try {
-      await fetchFootballDataOrgCompetition({
+      const outcome = await fetchFootballDataOrgCompetition({
         database,
         competition,
         season,
@@ -232,6 +240,8 @@ export async function runDailyFetch({
         http,
         now: () => observedAt
       });
+      movedAttachments.push(...outcome.movedAttachments);
+      refusedAttachments.push(...outcome.refusedAttachments);
     } catch (error) {
       errors.push(error);
     }
@@ -341,5 +351,12 @@ export async function runDailyFetch({
   if (fpl === undefined) {
     throw new Error("Daily FPL fetch completed without a result");
   }
-  return { fpl, xg, squadChanges, headCoachChanges };
+  return {
+    fpl,
+    xg,
+    squadChanges,
+    headCoachChanges,
+    movedAttachments,
+    refusedAttachments
+  };
 }

@@ -233,6 +233,7 @@ describe("scheduled Prediction runs", () => {
       new Date("2026-08-21T11:30:00Z"),
       new Date("2026-08-21T11:30:00Z"),
       new Date("2026-08-21T11:30:00Z"),
+      new Date("2026-08-21T11:30:00Z"),
       new Date("2026-08-21T11:40:00Z"),
       new Date("2026-08-21T11:40:00Z")
     ];

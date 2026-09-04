@@ -128,6 +128,22 @@ describe("the derived deadline", () => {
     expect(breachedBy).toBeNull();
   });
 
+  test("freezes when a Fixture has locked into the Gameweek, even before the clock reaches deadline", () => {
+    const stored = at("2026-08-15T13:30:00Z");
+    const pushedBack = at("2026-08-15T19:00:00Z");
+
+    const decision = deriveDeadline(
+      [pushedBack, SUNDAY],
+      stored,
+      at("2026-08-12T06:00:00Z"),
+      true
+    );
+
+    expect(decision.deadlineAt).toEqual(stored);
+    expect(decision.locked).toBe(true);
+    expect(decision.breachedBy).toBeNull();
+  });
+
   test("refuses a Gameweek with no scheduled kickoff", () => {
     expect(() => deriveDeadline([], null, at("2026-08-10T06:00:00Z")))
       .toThrow("at least one scheduled kickoff");

@@ -164,6 +164,7 @@ export async function predictGameweek({
     throw new Error(`No Entrants are configured for ${competition}`);
   }
 
+  const asOf = now();
   const work = await database.query<WorkItemRow>(
     `-- roster: the match track's.
      select
@@ -174,8 +175,9 @@ export async function predictGameweek({
       where f.competition = $1
         and f.season = $2
         and coalesce(f.locked_in_gw, f.gw) = $3
+        and f.kickoff_at > $4
         and m.role = 'entrant'
-        and m.prompt_version = $4
+        and m.prompt_version = $5
         and not exists (
           select 1
             from predictions p
@@ -185,7 +187,7 @@ export async function predictGameweek({
              and p.fixture_id = f.fixture_id
         )
       order by f.fixture_id, m.id`,
-    [competition, season, gameweek, matchPromptOf(competition).version]
+    [competition, season, gameweek, asOf, matchPromptOf(competition).version]
   );
 
   const contextData = trigger === "main"

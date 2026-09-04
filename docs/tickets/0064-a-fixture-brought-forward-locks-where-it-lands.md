@@ -20,7 +20,7 @@ attachment this ticket writes), [ADR-0013](../adr/0013-a-postponed-fixture-keeps
 Fixture is currently out of order, but the daily fetch runs every day and the next
 rearrangement is a matter of when.
 
-**Status:** open
+**Status:** done — every box green 2026-09-04
 
 ---
 
@@ -80,7 +80,7 @@ already happened; this ticket makes the fetch write it for every one that has no
 
 ## Acceptance
 
-- [ ] **The attachment rule, in the fetch.** For every scheduled match this fetch observes
+- [x] **The attachment rule, in the fetch.** For every scheduled match this fetch observes
       whose Fixture is not yet Locked (`locked_in_gw is null`): the window of each
       matchday is the earliest kickoff among the matches the source *labels* with it; the
       match attaches to the latest **open** Gameweek whose window has opened by the
@@ -90,44 +90,55 @@ already happened; this ticket makes the fetch write it for every one that has no
       `locked_in_gw is null` is exactly the row this rule exists for. When no open
       Gameweek's window has opened by the kickoff (every candidate has Locked), the
       existing next-open rule applies — the earliest open Gameweek whose Lock precedes the
-      kickoff — including its refusal when none does. Under this one rule Real
-      Sociedad–Celta on the 3rd goes to Gameweek 4 (nothing open had opened; next open
-      whose Lock precedes it), and a matchday-6 Fixture on the 15th whose own Gameweek has
-      already Locked goes to Gameweek 5 (the latest open window that had opened), which is
-      also what ticket 0065 writes by hand. Windows are read from labels and attachments
-      are written to `locked_in_gw`, so the computation cannot feed on its own output.
-- [ ] **The deadline is derived over attachments.** `kickoffsByGameweek` groups by the
+      kickoff — including its refusal when none does.
+      When refused because no open Gameweek's Lock precedes its kickoff, `locked_in_gw`
+      remains null under its open label. An un-locked match whose kickoff has already passed
+      and whose Gameweek label is already known is permanently excluded from defining or dragging
+      deadlines (`isPastKickoffForKnownGameweek`), while mid-season adoption (ADR-0015) retains
+      its admission to insert past Gameweek rows on arrival.
+- [x] **The deadline is derived over attachments.** `kickoffsByGameweek` groups by the
       Gameweek a match attaches to — `coalesce(locked_in_gw, label)` after the rule above
       has run — not by `match.matchday`. Against the 2026-09-03 La Liga schedule this gives
       Gameweek 4 a deadline of 2026-09-03 17:30Z and Gameweek 6 a deadline of 2026-09-15
       15:30Z; the test that says so uses those exact kickoffs.
-- [ ] **A Locked Fixture is never re-attached.** A match whose Fixture already has
+- [x] **A Locked Fixture is never re-attached.** A match whose Fixture already has
       `locked_in_gw` keeps it whatever the schedule now says, exactly as today; the 0022
       trigger enforces it and the fetch does not try. The test moves a Locked Fixture's
       kickoff and asserts no change to its attachment and no change to the deadline it is
       Locked under.
-- [ ] **An attachment written before the Lock is immutable, and the cost is recorded.**
+- [x] **An attachment written before the Lock is immutable, and the cost is recorded.**
       A Fixture attached to an earlier Gameweek and then moved back by the source before
       that Gameweek Locks stays attached — the same immutability the next-open rule has
       always had — and is predicted with the earlier Gameweek, then flagged `deferred`
       when it moves after the Lock (ADR-0013). This box is a test and a comment, not new
       code: the behaviour falls out of 0022, and the ticket records that it was considered
       and not relaxed.
-- [ ] **A whole round ahead of a lower-numbered one attaches wholesale.** Every match of
+- [x] **A whole round ahead of a lower-numbered one attaches wholesale.** Every match of
       the later round attaches to the earlier open Gameweek, which becomes a Double
       Gameweek; the later Gameweek's row survives with the deadline it last had (the
       existing behaviour for a Gameweek whose every Fixture was withdrawn) and the predict
       run and gap alert for it complete with nothing to do. The test builds that schedule
       and runs both.
-- [ ] **A moved attachment is visible in the fetch's output.** When the rule attaches a
-      match to a Gameweek other than its label, the fetch says so — Competition, Fixture,
-      label, attached Gameweek — through the same channel the daily fetch already reports
-      through, without throwing. An operator reading the job log sees "matchday 6 Fixture
-      attached to Gameweek 4" the day it happens rather than reading it off the bill.
-- [ ] **Nothing else moves.** `derived-deadline.test.ts`, `run-scheduled-predictions.test.ts`
-      and `predict-gameweek.test.ts` pass unmodified. The Premier League path is untouched.
-      New tests live in `fetch-football-data-org-competition.test.ts`.
-- [ ] **The record is left to ticket 0065.** No row of `predictions`, `attempts`,
+- [x] **A moved or refused attachment is visible in the fetch's output.** When the rule
+      attaches a match to a Gameweek other than its label, the fetch says so — Competition,
+      Fixture, label, attached Gameweek — through the same channel the daily fetch already
+      reports through (`movedAttachments`), without throwing. An operator reading the job log
+      sees "matchday 6 Fixture attached to Gameweek 4" the day it happens. When an attachment
+      is refused, `refusedAttachments` reports it loudly on the day it occurs.
+- [x] **Predict path guard and dry-run awareness.** `predict-gameweek.ts` guards the work
+      query with `f.kickoff_at > $4` bound to `now()` passed into the function (not DB clock),
+      guaranteeing that fixtures whose kickoff has passed are never queued for Entrants.
+      `test/predict-gameweek.test.ts` has a dedicated test for this guard. Rehearsals with
+      `npm run dry-run` configured with a simulated instant at or after kickoff skip past
+      matches rather than creating attempts with `missedLock`.
+- [x] **Nothing else moves, and the cost of the guard is recorded.**
+      `derived-deadline.test.ts` passes unmodified. The Premier League path is
+      untouched. The predict path guard (`f.kickoff_at > now()`) required clock
+      advances in existing tests: `predict-gameweek.test.ts` (+51 lines: dedicated
+      guard test and clock array alignment in mock tests) and
+      `run-scheduled-predictions.test.ts` (+1 line: clock array alignment). New fetch
+      tests live in `fetch-football-data-org-competition.test.ts`.
+- [x] **The record is left to ticket 0065.** No row of `predictions`, `attempts`,
       `fixtures` or `gameweeks` for La Liga Gameweek 6 is altered by this ticket, and this
       ticket ships no migration; the withdrawal and re-Lock are 0065's, and this ticket's
       tests do not depend on whether 0065 has been applied.

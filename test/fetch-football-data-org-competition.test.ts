@@ -1,5 +1,5 @@
 import pg from "pg";
-import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   fetchFootballDataOrgCompetition,
   FootballDataOrgHttpError,
@@ -7,9 +7,14 @@ import {
   KickoffInsideDeadlineError,
   MissingFootballDataOrgTokenError,
   parseFootballDataOrgMatches,
-  StaleCompetitionSourceError
+  StaleCompetitionSourceError,
+  type MovedAttachment,
+  type RefusedAttachment
 } from "../src/football-data-org/fetch-competition.js";
 import type { HttpFetcher } from "../src/http.js";
+import { predictGameweek } from "../src/predictions/predict-gameweek.js";
+import { readGapAlert } from "../src/predictions/gap-alert.js";
+import { matchPromptOf } from "../src/predictions/openrouter-entrant.js";
 import { archivedBody } from "./archived-fixture.js";
 import { resetSchema } from "./schema-fixture.js";
 
@@ -18,6 +23,18 @@ const { Client } = pg;
 const SEASON = "2026-27";
 const COMPETITION = "PD";
 const TOKEN = "a-football-data-org-token";
+
+const MD6_KICKOFFS: Record<number, string> = {
+  564678: "2026-09-15T17:00:00Z",
+  564679: "2026-09-15T19:00:00Z",
+  564680: "2026-09-15T19:30:00Z",
+  564681: "2026-09-16T17:00:00Z",
+  564683: "2026-09-16T19:00:00Z",
+  564684: "2026-09-16T19:30:00Z",
+  564685: "2026-09-17T17:00:00Z",
+  564686: "2026-09-17T19:00:00Z",
+  564687: "2026-09-17T19:30:00Z"
+};
 
 /**
  * The response football-data.org actually returned for La Liga 2026-27, kept
@@ -178,9 +195,13 @@ describe("a Competition read from football-data.org", () => {
     at: string,
     body?: string,
     status = 200
-  ): Promise<{ requests: { url: string; token: string | undefined }[] }> => {
+  ): Promise<{
+    requests: { url: string; token: string | undefined }[];
+    movedAttachments: MovedAttachment[];
+    refusedAttachments: RefusedAttachment[];
+  }> => {
     const { http, requests } = respondingWith(body ?? await snapshot(), status);
-    await fetchFootballDataOrgCompetition({
+    const result = await fetchFootballDataOrgCompetition({
       database: client,
       competition: COMPETITION,
       season: SEASON,
@@ -188,7 +209,41 @@ describe("a Competition read from football-data.org", () => {
       http,
       now: () => new Date(at)
     });
-    return { requests };
+    return {
+      requests,
+      movedAttachments: result.movedAttachments,
+      refusedAttachments: result.refusedAttachments
+    };
+  };
+
+  const queryFixture = async (fixtureId: number) => {
+    const { rows } = await client.query<{
+      fixture_id: number;
+      gw: number;
+      locked_in_gw: number | null;
+      kickoff_at: Date;
+      deferred: boolean;
+    }>(
+      `select fixture_id, gw, locked_in_gw, kickoff_at, deferred
+         from fixtures
+        where competition = $1 and season = $2 and fixture_id = $3`,
+      [COMPETITION, SEASON, fixtureId]
+    );
+    return rows[0];
+  };
+
+  const realSociedadSchedule = async (): Promise<string> => {
+    const raw = JSON.parse(await recorded()) as {
+      matches: { id: number; matchday: number; utcDate: string }[];
+    };
+    for (const match of raw.matches) {
+      if (match.matchday === 5) {
+        match.utcDate = "2026-09-11T19:00:00Z";
+      } else if (match.id in MD6_KICKOFFS) {
+        match.utcDate = MD6_KICKOFFS[match.id]!;
+      }
+    }
+    return JSON.stringify(raw);
   };
 
   const gameweeks = async (): Promise<{ gw: number; deadline: string }[]> => {
@@ -623,5 +678,428 @@ describe("a Competition read from football-data.org", () => {
         [COMPETITION, SEASON, open?.gw, open?.deadline_at]
       );
       expect(rows[0]?.count).toBe("0");
+    });
+
+  test("attaches a Fixture brought forward to the Gameweek it is played in and derives deadlines over attachments",
+    async () => {
+      // The 2026-09-03 La Liga schedule: Real Sociedad–Celta (564682, matchday 6)
+      // was brought forward to 3 September 19:00Z, twelve days ahead of its round.
+      // The other nine matchday-6 Fixtures kick off 15–17 September.
+      const schedule = await realSociedadSchedule();
+
+      const { movedAttachments } = await fetchAt("2026-09-03T06:00:00Z", schedule);
+
+      const gwMap = new Map((await gameweeks()).map(({ gw, deadline }) => [gw, deadline]));
+      expect(gwMap.get(4)).toBe("2026-09-03T17:30:00.000Z");
+      expect(gwMap.get(5)).toBe("2026-09-11T17:30:00.000Z");
+      expect(gwMap.get(6)).toBe("2026-09-15T15:30:00.000Z");
+
+      const moved = await queryFixture(564682);
+      expect(moved).toMatchObject({
+        fixture_id: 564682,
+        gw: 6,
+        locked_in_gw: 4
+      });
+
+      const { rows } = await client.query<{
+        fixture_id: number;
+        locked_in_gw: number | null;
+      }>(
+        `select fixture_id, locked_in_gw
+           from fixtures
+          where competition = $1 and season = $2 and gw = 6 and fixture_id <> 564682
+          order by fixture_id`,
+        [COMPETITION, SEASON]
+      );
+      expect(rows).toHaveLength(9);
+      expect(rows.every(({ locked_in_gw: lockedIn }) => lockedIn === null)).toBe(true);
+
+      expect(movedAttachments).toEqual([
+        {
+          competition: COMPETITION,
+          fixtureId: 564682,
+          matchday: 6,
+          attachedGameweek: 4
+        }
+      ]);
+    });
+
+  test("a matchday Fixture whose own Gameweek has already Locked attaches to the latest open window that had opened",
+    async () => {
+      // Gameweek 6 has already locked in the record (the ticket 0065 state).
+      await client.query(
+        `insert into gameweeks (competition, season, gw, deadline_at) values
+           ($1, $2, 4, '2026-09-04T17:30:00Z'),
+           ($1, $2, 5, '2026-09-11T17:30:00Z'),
+           ($1, $2, 6, '2026-09-03T17:30:00Z')`,
+        [COMPETITION, SEASON]
+      );
+
+      // In this schedule, all matchday-6 fixtures kick off 15-17 September (including 564682).
+      const schedule = (await realSociedadSchedule()).replace(
+        '"utcDate":"2026-09-03T19:00:00Z"',
+        '"utcDate":"2026-09-15T17:00:00Z"'
+      );
+
+      await fetchAt("2026-09-04T06:00:00Z", schedule);
+
+      // All matchday-6 fixtures whose own Gameweek 6 is locked attach to Gameweek 5
+      const { rows } = await client.query<{
+        fixture_id: number;
+        gw: number;
+        locked_in_gw: number;
+      }>(
+        `select fixture_id, gw, locked_in_gw
+           from fixtures
+          where competition = $1 and season = $2 and gw = 6
+          order by fixture_id`,
+        [COMPETITION, SEASON]
+      );
+
+      expect(rows).toHaveLength(10);
+      expect(rows.every(({ locked_in_gw: lockedIn }) => lockedIn === 5)).toBe(true);
+    });
+
+  test("a Locked Fixture is never re-attached when its kickoff moves",
+    async () => {
+      // Gameweek 4 is Locked at 2026-09-03 17:30Z. Fixture 564682 is already Locked into Gameweek 4.
+      await client.query(
+        `insert into gameweeks (competition, season, gw, deadline_at) values
+           ($1, $2, 4, '2026-09-03T17:30:00Z'),
+           ($1, $2, 5, '2026-09-11T17:30:00Z'),
+           ($1, $2, 6, '2026-09-15T15:30:00Z')`,
+        [COMPETITION, SEASON]
+      );
+      await client.query(
+        `insert into fixtures (
+           competition, season, fixture_id, gw, locked_in_gw, home_team,
+           away_team, kickoff_at, result
+         ) values (
+           $1, $2, 564682, 6, 4, 'Real Sociedad de Fútbol',
+           'RC Celta de Vigo', '2026-09-03T19:00:00Z', null
+         )`,
+        [COMPETITION, SEASON]
+      );
+
+      // In the new fetch body, fixture 564682's kickoff is moved to late September.
+      const body = (await realSociedadSchedule()).replace(
+        '"utcDate":"2026-09-03T19:00:00Z"',
+        '"utcDate":"2026-09-25T19:00:00Z"'
+      );
+
+      await fetchAt("2026-09-03T18:00:00Z", body);
+
+      const gwMap = new Map((await gameweeks()).map(({ gw, deadline }) => [gw, deadline]));
+      expect(gwMap.get(4)).toBe("2026-09-03T17:30:00.000Z");
+
+      const row = await queryFixture(564682);
+      expect(row).toMatchObject({
+        fixture_id: 564682,
+        gw: 6,
+        locked_in_gw: 4
+      });
+      expect(row?.kickoff_at.toISOString()).toBe("2026-09-25T19:00:00.000Z");
+    });
+
+  test("an attachment written before the Lock is immutable when source moves it back, and is flagged deferred after Lock",
+    async () => {
+      const schedule = await realSociedadSchedule();
+
+      // First fetch: fixture 564682 is brought forward to Sept 3 and attaches to Gameweek 4.
+      await fetchAt("2026-09-02T06:00:00Z", schedule);
+
+      const beforeMove = await queryFixture(564682);
+      expect(beforeMove?.locked_in_gw).toBe(4);
+      expect(beforeMove?.deferred).toBe(false);
+
+      // Source moves the fixture back to 16 September before Gameweek 4 Locks.
+      // Under migration 0022 and ADR-0015, an attachment once written is immutable.
+      // The ticket records that relaxing this before the Lock was considered and
+      // declined: it is predicted with the earlier Gameweek and marked deferred if it
+      // kicks off past the Lock (ADR-0013).
+      const movedBackSchedule = schedule.replace(
+        '"utcDate":"2026-09-03T19:00:00Z"',
+        '"utcDate":"2026-09-16T19:00:00Z"'
+      );
+
+      // Second fetch before Gameweek 4's Lock: kickoff updated, deferred stays false.
+      await fetchAt("2026-09-03T06:00:00Z", movedBackSchedule);
+
+      const beforeLock = await queryFixture(564682);
+      expect(beforeLock?.locked_in_gw).toBe(4);
+      expect(beforeLock?.kickoff_at.toISOString()).toBe("2026-09-16T19:00:00.000Z");
+      expect(beforeLock?.deferred).toBe(false);
+
+      // Third fetch after Gameweek 4's Lock at 17:30Z: the fixture is now flagged deferred.
+      await fetchAt("2026-09-03T18:00:00Z", movedBackSchedule);
+
+      const afterLock = await queryFixture(564682);
+      expect(afterLock?.locked_in_gw).toBe(4);
+      expect(afterLock?.deferred).toBe(true);
+    });
+
+  test("a whole round ahead of a lower-numbered one attaches wholesale",
+    async () => {
+      // Seed an entrant so predictGameweek can run for the Competition.
+      await client.query(
+        `insert into models (
+           id, name, base_model, provider, prompt_version, role
+         ) values (
+           'entrant/v1', 'Test Entrant', 'provider/model', 'provider',
+           $1, 'entrant'
+         )`,
+        [matchPromptOf(COMPETITION).version]
+      );
+
+      // Pre-existing stored deadlines for Gameweeks 4, 5, 6. Gameweek 4 has Locked.
+      await client.query(
+        `insert into gameweeks (competition, season, gw, deadline_at) values
+           ($1, $2, 4, '2026-09-04T17:30:00Z'),
+           ($1, $2, 5, '2026-09-11T17:30:00Z'),
+           ($1, $2, 6, '2026-09-18T17:30:00Z')`,
+        [COMPETITION, SEASON]
+      );
+
+      // In the schedule, matchday 5 kickoffs are on 11 September, and ALL matchday 6
+      // kickoffs are brought forward to 8 September (ahead of matchday 5).
+      const raw = JSON.parse(await recorded()) as { matches: { matchday: number; utcDate: string }[] };
+      for (const match of raw.matches) {
+        if (match.matchday === 5) {
+          match.utcDate = "2026-09-11T19:00:00Z";
+        } else if (match.matchday === 6) {
+          match.utcDate = "2026-09-08T19:00:00Z";
+        }
+      }
+
+      await fetchAt("2026-09-07T06:00:00Z", JSON.stringify(raw));
+
+      // Every match of matchday 6 attaches to Gameweek 5, turning Gameweek 5 into a Double Gameweek.
+      const { rows: md6Rows } = await client.query<{ locked_in_gw: number }>(
+        `select locked_in_gw from fixtures
+          where competition = $1 and season = $2 and gw = 6`,
+        [COMPETITION, SEASON]
+      );
+      expect(md6Rows).toHaveLength(10);
+      expect(md6Rows.every((r) => r.locked_in_gw === 5)).toBe(true);
+
+      const { rows: gw5Count } = await client.query<{ count: string }>(
+        `select count(*) as count from fixtures
+          where competition = $1 and season = $2 and coalesce(locked_in_gw, gw) = 5`,
+        [COMPETITION, SEASON]
+      );
+      expect(gw5Count[0]?.count).toBe("20");
+
+      // Gameweek 6 row survives with the deadline it last had.
+      const gwMap = new Map((await gameweeks()).map(({ gw, deadline }) => [gw, deadline]));
+      expect(gwMap.get(6)).toBe("2026-09-18T17:30:00.000Z");
+
+      // Predict run for Gameweek 6 completes with nothing to do.
+      const alert = await predictGameweek({
+        database: client,
+        competition: COMPETITION,
+        season: SEASON,
+        gameweek: 6,
+        concurrency: 1,
+        apiKey: "test-key",
+        entrantCallTimeoutMs: 5000,
+        http: async () => ({ status: 200, body: "{}" }),
+        now: () => new Date("2026-09-18T16:00:00Z")
+      });
+      expect(alert).toBeNull();
+
+      // Gap alert for Gameweek 6 completes with nothing to do.
+      const gapAlert = await readGapAlert(
+        client,
+        COMPETITION,
+        SEASON,
+        6,
+        () => new Date("2026-09-18T16:00:00Z")
+      );
+      expect(gapAlert).toBeNull();
+    });
+
+  test("refuses an attachment to a Fixture pulled ahead that kicks off inside or past its Lock, without dragging its open label",
+    async () => {
+      // Real Sociedad–Celta kicks off at 2026-09-03 19:00Z.
+      // At 18:00Z on 3 September, the lead margin (17:30Z) has already passed.
+      // It cannot attach to Gameweek 4, and must not drag Gameweek 6's deadline.
+      // It is reported through refusedAttachments on the day it occurs.
+      const schedule = await realSociedadSchedule();
+
+      const { refusedAttachments } = await fetchAt("2026-09-03T18:00:00Z", schedule);
+      expect(refusedAttachments).toEqual([{
+        competition: COMPETITION,
+        fixtureId: 564682,
+        matchday: 6,
+        kickoffAt: new Date("2026-09-03T19:00:00.000Z")
+      }]);
+
+      const moved = await queryFixture(564682);
+      expect(moved?.locked_in_gw).toBeNull();
+      expect(moved?.gw).toBe(6);
+
+      const gwMap = new Map((await gameweeks()).map(({ gw, deadline }) => [gw, deadline]));
+      expect(gwMap.get(6)).toBe("2026-09-15T15:30:00.000Z");
+    });
+
+  test("past refused fixture marked FINISHED does not drag or breach Gameweek 6 on 12 September after Gameweek 5 locks",
+    async () => {
+      // Seed Gameweek 4 (locked), Gameweek 5 (locked on 11 Sept at 17:30Z),
+      // and Gameweek 6 (stored deadline 15 Sept 15:30Z).
+      await client.query(
+        `insert into gameweeks (competition, season, gw, deadline_at) values
+           ($1, $2, 4, '2026-09-04T17:30:00Z'),
+           ($1, $2, 5, '2026-09-11T17:30:00Z'),
+           ($1, $2, 6, '2026-09-15T15:30:00Z')`,
+        [COMPETITION, SEASON]
+      );
+
+      // On 12 September, Gameweek 5 has locked.
+      // Fixture 564682 was played on 3 September and is marked FINISHED.
+      const raw = JSON.parse(await realSociedadSchedule()) as {
+        matches: {
+          id: number;
+          matchday: number;
+          utcDate: string;
+          status: string;
+          score: { fullTime: { home: number | null; away: number | null } };
+        }[];
+      };
+      const played = raw.matches.find((m) => m.id === 564682);
+      if (played !== undefined) {
+        played.status = "FINISHED";
+        played.score = { fullTime: { home: 2, away: 1 } };
+      }
+
+      // Fetch at 12 September must not throw KickoffInsideDeadlineError, must
+      // not drag Gameweek 6's deadline, and locked_in_gw must remain null.
+      const { refusedAttachments } = await fetchAt("2026-09-12T06:00:00Z", JSON.stringify(raw));
+      expect(refusedAttachments).toEqual([]);
+
+      const row = await queryFixture(564682);
+      expect(row?.locked_in_gw).toBeNull();
+      expect(row?.gw).toBe(6);
+
+      const gwMap = new Map((await gameweeks()).map(({ gw, deadline }) => [gw, deadline]));
+      expect(gwMap.get(6)).toBe("2026-09-15T15:30:00.000Z");
+    });
+
+  test("past refused fixture marked FINISHED does not breach Gameweek 6 on 16 September after Gameweek 6 locks, and is not predicted",
+    async () => {
+      // Seed Gameweek 4, 5, and Gameweek 6 (all locked as of 16 September).
+      await client.query(
+        `insert into gameweeks (competition, season, gw, deadline_at) values
+           ($1, $2, 4, '2026-09-04T17:30:00Z'),
+           ($1, $2, 5, '2026-09-11T17:30:00Z'),
+           ($1, $2, 6, '2026-09-15T15:30:00Z')`,
+        [COMPETITION, SEASON]
+      );
+
+      const raw = JSON.parse(await realSociedadSchedule()) as {
+        matches: {
+          id: number;
+          matchday: number;
+          utcDate: string;
+          status: string;
+          score: { fullTime: { home: number | null; away: number | null } };
+        }[];
+      };
+      const played = raw.matches.find((m) => m.id === 564682);
+      if (played !== undefined) {
+        played.status = "FINISHED";
+        played.score = { fullTime: { home: 2, away: 1 } };
+      }
+
+      // Fetch at 16 September must not throw.
+      await fetchAt("2026-09-16T06:00:00Z", JSON.stringify(raw));
+
+      const row = await queryFixture(564682);
+      expect(row?.locked_in_gw).toBeNull();
+      expect(row?.gw).toBe(6);
+
+      const gwMap = new Map((await gameweeks()).map(({ gw, deadline }) => [gw, deadline]));
+      expect(gwMap.get(6)).toBe("2026-09-15T15:30:00.000Z");
+
+      // Predict Gameweek 6 run at deadline (2026-09-15 15:30Z):
+      // An Entrant configured for PD is queried.
+      await client.query(
+        `insert into models (id, name, base_model, provider, prompt_version, role)
+         values ('entrant/pd', 'PD Entrant', 'openai/gpt-5.2', 'openai', $1, 'entrant')`,
+        [matchPromptOf(COMPETITION).version]
+      );
+
+      const askedFixtureIds: number[] = [];
+      await predictGameweek({
+        competition: COMPETITION,
+        database: client,
+        season: SEASON,
+        gameweek: 6,
+        concurrency: 1,
+        apiKey: "test-key",
+        entrantCallTimeoutMs: 1000,
+        now: () => new Date("2026-09-15T15:30:00Z"),
+        http: async (_url, options) => {
+          const body = JSON.parse(options?.body as string);
+          const matchId = Number(body.messages[0]?.content.match(/Fixture ID: (\d+)/)?.[1]);
+          askedFixtureIds.push(matchId);
+          return {
+            status: 200,
+            body: JSON.stringify({
+              choices: [{
+                message: {
+                  content: JSON.stringify({
+                    fixture_id: matchId,
+                    probs: { H: 0.5, D: 0.3, A: 0.2 },
+                    score: { home: 1, away: 0 },
+                    rationale: "Home win."
+                  })
+                }
+              }]
+            })
+          };
+        }
+      });
+
+      // Fixture 564682 (kickoff 3 Sept) was NOT asked; only future matches of GW6 were asked.
+      expect(askedFixtureIds).not.toContain(564682);
+    });
+
+  test("picks earliest candidate by deadline when open candidate deadlines are out of Gameweek number order",
+    async () => {
+      // Seed Gameweek 4 (locked), Gameweek 5 (stored deadline late Sept),
+      // and Gameweek 6 (stored deadline mid Sept). Both deadlines are out of
+      // Gameweek number order.
+      await client.query(
+        `insert into gameweeks (competition, season, gw, deadline_at) values
+           ($1, $2, 4, '2026-09-04T17:30:00Z'),
+           ($1, $2, 5, '2026-09-22T17:30:00Z'),
+           ($1, $2, 6, '2026-09-15T15:30:00Z')`,
+        [COMPETITION, SEASON]
+      );
+
+      // In the schedule, all open rounds (>= 5) have windows in October.
+      // A single matchday-4 fixture scheduled on Sept 25 arrives (its own GW 4 is locked).
+      // Since no open Gameweek's window has opened by Sept 25, the next-open rule applies.
+      // Both GW 5 and GW 6 have locks preceding Sept 25, but GW 6's deadline (Sept 15)
+      // is earlier than GW 5's (Sept 22). The next-open rule picks earliest by deadline.
+      const raw = JSON.parse(await recorded()) as {
+        matches: { id: number; matchday: number; utcDate: string }[];
+      };
+      for (const match of raw.matches) {
+        if (match.matchday >= 5) {
+          match.utcDate = "2026-10-15T19:00:00Z";
+        }
+      }
+      const postponed = raw.matches.find((m) => m.matchday === 4);
+      if (postponed !== undefined) {
+        postponed.utcDate = "2026-09-25T19:00:00Z";
+      }
+
+      await fetchAt("2026-09-04T18:00:00Z", JSON.stringify(raw));
+
+      if (postponed !== undefined) {
+        const row = await queryFixture(postponed.id);
+        expect(row?.locked_in_gw).toBe(6);
+      }
     });
 });

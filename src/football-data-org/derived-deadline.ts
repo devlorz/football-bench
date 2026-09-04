@@ -32,11 +32,15 @@ export interface DerivedDeadline {
  * @param kickoffs every scheduled kickoff this fetch observed for the Gameweek
  * @param storedDeadline the deadline already on the record, or `null` for a
  *   Gameweek the record has never seen
+ * @param observedAt the instant of the fetch
+ * @param committed whether any Fixture already points its `locked_in_gw` at
+ *   this Gameweek in the database (migration 0025)
  */
 export function deriveDeadline(
   kickoffs: readonly Date[],
   storedDeadline: Date | null,
-  observedAt: Date
+  observedAt: Date,
+  committed = false
 ): DerivedDeadline {
   const earliestTime = Math.min(...kickoffs.map((kickoff) => kickoff.getTime()));
   if (kickoffs.length === 0 || !Number.isFinite(earliestTime)) {
@@ -58,11 +62,11 @@ export function deriveDeadline(
     };
   }
 
-  if (observedAt.getTime() >= storedDeadline.getTime()) {
+  if (committed || observedAt.getTime() >= storedDeadline.getTime()) {
     // Locked, so the deadline is a stored fact rather than a recomputation
-    // (ADR-0015). A kickoff that has since moved inside it is the one thing
-    // that cannot be absorbed: the Entrants committed at a moment that is no
-    // longer before kick-off.
+    // (ADR-0015). A Gameweek deadline is also immutable once a Fixture has
+    // locked into it (migration 0025): Entrants committed before this instant,
+    // so neither half of the commitment can be rewritten by an update.
     return {
       deadlineAt: storedDeadline,
       locked: true,

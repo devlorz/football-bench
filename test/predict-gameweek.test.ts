@@ -304,6 +304,7 @@ describe("predicting a Gameweek", () => {
     const requests: HttpRequest[] = [];
     const clock = [
       new Date("2026-08-21T17:28:59.750Z"),
+      new Date("2026-08-21T17:28:59.750Z"),
       new Date("2026-08-21T17:29:00Z")
     ];
     const context = [
@@ -553,7 +554,8 @@ describe("predicting a Gameweek", () => {
       `insert into gameweeks (season, gw, deadline_at)
        values ('2026-27', 2, '2026-08-28T17:30:00Z');
        update fixtures
-          set locked_in_gw = 2
+          set locked_in_gw = 2,
+              kickoff_at = '2026-08-28T19:00:00Z'
         where season = '2026-27' and fixture_id = 1`
     );
     let calls = 0;
@@ -1145,6 +1147,7 @@ describe("predicting a Gameweek", () => {
     let calls = 0;
     const clock = [
       new Date("2026-08-21T17:29:59.000Z"),
+      new Date("2026-08-21T17:29:59.000Z"),
       new Date("2026-08-21T17:30:00.000Z"),
       new Date("2026-08-21T17:30:00.000Z")
     ];
@@ -1281,6 +1284,7 @@ describe("predicting a Gameweek", () => {
       }
     ];
     const clock = [
+      new Date("2026-08-21T17:28:59.000Z"),
       new Date("2026-08-21T17:28:59.000Z"),
       new Date("2026-08-21T17:28:59.250Z"),
       new Date("2026-08-21T17:28:59.250Z"),
@@ -2027,5 +2031,51 @@ describe("predicting a Gameweek", () => {
       predictions: 0,
       locked_fixtures: 0
     });
+  });
+
+  test("skips fixtures that have already kicked off even if labeled or locked into the Gameweek", async () => {
+    // Fixture 1 is in the future relative to now; Fixture 2 is in the past.
+    await client.query(
+      `insert into fixtures (
+         season, fixture_id, gw, home_team, away_team, kickoff_at
+       ) values (
+         '2026-27', 2, 1, 'Chelsea', 'Fulham',
+         '2026-08-21T16:00:00Z'
+       )`
+    );
+
+    const askedFixtureIds: number[] = [];
+    await predictGameweek({
+      competition: "PL",
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      concurrency: 1,
+      apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
+      now: () => new Date("2026-08-21T17:00:00Z"),
+      http: async (_url, options) => {
+        const body = JSON.parse(options?.body as string);
+        askedFixtureIds.push(requestedFixtureId(body));
+        return {
+          status: 200,
+          body: JSON.stringify({
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  fixture_id: 1,
+                  probs: { H: 0.5, D: 0.3, A: 0.2 },
+                  score: { home: 1, away: 0 },
+                  rationale: "Reasonable."
+                })
+              }
+            }]
+          })
+        };
+      }
+    });
+
+    // Fixture 1 (kickoff 19:00Z) was asked; Fixture 2 (kickoff 16:00Z) was skipped.
+    expect(askedFixtureIds).toEqual([1]);
   });
 });

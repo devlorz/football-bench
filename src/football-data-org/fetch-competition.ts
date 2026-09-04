@@ -3,7 +3,7 @@ import { z } from "zod";
 import { outcomeOf, type FixtureResult } from "../fixture-result.js";
 import type { HttpFetcher } from "../http.js";
 import { storeRawSnapshots } from "../snapshots/store-raw-snapshots.js";
-import { deriveDeadline } from "./derived-deadline.js";
+import { DERIVED_DEADLINE_LEAD_MS, deriveDeadline } from "./derived-deadline.js";
 
 type Database = Pick<Client, "query">;
 
@@ -198,6 +198,25 @@ function settledResult(match: FootballDataOrgMatch): string | null {
   return JSON.stringify(result);
 }
 
+export interface MovedAttachment {
+  competition: string;
+  fixtureId: number;
+  matchday: number;
+  attachedGameweek: number;
+}
+
+export interface RefusedAttachment {
+  competition: string;
+  fixtureId: number;
+  matchday: number;
+  kickoffAt: Date;
+}
+
+export interface FetchFootballDataOrgCompetitionResult {
+  movedAttachments: MovedAttachment[];
+  refusedAttachments: RefusedAttachment[];
+}
+
 export interface FetchFootballDataOrgCompetitionOptions {
   database: Database;
   competition: string;
@@ -223,7 +242,7 @@ export async function fetchFootballDataOrgCompetition({
   apiToken,
   http,
   now
-}: FetchFootballDataOrgCompetitionOptions): Promise<void> {
+}: FetchFootballDataOrgCompetitionOptions): Promise<FetchFootballDataOrgCompetitionResult> {
   if (apiToken === null) {
     throw new MissingFootballDataOrgTokenError(competition);
   }
@@ -261,25 +280,255 @@ export async function fetchFootballDataOrgCompetition({
     throw new StaleCompetitionSourceError(competition, season);
   }
 
-  const kickoffsByGameweek = new Map<number, Date[]>();
-  for (const match of scheduled) {
-    const kickoffs = kickoffsByGameweek.get(match.matchday) ?? [];
-    kickoffs.push(match.kickoffAt);
-    kickoffsByGameweek.set(match.matchday, kickoffs);
-  }
+  // Preserved attachments from existing fixtures. Once a Fixture has locked into
+  // a Gameweek, migration 0022 makes that attachment immutable and this fetch
+  // preserves it. Any Gameweek with locked fixtures also keeps its deadline
+  // frozen under migration 0025.
+  const storedFixturesResult = await database.query<{
+    fixture_id: number;
+    locked_in_gw: number | null;
+  }>(
+    `select fixture_id, locked_in_gw
+       from fixtures
+      where competition = $1 and season = $2`,
+    [competition, season]
+  );
+  const storedLockedInGws = new Map<number, number>(
+    storedFixturesResult.rows
+      .filter((row): row is { fixture_id: number; locked_in_gw: number } => row.locked_in_gw !== null)
+      .map((row) => [row.fixture_id, row.locked_in_gw])
+  );
+  const committedGameweeks = new Set(storedLockedInGws.values());
 
-  const stored = await database.query(
+  const storedGameweeksResult = await database.query(
     `select gw, deadline_at
        from gameweeks
       where competition = $1 and season = $2`,
     [competition, season]
   );
   const storedDeadlines = new Map<number, Date>(
-    stored.rows.map(({ gw, deadline_at: deadlineAt }) => [
+    storedGameweeksResult.rows.map(({ gw, deadline_at: deadlineAt }) => [
       gw as number,
       deadlineAt as Date
     ])
   );
+
+  // The window of each matchday is the earliest kickoff among matches the source
+  // labels with it, excluding kickoffs pulled ahead of an earlier round's window
+  // (ADR-0036 2026-09-03 amendment, ticket 0064).
+  const matchesByMatchday = new Map<number, Date[]>();
+  for (const match of scheduled) {
+    const list = matchesByMatchday.get(match.matchday) ?? [];
+    list.push(match.kickoffAt);
+    matchesByMatchday.set(match.matchday, list);
+  }
+
+  const windowByMatchday = new Map<number, Date>();
+  const matchdays = [...matchesByMatchday.keys()].sort((a, b) => a - b);
+  for (const md of matchdays) {
+    const kickoffs = matchesByMatchday.get(md);
+    if (kickoffs === undefined || kickoffs.length === 0) {
+      continue;
+    }
+    kickoffs.sort((a, b) => a.getTime() - b.getTime());
+    const earlierMaxWindow = Math.max(
+      0,
+      ...matchdays.filter((m) => m < md).map((m) => windowByMatchday.get(m)?.getTime() ?? 0)
+    );
+    const notPulledAhead = kickoffs.filter((k) => k.getTime() >= earlierMaxWindow);
+    const earliestKickoff = notPulledAhead[0] ?? kickoffs[0];
+    if (earliestKickoff !== undefined) {
+      windowByMatchday.set(md, earliestKickoff);
+    }
+  }
+
+  // A match not yet locked whose kickoff has already passed cannot define or
+  // drag the deadline of any Gameweek the record already knows: a deadline is
+  // a promise about the future, and a match already kicked off cannot promise
+  // anything (ADR-0036 rule 3).
+  //
+  // One case is admitted all the same: a Competition adopted mid-Season
+  // (ADR-0015) arrives holding past Gameweeks the database has never seen.
+  // Those Gameweeks must be written so their Fixtures have a parent row to
+  // point to; for them storedDeadlines is empty, and deriveDeadline locks them
+  // cleanly on arrival.
+  //
+  // One case is an existing commitment breach: if that Gameweek is already
+  // locked and an honest match of that round (not pulled ahead of an earlier
+  // round) kicked off before the locked deadline, the commitment made to
+  // Entrants who predicted that Gameweek was violated, and the fetch alerts
+  // loudly via KickoffInsideDeadlineError rather than silently absorbing it.
+  //
+  // The kickoff is the test, not the result: a Fixture already played is caught
+  // by it, and so is one this fetch found in flight or one whose result the
+  // source has not posted yet — the recorded first response for La Liga
+  // carried all ten of its opening Fixtures as `TIMED` hours after they
+  // kicked off, and a result-only test would have queued six of them for a
+  // Lock five days later.
+  const isPastKickoffForKnownGameweek = (match: {
+    id: number;
+    matchday: number;
+    kickoffAt: Date;
+  }): boolean => {
+    if (storedLockedInGws.has(match.id)) {
+      return false;
+    }
+    const storedDeadline = storedDeadlines.get(match.matchday);
+    if (storedDeadline === undefined) {
+      return false;
+    }
+    if (
+      observedAt.getTime() >= storedDeadline.getTime()
+      && match.kickoffAt.getTime() < storedDeadline.getTime()
+    ) {
+      const roundWindow = windowByMatchday.get(match.matchday);
+      const isPulledAhead = roundWindow !== undefined
+        && match.kickoffAt.getTime() < roundWindow.getTime();
+      if (!isPulledAhead) {
+        return false;
+      }
+    }
+    return match.kickoffAt.getTime() <= observedAt.getTime();
+  };
+
+  // Open Gameweeks whose deadlines have not passed as of observedAt, ordered
+  // by deadline and then by Gameweek number. The pure decision of whether a
+  // Gameweek is locked (by the clock or by migration 0025) lives in deriveDeadline.
+  interface OpenGameweek {
+    gw: number;
+    deadlineAt: Date;
+    windowOpen: Date;
+    hasStoredDeadline: boolean;
+    locked: boolean;
+  }
+
+  const openGameweeks: OpenGameweek[] = [];
+  for (const [gw, windowKickoff] of windowByMatchday) {
+    const storedDeadline = storedDeadlines.get(gw) ?? null;
+    const decision = deriveDeadline(
+      [windowKickoff],
+      storedDeadline,
+      observedAt,
+      committedGameweeks.has(gw)
+    );
+    if (!decision.locked) {
+      openGameweeks.push({
+        gw,
+        deadlineAt: storedDeadline ?? decision.deadlineAt,
+        windowOpen: windowKickoff,
+        hasStoredDeadline: storedDeadline !== null,
+        locked: decision.locked
+      });
+    }
+  }
+  openGameweeks.sort(
+    (a, b) => a.deadlineAt.getTime() - b.deadlineAt.getTime() || a.gw - b.gw
+  );
+
+  // Attach each scheduled match to a Gameweek (ticket 0064, ADR-0036).
+  //
+  // A match whose Fixture is already locked in the database keeps its attachment
+  // unchanged whatever the schedule now says; migration 0022's trigger enforces
+  // it and the fetch does not try to rewrite it.
+  //
+  // For not-yet-locked matches:
+  // Ordinarily, a match belongs to its own label. But if its own matchday is
+  // already Locked (the ticket 0065 postponement case), or if it kicks off
+  // before an earlier open Gameweek's window (the ticket 0064 brought-forward
+  // case), it cannot remain in its label:
+  //
+  // 1. It attaches to the latest open candidate Gameweek whose window has
+  //    opened by the match's kickoff.
+  // 2. When no open candidate's window has opened by the kickoff, the existing
+  //    next-open rule applies: the earliest open candidate whose Lock precedes
+  //    the kickoff. If that candidate's deadline is frozen (already locked or
+  //    committed under migration 0025) or the match is from an already-locked
+  //    round (ADR-0015), the kickoff must postdate the deadline; if it is
+  //    pulled ahead into an open round (ticket 0064), the re-derived deadline
+  //    must still be in the future so Entrants have an unbreached window.
+  // 3. If no candidate qualifies, the attachment is refused (stays null).
+  //    A refused match that was pulled ahead of an earlier open Gameweek does
+  //    not attach and does not drag its open label's deadline. It is reported
+  //    via refusedAttachments on the day it occurs.
+  const movedAttachments: MovedAttachment[] = [];
+  const refusedAttachments: RefusedAttachment[] = [];
+  const attachments = new Map<number, number>();
+  const refusedMatchIds = new Set<number>();
+
+  for (const match of scheduled) {
+    const existingLock = storedLockedInGws.get(match.id);
+    if (existingLock !== undefined) {
+      attachments.set(match.id, existingLock);
+      continue;
+    }
+
+    if (isPastKickoffForKnownGameweek(match)) {
+      continue;
+    }
+
+    const isMatchdayLocked = !openGameweeks.some((g) => g.gw === match.matchday);
+    const isPulledAheadOfEarlierOpen = openGameweeks.some(
+      (g) => g.gw < match.matchday && match.kickoffAt.getTime() < g.windowOpen.getTime()
+    );
+
+    if (!isMatchdayLocked && !isPulledAheadOfEarlierOpen) {
+      continue;
+    }
+
+    const candidates = isMatchdayLocked
+      ? openGameweeks
+      : openGameweeks.filter((g) => g.gw < match.matchday);
+
+    const opened = candidates.filter(
+      (g) => g.windowOpen.getTime() <= match.kickoffAt.getTime()
+    );
+
+    let targetGw: number | undefined;
+    if (opened.length > 0) {
+      targetGw = opened.reduce((latest, current) =>
+        current.gw > latest.gw ? current : latest
+      ).gw;
+    } else {
+      const qualifying = candidates.find((c) => {
+        if (isMatchdayLocked || c.locked || committedGameweeks.has(c.gw)) {
+          return match.kickoffAt.getTime() > c.deadlineAt.getTime();
+        }
+        const derivedDeadline = Math.min(c.windowOpen.getTime(), match.kickoffAt.getTime())
+          - DERIVED_DEADLINE_LEAD_MS;
+        return derivedDeadline > observedAt.getTime();
+      });
+      targetGw = qualifying?.gw;
+    }
+
+    if (targetGw !== undefined && targetGw !== match.matchday) {
+      attachments.set(match.id, targetGw);
+      movedAttachments.push({
+        competition,
+        fixtureId: match.id,
+        matchday: match.matchday,
+        attachedGameweek: targetGw
+      });
+    } else if (targetGw === undefined && isPulledAheadOfEarlierOpen) {
+      refusedMatchIds.add(match.id);
+      refusedAttachments.push({
+        competition,
+        fixtureId: match.id,
+        matchday: match.matchday,
+        kickoffAt: match.kickoffAt
+      });
+    }
+  }
+
+  const kickoffsByGameweek = new Map<number, Date[]>();
+  for (const match of scheduled) {
+    if (refusedMatchIds.has(match.id) || isPastKickoffForKnownGameweek(match)) {
+      continue;
+    }
+    const attachedGw = attachments.get(match.id) ?? match.matchday;
+    const kickoffs = kickoffsByGameweek.get(attachedGw) ?? [];
+    kickoffs.push(match.kickoffAt);
+    kickoffsByGameweek.set(attachedGw, kickoffs);
+  }
 
   // Only the Gameweeks this response scheduled something for. A Gameweek whose
   // every Fixture was withdrawn is absent, and keeps the deadline it already
@@ -295,7 +544,8 @@ export async function fetchFootballDataOrgCompetition({
       deriveDeadline(
         kickoffs,
         storedDeadlines.get(gameweek) ?? null,
-        observedAt
+        observedAt,
+        committedGameweeks.has(gameweek)
       )
     ])
   );
@@ -311,24 +561,15 @@ export async function fetchFootballDataOrgCompetition({
     }
   }
 
-  // The Gameweek a Fixture first seen after its own deadline belongs to, on
-  // the FPL path's terms: it cannot be Locked into a Gameweek whose Lock has
-  // already passed, so it joins the next one still open.
-  const nextOpenGameweek = [...deadlines]
-    .filter(([, { locked }]) => !locked)
-    .sort(([leftGw, left], [rightGw, right]) =>
-      left.deadlineAt.getTime() - right.deadlineAt.getTime() || leftGw - rightGw
-    )[0]?.[0];
-
   await database.query("begin");
   try {
     for (const [gameweek, decision] of deadlines) {
       // A Locked Gameweek's deadline is a stored fact and is not rewritten,
       // even with the same value: the write that could move it is the write
-      // that must not exist. One Locked Gameweek is written all the same —
-      // the one the record has never seen, which a Competition adopted after
-      // its Season began arrives holding. It has no stored deadline to move,
-      // and its Fixtures have nowhere to point without it.
+      // that must not exist (ADR-0015, migration 0025). One Locked Gameweek
+      // is written all the same — the one the record has never seen, which a
+      // Competition adopted after its Season began arrives holding. It has no
+      // stored deadline to move, and its Fixtures have nowhere to point without it.
       if (!decision.locked || !storedDeadlines.has(gameweek)) {
         await database.query(
           `insert into gameweeks (competition, season, gw, deadline_at)
@@ -378,38 +619,31 @@ export async function fetchFootballDataOrgCompetition({
 
     for (const match of scheduled) {
       // A Fixture whose Gameweek Locked before the record ever saw it joins
-      // the next open Gameweek (ADR-0015) — but only if that Gameweek's Lock
-      // still precedes its kick-off. A Prediction that postdates kick-off is
-      // the one thing this benchmark cannot allow, and the predict path
-      // selects on `coalesce(locked_in_gw, gw)` and asks nothing about the
-      // clock, so the refusal has to be here.
+      // the next open Gameweek (ADR-0015, ADR-0036, ticket 0064) — but only if
+      // that Gameweek's Lock still precedes its kick-off.
       //
-      // The kickoff is the test, not the result. A Fixture already played is
+      // The kickoff is the test, not the result: a Fixture already played is
       // caught by it, and so is one this fetch found in flight or one whose
       // result the source has not posted yet — the recorded first response for
       // La Liga carried all ten of its opening Fixtures as `TIMED` hours after
       // they kicked off, and a result-only test would have queued six of them
-      // for a Lock five days later. What stays `null` sits under its own
-      // Locked Gameweek: history the context can read and the scorer ignores.
+      // for a Lock five days later.
       //
-      // The three Fixtures ADR-0036 names as deferred to late August still
-      // move, because their kick-offs are after the open Gameweek's Lock,
-      // which is the case ADR-0015 exists for.
+      // A Fixture brought forward ahead of a lower-numbered open Gameweek
+      // attaches to the Gameweek it is played in (ticket 0064, ADR-0036).
       //
-      // The FPL path this was copied from cannot reach any of it: its fetch has
-      // always started before Gameweek 1. This one is reached the first time a
-      // Competition is adopted mid-Season, which ticket 8's "launch at
-      // Gameweek 3" escape hatch makes a real plan rather than a hypothetical.
-      const openDeadline = nextOpenGameweek === undefined
-        ? undefined
-        : deadlines.get(nextOpenGameweek)?.deadlineAt;
-      const lockedInGameweek =
-        deadlines.get(match.matchday)?.locked === true
-        && nextOpenGameweek !== undefined
-        && openDeadline !== undefined
-        && match.kickoffAt.getTime() > openDeadline.getTime()
-          ? nextOpenGameweek
-          : null;
+      // When attached to another Gameweek, locked_in_gw is written on both
+      // insert and update so an unattached row already in the record is updated
+      // when brought forward. Once written, locked_in_gw is immutable
+      // (migration 0022). If the fixture later moves past its locked Gameweek's
+      // deadline, it is flagged deferred (ADR-0013).
+      //
+      // When refused because no open Gameweek's Lock precedes its kickoff,
+      // locked_in_gw stays null: history the context can read and the scorer
+      // ignores (the scorer selects on `locked_in_gw is not null`). The
+      // predict path guards on `kickoff_at > now` so an unpredicted match
+      // whose kickoff has passed is never queued for Entrants.
+      const lockedInGameweek = attachments.get(match.id) ?? null;
       await database.query(
         `insert into fixtures (
            competition, season, fixture_id, gw, locked_in_gw, home_team,
@@ -419,6 +653,7 @@ export async function fetchFootballDataOrgCompetition({
          on conflict (competition, season, fixture_id)
          do update set
            gw = excluded.gw,
+           locked_in_gw = coalesce(fixtures.locked_in_gw, excluded.locked_in_gw),
            result = coalesce(excluded.result, fixtures.result),
            home_team = excluded.home_team,
            away_team = excluded.away_team,
@@ -452,6 +687,7 @@ export async function fetchFootballDataOrgCompetition({
       );
     }
     await database.query("commit");
+    return { movedAttachments, refusedAttachments };
   } catch (error) {
     await database.query("rollback");
     throw error;

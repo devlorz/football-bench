@@ -34,6 +34,20 @@ try {
       + result.squadChanges.failure
     );
   }
+  // Visible on the day it happens: an operator reading the job log sees
+  // "matchday 6 Fixture attached to Gameweek 4" without throwing (ticket 0064).
+  for (const moved of result.movedAttachments) {
+    console.info(
+      `Competition ${moved.competition}: matchday ${moved.matchday} Fixture `
+      + `${moved.fixtureId} attached to Gameweek ${moved.attachedGameweek}`
+    );
+  }
+  for (const refused of result.refusedAttachments) {
+    console.warn(
+      `Competition ${refused.competition}: matchday ${refused.matchday} Fixture `
+      + `${refused.fixtureId} (kickoff ${refused.kickoffAt.toISOString()}) could not attach to an open Gameweek before kickoff and was refused`
+    );
+  }
 } finally {
   await database.end();
 }

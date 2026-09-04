@@ -74,19 +74,40 @@
 > of it, because nothing moved after a Lock; the migration's comment and this note are
 > the record.
 >
-> What the rule becomes, so it does not happen again: a not-yet-Locked Fixture attaches
-> to the latest Gameweek whose window — the earliest kickoff among the Fixtures the source
-> *labels* with it — has opened by the Fixture's kickoff. Ordinarily that is its own
-> label. When it is an earlier Gameweek still open, `locked_in_gw` is written to it and
-> that Gameweek's deadline is derived over it too, so the moved Fixture is predicted with
-> the Gameweek it is actually played in and its round-mates keep their own Lock. When the
-> earlier Gameweek has already Locked, the existing rule holds — the next open Gameweek,
-> provided its Lock precedes the kickoff. Under this rule Real Sociedad–Celta would have
-> joined Gameweek 4, whose deadline would have moved a day earlier for its own ten
-> Fixtures — the same cost a Friday Fixture already imposes on a Premier League weekend —
-> and Gameweek 6 would have Locked on the 15th. A whole round played ahead of a
-> lower-numbered one attaches wholesale and becomes a Double Gameweek beside an empty
-> one, which is what the Premier League's own calendar already produces.
+> What the rule becomes, so it does not happen again (ticket 0064):
+>
+> 1. **Attachment to an open Gameweek**: a not-yet-Locked Fixture attaches to the latest open
+>    candidate Gameweek whose window — the earliest kickoff among Fixtures the source
+>    *labels* with it, excluding any Fixture pulled ahead of an earlier round's window
+>    (`notPulledAhead`) — has opened by the Fixture's kickoff. Ordinarily that is its own
+>    label. When it kicks off before an earlier open Gameweek's window, it attaches to that
+>    earlier Gameweek (or the earliest open candidate whose Lock precedes the kickoff with
+>    an unbreached lead margin). Its `locked_in_gw` is written on both insert and update,
+>    and that Gameweek's deadline is derived over it too.
+> 2. **Refusal when no window fits**: if no open candidate qualifies because the kickoff has
+>    passed or falls inside the deadline margin, the attachment is refused (`locked_in_gw`
+>    stays null under its open label) and reported via `refusedAttachments` on the day it
+>    occurs. It does not attach and does not drag its open label's deadline.
+> 3. **Exclusion of past kickoffs**: an un-locked Fixture whose kickoff has already passed
+>    relative to `observedAt` and whose label already exists in stored deadlines has no right
+>    to define or drag the deadline of any Gameweek — a deadline is a promise about the future,
+>    and a match already kicked off cannot promise anything. Two cases are distinguished:
+>    - *Mid-season adoption* (ADR-0015): where stored deadlines are empty, past matches write
+>      their Gameweek rows and lock cleanly on arrival.
+>    - *Existing commitment breach*: if that Gameweek is already Locked and an honest Fixture
+>      of that round (not one pulled ahead of an earlier round) kicked off before the locked
+>      deadline, the commitment made to Entrants who predicted that Gameweek was violated, and
+>      the fetch alerts loudly via `KickoffInsideDeadlineError` rather than silently absorbing it.
+> 4. **Predict guard**: the predict path (`predictGameweek`) guards on `f.kickoff_at > now()`.
+>    A Prediction postdating kickoff is the one thing the benchmark cannot allow; unpredicted
+>    past matches under open labels are excluded from work items and reported honestly on the
+>    dashboard as unpredicted without generating gaps.
+>
+> **The throw vs. report boundary**:
+> - **throw** when an existing commitment becomes false — a kickoff moved inside or before an
+>   already Locked deadline (Entrants predicted on a promise that was broken).
+> - **report** when there was never a commitment — a Fixture not yet Locked and with no
+>   unbreached window for Entrants to predict (nothing was absorbed wrongly; nobody was asked).
 
 For every Competition except the Premier League, the daily fetch reads football-data.org:
 the Fixture list, each Fixture's matchday (stored as its Gameweek), kickoff times and final
@@ -125,9 +146,9 @@ being redesigned.
 
 - The deadline is ours, not the league's. Once a Lock has been observed at a derived
   deadline, that deadline is frozen with it. If a fetch ever observes a kickoff moved
-  earlier than the current derived deadline, that is alerted loudly, not absorbed — a
-  Prediction must always precede kick-off, and the ninety-minute buffer plus daily fetch
-  cadence is the margin that keeps that true.
+  earlier than the current derived deadline, that is alerted loudly, not absorbed (see the
+  2026-09-03 boundary in the amendment above) — a Prediction must always precede kick-off,
+  and the ninety-minute buffer plus daily fetch cadence is the margin that keeps that true.
 - The stale-season guard (`StaleFootballDataSeasonError`'s pattern) is applied per
   Competition: a Competition whose source has produced no rows by its first deadline fails
   the fetch loudly rather than locking an empty Gameweek.
