@@ -240,7 +240,8 @@ describe("applying migrations", () => {
       "0033_the_head_coach_in_post.sql",
       "0034_a_seat_leaves_a_track_without_leaving_the_record.sql",
       "0035_the_italian_and_french_divisions.sql",
-      "0036_the_german_divisions.sql"
+      "0036_the_german_divisions.sql",
+      "0037_la_liga_gameweek_6s_nine_early_predictions_are_withdrawn.sql"
     ]);
 
     // Relabelled, not rewritten: every row of every rekeyed table comes back
@@ -278,6 +279,181 @@ describe("applying migrations", () => {
       { competition: "PL", season: "2026-27" }
     ]);
   });
+
+  // Migration 0037 refuses to run at or after this instant (Gameweek 5's
+  // `main` run) -- by design, since past it the nine it moves would be
+  // re-Locked into a Gameweek nobody will predict. The two tests below seed
+  // that exact nine-and-one shape and run every migration including 0037,
+  // so once real time passes this instant they would hit that "too late"
+  // guard first and fail for the wrong reason -- not a regression, just a
+  // migration whose subject stopped being testable. Skipped past it rather
+  // than left red; delete both once ticket 0065's production apply (box 5)
+  // is done and this migration is history.
+  const migration0037Cutoff = new Date("2026-09-11T11:30:00Z");
+
+  // The PD Gameweek 6 bug's shape, shared by both tests below: two
+  // Gameweeks and ten Fixtures, nine of which kick off well after the wrong
+  // deadline and one -- Real Sociedad-Celta -- which genuinely does not.
+  // `resultFor` lets a test give one of the nine a settled result without a
+  // second copy of these inserts.
+  async function seedPdGameweek6Fixtures(
+    resultFor?: { fixtureId: number; result: string }
+  ): Promise<void> {
+    await client.query(
+      `insert into gameweeks (competition, season, gw, deadline_at)
+       values
+         ('PD', '2026-27', 5, '2026-09-11T17:30:00Z'),
+         ('PD', '2026-27', 6, '2026-09-03T17:30:00Z')`
+    );
+    const fixtures: Array<[number, string, string, string]> = [
+      [1, "Real Sociedad", "Celta", "2026-09-03T19:00:00Z"],
+      [2, "Home 2", "Away 2", "2026-09-15T17:00:00Z"],
+      [3, "Home 3", "Away 3", "2026-09-15T19:30:00Z"],
+      [4, "Home 4", "Away 4", "2026-09-16T17:00:00Z"],
+      [5, "Home 5", "Away 5", "2026-09-16T19:30:00Z"],
+      [6, "Home 6", "Away 6", "2026-09-16T19:30:00Z"],
+      [7, "Home 7", "Away 7", "2026-09-17T17:00:00Z"],
+      [8, "Home 8", "Away 8", "2026-09-17T19:30:00Z"],
+      [9, "Home 9", "Away 9", "2026-09-17T19:30:00Z"],
+      [10, "Home 10", "Away 10", "2026-09-17T19:30:00Z"]
+    ];
+    for (const [fixtureId, homeTeam, awayTeam, kickoffAt] of fixtures) {
+      await client.query(
+        `insert into fixtures (
+           competition, season, fixture_id, gw, locked_in_gw,
+           home_team, away_team, kickoff_at, result
+         ) values ('PD', '2026-27', $1, 6, 6, $2, $3, $4, $5)`,
+        [
+          fixtureId, homeTeam, awayTeam, kickoffAt,
+          resultFor?.fixtureId === fixtureId ? resultFor.result : null
+        ]
+      );
+    }
+  }
+
+  test.skipIf(new Date() >= migration0037Cutoff)(
+    "withdraws La Liga Gameweek 6's nine early Predictions and re-locks them into 5",
+    async () => {
+      await applyRealMigrationsThrough(
+        client, "0036_the_german_divisions.sql"
+      );
+      await client.query(
+        `insert into models (id, name, base_model, provider, prompt_version, role)
+         values
+           ('seat-1', 'Seat 1', 'provider/base-model', 'provider', 'match/v1', 'entrant'),
+           ('seat-2', 'Seat 2', 'provider/base-model', 'provider', 'match/v1', 'entrant')`
+      );
+      await seedPdGameweek6Fixtures();
+      for (let fixtureId = 1; fixtureId <= 10; fixtureId += 1) {
+        const context = await client.query<{ id: number }>(
+          `insert into contexts (competition, season, gw, track, fixture_id, hash, body)
+           values ('PD', '2026-27', 6, 'match', $1, $2, 'the context')
+           returning id`,
+          [fixtureId, `hash-${fixtureId}`]
+        );
+        const contextId = context.rows[0]!.id;
+        for (const modelId of ["seat-1", "seat-2"]) {
+          await client.query(
+            `insert into predictions (
+               model_id, competition, season, fixture_id, probs, pred_home,
+               pred_away, context_id, attempts_used
+             ) values (
+               $1, 'PD', '2026-27', $2, '{"H":0.4,"D":0.3,"A":0.3}', 1, 1, $3, 1
+             )`,
+            [modelId, fixtureId, contextId]
+          );
+          await client.query(
+            `insert into attempts (
+               model_id, competition, season, gw, track, fixture_id,
+               attempt_no, ok, trigger
+             ) values ($1, 'PD', '2026-27', 6, 'match', $2, 0, true, 'main')`,
+            [modelId, fixtureId]
+          );
+        }
+      }
+
+      await applyMigrations(client);
+
+      const predictions = await client.query<{ fixture_id: number }>(
+        "select fixture_id from predictions where competition = 'PD' order by fixture_id"
+      );
+      expect(predictions.rows).toEqual([{ fixture_id: 1 }, { fixture_id: 1 }]);
+
+      const fixtures = await client.query<{
+        fixture_id: number; locked_in_gw: number;
+      }>(
+        `select fixture_id, locked_in_gw from fixtures
+          where competition = 'PD' order by fixture_id`
+      );
+      expect(fixtures.rows[0]).toEqual({ fixture_id: 1, locked_in_gw: 6 });
+      expect(fixtures.rows.slice(1)).toEqual(
+        Array.from({ length: 9 }, (_, index) => (
+          { fixture_id: index + 2, locked_in_gw: 5 }
+        ))
+      );
+
+      const attempts = await client.query<{ count: number }>(
+        "select count(*)::int as count from attempts where competition = 'PD'"
+      );
+      expect(attempts.rows).toEqual([{ count: 20 }]);
+
+      const triggers = await client.query<{
+        tgname: string; tgenabled: string;
+      }>(
+        `select tgname, tgenabled from pg_trigger
+          where (tgname, tgrelid) in (
+            ('fixture_locked_gameweek_is_immutable', 'fixtures'::regclass),
+            ('predictions_are_immutable', 'predictions'::regclass)
+          )
+          order by tgname`
+      );
+      expect(triggers.rows).toEqual([
+        { tgname: "fixture_locked_gameweek_is_immutable", tgenabled: "O" },
+        { tgname: "predictions_are_immutable", tgenabled: "O" }
+      ]);
+
+      const deadlines = await client.query<{ gw: number; deadline_at: Date }>(
+        "select gw, deadline_at from gameweeks where competition = 'PD' order by gw"
+      );
+      expect(deadlines.rows).toEqual([
+        { gw: 5, deadline_at: new Date("2026-09-11T17:30:00Z") },
+        { gw: 6, deadline_at: new Date("2026-09-03T17:30:00Z") }
+      ]);
+    }
+  );
+
+  test.skipIf(new Date() >= migration0037Cutoff)(
+    "refuses to withdraw a Fixture that already has a result",
+    async () => {
+      await applyRealMigrationsThrough(
+        client, "0036_the_german_divisions.sql"
+      );
+      // The full nine-plus-one shape, so the "already has a result" guard is
+      // the one that fires -- not the row-count guard above it.
+      await seedPdGameweek6Fixtures({
+        fixtureId: 2,
+        result: '{"home_goals": 1, "away_goals": 0, "outcome": "H"}'
+      });
+
+      const failure = await applyMigrations(client)
+        .then(() => null, (error: unknown) => error);
+      expect(failure).toBeInstanceOf(Error);
+      expect((failure as Error).message)
+        .toBe(
+          "Migration 0037_la_liga_gameweek_6s_nine_early_predictions_are_withdrawn.sql failed"
+        );
+      expect(((failure as Error).cause as Error).message)
+        .toMatch(/already has a result or is unscheduled/);
+
+      // The whole migration ran in one transaction and rolled back: the
+      // Fixture the guard refused on is still exactly where it started.
+      const untouched = await client.query<{ locked_in_gw: number }>(
+        `select locked_in_gw from fixtures
+          where competition = 'PD' and season = '2026-27' and fixture_id = 2`
+      );
+      expect(untouched.rows).toEqual([{ locked_in_gw: 6 }]);
+    }
+  );
 
   test("locks player snapshots over the deployed 0006 schema", async () => {
     await applyRealMigrationsThrough(
@@ -328,7 +504,8 @@ describe("applying migrations", () => {
       "0033_the_head_coach_in_post.sql",
       "0034_a_seat_leaves_a_track_without_leaving_the_record.sql",
       "0035_the_italian_and_french_divisions.sql",
-      "0036_the_german_divisions.sql"
+      "0036_the_german_divisions.sql",
+      "0037_la_liga_gameweek_6s_nine_early_predictions_are_withdrawn.sql"
     ]);
     const backfill = await client.query<{
       observed_at: Date;

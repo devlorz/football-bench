@@ -60,7 +60,8 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0033_the_head_coach_in_post.sql",
       "0034_a_seat_leaves_a_track_without_leaving_the_record.sql",
       "0035_the_italian_and_french_divisions.sql",
-      "0036_the_german_divisions.sql"
+      "0036_the_german_divisions.sql",
+      "0037_la_liga_gameweek_6s_nine_early_predictions_are_withdrawn.sql"
     ]);
     // The record the copy carried, not a shape asserted about the schema: an
     // operator reading a rehearsal needs to see that it ran over rows.
@@ -132,7 +133,8 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0033_the_head_coach_in_post.sql",
       "0034_a_seat_leaves_a_track_without_leaving_the_record.sql",
       "0035_the_italian_and_french_divisions.sql",
-      "0036_the_german_divisions.sql"
+      "0036_the_german_divisions.sql",
+      "0037_la_liga_gameweek_6s_nine_early_predictions_are_withdrawn.sql"
     ]);
     expect(rehearsal.rows).toMatchObject({ gameweeks: 1, squad_changes: 1 });
   });
@@ -165,7 +167,8 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0033_the_head_coach_in_post.sql",
       "0034_a_seat_leaves_a_track_without_leaving_the_record.sql",
       "0035_the_italian_and_french_divisions.sql",
-      "0036_the_german_divisions.sql"
+      "0036_the_german_divisions.sql",
+      "0037_la_liga_gameweek_6s_nine_early_predictions_are_withdrawn.sql"
     ]);
     // Compared rather than skipped, and back whole: `verifyRelabelledAsPl`
     // raises, so this row reaching the count is the comparison having run over

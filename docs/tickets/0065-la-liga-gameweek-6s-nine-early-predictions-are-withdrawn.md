@@ -58,7 +58,10 @@ change to a non-null `locked_in_gw`, so the nine cannot be re-pointed while it s
 migration disables it on `fixtures` for the duration of its own transaction and re-enables
 it before commit. `gameweek_deadline_is_immutable_once_committed` (0025) is not touched:
 no deadline changes. `prediction_requires_locked_fixture` (0022) is not touched: nothing
-is inserted. Deleting from `predictions` is not guarded by any trigger.
+is inserted. **Correction found while implementing:** deleting from `predictions` *is*
+guarded — `predictions_are_immutable` (0001, `before update or delete`) refuses it. The
+migration disables that trigger on `predictions` too, for the same span, and re-enables it
+before commit.
 
 **What the scheduler will do.** `prediction_runs` has `PD` gw 6 `main` and `fill`
 completed and no row for gw 5. Nothing is reset: Gameweek 6's runs did happen and did
@@ -77,33 +80,62 @@ finds out why.
 
 ## Acceptance
 
-- [ ] **Migration `0037`**, one transaction, in this order: disable
+- [x] **Migration `0037`**, one transaction, in this order: disable
       `fixture_locked_gameweek_is_immutable` on `fixtures`; delete from `predictions` where
       `competition = 'PD'`, `season = '2026-27'` and `fixture_id` is one of the nine; set
       `locked_in_gw = 5` and `updated_at = now()` on those nine; re-enable the trigger. The
       nine are selected by the record — `locked_in_gw = 6` and `kickoff_at > '2026-09-04'`
       — never by a typed list of ids. Real Sociedad–Celta is excluded by that predicate,
       and the migration asserts, before it writes, that exactly nine rows match and exactly
-      one row does not.
-- [ ] **The migration refuses to run late.** It raises if `now() >= '2026-09-11 11:30Z'`,
+      one row does not. **Written as `kickoff_at > '2026-09-04T00:00:00Z'`, not the bare
+      date**: this session's shell defaults to `Asia/Bangkok` (UTC+7), and a bare
+      `'2026-09-04'` literal resolves at that zone's midnight — `2026-09-03T17:00:00Z`,
+      which is *before* Real Sociedad–Celta's own 19:00Z kickoff and would have moved all
+      ten. Caught by `test/migrations.test.ts`, not by inspection. Also disables
+      `predictions_are_immutable` — see the correction above. Empty-database callers (a
+      fresh clone, every other test in the suite) are let through as a no-op rather than
+      held to the nine-and-one shape, so this migration does not break `applyMigrations`
+      run from scratch anywhere but the deployed database.
+- [x] **The migration refuses to run late.** It raises if `now() >= '2026-09-11T11:30:00Z'`,
       because after Gameweek 5's `main` run has started the nine would be re-Locked into a
       Gameweek nobody will predict. It also raises if any of the nine already has a
       `prediction_runs`-visible reason not to move: a `result`, or `unscheduled = true`.
-- [ ] **The migration's header comment tells the whole story** in the voice of 0025's:
+      Covered by `test/migrations.test.ts` ("refuses to withdraw a fixture that already has
+      a result"); the late-run branch is a plain `if` guarding an early `raise` and was not
+      given a dedicated test — faking `now()` inside a real Postgres session was judged not
+      worth it for that shape of check.
+- [x] **The migration's header comment tells the whole story** in the voice of 0025's:
       what was brought forward, what the label-grouped deadline did, why nine and not ten,
       why 5, and that this is the one recorded exception to ADR-0013's insert-only rule
       and to 0022's immutability — lifted inside this transaction and restored by it.
-- [ ] **Rehearsed before it is applied.** `npm run db:rehearse` passes on a throwaway
-      database seeded with the ten Fixtures, ninety Predictions and 150 attempts in the
-      shape the record holds; the rehearsal asserts ten Predictions remain (all on Real
-      Sociedad–Celta), nine Fixtures point at 5, one points at 6, 150 attempts are
-      untouched, both triggers are enabled afterwards, and both Gameweeks' deadlines are
-      unchanged.
+- [ ] **Rehearsed before it is applied.** **This box's original wording described a tool
+      that cannot pass.** `npm run db:rehearse` (`src/db/rehearse-migration.ts`) raises
+      whenever a compared table's row count differs from its pre-migration snapshot by even
+      one row (`missing > 0 or extra > 0`, line ~150) — the invariant it exists to prove is
+      "a migration moves the record, it does not rewrite it." This migration deletes ninety
+      `predictions` rows and rewrites nine `fixtures` rows on purpose; `db:rehearse` will
+      raise on it every time, correctly, and no seeding fixes that — the tool's job and this
+      migration's job are opposites. Corrected criterion: `pg_dump` a copy of production
+      (same mechanism `db:rehearse` already uses internally), apply `0037` to the copy by
+      hand, and read the following off the copy directly — no generic invariant to satisfy:
+      ten Predictions remain, all on Real Sociedad–Celta (`fixture_id` read off the record,
+      not typed from memory); nine Fixtures point at `locked_in_gw = 5` and one points at
+      `6`; `attempts` still holds 150 rows, untouched; both `fixture_locked_gameweek_is_
+      immutable` (on `fixtures`) and `predictions_are_immutable` (on `predictions`) are
+      enabled; and both Gameweeks' deadlines are unchanged — `5` at 2026-09-11 17:30Z, `6`
+      at 2026-09-03 17:30Z. **Not run this session** — even the `pg_dump` step was blocked by the
+      auto-mode classifier as a production-touching command; needs the operator to run it
+      directly (or grant Bash permission for it). In its place, `test/migrations.test.ts`
+      gained a dedicated test seeding the same shape (two seats, not ten, over the same ten
+      Fixtures) and asserting the same five outcomes against a local throwaway Postgres —
+      it passes, but it is a synthetic record, not the live one; the copy-of-production
+      rehearsal against real row shapes and counts (ninety Predictions, 150 attempts) is
+      still outstanding.
 - [ ] **Applied to production and read back.** After `npm run db:migrate` against the
       pooler: the same five assertions, read from production and pasted into this ticket
       with their timestamp. `schema_migrations` lists `0037`.
 - [ ] **Gameweek 5 runs with twenty.** On 2026-09-11 the `main` run's attempt count for
       `PD` gw 5 is ~200 and every one of the nine has a Prediction from every seat, or a
       gap alert naming which does not. Recorded here after the run.
-- [ ] **ADR-0036's amendment already says this.** Its "What is decided" paragraph records
+- [x] **ADR-0036's amendment already says this.** Its "What is decided" paragraph records
       the withdrawal, the re-Lock into 5 and the cost; this ticket does not edit it again.
