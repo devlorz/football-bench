@@ -77,16 +77,17 @@ export const FPL_WITHDRAWALS: readonly {
 ];
 
 /**
- * What a `models` row is for, as its check constraint admits (migrations 0001
- * and 0019): a competitor on a leaderboard, a Reference Line, or a
- * retrospective Exhibition Run.
+ * What a `models` row is for, as its check constraint admits (migrations 0001,
+ * 0019 and 0038): a competitor on a leaderboard, a Reference Line, a
+ * retrospective Exhibition Run, or a Shadow Seat that asks unranked
+ * (ADR-0055).
  *
- * All three and not just the two that predict, because this is what the column
+ * All four and not just the two that predict, because this is what the column
  * holds rather than what any one reader wants of it — a query that filters the
  * role down still reads rows of this type, and what a Reference Line may do is
  * decided by asking, not by being unsayable.
  */
-export type ModelRole = "entrant" | "reference" | "exhibition";
+export type ModelRole = "entrant" | "reference" | "exhibition" | "shadow";
 
 /** Where a Base Model comes from (CONTEXT.md, ADR-0009, ADR-0034). */
 type BaseModelClass = "Frontier" | "First-party" | "Open-weight";

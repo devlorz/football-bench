@@ -41,7 +41,7 @@ describe("the benchmark database", () => {
     );
   }
 
-  test("stores an Exhibition beside the roles that were already there", async () => {
+  test("stores a Shadow beside the roles that were already there", async () => {
     await client.query(
       `insert into models (
          id, name, base_model, provider, prompt_version, role
@@ -57,6 +57,10 @@ describe("the benchmark database", () => {
          (
            'exhibition/late', 'Late Arrival', 'vendor/late', 'provider',
            'match/2026-27-v2', 'exhibition'
+         ),
+         (
+           'shadow/one', 'Shadow of One', 'vendor/one', 'provider',
+           'match/2026-27-v2', 'shadow'
          )`
     );
 
@@ -66,7 +70,8 @@ describe("the benchmark database", () => {
     expect(stored.rows).toEqual([
       { id: "entrant/one", role: "entrant" },
       { id: "exhibition/late", role: "exhibition" },
-      { id: "reference/elo", role: "reference" }
+      { id: "reference/elo", role: "reference" },
+      { id: "shadow/one", role: "shadow" }
     ]);
 
     // The check widened by exactly one word; anything else is still refused.

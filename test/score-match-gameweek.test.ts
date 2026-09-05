@@ -1,6 +1,6 @@
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
-import { resetSchema } from "./schema-fixture.js";
+import { insertShadow, resetSchema } from "./schema-fixture.js";
 import {
   outcomeOf,
   type FixtureResult,
@@ -37,6 +37,7 @@ import {
   RPS_SEASON_TO_DATE_METRIC,
   SCORE_PCT_METRIC,
   SCORE_PCT_SEASON_TO_DATE_METRIC,
+  matchRoster,
   scoreMatchGameweek,
   type BetSlipDetail,
   type PairedDifferenceDetail
@@ -294,6 +295,31 @@ describe("scoring the readable Match Points layer", () => {
     expect(await storedValue(
       "entrant/b", 1, MATCH_POINTS_SEASON_TO_DATE_METRIC
     )).toBeNull();
+  });
+
+  // ADR-0055: a Shadow Seat's Prediction reaches `predictions` the same way
+  // an Entrant's does (ticket 0066), but is ranked nowhere -- proven here at
+  // the write, not only at `matchRoster`'s read, since `predictedFixtures`
+  // is what feeds every row this describe block otherwise asserts on.
+  test("writes no scores row for a Shadow's Prediction", async () => {
+    await insertShadow(client, {
+      id: "shadow/entrant-a",
+      baseModel: "provider/base-model",
+      provider: "provider"
+    });
+    await storeFixture(1, 1);
+    await settle(1, 2, 1);
+    await predict("entrant/a", 1, 2, 1);
+    await predict("shadow/entrant-a", 1, 2, 1);
+
+    await score(1);
+
+    expect(await storedValue("entrant/a", 1, MATCH_POINTS_METRIC))
+      .toMatchObject({ value: 5 });
+    expect(await storedValue("shadow/entrant-a", 1, MATCH_POINTS_METRIC))
+      .toBeNull();
+    expect(await storedValue("shadow/entrant-a", 1, SCORE_PCT_METRIC))
+      .toBeNull();
   });
 
   test("writes nothing that needs an outcome for an unplayed Gameweek", async () => {
@@ -2164,6 +2190,42 @@ describe("scoring the readable Match Points layer", () => {
       .toMatchObject({ value: expect.closeTo(1 / 3, 12), n: 3 });
     expect(await storedValue("entrant/b", 1, ATTEMPTS_TO_VALID_METRIC))
       .toMatchObject({ value: 1, n: 3 });
+  });
+});
+
+describe("the Match roster a Shadow Seat does not join", () => {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+
+  beforeAll(async () => {
+    await client.connect();
+    await resetSchema(client);
+
+    return async () => {
+      await client.end();
+    };
+  });
+
+  // ADR-0055: `matchRoster` is what `scoreMatchGameweek` reads its complete
+  // cases against, and it filters `role = 'entrant'` already -- unchanged by
+  // this ticket. Proven rather than assumed: a Shadow beside its Entrant still
+  // leaves the roster the one row it was.
+  test("leaves the roster the one Entrant it was", async () => {
+    await client.query("truncate models restart identity cascade");
+    await client.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role
+       ) values (
+         'entrant/one', 'One', 'provider/base-model', 'provider', $1, 'entrant'
+       )`,
+      [MATCH_PROMPT_VERSION]
+    );
+    await insertShadow(client, {
+      id: "shadow/one",
+      baseModel: "provider/base-model",
+      provider: "provider"
+    });
+
+    expect(await matchRoster(client, "PL")).toEqual(["entrant/one"]);
   });
 });
 

@@ -1,6 +1,6 @@
 import pg from "pg";
 import { beforeAll, describe, expect, test } from "vitest";
-import { resetSchema } from "./schema-fixture.js";
+import { insertShadow, resetSchema } from "./schema-fixture.js";
 import { workerDriver } from "./worker-driver.js";
 import { seedSeason } from "../src/seed-season.js";
 import {
@@ -623,6 +623,26 @@ describe("the dashboard read API on a Locked Gameweek nothing has settled", () =
       // And no caveat, because nothing on the page is describing it.
       expect(body.exhibitionCaveat).toBeNull();
     });
+
+  // ADR-0055: `SEATS_CTE` admits `role = 'entrant'` or a qualifying
+  // `'exhibition'`, unchanged by this ticket -- a Shadow Seat is neither, with
+  // or without a Prediction on it.
+  test("keeps a Shadow Seat off the leaderboard", async () => {
+    await insertShadow(writer, {
+      id: "shadow/late-arrival",
+      baseModel: "late/base-model",
+      provider: "late"
+    });
+
+    const response = await handleDashboardRequest(
+      new Request("https://benchmark.example/api/pl/leaderboard"),
+      query, SEASON, NOW
+    );
+    const body = await response.json() as LeaderboardBody;
+
+    expect(body.throughGw).toBeNull();
+    expect(body.entrants.map(({ id }) => id)).toEqual(ROSTER);
+  });
 
   test("holds it through the window between results and the scoring run",
     async () => {

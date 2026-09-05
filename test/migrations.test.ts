@@ -241,7 +241,9 @@ describe("applying migrations", () => {
       "0034_a_seat_leaves_a_track_without_leaving_the_record.sql",
       "0035_the_italian_and_french_divisions.sql",
       "0036_the_german_divisions.sql",
-      "0037_la_liga_gameweek_6s_nine_early_predictions_are_withdrawn.sql"
+      "0037_la_liga_gameweek_6s_nine_early_predictions_are_withdrawn.sql",
+      "0038_a_shadow_seat_asks_without_being_ranked.sql",
+      "0039_three_shadow_seats_join_the_premier_league.sql"
     ]);
 
     // Relabelled, not rewritten: every row of every rekeyed table comes back
@@ -505,7 +507,9 @@ describe("applying migrations", () => {
       "0034_a_seat_leaves_a_track_without_leaving_the_record.sql",
       "0035_the_italian_and_french_divisions.sql",
       "0036_the_german_divisions.sql",
-      "0037_la_liga_gameweek_6s_nine_early_predictions_are_withdrawn.sql"
+      "0037_la_liga_gameweek_6s_nine_early_predictions_are_withdrawn.sql",
+      "0038_a_shadow_seat_asks_without_being_ranked.sql",
+      "0039_three_shadow_seats_join_the_premier_league.sql"
     ]);
     const backfill = await client.query<{
       observed_at: Date;

@@ -1,5 +1,31 @@
 # A seat thinks as its provider ships it, and a Shadow Seat may think otherwise
 
+> Amended 2026-09-06 by ticket 0066's review. **`models.config` is not the untouched
+> column this ADR describes it as**, in two places: "a column migration 0001 created
+> and nothing has read since" below, and "For every existing row `config` is `{}` and
+> the body is byte-for-byte what it is today" in Consequences. Both are wrong. Ticket
+> 0066's own "What is already known" repeated the same claim and carries the same
+> correction.
+>
+> What is actually true: `upsertSeats` (`season-roster.ts`, in place since ADR-0034)
+> writes `{baseModelClass, canonical_slug, catalog_checked_at}` into every real seat's
+> `config` on every roster entry, and the dashboard's `read-api.ts:440` reads
+> `baseModelClass` back out of it. The column has been written and read all along; what
+> is new here is only `config.reasoning`.
+>
+> What it cost: the first pass at this ADR's own Consequence — `openRouterRequest`
+> spreads `models.config` whole into the request body — followed the wrong premise
+> literally. Had it shipped, every real seat's next call would have carried
+> `baseModelClass`, `canonical_slug` and `catalog_checked_at` as stray top-level
+> OpenRouter fields, `config` would have been able to override `model`, `provider` or
+> `max_tokens` and quietly defeat ADR-0009's pinning, and the claim "the body is
+> byte-for-byte what it is today" would have been false for every real seat, true only
+> in a test that hand-seeds `config` as `{}`. Caught in review before any of it reached
+> a real Lock. Fixed by reading one key, `config.reasoning`, rather than the column
+> whole — see the corrected Consequence below. The decision stands unchanged: a Shadow
+> Seat differs from the seat it shadows by exactly `config.reasoning`, which was always
+> the intent; only "the whole column is empty and unread" was never true.
+
 Every match-track request names a Base Model, a pinned provider, a quantization and an
 output ceiling, and says nothing about reasoning. What each seat does with that silence
 is whatever its provider does by default through OpenRouter: Claude Opus 5 writes its
@@ -33,9 +59,11 @@ produced stays comparable with itself, and no Season restart is spent on it.
 
 **A Shadow Seat may ask the same Fixture with a different envelope, and is never
 ranked.** A `models` row with `role = 'shadow'` names an existing seat's Base Model,
-provider and quantization, the same Prompt Version, and in `models.config` — a column
-migration 0001 created and nothing has read since — the one thing that differs on the
-wire, `{"reasoning": {"effort": "none"}}` and nothing else. It is called by the same
+provider and quantization, the same Prompt Version, and asks with `config.reasoning`
+set — the one key of `models.config` that differs on the wire (amended 2026-09-06:
+not "a column nothing has read since", `upsertSeats` already writes to it and
+`read-api.ts` reads it back; `reasoning` is the one key of it a Shadow adds) —
+`{"reasoning": {"effort": "none"}}` and nothing else. It is called by the same
 prediction run at the same Lock over the same stored context bytes as the seat it
 shadows, so its Predictions pre-date the deadline like every real one and the two rows
 are a paired comparison on identical Fixtures. It is excluded from the Season Roster,
@@ -81,9 +109,14 @@ of a record where every call chose its own effort.
   'shadow')` and nothing else changes its filter. A Shadow Seat's attempts, Predictions
   and contexts land in the same tables under its own `model_id`, and ADR-0007's ledger
   prices it like any seat.
-- `openRouterRequest` reads `models.config` into the request body. For every existing
-  row `config` is `{}` and the body is byte-for-byte what it is today. The frozen
-  Prompt Version — template plus context builder, hashed over the rendered text — is
+- `openRouterRequest` reads `config.reasoning` out of `models.config` and puts it on
+  the wire as `reasoning`; nothing else in the column is forwarded (amended
+  2026-09-06: not the whole column spread — a real seat's `config` already carries
+  `baseModelClass`, `canonical_slug` and `catalog_checked_at`, which the wire must
+  never see, and an unrestricted spread would let `config` override `model`,
+  `provider` or `max_tokens` and defeat ADR-0009's pinning). For a row with no
+  `reasoning` key the body is byte-for-byte what it is today. The frozen Prompt
+  Version — template plus context builder, hashed over the rendered text — is
   untouched: the envelope was never inside it, which is how `max_tokens` doubled on
   2026-08-21 without a version moving.
 - A Shadow Seat costs what a seat costs minus its reasoning; on the seats worth

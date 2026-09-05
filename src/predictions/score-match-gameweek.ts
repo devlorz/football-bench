@@ -553,6 +553,13 @@ async function predictedFixtures(
          on p.competition = f.competition
         and p.season = f.season
         and p.fixture_id = f.fixture_id
+       -- ADR-0055: a Shadow Seat's Prediction is not the record, so it is
+       -- never scored -- excluded here, at the one query every scored row in
+       -- this Gameweek is read from, rather than filtered out of a roster
+       -- downstream of it. Not narrowed to role = 'entrant': an Exhibition
+       -- Run is scored too (ADR-0032) -- ranked on no Season Roster, but on
+       -- the readable rankings all the same, labelled by when it ran.
+       join models m on m.id = p.model_id and m.role <> 'shadow'
       where f.competition = $1 and f.season = $2
         and f.locked_in_gw is not null
       order by f.locked_in_gw, f.fixture_id, p.model_id`,

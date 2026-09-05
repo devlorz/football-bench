@@ -1,7 +1,7 @@
 import pg from "pg";
 import { beforeAll, describe, expect, test } from "vitest";
 import {
-  insertOxAlpha, OX_ALPHA_FIXTURE, resetSchema
+  insertOxAlpha, insertShadow, OX_ALPHA_FIXTURE, resetSchema
 } from "./schema-fixture.js";
 import { workerDriver } from "./worker-driver.js";
 import { seedSeason, type SeedStop } from "../src/seed-season.js";
@@ -492,6 +492,23 @@ describe("the Fixtures endpoint before any Prediction run", () => {
           .toBe(true);
       }
     });
+
+  // ADR-0055: `SEATS_CTE` admits `role = 'entrant'` or a qualifying
+  // `'exhibition'`, unchanged by this ticket -- a Shadow Seat is neither, so
+  // it draws no slot on the Fixtures page.
+  test("keeps a Shadow Seat off every Fixture's slots", async () => {
+    await insertShadow(writer, {
+      id: "shadow/claude-v1",
+      baseModel: "claude/base-model",
+      provider: "claude-provider"
+    });
+
+    const body = await fixtures(new Date("2026-08-01T12:00:00Z"));
+
+    for (const fixture of body.fixtures) {
+      expect(fixture.slots.map(({ entrant }) => entrant.id)).toEqual(ROSTER);
+    }
+  });
 });
 
 describe("the Fixtures endpoint on a Gameweek Locked and not yet scored", () => {

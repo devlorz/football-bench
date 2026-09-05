@@ -1,6 +1,6 @@
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
-import { insertExhibition, resetSchema } from "./schema-fixture.js";
+import { insertExhibition, insertShadow, resetSchema } from "./schema-fixture.js";
 import type { HttpRequest } from "../src/http.js";
 import { predictGameweek } from "../src/predictions/predict-gameweek.js";
 import {
@@ -1607,6 +1607,142 @@ describe("predicting a Gameweek", () => {
          'fpl/2026-27-v1', 'entrant'
        )`
     );
+    let calls = 0;
+
+    await expect(predictGameweek({
+      competition: "PL",
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      concurrency: 1,
+      apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
+      now: () => new Date("2026-08-21T17:29:00Z"),
+      http: async () => {
+        calls += 1;
+        throw new Error("HTTP must not run");
+      }
+    })).rejects.toThrow("No Entrants are configured");
+    expect(calls).toBe(0);
+  });
+
+  // ADR-0055: a Shadow Seat asks the same Fixture as the Entrant it shadows,
+  // at the same Lock, with only its `config` on the wire differing.
+  test("seats a Shadow beside its Entrant and asks both, at the same Lock",
+    async () => {
+      await insertShadow(client, {
+        id: "shadow/entrant-v1",
+        name: "Shadow of Tracer Entrant",
+        baseModel: "openai/gpt-5.2",
+        provider: "openai",
+        config: { reasoning: { effort: "none" } }
+      });
+      const requests: Array<{ model: string; reasoning?: unknown }> = [];
+
+      await predictGameweek({
+        competition: "PL",
+        database: client,
+        season: "2026-27",
+        gameweek: 1,
+        concurrency: 2,
+        apiKey: "test-key",
+        entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
+        now: () => new Date("2026-08-21T17:29:00Z"),
+        http: async (_url, options) => {
+          const body = JSON.parse(options?.body ?? "{}") as {
+            model: string;
+            reasoning?: unknown;
+          };
+          requests.push(
+            "reasoning" in body
+              ? { model: body.model, reasoning: body.reasoning }
+              : { model: body.model }
+          );
+          return {
+            status: 200,
+            body: JSON.stringify({
+              choices: [{
+                message: {
+                  content: JSON.stringify({
+                    fixture_id: 1,
+                    probs: { H: 0.6, D: 0.24, A: 0.16 },
+                    score: { home: 2, away: 1 },
+                    rationale: `Prediction from ${body.model}.`
+                  })
+                }
+              }]
+            })
+          };
+        }
+      });
+
+      expect(requests).toHaveLength(2);
+      expect(requests.every(({ model }) => model === "openai/gpt-5.2"))
+        .toBe(true);
+      // Told apart on the wire by `reasoning` alone -- the Entrant's request
+      // carries no such key at all, and the Shadow's carries exactly one.
+      expect(requests.filter((request) => "reasoning" in request))
+        .toEqual([{ model: "openai/gpt-5.2", reasoning: { effort: "none" } }]);
+
+      const predictions = await client.query<{ model_id: string }>(
+        "select model_id from predictions order by model_id"
+      );
+      expect(predictions.rows).toEqual([
+        { model_id: "entrant/v1" },
+        { model_id: "shadow/entrant-v1" }
+      ]);
+    });
+
+  // ADR-0055: readGapAlert still selects `role = 'entrant'` unchanged, so a
+  // Shadow that Gaps must not page an operator about a seat nobody ranks.
+  test("leaves a Shadow's Gap out of the alert", async () => {
+    await insertShadow(client, {
+      id: "shadow/entrant-v1",
+      name: "Shadow of Tracer Entrant",
+      baseModel: "openai/gpt-5.2",
+      provider: "openai"
+    });
+
+    const alert = await predictGameweek({
+      competition: "PL",
+      database: client,
+      season: "2026-27",
+      gameweek: 1,
+      concurrency: 2,
+      apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
+      now: () => new Date("2026-08-21T17:29:00Z"),
+      http: async () => ({
+        status: 503,
+        body: "{\"error\":\"provider unavailable\"}"
+      })
+    });
+
+    // Both seats Gapped -- the Shadow leaves an attempt behind like any
+    // called seat -- but only the Entrant's is a Gap the alert reports.
+    expect(alert?.gaps).toEqual([{
+      entrantId: "entrant/v1",
+      entrantName: "Tracer Entrant",
+      fixtureId: 1,
+      fixture: "Arsenal v Coventry City",
+      cause: "provider"
+    }]);
+    const attempted = await client.query<{ model_id: string }>(
+      "select distinct model_id from attempts order by model_id"
+    );
+    expect(attempted.rows).toEqual([
+      { model_id: "entrant/v1" },
+      { model_id: "shadow/entrant-v1" }
+    ]);
+  });
+
+  test("refuses a roster of Shadows with no Entrant to shadow", async () => {
+    // A Shadow without a seat to shadow is a misconfiguration (ADR-0055), so
+    // the roster guard must ask for an Entrant by name, not merely for a
+    // non-empty roster -- a widened role filter that only counted rows would
+    // let a Shadow alone through it.
+    await client.query("delete from models");
+    await insertShadow(client, { id: "shadow/orphan" });
     let calls = 0;
 
     await expect(predictGameweek({

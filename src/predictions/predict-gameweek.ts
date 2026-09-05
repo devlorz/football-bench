@@ -45,6 +45,7 @@ interface EntrantRow {
   provider: string;
   prompt_version: string;
   quantization: string | null;
+  role: ModelRole;
 }
 
 interface WorkItemRow extends FixtureRow {
@@ -53,6 +54,7 @@ interface WorkItemRow extends FixtureRow {
   provider: string;
   quantization: string | null;
   role: ModelRole;
+  config: Record<string, unknown>;
 }
 
 function sha256(value: string): string {
@@ -152,15 +154,20 @@ export async function predictGameweek({
   //
   // The refusal it replaces asserted that every Entrant is a Match Entrant.
   // That premise has expired rather than the check having been weakened.
+  //
+  // Widened to admit a Shadow Seat (ADR-0055) so the guard can see one sits
+  // beside a real Entrant rather than alone: a Shadow with no seat to shadow
+  // is a misconfiguration, so the refusal below asks for an Entrant row by
+  // name, not merely for a non-empty roster.
   const entrantResult = await database.query<EntrantRow>(
     `-- roster: the match track's.
-     select id, base_model, provider, quantization, prompt_version
+     select id, base_model, provider, quantization, prompt_version, role
        from models
-      where role = 'entrant' and prompt_version = $1
+      where role in ('entrant', 'shadow') and prompt_version = $1
       order by id`,
     [matchPromptOf(competition).version]
   );
-  if (entrantResult.rows.length === 0) {
+  if (!entrantResult.rows.some((row) => row.role === "entrant")) {
     throw new Error(`No Entrants are configured for ${competition}`);
   }
 
@@ -169,14 +176,15 @@ export async function predictGameweek({
     `-- roster: the match track's.
      select
        f.fixture_id, f.home_team, f.away_team, f.kickoff_at,
-       m.id as entrant_id, m.base_model, m.provider, m.quantization, m.role
+       m.id as entrant_id, m.base_model, m.provider, m.quantization, m.role,
+       m.config
       from fixtures f
       cross join models m
       where f.competition = $1
         and f.season = $2
         and coalesce(f.locked_in_gw, f.gw) = $3
         and f.kickoff_at > $4
-        and m.role = 'entrant'
+        and m.role in ('entrant', 'shadow')
         and m.prompt_version = $5
         and not exists (
           select 1
@@ -235,6 +243,7 @@ export async function predictGameweek({
       // The stored role, not the literal this query filters on: what decides
       // whether the Lock refuses is the column, so the column is what travels.
       role: item.role,
+      config: item.config,
       fixture_id: item.fixture_id,
       context
     };

@@ -142,7 +142,8 @@ async function callBaseModel(options: {
     {
       baseModel: model.base_model,
       provider: model.provider,
-      quantization: model.quantization
+      quantization: model.quantization,
+      config: model.config
     },
     buildMatchContext(fixture, contextData)
   );
@@ -312,7 +313,9 @@ export async function preflightBaseModels({
   let checked: CalledRow[];
   if (exhibitionModelId !== undefined) {
     checked = [
-      await loadExhibition(database, exhibitionModelId, promptVersion)
+      await loadExhibition(
+        database, exhibitionModelId, promptVersion, ["exhibition", "shadow"]
+      )
     ];
   } else {
     // The Match track's seats, told from the FPL track's — and from another
@@ -321,7 +324,8 @@ export async function preflightBaseModels({
     // roster short of a Base Model is still refused before the first call.
     const entrants = await database.query<CalledRow>(
       `-- roster: the match track's, told from this track's by Prompt Version.
-       select id, base_model, provider, quantization, prompt_version, role
+       select id, base_model, provider, quantization, prompt_version, role,
+              config
          from models
         where role = 'entrant' and prompt_version = $1
         order by id`,

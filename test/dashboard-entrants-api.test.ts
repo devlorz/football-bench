@@ -1,6 +1,6 @@
 import pg, { type Client as PgClient } from "pg";
 import { beforeAll, describe, expect, test } from "vitest";
-import { insertExhibition, resetSchema } from "./schema-fixture.js";
+import { insertExhibition, insertShadow, resetSchema } from "./schema-fixture.js";
 import { workerDriver } from "./worker-driver.js";
 import { seedSeason, type SeedStop } from "../src/seed-season.js";
 import {
@@ -549,6 +549,21 @@ describe("the Entrant record endpoint before the Season starts", () => {
       // the caveat is about.
       expect(body.exhibitionCaveat).toBeNull();
     });
+
+  // ADR-0055: `SEATS_CTE` admits `role = 'entrant'` or a qualifying
+  // `'exhibition'`, unchanged by this ticket -- a Shadow Seat is neither.
+  test("keeps a Shadow Seat off the Entrant record page", async () => {
+    await insertShadow(writer, {
+      id: "shadow/claude-v1",
+      baseModel: "claude/base-model",
+      provider: "claude-provider"
+    });
+
+    const body = await entrants();
+
+    expect(body.throughGw).toBeNull();
+    expect(body.entrants.map(({ id }) => id)).toEqual(ROSTER);
+  });
 });
 
 describe("the Entrant record endpoint with an Exhibition Run on the Season",

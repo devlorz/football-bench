@@ -254,6 +254,19 @@ export interface OpenRouterEntrant {
   baseModel: string;
   provider: string;
   quantization: string | null;
+  /**
+   * `models.config`, read for its `reasoning` key alone and nothing else
+   * (ADR-0055) — the whole of the Shadow Seat mechanism. Not spread whole:
+   * every real Entrant's `config` already holds bookkeeping fields no
+   * request should carry (`baseModelClass`, `canonical_slug`,
+   * `catalog_checked_at` — written by `upsertSeats` in season-roster.ts, read
+   * back by the dashboard's read-api), and spreading the column verbatim
+   * would put them on the wire as top-level OpenRouter fields for every real
+   * seat, not just leave the body unchanged for one that carries `{}`. An
+   * allow-list of one key keeps ADR-0009's pinning (`model`, `provider`,
+   * `max_tokens`) un-overridable too.
+   */
+  config?: { reasoning?: unknown };
 }
 
 export interface OpenRouterMessage {
@@ -410,7 +423,10 @@ export function openRouterRequest(
       ),
       provider,
       stream: false,
-      max_tokens: ENTRANT_MAX_OUTPUT_TOKENS
+      max_tokens: ENTRANT_MAX_OUTPUT_TOKENS,
+      ...(entrant.config?.reasoning === undefined
+        ? {}
+        : { reasoning: entrant.config.reasoning })
     })
   };
 }

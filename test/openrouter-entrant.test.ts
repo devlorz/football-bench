@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, test } from "vitest";
+import type { HttpRequest } from "../src/http.js";
 import {
   ENTRANT_MAX_OUTPUT_TOKENS,
   MATCH_PROMPT_COMPETITIONS,
@@ -389,5 +390,62 @@ describe("what a call says it will pay for", () => {
   // the longest completion any seat finished on 2026-08-20 (report of that day).
   test("clears the longest answer any seat has been seen to finish", () => {
     expect(ENTRANT_MAX_OUTPUT_TOKENS).toBeGreaterThan(6_138);
+  });
+});
+
+// ADR-0055: the whole of the Shadow Seat mechanism is `config.reasoning`
+// alone, read out of the column and nothing else forwarded.
+describe("what a call's config puts on the wire", () => {
+  const requestOf = (config?: { reasoning?: unknown }): HttpRequest =>
+    openRouterRequest(
+      "key",
+      {
+        baseModel: "deepseek/v4-pro",
+        provider: "DeepSeek",
+        quantization: null,
+        ...(config === undefined ? {} : { config })
+      },
+      "Who wins?"
+    );
+
+  // Every seat but a Shadow's carries no `config`, so the body it produces
+  // must stay the one already captured in `predict-gameweek.test.ts` --
+  // pinned here too, against the one field a Shadow adds.
+  test("is byte-identical to the unconfigured body when config is empty", () => {
+    expect(requestOf({}).body).toBe(requestOf(undefined).body);
+    expect(JSON.parse(requestOf({}).body!)).not.toHaveProperty("reasoning");
+  });
+
+  // The Shadow Seat's one line on the wire (ADR-0055): `config.reasoning`
+  // reaches the body, spelled exactly as written.
+  test("adds config.reasoning as reasoning", () => {
+    const body = JSON.parse(
+      requestOf({ reasoning: { effort: "none" } }).body!
+    ) as { reasoning?: { effort: string } };
+    expect(body.reasoning).toEqual({ effort: "none" });
+  });
+
+  // A real Entrant's `config` is not `{}` in production -- `upsertSeats`
+  // (season-roster.ts) writes `baseModelClass`, `canonical_slug` and
+  // `catalog_checked_at` into it, and `read-api.ts` reads them back. None of
+  // that bookkeeping is a request-envelope override, so only `reasoning` is
+  // read out of the column; every other key is ignored rather than spread
+  // onto the wire, or onto a field this function already sets (ADR-0009's
+  // `model`/`provider`/`max_tokens` pinning stays un-overridable).
+  test("reads only reasoning out of config, ignoring every other key", () => {
+    const body = JSON.parse(
+      requestOf({
+        reasoning: { effort: "none" },
+        baseModelClass: "Open-weight",
+        canonical_slug: "vendor/pinned-20260101",
+        max_tokens: 1,
+        model: "vendor/spoofed"
+      } as { reasoning?: unknown }).body!
+    ) as Record<string, unknown>;
+    expect(body.reasoning).toEqual({ effort: "none" });
+    expect(body.max_tokens).toBe(ENTRANT_MAX_OUTPUT_TOKENS);
+    expect(body.model).toBe("deepseek/v4-pro");
+    expect(body).not.toHaveProperty("baseModelClass");
+    expect(body).not.toHaveProperty("canonical_slug");
   });
 });

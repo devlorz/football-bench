@@ -7,7 +7,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
-import { insertExhibition, resetSchema } from "./schema-fixture.js";
+import { insertExhibition, insertShadow, resetSchema } from "./schema-fixture.js";
 import type { HttpRequest } from "../src/http.js";
 import { preflightBaseModels } from "../src/preflight/preflight-base-models.js";
 import { matchPromptOf } from "../src/predictions/openrouter-entrant.js";
@@ -874,6 +874,62 @@ describe("pre-flight for the Base Model roster", () => {
       .toEqual(Array.from({ length: 9 }, (_u, n) => `entrant/${seat(n + 1)}`));
   });
 
+  // ADR-0055: the roster query already selects `role = 'entrant'`, so a
+  // Shadow beside the nine real seats must not be counted as a tenth.
+  test("leaves a Shadow Seat out of the roster it checks", async () => {
+    await insertShadow(client, {
+      id: "shadow/entrant-01",
+      baseModel: "vendor/shadow-base-model-1",
+      provider: "provider-1"
+    });
+    const called: string[] = [];
+
+    const report = await preflightBaseModels({
+      database: client,
+      competition: "PL",
+      season: "2026-27",
+      fixtureId: 1,
+      expectedEntrantCount: 9,
+      apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
+      http: async (_url, options) => {
+        const request = JSON.parse(options?.body ?? "{}") as { model: string };
+        called.push(request.model);
+        return {
+          status: 200,
+          body: JSON.stringify({
+            model: request.model,
+            openrouter_metadata: {
+              endpoints: {
+                available: [{
+                  provider: `Resolved ${request.model}`,
+                  model: request.model,
+                  selected: true
+                }]
+              }
+            },
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  fixture_id: 1,
+                  probs: { H: 0.6, D: 0.24, A: 0.16 },
+                  score: { home: 2, away: 1 },
+                  rationale: "Pre-flight answer."
+                })
+              }
+            }]
+          })
+        };
+      }
+    });
+
+    expect(report.ok).toBe(true);
+    expect(called).toHaveLength(9);
+    expect(called).not.toContain("vendor/shadow-base-model-1");
+    expect(report.results.map(({ modelId }) => modelId))
+      .not.toContain("shadow/entrant-01");
+  });
+
   test("checks one Exhibition on its own, at the frozen Prompt Version", async () => {
     // A late-arriving Base Model joins as data — one row — and the check that
     // it will answer at all is the same check the roster passed, aimed at it.
@@ -946,6 +1002,75 @@ describe("pre-flight for the Base Model roster", () => {
       detail: null,
       resolvedProvider: "Late Provider",
       resolvedModel: "vendor/late-20260901",
+      rawBody: null
+    }]);
+  });
+
+  // ADR-0055 / ticket 0066: the same single-model door, aimed at a Shadow
+  // instead of an Exhibition -- the only place a Shadow's `config` is
+  // exercised before a real Lock calls it.
+  test("checks one Shadow on its own, with its config on the wire", async () => {
+    await insertShadow(client, {
+      id: "shadow/entrant-v1",
+      baseModel: "openai/gpt-5.2",
+      provider: "openai",
+      config: { reasoning: { effort: "none" } }
+    });
+    const requests: HttpRequest[] = [];
+
+    const report = await preflightBaseModels({
+      database: client,
+      competition: "PL",
+      season: "2026-27",
+      fixtureId: 1,
+      exhibitionModelId: "shadow/entrant-v1",
+      apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
+      http: async (url, options) => {
+        requests.push({ url, ...options! });
+        return {
+          status: 200,
+          body: JSON.stringify({
+            model: "openai/gpt-5.2",
+            openrouter_metadata: {
+              endpoints: {
+                available: [{
+                  provider: "OpenAI",
+                  model: "openai/gpt-5.2-20260601",
+                  selected: true
+                }]
+              }
+            },
+            choices: [{
+              message: {
+                content: JSON.stringify({
+                  fixture_id: 1,
+                  probs: { H: 0.6, D: 0.24, A: 0.16 },
+                  score: { home: 2, away: 1 },
+                  rationale: "Pre-flight answer."
+                })
+              }
+            }]
+          })
+        };
+      }
+    });
+
+    expect(requests).toHaveLength(1);
+    const sent = JSON.parse(requests[0]!.body!) as {
+      model: string;
+      reasoning?: { effort: string };
+    };
+    expect(sent.model).toBe("openai/gpt-5.2");
+    expect(sent.reasoning).toEqual({ effort: "none" });
+    expect(report.ok).toBe(true);
+    expect(report.results).toEqual([{
+      modelId: "shadow/entrant-v1",
+      baseModel: "openai/gpt-5.2",
+      status: "parseable",
+      detail: null,
+      resolvedProvider: "OpenAI",
+      resolvedModel: "openai/gpt-5.2-20260601",
       rawBody: null
     }]);
   });

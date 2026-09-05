@@ -93,11 +93,16 @@ A new role value is therefore invisible everywhere except where this ticket make
 visible. The `models_role_check` constraint was last widened by migration 0019 for
 `'exhibition'`.
 
-**`models.config` is written by no code path and read by none.** Every row holds `{}`.
-`openRouterRequest` (`openrouter-entrant.ts`) builds the body from `baseModel`,
+**`models.config` is written by no code path and read by none. Every row holds `{}`.**
+Wrong, caught by review after the first pass at this ticket shipped against it:
+`upsertSeats` (`season-roster.ts`) already writes `{baseModelClass, canonical_slug,
+catalog_checked_at}` into every real Entrant's `config`, and `read-api.ts` reads it
+back. `openRouterRequest` (`openrouter-entrant.ts`) builds the body from `baseModel`,
 `provider`, `quantization`, the messages and `max_tokens`; the `OpenRouterEntrant`
 type carries the first three. The `WorkItemRow` in `predict-gameweek.ts` is where a
-seat's row becomes a call.
+seat's row becomes a call. Because the premise was wrong, `openRouterRequest` reads
+only `config.reasoning` rather than spreading the column whole — see the corrected
+acceptance box below.
 
 **OpenRouter's contract for the field**, read 2026-09-03 from its reasoning-tokens
 page and `/api/v1/models`: `reasoning.effort` accepts `max`, `xhigh`, `high`,
@@ -109,34 +114,63 @@ list says, and is the first thing the pre-flight below finds out.
 
 ## Acceptance
 
-- [ ] **Migration:** `models_role_check` admits `'shadow'`. Nothing else in the schema
-      moves; `config` already exists and already defaults to `{}`.
-- [ ] **The envelope reads `config`.** `OpenRouterEntrant` gains the seat's `config`;
-      `openRouterRequest` spreads it into the body after the fields it sets itself, so
-      a key `config` names wins and a key it does not name is absent. For `config = {}`
-      the serialised body is byte-identical to today's, and a test asserts that against
-      a captured body. The stored context, its hash and the Prompt Version are not
-      touched — the test that pins each version's sha passes unmodified.
-- [ ] **The prediction run admits the role.** Both `role = 'entrant'` selections in
+- [x] **Migration:** `models_role_check` admits `'shadow'`. Nothing else in the schema
+      moves; `config` already exists and already defaults to `{}`. Migration 0038.
+- [x] **The envelope reads `config.reasoning`.** `OpenRouterEntrant` gains the seat's
+      `config`, narrowed to `{ reasoning?: unknown }`; `openRouterRequest` reads only
+      that one key and puts it on the wire as `reasoning`, nothing else in the column
+      forwarded. Not a whole-column spread, corrected from the first pass: a real
+      Entrant's `config` already carries `baseModelClass`, `canonical_slug` and
+      `catalog_checked_at` (`upsertSeats`, `season-roster.ts`), and spreading the
+      column would have put those on the wire as top-level OpenRouter fields for every
+      real seat's next call, not left the body unchanged. An allow-list of one key also
+      keeps ADR-0009's pinning (`model`, `provider`, `max_tokens`) un-overridable. For
+      a seat with no `reasoning` key the serialised body is byte-identical to before
+      this field existed, and a test asserts that against a captured body, plus a test
+      that every other key in a real `config` is read and ignored. The stored context,
+      its hash and the Prompt Version are not touched — the test that pins each
+      version's sha passes unmodified.
+- [x] **The prediction run admits the role.** Both `role = 'entrant'` selections in
       `predict-gameweek.ts` become `role in ('entrant', 'shadow')`. The roster check's
       "no Entrants configured" error still fires when only shadows exist for a
       Competition, because a shadow without a seat to shadow is a misconfiguration.
       No other reader changes: a test seats one shadow beside one Entrant and asserts
-      the scorer, the gap alert, the pre-flight count and the dashboard's roster,
-      leaderboard and fixtures views each see exactly one.
-- [ ] **Three rows, by migration or by the roster CLI, whichever ADR-0034's seating
+      the gap alert, the pre-flight count and the dashboard's roster, leaderboard and
+      fixtures views each see exactly one. The scorer needed an actual change, caught
+      by review: `predictedFixtures` (`score-match-gameweek.ts`) joined `predictions`
+      to `fixtures` with no role filter at all, so a Shadow's Prediction was scored
+      and written to `scores` like any Entrant's — hidden from the dashboard by
+      `SEATS_CTE` but present in the record, contradicting "the scorer does not see
+      the shadow". Fixed at that one query with `m.role <> 'shadow'` (not narrowed to
+      `'entrant'` — an Exhibition Run is still scored, ADR-0032), and a test proves a
+      Shadow's Prediction settles with no `scores` row while its paired Entrant's
+      does.
+- [x] **Three rows, by migration or by the roster CLI, whichever ADR-0034's seating
       already uses:** `match/shadow-kimi-k3`, `match/shadow-deepseek-v4-pro`,
       `match/shadow-glm-5.3` — `role = 'shadow'`, `prompt_version = 'match/2026-27-v2'`,
       `base_model`, `provider` and `quantization` copied from the row each shadows,
       `config = '{"reasoning": {"effort": "none"}}'`, `name` making the pairing legible.
-      Premier League only.
+      Premier League only. Migration 0039, not the temporary `role = 'exhibition'` door
+      ADR-0034 used for its own candidates: that door's `upsertSeats` writes a `config`
+      of observational fields (`canonical_slug`, `catalog_checked_at`) a Shadow does not
+      carry, so this is a hand-written migration, seated directly with `role = 'shadow'`
+      from the start.
 - [ ] **Pre-flight first, and it is a paid call — ask before running it.** The
       single-model pre-flight (`npm run preflight`) is aimed at each shadow once, three
       calls, and the ticket records for each: the resolved provider, whether the
       response carries `reasoning_tokens: 0` (or absent), and whether the provider
       accepted `effort: "none"` or rejected it as mandatory. A rejected shadow is not
       seated; the ticket records which and the ADR's list of three is amended to the
-      ones that ran.
+      ones that ran. The single-model door (`loadExhibition`, the `exhibitionModelId`
+      field) took an `allowedRoles` list rather than a hard-coded `'exhibition'` check
+      (caught by review: a global widening would have let `replay-match-exhibition.ts`
+      and `replay-fpl-exhibition.ts` — retrospective replays over already-played
+      Gameweeks — load a Shadow too, which is never retrospective). The pre-flight
+      caller alone names `['exhibition', 'shadow']`; both replay callers keep the
+      default, `['exhibition']`, unchanged. `config.reasoning` reaches the wire the
+      same way a real Lock's call would, so this is the first place a Shadow's
+      envelope is exercised at all. Plumbing only —
+      the three calls have not been made.
 - [ ] **The first Gameweek's pairs are read back.** After Premier League Gameweek 4
       settles, a query paired on `fixture_id` between each shadow and its seat — RPS,
       argmax hit, predicted scoreline agreement, `completion_tokens`, `usage.cost` —

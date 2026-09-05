@@ -21,6 +21,13 @@ export interface CalledRow {
    * wrong.
    */
   role: ModelRole;
+  /**
+   * `models.config`, spread onto the wire the same way `predict-gameweek.ts`
+   * spreads it (ADR-0055): `{}` for every row but a Shadow's, so this door's
+   * call is byte-identical to the roster's except where a Shadow's `config`
+   * says otherwise.
+   */
+  config: Record<string, unknown>;
 }
 
 /**
@@ -39,11 +46,20 @@ export interface CalledRow {
 type FrozenPromptVersion = string;
 
 /**
- * The one Exhibition row the operator named, or a refusal saying which of the
- * three things is wrong with the id: no such row, a row that is not an
- * Exhibition, or one that is not at the frozen Prompt Version the caller
- * builds. A typo must not put an Entrant through this door, and a row cannot
- * claim one Prompt Version while being called at another.
+ * The one row the operator named, or a refusal saying which of the three
+ * things is wrong with the id: no such row, a row whose role is not one
+ * `allowedRoles` names, or one that is not at the frozen Prompt Version the
+ * caller builds. A typo must not put an Entrant through this door, and a row
+ * cannot claim one Prompt Version while being called at another.
+ *
+ * `allowedRoles` is the caller's to state (ADR-0055, ticket 0066) rather than
+ * a fixed `'exhibition'` this function assumes for everyone: a retrospective
+ * replay (`replay-match-exhibition.ts`, `replay-fpl-exhibition.ts`) answers
+ * already-played Gameweeks after the fact, which is true of an Exhibition Run
+ * and never of a Shadow Seat, so those callers still name `['exhibition']`
+ * alone. The single-model pre-flight door has no such reason to refuse a
+ * Shadow — exercising its `config` before a real Lock calls it is exactly
+ * what ticket 0066 needs the door for — so it alone names both.
  *
  * The version is the caller's because it says which track it is: a Match replay
  * and an FPL replay build different frozen prompts, and each has exactly one it
@@ -53,12 +69,14 @@ type FrozenPromptVersion = string;
 export async function loadExhibition(
   database: Database,
   modelId: string,
-  promptVersion: FrozenPromptVersion
+  promptVersion: FrozenPromptVersion,
+  allowedRoles: readonly ModelRole[] = ["exhibition"]
 ): Promise<CalledRow> {
   const result = await database.query<CalledRow>(
-    `-- roster: none. One Exhibition Run by id, which sits on no Season
-     -- Roster at all (ADR-0032) and so has none to leave.
-     select id, base_model, provider, quantization, prompt_version, role
+    `-- roster: none. One row named by id, sitting on no Season Roster at all
+     -- (ADR-0032, ADR-0055) and so with none to leave.
+     select id, base_model, provider, quantization, prompt_version, role,
+            config
        from models
       where id = $1`,
     [modelId]
@@ -67,9 +85,10 @@ export async function loadExhibition(
   if (model === undefined) {
     throw new Error(`${modelId} has no row in models`);
   }
-  if (model.role !== "exhibition") {
+  if (!allowedRoles.includes(model.role)) {
     throw new Error(
-      `${modelId} has role '${model.role}', not 'exhibition'`
+      `${modelId} has role '${model.role}', not `
+      + allowedRoles.map((role) => `'${role}'`).join(" or ")
     );
   }
   if (model.prompt_version !== promptVersion) {

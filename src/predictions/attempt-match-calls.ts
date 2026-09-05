@@ -35,6 +35,13 @@ export interface MatchCall {
   provider: string;
   quantization: string | null;
   role: ModelRole;
+  /**
+   * `models.config`, carried through to `openRouterRequest`, which reads only
+   * its `reasoning` key (ADR-0055). Optional rather than required: a caller
+   * with no Shadow's envelope to forward — an Exhibition replay, say — has no
+   * reason to state the absence of one.
+   */
+  config?: Record<string, unknown>;
   fixture_id: number;
   context: StoredContext;
 }
@@ -384,7 +391,8 @@ export async function attemptMatchCalls({
           {
             baseModel: call.base_model,
             provider: call.provider,
-            quantization: call.quantization
+            quantization: call.quantization,
+            ...(call.config === undefined ? {} : { config: call.config })
           },
           messages
         );

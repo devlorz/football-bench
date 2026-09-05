@@ -64,6 +64,19 @@ the complete-case intersection or a published interval, and supports no claim of
 skill — its Base Model may already know the results.
 _Avoid_: backfill (a Gap is never back-filled, and an Exhibition Run fills none)
 
+**Shadow Seat**:
+A second call of an Entrant's Base Model, asking the same Fixture at the same Lock over the
+same context, with `config.reasoning` set to disable reasoning and nothing else different
+(ADR-0055). Its `models` row carries `role = 'shadow'` and the Base Model, provider and
+quantization of the Entrant it shadows, so a paired reading of the two isolates what
+reasoning bought. A Shadow Seat is ranked nowhere: it is not part of the Season Roster,
+never selects or joins a Comparison Anchor, never enters the complete-case intersection or
+a published interval, is excluded from every scored row, and does not appear on the
+leaderboard, the Entrant record page or the Fixtures page.
+_Avoid_: Exhibition Run (a Shadow Seat is on the current Season's roster's Base Models and
+answers every Lock live; an Exhibition Run is a late arrival replayed retrospectively over
+already-played Gameweeks)
+
 ### Forecasting
 
 **Competition**:
