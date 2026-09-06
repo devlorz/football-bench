@@ -155,7 +155,7 @@ list says, and is the first thing the pre-flight below finds out.
       of observational fields (`canonical_slug`, `catalog_checked_at`) a Shadow does not
       carry, so this is a hand-written migration, seated directly with `role = 'shadow'`
       from the start.
-- [ ] **Pre-flight first, and it is a paid call — ask before running it.** The
+- [x] **Pre-flight first, and it is a paid call — ask before running it.** The
       single-model pre-flight (`npm run preflight`) is aimed at each shadow once, three
       calls, and the ticket records for each: the resolved provider, whether the
       response carries `reasoning_tokens: 0` (or absent), and whether the provider
@@ -169,8 +169,29 @@ list says, and is the first thing the pre-flight below finds out.
       caller alone names `['exhibition', 'shadow']`; both replay callers keep the
       default, `['exhibition']`, unchanged. `config.reasoning` reaches the wire the
       same way a real Lock's call would, so this is the first place a Shadow's
-      envelope is exercised at all. Plumbing only —
-      the three calls have not been made.
+      envelope is exercised at all.
+
+      **Run 2026-09-06, three calls, on Premier League Gameweek 4's Fixture 32
+      (Bournemouth–Brentford, kickoff 2026-09-12 14:00Z), authorised by the operator
+      after 0038/0039 had been applied to production.** Read off the report and the
+      `openrouter-preflight:*` rows in `raw_snapshots`:
+
+      | shadow | resolved provider | status | `reasoning_tokens` | completion | `usage.cost` |
+      | --- | --- | --- | ---: | ---: | ---: |
+      | `match/shadow-kimi-k3` | Moonshot AI (`moonshotai/kimi-k3-20260715`) | parseable | 0 | 210 | $0.0131 |
+      | `match/shadow-deepseek-v4-pro` | Novita (`deepseek/deepseek-v4-pro-20260423`) | parseable | 0 | 234 | $0.0060 |
+      | `match/shadow-glm-5.3` | — (refused before routing) | HTTP 400 | — | — | $0 |
+
+      GLM 5.3's refusal, verbatim from the body: *"Reasoning is mandatory for this
+      endpoint and cannot be disabled."* — the `mandatory` case the contract above
+      named. Both accepted shadows answered in the schema at the first attempt with an
+      empty `message.reasoning`, at roughly a quarter to a fifth of their real seat's
+      per-call cost (Kimi ~$0.052, DeepSeek ~$0.030 on the record). **GLM 5.3 is not
+      seated: migration 0040 deletes `match/shadow-glm-5.3`** — deleted rather than
+      withdrawn because the prediction run selects Shadows by role and never reads
+      `withdrawn_at`, and the row has no attempt, Prediction or context under it (the
+      migration refuses to run if any appears). Two Shadow Seats run; ADR-0055's
+      consequence is amended to say so.
 - [ ] **The first Gameweek's pairs are read back.** After Premier League Gameweek 4
       settles, a query paired on `fixture_id` between each shadow and its seat — RPS,
       argmax hit, predicted scoreline agreement, `completion_tokens`, `usage.cost` —

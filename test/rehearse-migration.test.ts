@@ -63,7 +63,8 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0036_the_german_divisions.sql",
       "0037_la_liga_gameweek_6s_nine_early_predictions_are_withdrawn.sql",
       "0038_a_shadow_seat_asks_without_being_ranked.sql",
-      "0039_three_shadow_seats_join_the_premier_league.sql"
+      "0039_three_shadow_seats_join_the_premier_league.sql",
+      "0040_the_glm_shadow_leaves_before_it_is_asked.sql"
     ]);
     // The record the copy carried, not a shape asserted about the schema: an
     // operator reading a rehearsal needs to see that it ran over rows.
@@ -138,7 +139,8 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0036_the_german_divisions.sql",
       "0037_la_liga_gameweek_6s_nine_early_predictions_are_withdrawn.sql",
       "0038_a_shadow_seat_asks_without_being_ranked.sql",
-      "0039_three_shadow_seats_join_the_premier_league.sql"
+      "0039_three_shadow_seats_join_the_premier_league.sql",
+      "0040_the_glm_shadow_leaves_before_it_is_asked.sql"
     ]);
     expect(rehearsal.rows).toMatchObject({ gameweeks: 1, squad_changes: 1 });
   });
@@ -174,7 +176,8 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0036_the_german_divisions.sql",
       "0037_la_liga_gameweek_6s_nine_early_predictions_are_withdrawn.sql",
       "0038_a_shadow_seat_asks_without_being_ranked.sql",
-      "0039_three_shadow_seats_join_the_premier_league.sql"
+      "0039_three_shadow_seats_join_the_premier_league.sql",
+      "0040_the_glm_shadow_leaves_before_it_is_asked.sql"
     ]);
     // Compared rather than skipped, and back whole: `verifyRelabelledAsPl`
     // raises, so this row reaching the count is the comparison having run over

@@ -129,4 +129,9 @@ of a record where every call chose its own effort.
   pays for cache writes it never reads back — 311,901 tokens written, 13,044 read,
   about $0.39 so far — because it has never needed a Repair; that is a `config` key
   this mechanism could carry later and this ADR does not add.
-- Ticket 0066 builds the role, the config read and the first three Shadow Seats.
+- Ticket 0066 builds the role, the config read and the first Shadow Seats. Three
+  were seated (Kimi K3, DeepSeek V4 Pro, GLM 5.3); the pre-flight of 2026-09-06 found
+  GLM 5.3's endpoint refuses `effort: "none"` outright — "Reasoning is mandatory for
+  this endpoint and cannot be disabled" — so migration 0040 unseated it before it was
+  ever asked, and two Shadow Seats run. A Base Model that cannot switch its reasoning
+  off is one this experiment cannot ask about; that is a finding, not a failure.
