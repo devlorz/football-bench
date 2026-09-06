@@ -1,6 +1,6 @@
 # A seat thinks as its provider ships it, and a Shadow Seat may think otherwise
 
-> Amended 2026-09-06 by ticket 0066's review. **`models.config` is not the untouched
+> Amended 2026-09-05 by ticket 0066's review. **`models.config` is not the untouched
 > column this ADR describes it as**, in two places: "a column migration 0001 created
 > and nothing has read since" below, and "For every existing row `config` is `{}` and
 > the body is byte-for-byte what it is today" in Consequences. Both are wrong. Ticket
@@ -60,7 +60,7 @@ produced stays comparable with itself, and no Season restart is spent on it.
 **A Shadow Seat may ask the same Fixture with a different envelope, and is never
 ranked.** A `models` row with `role = 'shadow'` names an existing seat's Base Model,
 provider and quantization, the same Prompt Version, and asks with `config.reasoning`
-set — the one key of `models.config` that differs on the wire (amended 2026-09-06:
+set — the one key of `models.config` that differs on the wire (amended 2026-09-05:
 not "a column nothing has read since", `upsertSeats` already writes to it and
 `read-api.ts` reads it back; `reasoning` is the one key of it a Shadow adds) —
 `{"reasoning": {"effort": "none"}}` and nothing else. It is called by the same
