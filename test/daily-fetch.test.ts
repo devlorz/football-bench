@@ -7,6 +7,9 @@ import {
 import {
   StaleCompetitionSourceError
 } from "../src/football-data-org/fetch-competition.js";
+import {
+  FootballDataSourceHttpError
+} from "../src/football-data/fetch-season.js";
 import { archivedBody } from "./archived-fixture.js";
 import { resetSchema } from "./schema-fixture.js";
 
@@ -474,6 +477,204 @@ describe("the daily fetch", () => {
     );
     expect(matches.rows).toEqual([{ season: "2025-26", count: 932 }]);
   });
+
+  // ADR-0056 / ticket 0067. The same instant as the test above -- past the
+  // Lock, football-data.co.uk still down -- but this time the Fixture FPL
+  // just settled is the result the guard needs, projected rather than
+  // absent, and the run still fails on the source outage alone.
+  test("projects a settled Fixture when football-data.co.uk is down, and still fails loudly",
+    async () => {
+      const fixtures = JSON.parse(
+        await archivedBody("fpl-fixtures-2026-27.json.gz")
+      ) as Array<{
+        id: number; team_h: number; team_a: number;
+        finished: boolean; team_h_score: number | null; team_a_score: number | null;
+      }>;
+      const arsenalVCoventry = fixtures.find((fixture) => fixture.id === 1);
+      if (arsenalVCoventry === undefined) {
+        throw new Error("fixture 1 is missing from the archived FPL fixtures");
+      }
+      arsenalVCoventry.finished = true;
+      arsenalVCoventry.team_h_score = 2;
+      arsenalVCoventry.team_a_score = 1;
+      const responses = await sourceResponses([[
+        "https://fantasy.premierleague.com/api/fixtures/",
+        JSON.stringify(fixtures)
+      ]]);
+
+      // `footballDataSeason` matches `season`: football-data.co.uk is already
+      // being asked about the current Season and is simply down, the one
+      // scenario the projection is for. A stale `FOOTBALL_DATA_SEASON` is a
+      // separate misconfiguration covered by its own test below.
+      const thrown = await runDailyFetch({
+        database: client,
+        season: "2026-27",
+        footballDataSeason: "2026-27",
+        footballDataOrgToken: null,
+        now: () => new Date("2026-08-21T17:30:00.000Z"),
+        http: async (url) => url.includes("football-data.co.uk")
+          ? { status: 503, body: "<html>maintenance" }
+          : { status: 200, body: responses.get(url) ?? "" }
+      }).catch((error: unknown) => error);
+
+      // Loud for the same reason it is today: football-data.co.uk answered
+      // 503, and saving the projected result changes nothing about that.
+      expect(thrown).toBeInstanceOf(FootballDataSourceHttpError);
+
+      // The guard ran after the projection and found a current-Season result,
+      // so no `StaleFootballDataSeasonError` joins it -- a single rejection
+      // rather than an `AggregateError` of two.
+      const projected = await client.query(
+        `select competition, season, division, played_on,
+                home_team, away_team, home_goals, away_goals,
+                home_shots, away_shots
+           from historical_matches
+          where season = '2026-27'`
+      );
+      expect(projected.rows).toEqual([{
+        competition: "PL",
+        season: "2026-27",
+        division: "Premier League",
+        played_on: new Date("2026-08-21T00:00:00.000Z"),
+        home_team: "Arsenal",
+        away_team: "Coventry",
+        home_goals: 2,
+        away_goals: 1,
+        home_shots: null,
+        away_shots: null
+      }]);
+    });
+
+  // The other direction of the same reordering: football-data.co.uk down and
+  // nothing settled anywhere else either (the default archived FPL fixtures
+  // are still in the future at this `now`), so the projection has nothing to
+  // write and the guard must still fire -- "no source did" has to mean no
+  // source, not "the projection ran".
+  test("still fires the staleness guard when football-data.co.uk is down and no source has a result",
+    async () => {
+      const responses = await sourceResponses();
+
+      const thrown = await runDailyFetch({
+        database: client,
+        season: "2026-27",
+        footballDataSeason: "2026-27",
+        footballDataOrgToken: null,
+        now: () => new Date("2026-08-21T17:30:00.000Z"),
+        http: async (url) => url.includes("football-data.co.uk")
+          ? { status: 503, body: "<html>maintenance" }
+          : { status: 200, body: responses.get(url) ?? "" }
+      }).catch((error: unknown) => error);
+
+      expect(thrown).toBeInstanceOf(AggregateError);
+      expect((thrown as AggregateError).errors).toMatchObject([
+        { name: FootballDataSourceHttpError.name },
+        { name: StaleFootballDataSeasonError.name, competition: "PL" }
+      ]);
+      const matches = await client.query(
+        "select count(*)::int as count from historical_matches"
+      );
+      expect(matches.rows).toEqual([{ count: 0 }]);
+    });
+
+  // football-data.co.uk answering with a body that fails to validate is not
+  // an outage: the site is up, and projecting over the gap would paper over a
+  // real data bug (a malformed row, or a redirect to the wrong division --
+  // ADR-0050's Portugal case) with results that read clean. This behaves
+  // exactly as it did before ticket 0067: no projection, no historical row,
+  // and the staleness guard still fires on top of the validation error.
+  test("does not project when football-data.co.uk answers but its body fails to validate",
+    async () => {
+      const responses = await sourceResponses([[
+        "https://www.football-data.co.uk/mmz4281/2526/E0.csv",
+        // `FTAG` is missing from the header entirely -- a required column
+        // gone, not a bad value in one that is present.
+        "Div,Date,Time,HomeTeam,AwayTeam,FTHG\n"
+        + "E0,15/08/2025,20:00,Liverpool,Bournemouth,4\n"
+      ]]);
+
+      const thrown = await runDailyFetch({
+        database: client,
+        season: "2026-27",
+        footballDataSeason: "2025-26",
+        footballDataOrgToken: null,
+        now: () => new Date("2026-08-21T17:30:00.000Z"),
+        http: async (url) => ({
+          status: 200,
+          body: responses.get(url) ?? ""
+        })
+      }).catch((error: unknown) => error);
+
+      expect(thrown).toBeInstanceOf(AggregateError);
+      expect((thrown as AggregateError).errors).toMatchObject([
+        { name: "FootballDataSourceValidationError" },
+        { name: StaleFootballDataSeasonError.name, competition: "PL" }
+      ]);
+      const matches = await client.query(
+        "select count(*)::int as count from historical_matches where season = '2026-27'"
+      );
+      expect(matches.rows).toEqual([{ count: 0 }]);
+    });
+
+  // `FOOTBALL_DATA_SEASON` left stale is a second, independent misconfiguration
+  // that can coincide with a real outage. ADR-0056's projection is "temporary
+  // by construction" only because the *next* successful fetch targets the same
+  // Season it projected into and rewrites the division whole; a fetch still
+  // pointed at last Season's file will never do that, so a projection made
+  // here would never heal and would silently swallow the one signal --
+  // `StaleFootballDataSeasonError`'s "advance FOOTBALL_DATA_SEASON" guidance --
+  // that tells an operator the env is behind. Projecting only when
+  // `footballDataSeason === season` keeps the promise instead of breaking it.
+  test("does not project when FOOTBALL_DATA_SEASON is stale, even if football-data.co.uk is also down",
+    async () => {
+      // A settled current-Season Fixture, exactly like the successful
+      // projection test above -- without the `footballDataSeason === season`
+      // gate, this is enough on its own to make the projection succeed and
+      // mask the guard, which is precisely the regression this test exists to
+      // catch.
+      const fixtures = JSON.parse(
+        await archivedBody("fpl-fixtures-2026-27.json.gz")
+      ) as Array<{
+        id: number; finished: boolean;
+        team_h_score: number | null; team_a_score: number | null;
+      }>;
+      const arsenalVCoventry = fixtures.find((fixture) => fixture.id === 1);
+      if (arsenalVCoventry === undefined) {
+        throw new Error("fixture 1 is missing from the archived FPL fixtures");
+      }
+      arsenalVCoventry.finished = true;
+      arsenalVCoventry.team_h_score = 2;
+      arsenalVCoventry.team_a_score = 1;
+      const responses = await sourceResponses([[
+        "https://fantasy.premierleague.com/api/fixtures/",
+        JSON.stringify(fixtures)
+      ]]);
+
+      const thrown = await runDailyFetch({
+        database: client,
+        season: "2026-27",
+        footballDataSeason: "2025-26",
+        footballDataOrgToken: null,
+        now: () => new Date("2026-08-21T17:30:00.000Z"),
+        http: async (url) => url.includes("football-data.co.uk")
+          ? { status: 503, body: "<html>maintenance" }
+          : { status: 200, body: responses.get(url) ?? "" }
+      }).catch((error: unknown) => error);
+
+      expect(thrown).toBeInstanceOf(AggregateError);
+      expect((thrown as AggregateError).errors).toMatchObject([
+        { name: FootballDataSourceHttpError.name },
+        {
+          name: StaleFootballDataSeasonError.name,
+          competition: "PL",
+          season: "2026-27",
+          footballDataSeason: "2025-26"
+        }
+      ]);
+      const matches = await client.query(
+        "select count(*)::int as count from historical_matches where season = '2026-27'"
+      );
+      expect(matches.rows).toEqual([{ count: 0 }]);
+    });
 
   test("dates each Competition's staleness from its own Gameweek 1 deadline",
     async () => {

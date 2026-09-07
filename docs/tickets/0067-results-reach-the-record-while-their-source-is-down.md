@@ -21,7 +21,7 @@ writing: if football-data.co.uk returns before 2026-09-11 the projection never f
 this ticket costs nothing. If it does not, five Competitions send packets whose table and
 form lines are a matchday stale, and no later fetch can un-send them.
 
-**Status:** open
+**Status:** done — every box green 2026-09-07
 
 ---
 
@@ -69,43 +69,67 @@ complete and the twenty-eight rows heal themselves.
 
 ## Acceptance
 
-- [ ] **The projection, on failure and only on failure.** When a Competition's
-      `fetchFootballDataSeason` throws, its settled Fixtures for the current Season are
+- [x] **The projection, on unreachability and only on unreachability.** When a
+      Competition's `fetchFootballDataSeason` throws `FootballDataSourceHttpError` — the
+      site answered a non-2xx status, `ADR-0056`'s "cannot be reached" — and
+      `footballDataSeason === season`, its settled Fixtures for the current Season are
       written into `historical_matches` under the top flight's division name: clubs
       through `teamNamesOf()` for that Competition, `played_on` from `kickoff_at` as a UTC
       date, goals from `result`, and all four shot columns null. A Fixture whose `result`
       is null is not written, which is `settledResult`'s side of ADR-0050 and needs no
       second rule. When the fetch succeeds the projection does not run at all — a
-      successful fetch has already written the same Matches with their shots.
-- [ ] **The delete is scoped to the top flight.** The projection deletes and rewrites only
-      the top flight's division rows for the current Season. The test seeds second-division
-      rows for the same Competition and Season, runs the projection, and asserts they are
-      byte-identical afterwards. This is the box the ticket most wants: the existing write
-      deletes both divisions before reinserting, no source but football-data.co.uk covers
-      `E1`, `SP2`, `I2`, `F2` or `D2`, and a projection that inherited that scope would
-      erase a backfill it cannot rebuild.
-- [ ] **A recovered source overwrites the projection.** The test runs the projection, then
+      successful fetch has already written the same Matches with their shots. **Narrowed
+      by review** on two other axes a plain "throws" first missed:
+      `FootballDataSourceValidationError` (the site answered; its body is the problem —
+      a malformed row in the *other* division, or a redirect to another division's file
+      entirely, ADR-0050's Portugal case) must not project, and neither must a fetch still
+      pointed at the wrong Season by a stale `FOOTBALL_DATA_SEASON` — see the box below.
+- [x] **The delete is scoped to the top flight, and an already-answered row is never
+      re-nulled.** The write is `insert ... on conflict (season, division, home_team,
+      away_team) do update ... where historical_matches.home_shots is null` — no
+      unconditional delete. Two properties, one clause: the second division is never
+      touched (a test seeds second-division rows for the same Competition and Season, runs
+      the projection, and asserts they are byte-identical afterwards — this is the box the
+      ticket most wants, since the existing write deletes both divisions before
+      reinserting and a projection that inherited that scope would erase a backfill it
+      cannot rebuild), and a row football-data.co.uk already answered with real shots is
+      left exactly as it was, even on the second or third day an outage continues and the
+      projection runs again over a division that already holds some good rows (**found by
+      review**: an unconditional delete-and-rewrite of the whole division, run daily,
+      would re-null every earlier Gameweek's real shots along with filling the new gap).
+- [x] **`FOOTBALL_DATA_SEASON` left stale never projects, even under a real outage.**
+      `footballDataSeason === season` gates the projection alongside the `HttpError` check
+      above (**found by review**). ADR-0056's projection is temporary by construction only
+      because the *next* successful fetch targets the same Season it projected into and
+      rewrites the division whole; a fetch still pointed at last Season's file by a stale
+      env var never does that, so a projection made here would never heal — and it would
+      erase the one signal that tells an operator the env is behind,
+      `StaleFootballDataSeasonError`'s own "advance FOOTBALL_DATA_SEASON" guidance, by
+      handing the guard a current-Season result to find. The test forces both an outage and
+      a stale `footballDataSeason` at once and asserts the guard still fires with that
+      guidance, unmasked, and that nothing is written.
+- [x] **A recovered source overwrites the projection.** The test runs the projection, then
       runs a successful `fetchFootballDataSeason` over the same Competition and Season, and
       asserts every projected row is replaced by the source's own — shots present, counts
       matching the file. Nothing distinguishes a healed division from one that never
       failed.
-- [ ] **The run still fails, and says the same thing it says today.** The projection
+- [x] **The run still fails, and says the same thing it says today.** The projection
       happens inside the existing per-Competition `catch`, and the error still joins
       `errors` and still fails the run. `.github/workflows/fetch.yml` opens or updates
       its "Daily fetch is failing" issue exactly as it does now. This is ADR-0056's second
       Consequence answered with no new machinery: the results are saved *and* the outage
       is loud, because saving them was never the reason the run was failing.
-- [ ] **The staleness guard narrows to "no source at all".** `StaleFootballDataSeasonError`
+- [x] **The staleness guard narrows to "no source at all".** `StaleFootballDataSeasonError`
       stops firing for a Competition past its Gameweek 1 deadline whose results arrived by
       projection, and still fires for one with no current-Season results from anywhere.
       Both directions are asserted. The guard runs after the projection, not before, or it
       answers a question the projection has already changed.
-- [ ] **A projected Match reads honestly in the packet.** A form line over a projected
+- [x] **A projected Match reads honestly in the packet.** A form line over a projected
       Match prints its goals and its xG where Understat has them, and its shots coverage
       short of its match count rather than averaging over a smaller denominator in
       silence. The test builds a context over a mix of projected and stored Matches and
       asserts the coverage marker, not just the absence of a crash.
-- [ ] **Nothing else moves.** No migration. `match/2026-27-v2` is unchanged and no new
+- [x] **Nothing else moves.** No migration. `match/2026-27-v2` is unchanged and no new
       Prompt Version ships — the builder's both-or-nothing rule and coverage marker are v2
       behaviour already. Prior Seasons are untouched, the second division is untouched in
       every Competition, and the backfill path (`npm run fetch:history`) is not given a

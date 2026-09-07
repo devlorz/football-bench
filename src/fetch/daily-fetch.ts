@@ -1,5 +1,11 @@
 import type { Client } from "pg";
-import { fetchFootballDataSeason } from "../football-data/fetch-season.js";
+import {
+  fetchFootballDataSeason,
+  FootballDataSourceHttpError
+} from "../football-data/fetch-season.js";
+import {
+  projectSettledFixturesIntoHistoricalMatches
+} from "../football-data/project-settled-fixtures.js";
 import {
   fetchFootballDataOrgCompetition,
   type MovedAttachment,
@@ -260,15 +266,55 @@ export async function runDailyFetch({
         season: footballDataSeason,
         http
       });
-      // Each Competition against its own clock, which is ADR-0036's
-      // consequence read literally: a league whose feed has produced no
-      // current-Season result by its own Gameweek 1 deadline fails by name,
-      // and a league still inside its own deadline stays quiet whatever the
-      // others are doing.
+    } catch (error) {
+      errors.push(error);
+      // ADR-0056 projects only when football-data.co.uk could not be
+      // reached at all -- a non-2xx response, `FootballDataSourceHttpError`'s
+      // one job. A `FootballDataSourceValidationError` means the opposite:
+      // the site answered and its body is the problem, whether a malformed
+      // row in the *other* division (a Ligue 2 hiccup must not cost Ligue 1
+      // its shots) or a redirect to another division's file entirely (the
+      // co.uk-to-Portugal case ADR-0050 records) -- and projecting over
+      // either would paper over a data bug with results that read clean.
       //
-      // Inside the same `try` as the fetch that feeds it, so a league whose
-      // fetch threw is never asked: it has already said so, and a second
-      // question would report one outage twice.
+      // `footballDataSeason === season` besides: the projection is "temporary
+      // by construction" only because the *next* successful fetch targets the
+      // same Season it wrote into and rewrites the division whole. A fetch
+      // still pointed at last Season's file by a stale `FOOTBALL_DATA_SEASON`
+      // will never do that, so a projection made here would never heal --
+      // and it would also erase the one signal that tells an operator the env
+      // is behind, `StaleFootballDataSeasonError`'s own "advance
+      // FOOTBALL_DATA_SEASON" guidance, by giving the guard a current-Season
+      // result to find.
+      if (
+        error instanceof FootballDataSourceHttpError
+        && footballDataSeason === season
+      ) {
+        // The same settled Fixtures were already stored this morning from
+        // football-data.org or the FPL API. Written here rather than left
+        // absent, and the run still fails on the line above: saving the
+        // projected results was never the reason it was failing.
+        try {
+          await projectSettledFixturesIntoHistoricalMatches({
+            database,
+            competition,
+            season
+          });
+        } catch (projectionError) {
+          errors.push(projectionError);
+        }
+      }
+    }
+    // Each Competition against its own clock, which is ADR-0036's consequence
+    // read literally: a league whose feed has produced no current-Season
+    // result by its own Gameweek 1 deadline fails by name, and a league still
+    // inside its own deadline stays quiet whatever the others are doing.
+    //
+    // Run whether or not the fetch above threw, and after the projection: a
+    // Competition whose results arrived by projection has a current-Season
+    // result now, and asking before the projection ran would answer a
+    // question ADR-0056 has already changed the answer to.
+    try {
       await requireCurrentSeasonMatchesAfterFirstDeadline(
         database,
         competition,

@@ -474,6 +474,71 @@ describe("building historical Match context", () => {
     );
   });
 
+  // ADR-0056 / ticket 0067. A projected Match carries goals and nothing else
+  // -- `match()` with no `signals` is exactly that shape, the same one
+  // `project-settled-fixtures.ts` writes when football-data.co.uk is down.
+  // It counts fully for the record and drops out of the shots and on-target
+  // sums, and the line says so rather than averaging over a smaller
+  // denominator in silence.
+  test("prints shots coverage short when a Match in the mix was projected, not sourced",
+    () => {
+      const context = buildHistoricalContext({
+        competition: "PL",
+        season: "2026-27",
+        asOf: new Date("2026-08-21T17:30:00.000Z"),
+        homeTeam: "Arsenal",
+        awayTeam: "Everton",
+        matches: [
+          match("2026-27", "Premier League", "2026-08-10", "Arsenal", "Chelsea", 3, 1, {
+            home_shots: 15, away_shots: 8,
+            home_shots_on_target: 7, away_shots_on_target: 3
+          }),
+          // Projected: football-data.co.uk was down for this round, so this
+          // row came from `fixtures.result` alone and carries no shot data.
+          match("2026-27", "Premier League", "2026-08-17", "Everton", "Arsenal", 0, 2)
+        ]
+      });
+
+      expect(context).toContain(
+        "Current-Season overall: 2 played, 2W 0D 0L, GF 5, GA 1, "
+          + "shots 15-8 (over 1 of 2 matches), "
+          + "on target 7-3 (over 1 of 2 matches), xG unavailable."
+      );
+    });
+
+  // The other half of the same acceptance box: a projected Match's own bullet
+  // on the last-five list. Its goals print as any Match's do, its shots and
+  // on-target segments are dropped rather than printed as "unavailable" --
+  // ticket 0004's rule for a match with no shot data at all -- and its xG
+  // prints in full when Understat had the Fixture, proving the two signals
+  // are independent: a Match missing one does not cost it the other.
+  test("a form line over a projected Match prints goals and xG, dropping the missing shots segment",
+    () => {
+      const context = buildHistoricalContext({
+        competition: "PL",
+        season: "2026-27",
+        asOf: new Date("2026-08-21T17:30:00.000Z"),
+        homeTeam: "Arsenal",
+        awayTeam: "Everton",
+        matches: [
+          // Projected: football-data.co.uk was down, so this row carries no
+          // shot data, but Understat still covered the Fixture and its xG
+          // was joined in afterwards.
+          match("2026-27", "Premier League", "2026-08-17", "Everton", "Arsenal", 0, 2, {
+            home_xg: 0.6, away_xg: 1.9
+          })
+        ]
+      });
+
+      // No "shots" or "on target" segment between the outcome and xG -- the
+      // line goes straight from `| W |` to `xG`, which is what proves the two
+      // absent segments were dropped rather than printed as "unavailable".
+      expect(context).toContain(
+        "- 2026-27 Premier League | 2026-08-17 | Everton 0-2 Arsenal | W"
+          + " | xG 0.60-1.90"
+      );
+    });
+
   test("renders the table in rule order, dated by its latest result", () => {
     const round = (playedOn: string, ...results: [string, number, number, string][]) =>
       results.map(([home, homeGoals, awayGoals, away]) =>
