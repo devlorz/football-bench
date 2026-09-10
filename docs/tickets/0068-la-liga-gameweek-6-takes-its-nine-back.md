@@ -152,7 +152,7 @@ six.
       the fetch is what makes it possible, which two rules are lifted and that both are
       restored inside the transaction, what the `attempts` ledger will look like, and the
       cost paragraph above.
-- [ ] **Rehearsed on a copy before it is applied**, by hand, the way 0065's was: `pg_dump
+- [x] **Rehearsed on a copy before it is applied**, by hand, the way 0065's was: `pg_dump
       --schema=public --exclude-table-data=raw_snapshots` of production restored locally,
       `0041` applied to the copy alone, and read off the copy: `locked_in_gw` over the ten
       matchday-6 Fixtures is `6 → 10`; Gameweek 5 holds 10 Fixtures and Gameweek 6 holds
@@ -169,6 +169,39 @@ six.
       > the session by the auto-mode classifier. The fetch half is already asserted in the
       > suite against the archived response — there is no replay flag on `npm run fetch`, and
       > none was built.
+
+      **Run 2026-09-10 on `football_bench_0041`, a `pg_dump --no-owner --no-privileges
+      --schema=public --exclude-table-data=raw_snapshots` copy of production restored into
+      the local cluster** (the copy's empty `public` schema has to be dropped first, or the
+      dump's own `create schema public` refuses). Before the apply the copy held
+      `schema_migrations` at `0040`, matchday 6 at `locked_in_gw` `5 → 9`, `6 → 1`, and
+      151 attempts under Gameweek 6. `DATABASE_URL=<copy> npm run db:migrate` printed
+      `Applied 1: 0041_la_liga_gameweek_6_takes_its_nine_back.sql` at 2026-09-10 11:32:41Z.
+      Read off the copy at **2026-09-10 11:32:46Z** with the readings query, session
+      timezone UTC:
+
+      | reading | value |
+      | --- | --- |
+      | matchday 6 `locked_in_gw = 6` / still `= 5` | 10 / 0 |
+      | Fixtures by `coalesce(locked_in_gw, gw)`, Gameweek 5 / 6 | 10 / 10 |
+      | Gameweek 5 / 6 deadline | `2026-09-11 17:30Z` / `2026-09-15 15:30Z` |
+      | `contexts` for Gameweek 6 | 1 |
+      | `prediction_runs` for Gameweek 6 | 0 |
+      | matchday 6 Predictions, all on `564682` | **9**, not 8 |
+      | `attempts` for Gameweek 6 | **151**, not 150 |
+      | `pg_trigger.tgenabled`, both lifted triggers | `O` |
+      | `schema_migrations` head | `0041…`, `0040…` beneath |
+
+      The two bold readings are not 0041's doing: the copy held 151 attempts and 9
+      Predictions on Real Sociedad–Celta *before* the apply, and the same after. The extra
+      row of each is one Exhibition Run, `exhibition-pd/gpt-6-astra`, pre-flighted at
+      2026-09-10 09:22Z (the Premier League Exhibition pre-flight of the same morning) —
+      answered after every deadline by construction (ADR-0032), and not a Match Entrant, so
+      not what 0037 withdrew or what this box counts. The readings query's expectations
+      are corrected to 9 and 151 with that reason beside them, and its total-Predictions
+      column is scoped to matchday 6 — as first written it counted every PD Prediction,
+      Gameweeks 1 to 4 included, and read 448 against an expected 8. Copy dropped
+      afterwards.
 - [ ] **Landed in the right order, and each step read back.** (1) The fetch carve-out is
       merged to `main` and pushed to `origin` — checked, not assumed; `origin/main` has
       drifted before — before 2026-09-11 06:00Z. (2) `npm run db:migrate` against the

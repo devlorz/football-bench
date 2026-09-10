@@ -50,16 +50,24 @@ select
   (select count(*) from prediction_runs
     where competition = 'PD' and season = '2026-27' and gw = 6)
     as gameweek_6_runs,
-  -- 8: Real Sociedad-Celta's, untouched. 0037 withdrew the rest.
-  (select count(*) from predictions
-    where competition = 'PD' and season = '2026-27')
-    as pd_predictions,
-  -- 8: and every one of them on Real Sociedad-Celta, not merely eight in total.
+  -- 9: matchday 6's Predictions, all Real Sociedad-Celta's, untouched. 0037
+  -- withdrew the rest. Nine and not the eight ticket 0065 read on 2026-09-04:
+  -- the ninth is an Exhibition Run (`exhibition-pd/gpt-6-astra`, pre-flighted
+  -- 2026-09-10 09:22Z, after every deadline by construction, ADR-0032).
+  -- Scoped to matchday 6 -- Gameweeks 1 to 4 hold PD Predictions of their own.
+  (select count(*) from predictions p
+    where p.competition = 'PD' and p.season = '2026-27'
+      and p.fixture_id in (select fixture_id from fixtures
+                            where competition = 'PD' and season = '2026-27'
+                              and gw = 6))
+    as matchday_6_predictions,
+  -- 9: and every one of them on Real Sociedad-Celta, not merely nine in total.
   (select count(*) from predictions
     where competition = 'PD' and season = '2026-27' and fixture_id = 564682)
-    as pd_predictions_on_real_sociedad_celta,
-  -- 150: the ledger 0041 deliberately leaves alone. The 2026-09-15 run adds
-  -- ~90 more on top of these; see 0041's comment.
+    as predictions_on_real_sociedad_celta,
+  -- 151: the ledger 0041 deliberately leaves alone -- 0065's 150 plus the
+  -- same Exhibition attempt as above. The 2026-09-15 run adds ~90 more on top
+  -- of these; see 0041's comment.
   (select count(*) from attempts
     where competition = 'PD' and season = '2026-27'
       and gw = 6 and track = 'match')
