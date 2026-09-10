@@ -5,7 +5,7 @@ for the nine matchday-6 La Liga Fixtures played 15–17 September, and re-Locks 
 into Gameweek 5, whose deadline — 2026-09-11 17:30Z — is the latest Lock that still
 precedes their kick-offs. Real Sociedad–Celta, the one Fixture that was actually brought
 forward to the 3rd, keeps its Lock and its Predictions untouched. Gameweek 6 is left
-holding that one Fixture; Gameweek 5 becomes a Double Gameweek of twenty. Decisions this
+holding that one Fixture; Gameweek 5 becomes a Double Gameweek of nineteen. Decisions this
 touches:
 [ADR-0036](../adr/0036-a-new-competitions-schedule-results-and-lock-come-from-football-data-org.md)
 (the 2026-09-03 amendment records this reversal and what it costs),
@@ -69,14 +69,14 @@ before commit.
 **What the scheduler will do.** `prediction_runs` has `PD` gw 6 `main` and `fill`
 completed and no row for gw 5. Nothing is reset: Gameweek 6's runs did happen and did
 produce the one Prediction that survives. Gameweek 5's `main` fires at 2026-09-11 11:30Z
-and selects work by `coalesce(locked_in_gw, gw) = 5`, which after this migration is twenty
+and selects work by `coalesce(locked_in_gw, gw) = 5`, which after this migration is nineteen
 Fixtures. Every reader downstream — scoring, the gap alert, the dashboard's Gameweek
 range and fixtures listing — already attributes by `locked_in_gw` and needs no change.
 
 **What it costs, stated.** $1.62 already spent on the nine Fixtures' 129 calls (their
 share of Gameweek 6's $1.91, read off `usage.cost`) is sunk, whether or not a call
 produced one of the 59 Predictions withdrawn. Gameweek 5's run grows from ~100 to
-~200 calls, roughly $1.7 more on 2026-09-11 — a run the operator authorises the same way
+~190 calls, roughly $1.6 more on 2026-09-11 — a run the operator authorises the same way
 as any other. The `attempts` ledger keeps 129 rows for gw 6 whose Predictions no longer
 exist; a reader of the ledger will see a Gameweek where nine Fixtures were called between
 eleven and nineteen times each and none of the calls stand. The migration's own comment is where that reader
@@ -161,8 +161,8 @@ finds out why.
       nine; `attempts` 150; Gameweek 5 `2026-09-11T17:30Z`, Gameweek 6 `2026-09-03T17:30Z`;
       both triggers `O`; `schema_migrations` head `0037…`, `0036_the_german_divisions.sql`
       beneath it. Six days and twenty-three hours before the late-run guard's instant.
-- [ ] **Gameweek 5 runs with twenty.** On 2026-09-11 the `main` run's attempt count for
-      `PD` gw 5 is ~200 and every one of the nine has a Prediction from every seat, or a
+- [ ] **Gameweek 5 runs with nineteen.** On 2026-09-11 the `main` run's attempt count for
+      `PD` gw 5 is ~190 and every one of the nine has a Prediction from every seat, or a
       gap alert naming which does not. Recorded here after the run.
 - [x] **ADR-0036's amendment already says this.** Its "What is decided" paragraph records
       the withdrawal, the re-Lock into 5 and the cost; this ticket does not edit it again.

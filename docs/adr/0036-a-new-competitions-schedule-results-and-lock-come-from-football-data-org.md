@@ -69,7 +69,7 @@
 > already overdue and unrescuable past it. This is the one recorded exception to
 > ADR-0013's insert-only rule and to ADR-0015's immutable `locked_in_gw`, lifted inside
 > one migration and restored by it. What it costs, stated: $1.62 of the $1.91 is sunk;
-> Gameweek 5 becomes a Double Gameweek of twenty and its run costs accordingly; the
+> Gameweek 5 becomes a Double Gameweek of nineteen and its run costs accordingly; the
 > `attempts` ledger keeps 129 rows for Gameweek 6 whose Predictions no longer exist, and
 > Gameweek 6 holds one Fixture for the rest of the Season. No `deferred` flag marks any
 > of it, because nothing moved after a Lock; the migration's comment and this note are
