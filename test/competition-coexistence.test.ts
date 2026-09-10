@@ -202,6 +202,41 @@ describe("two Competitions through one scheduler and scorer", () => {
     })).toEqual([]);
   });
 
+  test("a named Competition is scored alone, and an unlisted one not at all",
+    async () => {
+      await client.query("update fixtures set locked_in_gw = 1");
+
+      // The narrowing is the operator's, and it is a filter over the same
+      // list: PD alone comes back, so the four leagues with nothing new to
+      // say are not re-scored Gameweek by Gameweek behind it.
+      expect(await scoreMatchCompetitions({
+        database: client,
+        season: SEASON,
+        competition: "PD",
+        now: () => new Date("2026-08-28T10:00:00Z")
+      })).toEqual([{ competition: "PD", gameweeks: [1] }]);
+
+      // A code the `competitions` table does not list scores nothing rather
+      // than everything: a filter that fell back to the whole list when it
+      // matched none would score four leagues an operator had just excluded.
+      expect(await scoreMatchCompetitions({
+        database: client,
+        season: SEASON,
+        competition: "SA",
+        now: () => new Date("2026-08-28T10:00:00Z")
+      })).toEqual([]);
+
+      // And absent, it is still every listed Competition.
+      expect(await scoreMatchCompetitions({
+        database: client,
+        season: SEASON,
+        now: () => new Date("2026-08-28T10:00:00Z")
+      })).toEqual([
+        { competition: "PD", gameweeks: [1] },
+        { competition: "PL", gameweeks: [1] }
+      ]);
+    });
+
   test("each Competition is scored from its own result alone", async () => {
     await client.query(
       `insert into contexts (

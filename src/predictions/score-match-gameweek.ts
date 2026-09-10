@@ -1836,6 +1836,19 @@ export interface ScoredCompetition {
 export interface ScoreMatchCompetitionsOptions {
   database: Database;
   season: string;
+  /**
+   * One Competition to score instead of every listed one -- an operator's
+   * narrowing, never the cron's, which passes nothing and so scores them all.
+   *
+   * A filter over the same list rather than a second way in: an operator who
+   * names a Competition the `competitions` table does not list scores nothing
+   * and is told so, which is the same answer the unnarrowed run gives for a
+   * Season with no listed Competition at all. The reason to narrow is time --
+   * a pass re-scores every Gameweek of every league it takes (see
+   * `scoreMatchSeason`), and after an Exhibition Run lands in one league the
+   * other four have nothing new to say.
+   */
+  competition?: string;
   now: () => Date;
 }
 
@@ -1850,12 +1863,15 @@ export interface ScoreMatchCompetitionsOptions {
 export async function scoreMatchCompetitions({
   database,
   season,
+  competition: only,
   now
 }: ScoreMatchCompetitionsOptions): Promise<ScoredCompetition[]> {
   const active = await database.query<{ competition: string }>(
     `select competition from competitions
-      where season = $1 order by competition`,
-    [season]
+      where season = $1
+        and ($2::text is null or competition = $2)
+      order by competition`,
+    [season, only ?? null]
   );
   const scored: ScoredCompetition[] = [];
   for (const { competition } of active.rows) {
