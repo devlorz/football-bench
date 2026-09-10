@@ -209,6 +209,19 @@ six.
       their timestamp. (3) The 2026-09-11 06:00Z `fetch.yml` run completes green for `PD`
       and its log shows Gameweek 6 neither rewritten nor refused. All three before
       2026-09-11 11:30Z.
+
+      (1) done: `origin/main` contains `19f0bcb` (the carve-out), checked with
+      `git branch -r --contains` at 2026-09-10 11:54Z. (2) done: applied by the operator
+      at **2026-09-10 11:59:02Z** (`Applied 1:
+      0041_la_liga_gameweek_6_takes_its_nine_back.sql`), after a pre-flight read showed
+      production still at `0040` with matchday 6 at `5 → 9`, `6 → 1` and no Gameweek 5
+      run row. Read back at **2026-09-10 11:59:15Z**, session timezone UTC, identical to
+      the rehearsal's table above in every reading: `10 / 0`, `10 / 10`,
+      `2026-09-11 17:30Z / 2026-09-15 15:30Z`, contexts 1, runs 0, Predictions 9 all on
+      `564682`, attempts 151, both triggers `O`, `schema_migrations` head `0041…`. The ten
+      matchday-6 Fixtures listed by name all read `locked_in_gw = 6`; only Real
+      Sociedad–Celta is settled. Twenty-three and a half hours before the late-run
+      guard's instant. (3) waits on the 2026-09-11 06:00Z fetch.
 - [x] **ADR-0036 is amended, dated 2026-09-10, by this ticket.** The banner says what the
       2026-09-03 amendment decided for the nine and that this reverses it; why Gameweek 6
       was closed to them on the 3rd and open on the 10th; the carve-out as a rule, added
