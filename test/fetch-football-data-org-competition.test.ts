@@ -984,6 +984,69 @@ describe("a Competition read from football-data.org", () => {
       expect(gwMap.get(6)).toBe("2026-09-15T15:30:00.000Z");
     });
 
+  test("a Locked, settled Fixture is not counted against its Gameweek's deadline",
+    async () => {
+      // Gameweek 6 as production holds it once migration 0041 has run: all ten
+      // matchday-6 Fixtures Locked into 6, the deadline moved out to
+      // 2026-09-15 15:30Z, and Real Sociedad–Celta already played on the 3rd.
+      // Its kickoff sits twelve days inside that deadline, so without the
+      // carve-out the daily fetch reports a breach and writes nothing for `PD`
+      // — every day, for the rest of the Season. The promise the alert guards
+      // is that a Prediction precedes its kick-off, and all eight of Real
+      // Sociedad–Celta's did (ADR-0036 rule 3, ticket 0068).
+      const schedule = await realSociedadSchedule();
+      // At 18:00Z on the 3rd the fetch refuses Real Sociedad–Celta an
+      // attachment and leaves it unLocked, which is the one moment all ten can
+      // still be Locked into 6 by hand the way the predict path and migration
+      // 0041 leave them.
+      await fetchAt("2026-09-03T18:00:00Z", schedule);
+      await client.query(
+        `update fixtures set locked_in_gw = 6
+          where competition = $1 and season = $2 and gw = 6`,
+        [COMPETITION, SEASON]
+      );
+
+      const raw = JSON.parse(schedule) as {
+        matches: {
+          id: number;
+          status: string;
+          score: { fullTime: { home: number | null; away: number | null } };
+        }[];
+      };
+      const played = raw.matches.find((m) => m.id === 564682);
+      if (played !== undefined) {
+        played.status = "FINISHED";
+        played.score = { fullTime: { home: 2, away: 1 } };
+      }
+
+      await fetchAt("2026-09-11T06:00:00Z", JSON.stringify(raw));
+
+      const gwMap = new Map((await gameweeks()).map(({ gw, deadline }) => [gw, deadline]));
+      expect(gwMap.get(6)).toBe("2026-09-15T15:30:00.000Z");
+      expect((await queryFixture(564682))?.locked_in_gw).toBe(6);
+    });
+
+  test("a Locked Fixture inside its deadline still breaches while it is unplayed",
+    async () => {
+      // The same shape as the test above with one field changed: the Fixture
+      // inside Gameweek 6's deadline is `TIMED`, not `FINISHED`. Being Locked is
+      // not what earns the carve-out — being settled is. Here the promise is
+      // still live and can still be kept, so the fetch must alert and write
+      // nothing, which is rule 3's commitment-breach case unchanged.
+      const schedule = await realSociedadSchedule();
+      await fetchAt("2026-09-03T18:00:00Z", schedule);
+      await client.query(
+        `update fixtures set locked_in_gw = 6
+          where competition = $1 and season = $2 and gw = 6`,
+        [COMPETITION, SEASON]
+      );
+      const before = await gameweeks();
+
+      await expect(fetchAt("2026-09-11T06:00:00Z", schedule))
+        .rejects.toThrow(KickoffInsideDeadlineError);
+      expect(await gameweeks()).toEqual(before);
+    });
+
   test("past refused fixture marked FINISHED does not breach Gameweek 6 on 16 September after Gameweek 6 locks, and is not predicted",
     async () => {
       // Seed Gameweek 4, 5, and Gameweek 6 (all locked as of 16 September).

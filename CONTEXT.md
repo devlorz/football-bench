@@ -124,7 +124,12 @@ One scheduled match of a Competition, unique within a Competition and Season.
 One Competition's numbered batch of Fixtures — FPL-defined for the Premier League,
 source-defined elsewhere, and a Gameweek in both: "La Liga's Gameweek 5". The unit of
 prediction batching and of leaderboard updates.
-_Avoid_: matchday, round, GW week
+_Avoid_: matchday, round, GW week — as **synonyms**. `matchday` is still the right word for
+one thing it is not a synonym of: football-data.org's own column, the league's round number,
+which says nothing about when the round is played. A Fixture's matchday is its *label* (`gw`)
+and the Gameweek it is predicted in is its *attachment* (`locked_in_gw`), and since ADR-0036's
+2026-09-03 amendment those can differ. Say "matchday 6" or "label 6" for the one and
+"Gameweek 6" for the other; never "matchday" where "Gameweek" is meant.
 
 **Season**:
 One campaign, e.g. `2026-27`, run to the same label by every Competition. With the

@@ -519,9 +519,27 @@ export async function fetchFootballDataOrgCompetition({
     }
   }
 
+  // A Fixture already Locked and already settled at the source is left out of
+  // the derivation entirely (ADR-0036 rule 3, ticket 0068). It cannot be
+  // excluded by `isPastKickoffForKnownGameweek`, which admits every Locked
+  // match by design, and it cannot stop being Locked; so with a deadline moved
+  // out past its kickoff it would report a breach on every fetch for the rest
+  // of the Season and La Liga's schedule, results and later deadlines would
+  // stop landing. The promise the breach alert guards is that a Prediction
+  // precedes its kick-off, and a settled Fixture's Predictions are all already
+  // made — the narrowing is that a breach first observed after the Fixture is
+  // settled is no longer alerted here; the record still shows it in
+  // `predicted_at` against `kickoff_at`.
+  const isSettledAndLocked = (match: { id: number; status: string }): boolean =>
+    storedLockedInGws.has(match.id) && SETTLED_STATUSES.has(match.status);
+
   const kickoffsByGameweek = new Map<number, Date[]>();
   for (const match of scheduled) {
-    if (refusedMatchIds.has(match.id) || isPastKickoffForKnownGameweek(match)) {
+    if (
+      refusedMatchIds.has(match.id)
+      || isPastKickoffForKnownGameweek(match)
+      || isSettledAndLocked(match)
+    ) {
       continue;
     }
     const attachedGw = attachments.get(match.id) ?? match.matchday;
@@ -531,8 +549,9 @@ export async function fetchFootballDataOrgCompetition({
   }
 
   // Only the Gameweeks this response scheduled something for. A Gameweek whose
-  // every Fixture was withdrawn is absent, and keeps the deadline it already
-  // had: with no kickoff there is nothing to derive a new one from, and the
+  // every Fixture was withdrawn is absent — as is one whose every Fixture is
+  // Locked and settled, by the carve-out above — and keeps the deadline it
+  // already had: with no kickoff there is nothing to derive a new one from, and the
   // stored instant is the last one the schedule justified. It has no Fixtures
   // left to predict either way, so what the stale deadline can still do is
   // report a Lock for an empty Gameweek — visible in the record rather than

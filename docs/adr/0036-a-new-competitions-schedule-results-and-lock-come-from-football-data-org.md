@@ -110,6 +110,53 @@
 > - **report** when there was never a commitment — a Fixture not yet Locked and with no
 >   unbreached window for Entrants to predict (nothing was absorbed wrongly; nobody was asked).
 
+> Amended 2026-09-10 by ticket 0068. **The nine go back to Gameweek 6 and are predicted on
+> 2026-09-15, the day the first of them is played.** The 2026-09-03 amendment above decided
+> the opposite for them — re-Locked into Gameweek 5, predicted on the 11th — and this
+> reverses that half of it. Everything else it decided stands: the fifty-nine Predictions
+> stay withdrawn, Real Sociedad–Celta keeps its Lock and its eight Predictions, and rules 1
+> to 4 below are unchanged except for the carve-out this note adds to rule 3.
+>
+> Why Gameweek 6 was closed to them on the 3rd and open on the 10th. It was never the
+> Gameweek number that was wrong: Gameweek 6 is the only home the nine can have, since a
+> Lock must precede every kick-off it covers and Gameweek 7's is 2026-09-18 17:30Z, after
+> all nine are played. What closed it was that its deadline could not move off 2026-09-03
+> 17:30Z while Real Sociedad–Celta pointed at it — migration 0025's trigger — and it has to
+> go on pointing at it. A migration can lift that trigger for one transaction, the way 0037
+> lifted 0022's, and the deadline can be written out to 2026-09-15 15:30Z. What made that
+> unusable on the 3rd is the fetch: with the deadline out there and Real Sociedad–Celta's
+> 2026-09-03 19:00Z kickoff still Locked into the Gameweek, the derivation reads a breach
+> and `KickoffInsideDeadlineError` makes the daily fetch write nothing for `PD` — not once
+> but every day for the rest of the Season, because a Locked match is never excluded from
+> its Gameweek's kickoffs and a `FINISHED` match is still `scheduled`. La Liga's schedule,
+> results and every later deadline would stop landing. Ticket 0068 removes that, and
+> Gameweek 6 becomes usable.
+>
+> What the rule becomes, as a carve-out inside rule 3: **a Fixture that is both already
+> Locked (`locked_in_gw` stored) and settled at the source (`FINISHED` or `AWARDED`) is left
+> out of the kickoffs a Gameweek's deadline is derived and breach-tested over.** A Gameweek
+> whose every Fixture is settled is then absent from the derivation and keeps its stored
+> deadline, which is the documented behaviour for an emptied Gameweek. Rule 3's existing
+> *commitment breach* case keeps its meaning for every Fixture still to be played.
+>
+> The narrowing this costs, stated rather than left to be found in a test name, and it
+> belongs to the first Consequence below as much as to rule 3: **a breach the fetch first
+> observes after the Fixture is settled — a match moved earlier than its Lock and played
+> before the next daily fetch — is no longer alerted by the fetch.** Nothing shouts. The
+> record still shows it, in `predicted_at` against `kickoff_at`. What the alert exists to
+> guard is that a Prediction precedes its kick-off, and for a settled Fixture that question
+> is already answered by rows anyone can read.
+>
+> What it costs, stated. Nothing in Base Model calls: the nine's ~90 calls move from
+> 2026-09-11 to 2026-09-15 and Gameweek 5's run shrinks back to the ten Fixtures matchday 5
+> actually is. What is spent is a second recorded exception to two immutability rules
+> within a fortnight of the first — ADR-0015's immutable `locked_in_gw` and migration
+> 0025's frozen deadline, both lifted inside migration 0041 and both restored by it before
+> it commits — and the one narrowing above. The `attempts` ledger will show Gameweek 6
+> called twice, twelve days apart; 0041's comment is where a reader of it finds out why.
+> What is bought is four days of freshness on nine Fixtures: predicted zero to two days
+> before kick-off instead of four to six.
+
 For every Competition except the Premier League, the daily fetch reads football-data.org:
 the Fixture list, each Fixture's matchday (stored as its Gameweek), kickoff times and final
 scores. The free tier covers all four target leagues under one API and one rate limit that
@@ -150,6 +197,10 @@ being redesigned.
   earlier than the current derived deadline, that is alerted loudly, not absorbed (see the
   2026-09-03 boundary in the amendment above) — a Prediction must always precede kick-off,
   and the ninety-minute buffer plus daily fetch cadence is the margin that keeps that true.
+  One exception, added 2026-09-10 by ticket 0068 and stated in full in the amendment above:
+  a Fixture already Locked and already settled at the source is left out of the derivation
+  entirely, so a breach the fetch first observes after the Fixture is played is no longer
+  alerted — the record still shows it, in `predicted_at` against `kickoff_at`.
 - The stale-season guard (`StaleFootballDataSeasonError`'s pattern) is applied per
   Competition: a Competition whose source has produced no rows by its first deadline fails
   the fetch loudly rather than locking an empty Gameweek.
