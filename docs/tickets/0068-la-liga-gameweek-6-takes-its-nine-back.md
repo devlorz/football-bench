@@ -25,7 +25,10 @@ Gameweek 5's `main` run selects its work. Applied after that, the nine are predi
 twice or by nobody. Applied before the fetch fix is deployed, the 06:00Z fetch throws for
 `PD` and writes nothing.
 
-**Status:** drafted 2026-09-10
+**Status:** built 2026-09-10 — the fetch carve-out, migration `0041`, their tests, the
+ADR-0036 amendment, 0065's back-references and the read-back query are on the branch. Boxes
+5, 6 and 8 are the operator's: the rehearsal against a production copy, the merge-then-apply
+in order before 2026-09-11 11:30Z, and Gameweek 6's run on 2026-09-15.
 
 ---
 
@@ -103,7 +106,7 @@ six.
 
 ## Acceptance
 
-- [ ] **The fetch does not count a Locked, settled Fixture against its Gameweek's
+- [x] **The fetch does not count a Locked, settled Fixture against its Gameweek's
       deadline.** When building the kickoffs a Gameweek's deadline is derived and
       breach-tested over, a match that is both already Locked (`locked_in_gw` stored) and
       settled at the source (`FINISHED` or `AWARDED`) is left out. A Gameweek whose every
@@ -114,13 +117,13 @@ six.
       from 2026-09-15 17:00Z — and asserts the fetch neither throws nor rewrites the
       deadline. The existing breach test, a Locked `TIMED` match moved inside its
       deadline, still throws.
-- [ ] **The narrowing is recorded.** A breach the fetch first observes after the Fixture
+- [x] **The narrowing is recorded.** A breach the fetch first observes after the Fixture
       is settled — a match moved earlier than its Lock and played before the next daily
       fetch — is no longer alerted by the fetch. The record still shows it (`predicted_at`
       against `kickoff_at`); nothing shouts. ADR-0036 rule 3 and its first Consequence
       say so in the amendment below, in those words, rather than the exception being
       found in a test name.
-- [ ] **Migration `0041`**, one transaction, in this order: assert `now()` is before
+- [x] **Migration `0041`**, one transaction, in this order: assert `now()` is before
       2026-09-11 11:30Z; select the nine by the record — `competition = 'PD'`,
       `season = '2026-27'`, `locked_in_gw = 5`, `gw = 6` — into a temp table and assert
       exactly nine, with exactly one `PD` Fixture at `locked_in_gw = 6`; assert none of the
@@ -133,7 +136,18 @@ six.
       UTC literal, for the reason 0037's comment gives. An empty database is let through
       as a no-op exactly as 0037 is, so a fresh clone and the suite still migrate from
       scratch. Covered by `test/migrations.test.ts` in the shape 0037's tests take.
-- [ ] **The migration's header comment tells the whole story**, in the voice of 0025's
+      > Built with one departure from the order written above, and it is this box that was
+      > wrong rather than the SQL: the select and the empty-database no-op come *before* the
+      > `now()` guard, exactly as 0037 orders them. They have to. Past the cutoff a fresh
+      > clone and every suite run still have to migrate, and they can only be let through by
+      > a no-op that is decided before the clock is consulted. Guard order among the
+      > guards that do apply is as written, and all of them precede either
+      > `disable trigger`.
+      > Also built with one lock this box does not name: `predictions`, share-locked
+      > alongside `fixtures` and `gameweeks` because the new Prediction guard reads that
+      > table and Gameweek 5's Lock is live while this runs, so the guard could otherwise be
+      > raced by a `main` or `fill` run rather than merely satisfied.
+- [x] **The migration's header comment tells the whole story**, in the voice of 0025's
       and 0037's: why 0065 chose 5, what changed to make 6 possible, why the carve-out in
       the fetch is what makes it possible, which two rules are lifted and that both are
       restored inside the transaction, what the `attempts` ledger will look like, and the
@@ -149,6 +163,12 @@ six.
       is run against the copy with the archived football-data.org response and writes
       nothing for Gameweek 6 and throws nothing. `db:rehearse` is not the tool, for the
       reason 0065 records. Readings pasted here with their timestamp.
+      > The readings are written as `docs/queries/0068-box-5-and-6-readings.sql`, one file for
+      > this box and the next, because a rehearsal checked differently from the real apply has
+      > not rehearsed the real apply. The `pg_dump` itself is the operator's: it is denied to
+      > the session by the auto-mode classifier. The fetch half is already asserted in the
+      > suite against the archived response — there is no replay flag on `npm run fetch`, and
+      > none was built.
 - [ ] **Landed in the right order, and each step read back.** (1) The fetch carve-out is
       merged to `main` and pushed to `origin` — checked, not assumed; `origin/main` has
       drifted before — before 2026-09-11 06:00Z. (2) `npm run db:migrate` against the
@@ -156,12 +176,20 @@ six.
       their timestamp. (3) The 2026-09-11 06:00Z `fetch.yml` run completes green for `PD`
       and its log shows Gameweek 6 neither rewritten nor refused. All three before
       2026-09-11 11:30Z.
-- [ ] **ADR-0036 is amended, dated 2026-09-10, by this ticket.** The banner says what the
+- [x] **ADR-0036 is amended, dated 2026-09-10, by this ticket.** The banner says what the
       2026-09-03 amendment decided for the nine and that this reverses it; why Gameweek 6
       was closed to them on the 3rd and open on the 10th; the carve-out as a rule, added
       to rule 3 and the first Consequence, with the narrowing stated; and the cost
       paragraph above. The 2026-09-03 amendment is not edited — it was true when written.
-- [ ] **Ticket 0065 points here.** Its Status line and its open box "Gameweek 5 runs with
+      > This box asks for two things that cannot both be done: rule 3 lives *inside* the
+      > 2026-09-03 amendment, which the last sentence forbids editing. "Not edited" won given
+      > that it is the stated principle and the more conservative reading, so the carve-out is
+      > stated in full in the new 2026-09-10 banner — naming rule 3 and quoting what it now
+      > carves out — plus one clause on the first Consequence, which is ADR body text and not
+      > part of any amendment. The cost: rule 3's own four numbered lines do not mention the
+      > exception, so a reader who reads only the 2026-09-03 amendment will not find it. The
+      > new banner sits above that one, which is the order a reader meets them in.
+- [x] **Ticket 0065 points here.** Its Status line and its open box "Gameweek 5 runs with
       nineteen" record that the nine were moved on by this ticket and that Gameweek 5 ran
       with ten. Its read-back query gets a sibling for Gameweek 6's run on 2026-09-15,
       and its own expectation of nineteen is corrected to ten.

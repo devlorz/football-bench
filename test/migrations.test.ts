@@ -244,7 +244,8 @@ describe("applying migrations", () => {
       "0037_la_liga_gameweek_6s_nine_early_predictions_are_withdrawn.sql",
       "0038_a_shadow_seat_asks_without_being_ranked.sql",
       "0039_three_shadow_seats_join_the_premier_league.sql",
-      "0040_the_glm_shadow_leaves_before_it_is_asked.sql"
+      "0040_the_glm_shadow_leaves_before_it_is_asked.sql",
+      "0041_la_liga_gameweek_6_takes_its_nine_back.sql"
     ]);
 
     // Relabelled, not rewritten: every row of every rekeyed table comes back
@@ -283,25 +284,30 @@ describe("applying migrations", () => {
     ]);
   });
 
-  // Migration 0037 refuses to run at or after this instant (Gameweek 5's
-  // `main` run) -- by design, since past it the nine it moves would be
-  // re-Locked into a Gameweek nobody will predict. The two tests below seed
-  // that exact nine-and-one shape and run every migration including 0037,
-  // so once real time passes this instant they would hit that "too late"
-  // guard first and fail for the wrong reason -- not a regression, just a
-  // migration whose subject stopped being testable. Skipped past it rather
-  // than left red; delete both once ticket 0065's production apply (box 5)
-  // is done and this migration is history.
-  const migration0037Cutoff = new Date("2026-09-11T11:30:00Z");
+  // Migrations 0037 and 0041 both refuse to run at or after this instant
+  // (Gameweek 5's `main` run) -- by design, since past it the nine either one
+  // moves would land in a Gameweek nobody will predict. The tests below seed
+  // that exact nine-and-one shape and run every migration including both, so
+  // once real time passes this instant they would hit that "too late" guard
+  // first and fail for the wrong reason -- not a regression, just a migration
+  // whose subject stopped being testable. Skipped past it rather than left
+  // red; delete them once tickets 0065 and 0068 have been applied to
+  // production and both migrations are history.
+  const gameweek5MainRunCutoff = new Date("2026-09-11T11:30:00Z");
 
-  // The PD Gameweek 6 bug's shape, shared by both tests below: two
+  // The PD Gameweek 6 bug's shape, shared by the tests below: two
   // Gameweeks and ten Fixtures, nine of which kick off well after the wrong
   // deadline and one -- Real Sociedad-Celta -- which genuinely does not.
   // `resultFor` lets a test give one of the nine a settled result without a
-  // second copy of these inserts.
+  // second copy of these inserts, and `nineLockedInGw` lets a test seed the
+  // shape 0037 leaves behind, which is the shape 0041 is about.
   async function seedPdGameweek6Fixtures(
-    resultFor?: { fixtureId: number; result: string }
+    options: {
+      resultFor?: { fixtureId: number; result: string };
+      nineLockedInGw?: number;
+    } = {}
   ): Promise<void> {
+    const { resultFor, nineLockedInGw = 6 } = options;
     await client.query(
       `insert into gameweeks (competition, season, gw, deadline_at)
        values
@@ -325,18 +331,26 @@ describe("applying migrations", () => {
         `insert into fixtures (
            competition, season, fixture_id, gw, locked_in_gw,
            home_team, away_team, kickoff_at, result
-         ) values ('PD', '2026-27', $1, 6, 6, $2, $3, $4, $5)`,
+         ) values ('PD', '2026-27', $1, 6, $6, $2, $3, $4, $5)`,
         [
           fixtureId, homeTeam, awayTeam, kickoffAt,
-          resultFor?.fixtureId === fixtureId ? resultFor.result : null
+          resultFor?.fixtureId === fixtureId ? resultFor.result : null,
+          fixtureId === 1 ? 6 : nineLockedInGw
         ]
       );
     }
   }
 
-  test.skipIf(new Date() >= migration0037Cutoff)(
-    "withdraws La Liga Gameweek 6's nine early Predictions and re-locks them into 5",
+  test.skipIf(new Date() >= gameweek5MainRunCutoff)(
+    "withdraws La Liga Gameweek 6's nine early Predictions, then gives them Gameweek 6 back",
     async () => {
+      // 0037 and 0041 are a pair and the chain runs both: 0037 withdraws the
+      // nine's Predictions and re-Locks them into Gameweek 5, and 0041 -- once
+      // ticket 0068's fetch carve-out made Gameweek 6 an available home again
+      // -- moves them back and pushes Gameweek 6's deadline out to the day the
+      // first of them is played. Read here as the end state, because that is
+      // what a fresh clone gets. 0041's own nine-and-one guard is what still
+      // fails this test if 0037 stops moving them.
       await applyRealMigrationsThrough(
         client, "0036_the_german_divisions.sql"
       );
@@ -388,10 +402,9 @@ describe("applying migrations", () => {
         `select fixture_id, locked_in_gw from fixtures
           where competition = 'PD' order by fixture_id`
       );
-      expect(fixtures.rows[0]).toEqual({ fixture_id: 1, locked_in_gw: 6 });
-      expect(fixtures.rows.slice(1)).toEqual(
-        Array.from({ length: 9 }, (_, index) => (
-          { fixture_id: index + 2, locked_in_gw: 5 }
+      expect(fixtures.rows).toEqual(
+        Array.from({ length: 10 }, (_, index) => (
+          { fixture_id: index + 1, locked_in_gw: 6 }
         ))
       );
 
@@ -406,12 +419,17 @@ describe("applying migrations", () => {
         `select tgname, tgenabled from pg_trigger
           where (tgname, tgrelid) in (
             ('fixture_locked_gameweek_is_immutable', 'fixtures'::regclass),
-            ('predictions_are_immutable', 'predictions'::regclass)
+            ('predictions_are_immutable', 'predictions'::regclass),
+            ('gameweek_deadline_is_immutable_once_committed', 'gameweeks'::regclass)
           )
           order by tgname`
       );
       expect(triggers.rows).toEqual([
         { tgname: "fixture_locked_gameweek_is_immutable", tgenabled: "O" },
+        {
+          tgname: "gameweek_deadline_is_immutable_once_committed",
+          tgenabled: "O"
+        },
         { tgname: "predictions_are_immutable", tgenabled: "O" }
       ]);
 
@@ -420,12 +438,173 @@ describe("applying migrations", () => {
       );
       expect(deadlines.rows).toEqual([
         { gw: 5, deadline_at: new Date("2026-09-11T17:30:00Z") },
-        { gw: 6, deadline_at: new Date("2026-09-03T17:30:00Z") }
+        { gw: 6, deadline_at: new Date("2026-09-15T15:30:00Z") }
       ]);
     }
   );
 
-  test.skipIf(new Date() >= migration0037Cutoff)(
+  test.skipIf(new Date() >= gameweek5MainRunCutoff)(
+    "clears the nine's stale Gameweek 6 context and run rows on the way back",
+    async () => {
+      // 0041 alone, over the shape 0037 left behind. The nine are moved back to
+      // Gameweek 6 and the deadline follows them out to 2026-09-15 15:30Z, but
+      // the packet they would be predicted from and the run row that would make
+      // the scheduler skip them are both from 2026-09-03, and both have to go.
+      // Real Sociedad-Celta's context stays: it was predicted from it.
+      await applyRealMigrationsThrough(
+        client, "0040_the_glm_shadow_leaves_before_it_is_asked.sql"
+      );
+      await seedPdGameweek6Fixtures({ nineLockedInGw: 5 });
+      for (let fixtureId = 1; fixtureId <= 10; fixtureId += 1) {
+        await client.query(
+          `insert into contexts (competition, season, gw, track, fixture_id, hash, body)
+           values ('PD', '2026-27', 6, 'match', $1, $2, 'the context')`,
+          [fixtureId, `hash-${fixtureId}`]
+        );
+      }
+      await client.query(
+        `insert into prediction_runs (
+           competition, season, gw, trigger, scheduled_for, started_at,
+           completed_at
+         ) values
+           ('PD', '2026-27', 6, 'main', '2026-09-03T11:30:00Z',
+            '2026-09-03T11:30:04Z', '2026-09-03T11:56:00Z'),
+           ('PD', '2026-27', 6, 'fill', '2026-09-03T15:30:00Z',
+            '2026-09-03T15:30:03Z', '2026-09-03T15:37:00Z')`
+      );
+
+      await applyMigrations(client);
+
+      const contexts = await client.query<{ fixture_id: number }>(
+        `select fixture_id from contexts
+          where competition = 'PD' and gw = 6 order by fixture_id`
+      );
+      expect(contexts.rows).toEqual([{ fixture_id: 1 }]);
+
+      const runs = await client.query<{ count: number }>(
+        `select count(*)::int as count from prediction_runs
+          where competition = 'PD' and gw = 6`
+      );
+      expect(runs.rows).toEqual([{ count: 0 }]);
+
+      const deadlines = await client.query<{ gw: number; deadline_at: Date }>(
+        "select gw, deadline_at from gameweeks where competition = 'PD' order by gw"
+      );
+      expect(deadlines.rows).toEqual([
+        { gw: 5, deadline_at: new Date("2026-09-11T17:30:00Z") },
+        { gw: 6, deadline_at: new Date("2026-09-15T15:30:00Z") }
+      ]);
+    }
+  );
+
+  test.skipIf(new Date() >= gameweek5MainRunCutoff)(
+    "refuses to move a Fixture that has already been predicted under Gameweek 5",
+    async () => {
+      // The guard 0037 did not need and 0041 does: past Gameweek 5's Lock the
+      // nine may already carry Predictions made against it, and moving them
+      // then would leave a Prediction standing under a Gameweek it was never
+      // made for. The full nine-and-one shape, so this is the guard that fires
+      // and not the row-count one above it.
+      await applyRealMigrationsThrough(
+        client, "0040_the_glm_shadow_leaves_before_it_is_asked.sql"
+      );
+      await seedPdGameweek6Fixtures({ nineLockedInGw: 5 });
+      await client.query(
+        `insert into models (id, name, base_model, provider, prompt_version, role)
+         values ('seat-1', 'Seat 1', 'provider/base-model', 'provider', 'match/v1', 'entrant');
+         insert into contexts (competition, season, gw, track, fixture_id, hash, body)
+         values ('PD', '2026-27', 5, 'match', 2, 'hash-2', 'the context');
+         insert into predictions (
+           model_id, competition, season, fixture_id, probs, pred_home,
+           pred_away, context_id, attempts_used
+         ) values (
+           'seat-1', 'PD', '2026-27', 2, '{"H":0.4,"D":0.3,"A":0.3}', 1, 1,
+           (select id from contexts), 1
+         )`
+      );
+
+      const failure = await applyMigrations(client)
+        .then(() => null, (error: unknown) => error);
+      expect(failure).toBeInstanceOf(Error);
+      expect(((failure as Error).cause as Error).message)
+        .toMatch(/1 Prediction\(s\) already stand against them/);
+
+      // One transaction, rolled back whole: the deadline never moved either.
+      const untouched = await client.query<{ locked_in_gw: number }>(
+        `select locked_in_gw from fixtures
+          where competition = 'PD' and season = '2026-27' and fixture_id = 2`
+      );
+      expect(untouched.rows).toEqual([{ locked_in_gw: 5 }]);
+      const deadline = await client.query<{ deadline_at: Date }>(
+        "select deadline_at from gameweeks where competition = 'PD' and gw = 6"
+      );
+      expect(deadline.rows).toEqual([
+        { deadline_at: new Date("2026-09-03T17:30:00Z") }
+      ]);
+    }
+  );
+
+  test.skipIf(new Date() >= gameweek5MainRunCutoff)(
+    "refuses to move one of the nine that already has a result",
+    async () => {
+      // 0041's own copy of the guard 0037 has. A settled Fixture has been
+      // played, so moving its Lock rewrites which Gameweek it was predicted
+      // under after the fact -- and Gameweek 6's deadline is the 15th, which its
+      // kickoff would then sit inside.
+      await applyRealMigrationsThrough(
+        client, "0040_the_glm_shadow_leaves_before_it_is_asked.sql"
+      );
+      await seedPdGameweek6Fixtures({
+        resultFor: {
+          fixtureId: 2,
+          result: '{"home_goals": 1, "away_goals": 0, "outcome": "H"}'
+        },
+        nineLockedInGw: 5
+      });
+
+      const failure = await applyMigrations(client)
+        .then(() => null, (error: unknown) => error);
+      expect(((failure as Error).cause as Error).message)
+        .toMatch(/already has a result or is unscheduled/);
+      const untouched = await client.query<{ locked_in_gw: number }>(
+        `select locked_in_gw from fixtures
+          where competition = 'PD' and season = '2026-27' and fixture_id = 2`
+      );
+      expect(untouched.rows).toEqual([{ locked_in_gw: 5 }]);
+    }
+  );
+
+  test.skipIf(new Date() >= gameweek5MainRunCutoff)(
+    "refuses to write a deadline it did not compute off the record",
+    async () => {
+      // The deadline is computed from the nine's earliest kickoff and then
+      // asserted equal to 2026-09-15T15:30:00Z. A record whose kickoffs have
+      // moved under this file is a record it has stopped describing, and the
+      // point of the assertion is that it refuses rather than writing an instant
+      // nobody checked. One kickoff an hour earlier is enough to say so.
+      await applyRealMigrationsThrough(
+        client, "0040_the_glm_shadow_leaves_before_it_is_asked.sql"
+      );
+      await seedPdGameweek6Fixtures({ nineLockedInGw: 5 });
+      await client.query(
+        `update fixtures set kickoff_at = '2026-09-15T16:00:00Z'
+          where competition = 'PD' and season = '2026-27' and fixture_id = 2`
+      );
+
+      const failure = await applyMigrations(client)
+        .then(() => null, (error: unknown) => error);
+      expect(((failure as Error).cause as Error).message)
+        .toMatch(/expected the nine to Lock at 2026-09-15 15:30Z/);
+      const deadline = await client.query<{ deadline_at: Date }>(
+        "select deadline_at from gameweeks where competition = 'PD' and gw = 6"
+      );
+      expect(deadline.rows).toEqual([
+        { deadline_at: new Date("2026-09-03T17:30:00Z") }
+      ]);
+    }
+  );
+
+  test.skipIf(new Date() >= gameweek5MainRunCutoff)(
     "refuses to withdraw a Fixture that already has a result",
     async () => {
       await applyRealMigrationsThrough(
@@ -434,8 +613,10 @@ describe("applying migrations", () => {
       // The full nine-plus-one shape, so the "already has a result" guard is
       // the one that fires -- not the row-count guard above it.
       await seedPdGameweek6Fixtures({
-        fixtureId: 2,
-        result: '{"home_goals": 1, "away_goals": 0, "outcome": "H"}'
+        resultFor: {
+          fixtureId: 2,
+          result: '{"home_goals": 1, "away_goals": 0, "outcome": "H"}'
+        }
       });
 
       const failure = await applyMigrations(client)
@@ -511,7 +692,8 @@ describe("applying migrations", () => {
       "0037_la_liga_gameweek_6s_nine_early_predictions_are_withdrawn.sql",
       "0038_a_shadow_seat_asks_without_being_ranked.sql",
       "0039_three_shadow_seats_join_the_premier_league.sql",
-      "0040_the_glm_shadow_leaves_before_it_is_asked.sql"
+      "0040_the_glm_shadow_leaves_before_it_is_asked.sql",
+      "0041_la_liga_gameweek_6_takes_its_nine_back.sql"
     ]);
     const backfill = await client.query<{
       observed_at: Date;

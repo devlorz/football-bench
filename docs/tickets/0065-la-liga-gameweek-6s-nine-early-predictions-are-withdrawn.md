@@ -21,7 +21,12 @@ precondition: with the nine re-Locked into 5 by this migration, the fetch's labe
 deadline derivation reads Gameweek 5's deadline off label-5 kickoffs and Gameweek 6's off
 label-6 kickoffs, both of which are already what the record holds, and writes nothing.
 
-**Status:** applied to production 2026-09-04 — box 6 waits on Gameweek 5's run, 2026-09-11
+**Status:** applied to production 2026-09-04. Superseded in part by
+[ticket 0068](0068-la-liga-gameweek-6-takes-its-nine-back.md), drafted 2026-09-10: the nine
+were moved on out of Gameweek 5 and back into Gameweek 6 before Gameweek 5's run, so
+Gameweek 5 ran with the ten Fixtures matchday 5 actually is, not nineteen. Everything else
+this ticket did stands — the fifty-nine Predictions stay withdrawn. Box 6 below is corrected
+to ten and still waits on that run, 2026-09-11.
 
 ---
 
@@ -81,6 +86,14 @@ as any other. The `attempts` ledger keeps 129 rows for gw 6 whose Predictions no
 exist; a reader of the ledger will see a Gameweek where nine Fixtures were called between
 eleven and nineteen times each and none of the calls stand. The migration's own comment is where that reader
 finds out why.
+
+> The paragraph above and the "Double Gameweek of nineteen" in the opening are left as
+> written, because they were true when written — the repo does not edit a record that was
+> honest on its date, the way ADR-0036's amendments do not edit each other. What actually
+> happened is in the Status line: ticket 0068 moved the nine back into Gameweek 6 before
+> 2026-09-11, so Gameweek 5 ran with ten Fixtures and ~100 calls, not nineteen and ~190,
+> and the ~$1.6 costed here was never spent on the 11th. The nine's ~90 calls moved to
+> 2026-09-15 instead. The sunk $1.62 is unaffected: that was already spent on the 3rd.
 
 ## Acceptance
 
@@ -161,8 +174,13 @@ finds out why.
       nine; `attempts` 150; Gameweek 5 `2026-09-11T17:30Z`, Gameweek 6 `2026-09-03T17:30Z`;
       both triggers `O`; `schema_migrations` head `0037…`, `0036_the_german_divisions.sql`
       beneath it. Six days and twenty-three hours before the late-run guard's instant.
-- [ ] **Gameweek 5 runs with nineteen.** On 2026-09-11 the `main` run's attempt count for
-      `PD` gw 5 is ~190 and every one of the nine has a Prediction from every seat, or a
-      gap alert naming which does not. Recorded here after the run.
+- [ ] **Gameweek 5 runs with ten**, not the nineteen this ticket expected. Ticket 0068's
+      migration 0041 moved the nine back into Gameweek 6 before this run, to be predicted on
+      2026-09-15 instead. On 2026-09-11 the `main` run's attempt count for `PD` gw 5 is ~100
+      and every one of matchday 5's ten has a Prediction from every seat, or a gap alert
+      naming which does not. Read back by
+      `docs/queries/0065-box-6-gameweek-5-runs-with-ten.sql`, whose sibling
+      `docs/queries/0068-box-8-gameweek-6-runs-with-nine.sql` reads the nine's own run four
+      days later. Recorded here after the run.
 - [x] **ADR-0036's amendment already says this.** Its "What is decided" paragraph records
       the withdrawal, the re-Lock into 5 and the cost; this ticket does not edit it again.
