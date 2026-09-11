@@ -118,6 +118,11 @@ other than this runbook wrote them.
 The scheduled job takes over from Gameweek 2 (`npm run fpl:scheduled`). Nothing else needs
 doing on the day — the opening is the only Gameweek that is started rather than run.
 
+To run the next Gameweek by hand before the scheduler's six-hour lead, `npm run fpl:now`
+is the same job with `FPL_RUN_LEAD_HOURS=30`: it picks up any Gameweek whose Lock is within
+thirty hours, skips every Entrant that already holds it, and leaves the run open for the
+scheduler if a seat produces nothing. A paid run, authorised like any other.
+
 ## What this runbook does not cover
 
 - The Match track. It has no opening: its first Predictions are written by the predict job
