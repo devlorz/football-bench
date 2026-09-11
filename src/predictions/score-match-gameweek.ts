@@ -1572,6 +1572,29 @@ async function writeComparisons(
 }
 
 /**
+ * Every Gameweek this Competition's Match track has a published row for.
+ *
+ * One definition for two readers, which is not tidiness: `targetGameweeks` asks
+ * it which snapshots one scoring call has to rewrite, and `scoreMatchSeason`
+ * asks it which Locks a pass therefore need not name. Those two answers are the
+ * same list or they are a bug — a pass that named a Gameweek the sweep already
+ * covers would merely be slow, but one that skipped a Gameweek the sweep does
+ * not cover would leave it unscored and say nothing.
+ */
+async function publishedGameweeks(
+  database: Database,
+  competition: string,
+  season: string
+): Promise<number[]> {
+  const published = await database.query<{ gw: number }>(
+    `select distinct gw from scores
+      where competition = $1 and season = $2 and track = 'match'`,
+    [competition, season]
+  );
+  return published.rows.map(({ gw }) => gw);
+}
+
+/**
  * Which Gameweeks this run rewrites: the one asked for, and every later
  * Gameweek already published.
  *
@@ -1587,14 +1610,10 @@ async function targetGameweeks(
   season: string,
   gameweek: number
 ): Promise<number[]> {
-  const published = await database.query<{ gw: number }>(
-    `select distinct gw from scores
-      where competition = $1 and season = $2 and track = 'match'`,
-    [competition, season]
-  );
+  const published = await publishedGameweeks(database, competition, season);
   return [
     gameweek,
-    ...published.rows.map(({ gw }) => gw).filter((gw) => gw > gameweek)
+    ...published.filter((gw) => gw > gameweek)
   ].sort((one, other) => one - other);
 }
 
@@ -1769,6 +1788,29 @@ export async function scoreMatchGameweek({
   }
 }
 
+/**
+ * Which Gameweeks one Season pass names: the earliest Lock, plus each Lock
+ * `scores` does not yet hold.
+ *
+ * Separate from the pass itself so the rule can be read and asserted as
+ * arithmetic — it is the whole difference between a run that grows with the
+ * Season and one that grows with its square, and no row it writes betrays
+ * which of the two produced it.
+ *
+ * The earliest Lock is taken from the numbers rather than from the position,
+ * though `scoreMatchSeason`'s own query orders them: this is exported and read
+ * as a rule, and a rule that quietly meant "whichever Lock happens to be first"
+ * would drop the correction sweep on an unordered list without failing.
+ */
+export function seasonScoringGameweeks(
+  locked: number[],
+  published: number[]
+): number[] {
+  const earliest = Math.min(...locked);
+  const scored = new Set(published);
+  return locked.filter((gw) => gw === earliest || !scored.has(gw));
+}
+
 export interface ScoreMatchSeasonOptions {
   database: Database;
   competition: string;
@@ -1790,13 +1832,19 @@ export interface ScoreMatchSeasonOptions {
  * declines to write a record of zeros for one, and its Coherence and
  * behavioural rows are answerable the moment the Lock passes.
  *
- * ponytail: every Gameweek re-bootstraps every later snapshot, so the run is
- * quadratic in Gameweeks over its most expensive part — 10,000 resamples per
- * published comparison per target, minutes rather than seconds by May. If that
- * outgrows a daily job, the same rows come from scoring `min(gameweeks)` once,
- * which sweeps corrections through every published snapshot, plus each locked
- * Gameweek absent from `scores`, which bootstraps the genuinely new ones: one
- * more query for a linear number of targets.
+ * Not, however, by naming every Lock. That is what made the pass quadratic:
+ * `scoreMatchGameweek(gw)` already rewrites every published Gameweek above
+ * `gw`, so a Season at N Gameweeks paid N(N+1)/2 target-passes for N Gameweeks
+ * of rows, and the most expensive thing inside one is a 10,000-resample
+ * bootstrap per published comparison. The earliest Lock alone
+ * covers every published Gameweek there is, since every one of them is above
+ * it. What it cannot cover is a Gameweek nobody has scored yet, absent from
+ * `scores` and so absent from that list, and those are named on their own —
+ * which is the whole of `seasonScoringGameweeks` and the whole difference.
+ *
+ * Ascending, but nothing depends on the order beyond a Gameweek not being
+ * published twice: a Gameweek's rows are folded from stored Predictions and
+ * Fixtures rather than from any earlier `scores` row.
  */
 export async function scoreMatchSeason({
   database,
@@ -1812,13 +1860,18 @@ export async function scoreMatchSeason({
     [competition, season]
   );
   const gameweeks = locked.rows.map(({ gw }) => gw);
+  const named = seasonScoringGameweeks(
+    gameweeks, await publishedGameweeks(database, competition, season)
+  );
 
   const scoredAt = now();
-  for (const gameweek of gameweeks) {
+  for (const gameweek of named) {
     await scoreMatchGameweek({
       database, competition, season, gameweek, now: () => scoredAt
     });
   }
+  // Every Gameweek the Locks own, which is what this run wrote a record for —
+  // the ones it named and the ones the earliest Lock swept.
   return gameweeks;
 }
 

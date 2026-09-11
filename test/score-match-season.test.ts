@@ -12,7 +12,9 @@ import {
   BET_POINTS_METRIC,
   BET_POINTS_SEASON_TO_DATE_METRIC,
   RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC,
-  scoreMatchSeason
+  scoreMatchGameweek,
+  scoreMatchSeason,
+  seasonScoringGameweeks
 } from "../src/predictions/score-match-gameweek.js";
 import { MATCH_PROMPT_VERSION } from "../src/predictions/openrouter-entrant.js";
 
@@ -50,7 +52,8 @@ describe("scoring a whole Season in one daily run", () => {
     await client.query(
       `insert into gameweeks (season, gw, deadline_at) values
          ('2026-27', 1, '2026-08-21T17:30:00Z'),
-         ('2026-27', 2, '2026-08-28T17:30:00Z')`
+         ('2026-27', 2, '2026-08-28T17:30:00Z'),
+         ('2026-27', 3, '2026-09-04T17:30:00Z')`
     );
     for (const id of ENTRANTS) {
       await client.query(
@@ -148,6 +151,52 @@ describe("scoring a whole Season in one daily run", () => {
     }
   };
 
+  /** A third Gameweek, so a quadratic pass and a linear one differ at all. */
+  const playThreeGameweeks = async (): Promise<void> => {
+    await playTwoGameweeks();
+    await storeFixture(3, 3);
+    await settle(3, 0, 2);
+    for (const id of ENTRANTS) {
+      await predict(id, 3, 0, 1);
+    }
+  };
+
+  /** The pass as it was: every Lock named, each rewriting the published ones
+   *  above it. Written out rather than imported, because the point of the
+   *  equivalence test is that it runs a shape this file no longer has. */
+  const scoreEveryLock = async (at: Date): Promise<void> => {
+    const locked = await client.query<{ gw: number }>(
+      `select distinct locked_in_gw as gw from fixtures
+        where season = $1 and locked_in_gw is not null order by gw`,
+      [SEASON]
+    );
+    for (const { gw } of locked.rows) {
+      await scoreMatchGameweek({
+        database: client, competition: "PL", season: SEASON, gameweek: gw,
+        now: () => at
+      });
+    }
+  };
+
+  /** Every stored row but its stamp — what two shapes of the same pass have to
+   *  agree on row for row. The stamp is out because the upsert is conditional:
+   *  a row whose value did not change keeps the `scored_at` it already had, so
+   *  one row can carry different stamps under two shapes that agree on every
+   *  figure in it, depending only on which pass last had cause to rewrite it.
+   *  That is the upsert working, not the shapes disagreeing. */
+  const record = (): Promise<unknown[]> =>
+    client.query(
+      `select competition, season, gw, track, model_id, metric, value, n, detail
+         from scores order by gw, model_id, metric`
+    ).then(({ rows }) => rows);
+
+  /** Every stored row with its stamp, which is what an idempotent pass leaves
+   *  untouched: an upsert that rewrote a value or restamped a row would keep
+   *  the count and still not be the same record. */
+  const storedRows = (): Promise<unknown[]> =>
+    client.query("select * from scores order by gw, model_id, metric")
+      .then(({ rows }) => rows);
+
   test("scores every Gameweek the Season's Locks own, not only the last", async () => {
     await playTwoGameweeks();
 
@@ -173,36 +222,39 @@ describe("scoring a whole Season in one daily run", () => {
   });
 
   test("recomputes an earlier Gameweek whose result was corrected", async () => {
-    await playTwoGameweeks();
+    // Three Gameweeks rather than two, so the last published snapshot is one
+    // the corrected Gameweek is not adjacent to: the sweep has to reach it
+    // from the earliest Lock, which is the only Lock a pass now names here.
+    await playThreeGameweeks();
     await scoreSeason();
     expect(await points(ENTRANT, 1)).toBe(5);
+    expect(await points(ENTRANT, 3, MATCH_POINTS_SEASON_TO_DATE_METRIC))
+      .toBe(10);
 
     // The Gameweek the daily run would never revisit if it scored only the
     // Season's latest Lock: `scoreMatchGameweek` looks forward, never back.
     // 5-1 against a predicted 2-0: the right winner at the wrong goal
-    // difference, so 2 rather than 5, and 5 rather than 8 through the Season.
+    // difference, so 2 rather than 5, and 7 rather than 10 through the Season.
     await settle(1, 5, 1);
     await scoreSeason(RESCORED_AT);
 
     expect(await points(ENTRANT, 1)).toBe(2);
     expect(await points(ENTRANT, 2, MATCH_POINTS_SEASON_TO_DATE_METRIC))
       .toBe(5);
+    expect(await points(ENTRANT, 3, MATCH_POINTS_SEASON_TO_DATE_METRIC))
+      .toBe(7);
   });
 
   test("re-running over unchanged rows duplicates nothing", async () => {
     await playTwoGameweeks();
     await scoreSeason();
-    const rows = (): Promise<unknown[]> =>
-      client.query("select * from scores order by gw, model_id, metric")
-        .then(({ rows: stored }) => stored);
 
-    const first = await rows();
+    const first = await storedRows();
     await scoreSeason();
 
-    // Every column, not the count: an upsert that rewrote a value or restamped
-    // a row would keep the count and still not be the same record. The stamp is
-    // among them, and stays put because the clock decides nothing but itself.
-    expect(await rows()).toEqual(first);
+    // Every column, not the count. The stamp is among them, and stays put
+    // because the clock decides nothing but itself.
+    expect(await storedRows()).toEqual(first);
   });
 
   test("a Season with nothing settled writes no zero-valued score", async () => {
@@ -289,12 +341,125 @@ describe("scoring a whole Season in one daily run", () => {
 
       // Idempotently: the second run recomputes the same figures and leaves
       // every row, stamp included, exactly where it was.
-      const stored = (): Promise<unknown[]> =>
-        client.query("select * from scores order by gw, model_id, metric")
-          .then(({ rows }) => rows);
-      const before = await stored();
+      const before = await storedRows();
       await scoreSeason(RESCORED_AT);
-      expect(await stored()).toEqual(before);
+      expect(await storedRows()).toEqual(before);
+    });
+
+  /**
+   * Two Gameweeks scored, then a third arriving in the same pass as a
+   * correction to the first — the day a pass has both a snapshot to sweep and
+   * a Gameweek to bootstrap, and so the day the two shapes have the most room
+   * to disagree. Returns the record the pass leaves, stamp excepted.
+   */
+  const replay = async (
+    pass: (at: Date) => Promise<unknown>
+  ): Promise<unknown[]> => {
+    await pass(SCORED_AT);
+    await storeFixture(3, 3);
+    await settle(3, 0, 2);
+    for (const id of ENTRANTS) {
+      await predict(id, 3, 0, 1);
+    }
+    await settle(1, 5, 1);
+    await pass(RESCORED_AT);
+    return record();
+  };
+
+  test("writes what naming every Lock wrote, over the same record", async () => {
+    await playTwoGameweeks();
+    const named = await replay(scoreEveryLock);
+    expect(named.length).toBeGreaterThan(0);
+
+    // Back to the same starting record, so the second replay differs in the
+    // pass and in nothing else. The Predictions go too: they carry the context
+    // ids the first replay wrote, and a diff over rows rebuilt from different
+    // ids would be comparing two records rather than two shapes.
+    await client.query(
+      `truncate scores, predictions, contexts, fixtures
+       restart identity cascade`
+    );
+    await playTwoGameweeks();
+
+    // Every row of every metric, Reference Line and comparison, the bootstrap
+    // intervals in `detail` among them: the pass got cheaper and nothing else.
+    expect(await replay(scoreSeason)).toEqual(named);
+  });
+
+  test("names the earliest Lock, plus each Lock `scores` does not hold", () => {
+    // Nothing published: every Lock is new, so every Lock is named. This is
+    // the bootstrap, and it is the one case both shapes always agreed on.
+    expect(seasonScoringGameweeks([1, 2, 3], [])).toEqual([1, 2, 3]);
+
+    // Published through the Season: one name, whose own targets are the other
+    // two. Production's PD held 6 Locks and cost 21 target-passes this way;
+    // one name costs it 6.
+    expect(seasonScoringGameweeks([1, 2, 3], [1, 2, 3])).toEqual([1]);
+
+    // The daily case: the Season has moved on by a Lock nobody has scored.
+    expect(seasonScoringGameweeks([1, 2, 3], [1, 2])).toEqual([1, 3]);
+
+    // Unordered, because this is exported and read as a rule. Taken
+    // positionally it would name 3, whose targets are nothing above it, and
+    // the correction sweep would be gone without a row to show for it.
+    expect(seasonScoringGameweeks([3, 1, 2], [1, 2, 3])).toEqual([1]);
+
+    expect(seasonScoringGameweeks([], [])).toEqual([]);
+  });
+
+  test("bootstraps a Lock `scores` has never held", async () => {
+    await playTwoGameweeks();
+    await scoreSeason();
+    expect(await points(ENTRANT, 3)).toBeNull();
+
+    await storeFixture(3, 3);
+    await settle(3, 0, 2);
+    for (const id of ENTRANTS) {
+      await predict(id, 3, 0, 1);
+    }
+
+    expect(await scoreSeason(RESCORED_AT)).toEqual([1, 2, 3]);
+
+    // 0-2 against a predicted 0-1: the right winner at the wrong goal
+    // difference, so 2, and 10 through the Season.
+    expect(await points(ENTRANT, 3)).toBe(2);
+    expect(await points(ENTRANT, 3, MATCH_POINTS_SEASON_TO_DATE_METRIC))
+      .toBe(10);
+
+    // And a pass immediately after writes nothing: Gameweek 3 is published
+    // now, so the only Lock named is the earliest one, and it finds every row
+    // where it left it — the stamp included.
+    const before = await storedRows();
+    await scoreSeason(new Date("2026-08-30T10:00:00Z"));
+    expect(await storedRows()).toEqual(before);
+  });
+
+  test("clears the paired rows of a seat that stopped being declared, at every published Gameweek",
+    async () => {
+      await playThreeGameweeks();
+      await scoreSeason();
+
+      const pairedGameweeks = async (): Promise<number[]> =>
+        (await client.query<{ gw: number }>(
+          `select distinct gw from scores where season = $1 and metric = $2
+            order by gw`,
+          [SEASON, RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC]
+        )).rows.map(({ gw }) => gw);
+
+      expect(await pairedGameweeks()).toEqual([1, 2, 3]);
+
+      // The seat leaves this Competition's roster the way ADR-0038 tells seats
+      // apart: by the Prompt Version its Predictions were entered under.
+      await client.query(
+        "update models set prompt_version = 'other-league/v1' where id = $1",
+        [OTHER]
+      );
+      await scoreSeason(RESCORED_AT);
+
+      // Every published Gameweek, not only a new one: this cleanup is why the
+      // earliest Lock is named whether or not it is published, and a pass that
+      // named only the unscored Locks would leave all three sets standing.
+      expect(await pairedGameweeks()).toEqual([]);
     });
 
   test("a Season whose Fixtures own no Lock scores nothing", async () => {
