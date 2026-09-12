@@ -157,6 +157,12 @@ export interface ClubLink {
   article: string;
   /** What the row displays. */
   text: string;
+  /**
+   * Whether the cell linked at all, which is the difference between a row
+   * pointing at another club and one pointing nowhere: the first disagrees
+   * with what it displays and the second has nothing to disagree with.
+   */
+  linked: boolean;
 }
 
 /**
@@ -170,10 +176,11 @@ export function clubLink(cell: string): ClubLink {
   const source = cellSource(cell);
   const link = /\[\[([^\]|]+)(?:\|([^\]]*))?\]\]/.exec(source);
   if (link?.[1] === undefined) {
-    return { article: source, text: source };
+    return { article: source, text: source, linked: false };
   }
   return {
     article: link[1].trim(),
-    text: (link[2] ?? link[1]).trim()
+    text: (link[2] ?? link[1]).trim(),
+    linked: true
   };
 }

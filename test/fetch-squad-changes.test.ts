@@ -1157,6 +1157,26 @@ describe("parsing a window published as one dated table", () => {
       expect(page.match(/^==\s*Loans\s*==\s*$/m)).toBeNull();
     });
 
+  // The shape a Serie A editor filed on 2026-09-01, which refused the whole
+  // page and cost a day of movement: Rolando Mandragora's row named both
+  // clubs in bare text -- `|Fiorentina` over `|Torino` -- where every other
+  // row on the page links them. A cell that links nowhere is not a row
+  // pointing at another club: there is no second club to disagree with, and
+  // the displayed name is the only thing the page says. The row that links
+  // away from the club it displays stays refused, above.
+  test("reads a club from a row that links nowhere and names it plainly",
+    async () => {
+      const page = await italianPage();
+      const unlinked =
+        page.replace("|[[ACF Fiorentina|Fiorentina]]\n", "|Fiorentina\n");
+      expect(unlinked).not.toBe(page);
+      expect(unlinked).toContain("|[[ACF Fiorentina|Fiorentina]]\n");
+
+      expect(movement(parse(unlinked), "ACF Fiorentina", "in"))
+        .toContainEqual(["2026-07-01", "Viery", "Grêmio", "Undisclosed",
+          false]);
+    });
+
   test("skips a move touching none of the twenty clubs", async () => {
     const changes = parse(await italianPage());
 

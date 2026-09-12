@@ -226,14 +226,24 @@ function resolveClub(
     return club;
   }
   const displayed = byName.get(link.text);
-  if (displayed !== undefined) {
-    issues.push({
-      field: "club",
-      detail:
-        `a row displays ${link.text} but links to ${link.article}, `
-        + "which is not that club's pinned article"
-    });
+  if (displayed === undefined) {
+    return undefined;
   }
+  // A cell that links nowhere is not the ambiguous case: there is no second
+  // club for the displayed name to disagree with, and the name is the whole of
+  // what the page says -- which is how France's unlinked headings resolve a
+  // club already. Serie A filed exactly this on 2026-09-01, one row naming
+  // `Fiorentina` and `Torino` in bare text where its other seventy link them,
+  // and refusing it cost the whole page a day.
+  if (!link.linked) {
+    return displayed;
+  }
+  issues.push({
+    field: "club",
+    detail:
+      `a row displays ${link.text} but links to ${link.article}, `
+      + "which is not that club's pinned article"
+  });
   return undefined;
 }
 

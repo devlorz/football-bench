@@ -62,14 +62,16 @@ describe("reading a wikitext cell", () => {
     expect(cellText("[[Tottenham Hotspur F.C.|Spurs]]")).toBe("Spurs");
     expect(clubLink("[[Tottenham Hotspur F.C.|Spurs]]")).toEqual({
       article: "Tottenham Hotspur F.C.",
-      text: "Spurs"
+      text: "Spurs",
+      linked: true
     });
   });
 
   test("reads a cell with no link as its own text under both names", () => {
     expect(clubLink("rowspan=2|free agent")).toEqual({
       article: "free agent",
-      text: "free agent"
+      text: "free agent",
+      linked: false
     });
   });
 
@@ -94,7 +96,8 @@ describe("reading a wikitext cell", () => {
     expect(cellSource("{{nobreak|[[Castore]]}}")).toBe("[[Castore]]");
     expect(clubLink("{{nobreak|[[Nike, Inc.|Nike]]}}")).toEqual({
       article: "Nike, Inc.",
-      text: "Nike"
+      text: "Nike",
+      linked: true
     });
   });
 
