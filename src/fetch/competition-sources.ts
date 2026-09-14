@@ -5,13 +5,15 @@
  * walks the Competitions whose entry names its source, so a Competition that
  * never claimed a source never fails for lacking one.
  *
- * The five entries here describe exactly what those Competitions read today
- * and change nothing about their days. `UNL` is deliberately absent until
- * ticket 0071 builds the four sources its entry would name — an entry naming
- * sources that do not exist yet is a lie the fetch believes, and it would open
- * a listed Competition into a run that reaches nothing and reports success.
- * Until then `UNL` is in the `competition_code` domain and not here, and
- * `test/schema.test.ts` names that gap rather than stepping over it.
+ * The entries here describe exactly what those Competitions read today and
+ * change nothing about their days. `UNL` names UEFA for its schedule from
+ * ticket 0071, which is the ticket that built that fetch, and `null` for the
+ * three sources whose fetches tickets 0072 to 0074 build. A `null` is not a
+ * placeholder: it says this Competition has no such source, the daily fetch
+ * does not walk it, and the packet states the absence — which is the truth
+ * about `UNL` on each of those three until its ticket lands. Naming a source
+ * before its fetch exists would be the lie, because the fetch would believe
+ * it.
  *
  * A listed Competition with no entry fails the run by name (ADR-0054: a
  * missing map fails loudly, a wrong one fails nothing).
@@ -31,7 +33,7 @@ export interface CompetitionSources {
    * the FPL fetch and dropping it would not stop it. A Competition reads the
    * sources its entry names; the FPL API is read whether or not one does.
    */
-  readonly schedule: "fpl" | "football-data.org";
+  readonly schedule: "fpl" | "football-data.org" | "uefa";
   readonly history: "football-data.co.uk" | null;
   readonly stats: "understat" | null;
   readonly squadChanges: "wikipedia-transfers" | null;
@@ -60,7 +62,20 @@ const BY_COMPETITION: Readonly<Record<string, CompetitionSources>> = {
   PD: { schedule: "football-data.org", ...THE_DOMESTIC_FOUR },
   SA: { schedule: "football-data.org", ...THE_DOMESTIC_FOUR },
   BL1: { schedule: "football-data.org", ...THE_DOMESTIC_FOUR },
-  FL1: { schedule: "football-data.org", ...THE_DOMESTIC_FOUR }
+  FL1: { schedule: "football-data.org", ...THE_DOMESTIC_FOUR },
+  // The first Competition that is not a league, and the first that shares
+  // none of the domestic four: no club plays in it, so none of the four
+  // sources that hold clubs can answer for it (ADR-0057). Its own three —
+  // 365Scores for shots and xG, a dataset for recent internationals, a
+  // Wikipedia list for the head coaches — arrive with tickets 0072 to 0074
+  // and replace a `null` each.
+  UNL: {
+    schedule: "uefa",
+    history: null,
+    stats: null,
+    squadChanges: null,
+    headCoaches: null
+  }
 };
 
 /** Every Competition this registry names sources for. */

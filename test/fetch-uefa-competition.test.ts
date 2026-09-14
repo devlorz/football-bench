@@ -1,0 +1,361 @@
+import pg from "pg";
+import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import {
+  fetchUefaCompetition,
+  normaliseUefaMatches,
+  parseUefaMatches,
+  settledResultOf,
+  StaleUefaSourceError,
+  UefaValidationError,
+  UnknownUefaMatchdayError,
+  type UefaMatch
+} from "../src/uefa/fetch-competition.js";
+import type { HttpFetcher } from "../src/http.js";
+import { archivedBody } from "./archived-fixture.js";
+import { resetSchema } from "./schema-fixture.js";
+
+const { Client } = pg;
+
+const SEASON = "2026-27";
+const COMPETITION = "UNL";
+
+/** The six matchday names the league phase is played under (ADR-0057). */
+const LEAGUE_PHASE = new Set(["MD1", "MD2", "MD3", "MD4", "MD5", "MD6"]);
+
+/**
+ * UEFA's own pages for the Nations League, recorded on 2026-09-14 and kept as
+ * they arrived: 156 matches over two pages of a hundred, every envelope field,
+ * and not one result — the Season's first match is ten days away, which is why
+ * every status reads `UPCOMING`.
+ */
+const thisSeasonPages = async (): Promise<string[]> => Promise.all([
+  archivedBody("uefa-2026-27-UNL-recorded-offset-0.json.gz"),
+  archivedBody("uefa-2026-27-UNL-recorded-offset-100.json.gz")
+]);
+
+/** The page UEFA answers past the end of a Season: an empty array. */
+const pastTheEnd = async (): Promise<string> =>
+  archivedBody("uefa-2026-27-UNL-recorded-offset-200.json.gz");
+
+/**
+ * The 2024-25 edition, which is where every shape this Season has not reached
+ * yet actually exists: the one `ABANDONED` match, the knockout matchdays, and
+ * the three matches whose ninety-minute score differs from their total.
+ */
+const lastEditionPages = async (): Promise<string[]> => Promise.all([
+  archivedBody("uefa-2024-25-UNL-recorded-offset-0.json.gz"),
+  archivedBody("uefa-2024-25-UNL-recorded-offset-100.json.gz")
+]);
+
+const parsePages = (pages: string[]): UefaMatch[] =>
+  pages.flatMap((page) => parseUefaMatches("test", page));
+
+/**
+ * What `writeCompetitionSchedule` is handed, and the only thing this fetch
+ * decides. Everything after it — the derived deadline, the attachment, the
+ * breach alert, the withdrawn path, the upsert — is the same bytes the five
+ * leagues run (ticket 0071), so it is proven once, in
+ * `test/fetch-football-data-org-competition.test.ts`, and not asserted a
+ * second time here. What is asserted here is the handover: that every field
+ * arrives already decided, in the type the writer reads it as, because a
+ * `"3"` where a `3` belongs would surface downstream as a wrong deadline with
+ * nothing pointing at the field that was wrong.
+ */
+describe("the shape UEFA's feed is normalised into", () => {
+  let thisSeason: UefaMatch[];
+  let lastEdition: UefaMatch[];
+
+  beforeAll(async () => {
+    thisSeason = parsePages(await thisSeasonPages());
+    lastEdition = parsePages(await lastEditionPages());
+  });
+
+  test("parses both pages UEFA really returned, all 156 of them", () => {
+    // The claim a constructed body cannot make: the schema accepts a whole
+    // published Season, not one match in the shape its author expected.
+    expect(thisSeason).toHaveLength(156);
+    expect(new Set(thisSeason.map((match) => match.id)).size).toBe(156);
+  });
+
+  test("a matchday name becomes the Gameweek number it stands for", () => {
+    const { scheduled } = normaliseUefaMatches(COMPETITION, thisSeason);
+    const azerbaijan = scheduled.find((match) => match.fixtureId === 2047955);
+
+    // `MD3`, in the feed, on a match whose raw label this test can point at.
+    expect(thisSeason.find((match) => match.id === "2047955")?.matchday.name)
+      .toBe("MD3");
+    expect(azerbaijan?.matchday).toBe(3);
+    expect(typeof azerbaijan?.matchday).toBe("number");
+    expect(new Set(scheduled.map((match) => match.matchday)))
+      .toEqual(new Set([1, 2, 3, 4, 5, 6]));
+  });
+
+  test("a kickoff becomes a Date at the instant the feed names", () => {
+    const { scheduled } = normaliseUefaMatches(COMPETITION, thisSeason);
+    const azerbaijan = scheduled.find((match) => match.fixtureId === 2047955);
+
+    expect(azerbaijan?.kickoffAt).toBeInstanceOf(Date);
+    expect(azerbaijan?.kickoffAt.toISOString()).toBe("2026-10-01T16:00:00.000Z");
+  });
+
+  test("a match id becomes a number", () => {
+    const { scheduled } = normaliseUefaMatches(COMPETITION, thisSeason);
+
+    // UEFA writes its ids as strings; `fixtures.fixture_id` is an integer.
+    expect(thisSeason.every((match) => typeof match.id === "string")).toBe(true);
+    expect(scheduled.every((match) => Number.isInteger(match.fixtureId)))
+      .toBe(true);
+    expect(scheduled.map((match) => match.fixtureId)).toContain(2047955);
+  });
+
+  test("a settled result is the ninety-minute score and never the total", () => {
+    // Extra time is played in the knockout rounds and nowhere else, so the
+    // only matches whose two scores differ are in matchdays `normaliseUefa
+    // Matches` refuses outright (ADR-0057 defers the knockouts). The
+    // requirement is therefore proven at the function that reads the field,
+    // over the archived matches where the difference is real — the whole
+    // point of the requirement is the day a Nations League match goes to
+    // extra time and `total` is the wrong number to settle at.
+    const portugal = lastEdition.find((match) => match.id === "2043062");
+    const spain = lastEdition.find((match) => match.id === "2043060");
+
+    expect(portugal?.score?.regular).toEqual({ home: 3, away: 2 });
+    expect(portugal?.score?.total).toEqual({ home: 5, away: 2 });
+    expect(settledResultOf(portugal!)).toBe(
+      JSON.stringify({ home_goals: 3, away_goals: 2, outcome: "H" })
+    );
+
+    // 2–2 after ninety minutes, 3–3 after extra time, won 5–4 on penalties:
+    // the ninety-minute reading is a draw and neither other number is stored.
+    expect(spain?.score?.penalty).toEqual({ home: 5, away: 4 });
+    expect(settledResultOf(spain!)).toBe(
+      JSON.stringify({ home_goals: 2, away_goals: 2, outcome: "D" })
+    );
+  });
+
+  test("an ABANDONED match is withdrawn, not settled", () => {
+    // Romania–Kosovo, 2024-11-15: abandoned at 0–0 after Kosovo left the
+    // pitch, awarded 3–0 by UEFA later, and left in the feed forever at its
+    // ninety-minute 0–0 with no winner. Settling it would score a match that
+    // was never played out.
+    const leaguePhase = lastEdition.filter(
+      (match) => LEAGUE_PHASE.has(match.matchday.name)
+    );
+    const { scheduled, withdrawnIds } = normaliseUefaMatches(
+      COMPETITION,
+      leaguePhase
+    );
+
+    expect(lastEdition.find((match) => match.id === "2040157")?.status)
+      .toBe("ABANDONED");
+    expect(withdrawnIds).toContain(2040157);
+    expect(scheduled.map((match) => match.fixtureId)).not.toContain(2040157);
+    expect(scheduled).toHaveLength(155);
+    expect(scheduled.every((match) => match.settled)).toBe(true);
+  });
+
+  test("Türki̇ye is stored as Türkiye and the other fifty-three verbatim", () => {
+    const { scheduled } = normaliseUefaMatches(COMPETITION, thisSeason);
+    const names = new Set(
+      scheduled.flatMap((match) => [match.homeTeam, match.awayTeam])
+    );
+    const asPublished = new Set(
+      thisSeason.flatMap((match) => [
+        match.homeTeam.internationalName,
+        match.awayTeam.internationalName
+      ])
+    );
+
+    // The feed writes it with a combining dot above the `i` (U+0307), left
+    // over from lowercasing Turkish `İ`. Every other source spells it with a
+    // plain `i`, and a name that does not match is a side that never joins.
+    expect(asPublished).toContain("Türki̇ye");
+    expect(names).toContain("Türkiye");
+    expect(names).not.toContain("Türki̇ye");
+    expect(names.size).toBe(54);
+    expect([...asPublished].filter((name) => !names.has(name)))
+      .toEqual(["Türki̇ye"]);
+  });
+
+  test("a matchday outside the league phase is refused by name", () => {
+    // The knockouts are deferred, not handled (ADR-0057). The day November's
+    // draw puts `MD7` in this feed, the fetch says so with the name in it
+    // rather than inventing a Gameweek 7 nobody decided existed.
+    expect(() => normaliseUefaMatches(COMPETITION, lastEdition))
+      .toThrow(UnknownUefaMatchdayError);
+
+    const refused = [...new Set(
+      lastEdition
+        .filter((match) => !LEAGUE_PHASE.has(match.matchday.name))
+        .map((match) => match.matchday.name)
+    )];
+    expect(refused.sort()).toEqual(["3rd place", "Final", "MD7", "MD8", "SF"]);
+
+    for (const name of refused) {
+      const one = lastEdition.find((match) => match.matchday.name === name);
+      expect(() => normaliseUefaMatches(COMPETITION, [one!]))
+        .toThrow(new RegExp(`\\b${name.replace(" ", "\\s")}\\b`));
+    }
+  });
+
+  test("a FINISHED match with no ninety-minute score is refused by match", async () => {
+    // A settled Fixture with nothing to score is the one thing the schema is
+    // for. The archived page is real and the hole is cut into it, because a
+    // feed that has ever published this has not been observed doing it.
+    const page = JSON.parse(
+      (await lastEditionPages())[0]!
+    ) as { id: string; status: string; score?: { regular?: unknown } }[];
+    const holed = page.find((match) => match.status === "FINISHED")!;
+    delete holed.score!.regular;
+
+    expect(() => parseUefaMatches("test", JSON.stringify(page)))
+      .toThrow(new RegExp(`FINISHED match ${holed.id} has no`));
+    expect(() => parseUefaMatches("test", JSON.stringify(page)))
+      .toThrow(UefaValidationError);
+  });
+});
+
+function respondingWith(
+  bodyByOffset: Record<number, string>
+): { http: HttpFetcher; requests: string[] } {
+  const requests: string[] = [];
+  const http: HttpFetcher = async (url) => {
+    requests.push(url);
+    const offset = Number(new URL(url).searchParams.get("offset"));
+    const body = bodyByOffset[offset];
+    return body === undefined
+      ? { status: 404, body: "" }
+      : { status: 200, body };
+  };
+  return { http, requests };
+}
+
+describe("the Nations League read from UEFA", () => {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+
+  beforeAll(async () => {
+    await client.connect();
+    await resetSchema(client);
+
+    return async () => {
+      await client.end();
+    };
+  });
+
+  beforeEach(async () => {
+    await client.query(
+      "truncate fixtures, gameweeks, raw_snapshots restart identity cascade"
+    );
+  });
+
+  const fetchAt = async (
+    at: string,
+    bodyByOffset: Record<number, string>
+  ): Promise<string[]> => {
+    const { http, requests } = respondingWith(bodyByOffset);
+    await fetchUefaCompetition({
+      database: client,
+      competition: COMPETITION,
+      season: SEASON,
+      http,
+      now: () => new Date(at)
+    });
+    return requests;
+  };
+
+  test("stops at a short page and archives each one it read", async () => {
+    const [first, second] = await thisSeasonPages();
+    const requests = await fetchAt(
+      "2026-09-14T09:00:00Z",
+      { 0: first!, 100: second! }
+    );
+
+    // Fifty-six is fewer than the hundred asked for, so the Season is over at
+    // that page and `offset=200` is never requested.
+    expect(requests).toEqual([
+      "https://match.uefa.com/v5/matches?competitionId=2014&seasonYear=2027&limit=100&offset=0",
+      "https://match.uefa.com/v5/matches?competitionId=2014&seasonYear=2027&limit=100&offset=100"
+    ]);
+
+    const { rows: snapshots } = await client.query<{ source: string }>(
+      "select source from raw_snapshots order by source"
+    );
+    expect(snapshots.map(({ source }) => source)).toEqual([
+      "uefa:2026-27:UNL:0",
+      "uefa:2026-27:UNL:100"
+    ]);
+
+    const { rows } = await client.query<{ count: string }>(
+      "select count(*) from fixtures where competition = $1 and season = $2",
+      [COMPETITION, SEASON]
+    );
+    expect(Number(rows[0]!.count)).toBe(156);
+  });
+
+  test("a Season whose matches divide by the page size ends on an empty page", async () => {
+    // Nothing observed proves this one: 156 has always stopped the paging
+    // early. A Season of exactly two hundred would ask for a third page, and
+    // without this the answer to what happens then is whatever the loop
+    // happens to do.
+    const [first] = await thisSeasonPages();
+    const requests = await fetchAt(
+      "2026-09-14T09:00:00Z",
+      { 0: first!, 100: await pastTheEnd() }
+    );
+
+    expect(requests).toHaveLength(2);
+    expect(requests[1]).toContain("offset=100");
+
+    const { rows } = await client.query<{ count: string }>(
+      "select count(*) from fixtures where competition = $1 and season = $2",
+      [COMPETITION, SEASON]
+    );
+    expect(Number(rows[0]!.count)).toBe(100);
+  });
+
+  test("an empty first page is a dead source, not a finished Season", async () => {
+    await expect(fetchAt("2026-09-14T09:00:00Z", { 0: await pastTheEnd() }))
+      .rejects.toThrow(StaleUefaSourceError);
+
+    const { rows } = await client.query<{ count: string }>(
+      "select count(*) from gameweeks where competition = $1",
+      [COMPETITION]
+    );
+    expect(Number(rows[0]!.count)).toBe(0);
+  });
+
+  test("the six Gameweeks carry the deadlines UEFA's kickoffs derive", async () => {
+    const [first, second] = await thisSeasonPages();
+    await fetchAt("2026-09-14T09:00:00Z", { 0: first!, 100: second! });
+
+    const { rows } = await client.query(
+      `select gw, deadline_at from gameweeks
+        where competition = $1 and season = $2 order by gw`,
+      [COMPETITION, SEASON]
+    );
+    expect(rows.map(({ gw, deadline_at: deadlineAt }) => [
+      gw as number,
+      (deadlineAt as Date).toISOString()
+    ])).toEqual([
+      [1, "2026-09-24T14:30:00.000Z"],
+      [2, "2026-09-27T11:30:00.000Z"],
+      [3, "2026-10-01T14:30:00.000Z"],
+      [4, "2026-10-04T11:30:00.000Z"],
+      [5, "2026-11-12T15:30:00.000Z"],
+      [6, "2026-11-15T12:30:00.000Z"]
+    ]);
+  });
+
+  test("the response is archived before it is validated", async () => {
+    const unusable = JSON.stringify([{ id: "1", status: "UPCOMING" }]);
+
+    await expect(fetchAt("2026-09-14T09:00:00Z", { 0: unusable }))
+      .rejects.toThrow(UefaValidationError);
+
+    const { rows } = await client.query<{ body: string }>(
+      "select body from raw_snapshots where source = $1",
+      ["uefa:2026-27:UNL:0"]
+    );
+    expect(rows[0]?.body).toBe(unusable);
+  });
+});

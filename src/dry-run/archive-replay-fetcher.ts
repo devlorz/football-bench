@@ -5,6 +5,10 @@ import {
   headCoachSourceByPage,
   headCoachSourceOf
 } from "../head-coach/head-coach-source.js";
+import {
+  sourceName as uefaSourceName,
+  uefaCompetitionOf
+} from "../uefa/fetch-competition.js";
 
 export interface ArchivedSnapshot {
   source: string;
@@ -125,6 +129,38 @@ function footballDataOrgSource(url: string): string | null {
   return `football_data_org:${startYear}-${endYear}:${competition}`;
 }
 
+const UEFA_URL =
+  /^https:\/\/match\.uefa\.com\/v5\/matches\?competitionId=(\d+)&seasonYear=(\d{4})&limit=\d+&offset=(\d+)$/;
+
+/**
+ * UEFA names a Season by the year it closes in and a Competition by a numeric
+ * id, so both are translated back — the third source whose URL says nothing
+ * the archive's own names say, after Understat's and football-data.org's.
+ *
+ * The offset is part of the name because it is part of the response: this is
+ * the first paged source the record reads, and two pages under one name would
+ * be one page overwriting the other.
+ *
+ * Written with the fetch rather than after it, because the two sources above
+ * each earned the same paragraph the other way round: absent, a dry run
+ * reports no known source for bytes it is holding, and for a schedule source
+ * that is the whole Competition.
+ */
+function uefaSource(url: string): string | null {
+  const match = UEFA_URL.exec(url);
+  if (match === null) {
+    return null;
+  }
+  const [, id, closingYear, offset] = match;
+  const competition = uefaCompetitionOf(id!);
+  if (competition === undefined) {
+    return null;
+  }
+  const openingYear = Number(closingYear) - 1;
+  const season = `${openingYear}-${String(Number(closingYear) % 100).padStart(2, "0")}`;
+  return uefaSourceName(competition, season, Number(offset));
+}
+
 const WIKIPEDIA_PAGE_URL =
   /^https:\/\/en\.wikipedia\.org\/w\/index\.php\?title=([^&]+)&action=raw$/;
 
@@ -201,6 +237,7 @@ function archiveSource(
     ?? footballDataSource(url)
     ?? understatSource(url)
     ?? footballDataOrgSource(url)
+    ?? uefaSource(url)
     ?? squadChangeSourceFor(url)
     ?? headCoachChangeSourceFor(url)
     ?? openRouterSource(url, options);

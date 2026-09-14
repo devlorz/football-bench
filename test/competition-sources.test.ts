@@ -50,12 +50,20 @@ describe("the source registry", () => {
         // that needs no map and is the state a cup is in for all four. The
         // assertion is written per Competition so a failure names the one that
         // drifted rather than reporting a boolean that came out false.
+        //
+        // The expectation reads the entry's own `null`s, because since the
+        // first cup (ADR-0057) "every entry names all four" is no longer
+        // true. It is not therefore a tautology: `held` asks whether *this
+        // particular* source has a map, and the expectation only asks whether
+        // a source is named — so an entry naming a history source this file
+        // has never heard of is a red test rather than a check that quietly
+        // stopped being made.
         expect({ competition, ...held }).toEqual({
           competition,
-          history: true,
-          stats: true,
-          squadChanges: true,
-          headCoaches: true
+          history: sources.history === null ? null : true,
+          stats: sources.stats === null ? null : true,
+          squadChanges: sources.squadChanges === null ? null : true,
+          headCoaches: sources.headCoaches === null ? null : true
         });
       }
     });

@@ -13,6 +13,7 @@ import {
 import {
   UnknownCompetitionSourcesError
 } from "../src/fetch/competition-sources.js";
+import { UnknownUefaMatchdayError } from "../src/uefa/fetch-competition.js";
 import { archivedBody } from "./archived-fixture.js";
 import { resetSchema } from "./schema-fixture.js";
 
@@ -72,6 +73,22 @@ const PREMIER_LEAGUE_URLS = [
   UNDERSTAT_LEAGUE_DATA_URL,
   SUMMER_TRANSFERS_URL,
   ENGLISH_SEASON_ARTICLE_URL
+] as const;
+
+/**
+ * The only source a Nations League entry names today. Two pages, because the
+ * feed answers a hundred matches at a time and the league phase is 156.
+ */
+const NATIONS_LEAGUE_URLS = [
+  "https://match.uefa.com/v5/matches"
+  + "?competitionId=2014&seasonYear=2027&limit=100&offset=0",
+  "https://match.uefa.com/v5/matches"
+  + "?competitionId=2014&seasonYear=2027&limit=100&offset=100"
+] as const;
+
+const UEFA_PAGES = [
+  "uefa-2026-27-UNL-recorded-offset-0.json.gz",
+  "uefa-2026-27-UNL-recorded-offset-100.json.gz"
 ] as const;
 
 const LA_LIGA_URLS = [
@@ -295,6 +312,93 @@ describe("the daily fetch", () => {
       matches: 932
     }]);
   });
+
+  test("reads UEFA for the Nations League and leaves the leagues' sources alone",
+    async () => {
+      // The registry's whole promise, at the seam where it is kept: `UNL`
+      // names one source and reads that one, the Premier League's seven are
+      // untouched beside it, and neither Competition reaches the other's. A
+      // cup has no history, no xG, no Squad Changes and no head coaches yet,
+      // and the entries that say so are `null` — so the absence is a set this
+      // test can name rather than a failure nobody sees.
+      await client.query(
+        "insert into competitions (competition, season) values ('UNL', $1)",
+        ["2026-27"]
+      );
+      const responses = await sourceResponses([
+        [NATIONS_LEAGUE_URLS[0], await archivedBody(UEFA_PAGES[0])],
+        [NATIONS_LEAGUE_URLS[1], await archivedBody(UEFA_PAGES[1])]
+      ]);
+      const requested: string[] = [];
+
+      await runDailyFetch({
+        database: client,
+        season: "2026-27",
+        footballDataSeason: "2025-26",
+        footballDataOrgToken: "a-football-data-org-token",
+        now: () => new Date("2026-08-21T17:00:00.000Z"),
+        http: async (url: string) => {
+          requested.push(url);
+          return { status: 200, body: responses.get(url) ?? "" };
+        }
+      });
+
+      expect([...requested].sort()).toEqual(
+        [...PREMIER_LEAGUE_URLS, ...NATIONS_LEAGUE_URLS].sort()
+      );
+      const { rows } = await client.query(
+        `select count(*)::int as fixtures from fixtures
+          where competition = 'UNL' and season = '2026-27'`
+      );
+      expect(rows[0]?.fixtures).toBe(156);
+    });
+
+  test("a knockout matchday costs the Nations League its day and no other",
+    async () => {
+      await client.query(
+        "insert into competitions (competition, season) values ('UNL', $1)",
+        ["2026-27"]
+      );
+      // The 2024-25 edition, whose feed carries `MD7`, `MD8`, `SF`, `3rd
+      // place` and `Final` — the shape this Season's feed takes the day
+      // November's draw is made (ADR-0057 defers them).
+      const responses = await sourceResponses([
+        [
+          NATIONS_LEAGUE_URLS[0],
+          await archivedBody("uefa-2024-25-UNL-recorded-offset-0.json.gz")
+        ],
+        [
+          NATIONS_LEAGUE_URLS[1],
+          await archivedBody("uefa-2024-25-UNL-recorded-offset-100.json.gz")
+        ]
+      ]);
+
+      const thrown = await runDailyFetch({
+        database: client,
+        season: "2026-27",
+        footballDataSeason: "2025-26",
+        footballDataOrgToken: "a-football-data-org-token",
+        now: () => new Date("2026-08-21T17:00:00.000Z"),
+        http: async (url: string) => ({
+          status: 200,
+          body: responses.get(url) ?? ""
+        })
+      }).catch((error: unknown) => error);
+
+      // `MD8` and not `MD7` only because it is the first of the five the
+      // recorded pages carry; which one is named is the point, not which.
+      expect(thrown).toMatchObject({
+        name: UnknownUefaMatchdayError.name,
+        competition: "UNL",
+        matchday: "MD8"
+      });
+      // The Premier League's day landed whole around it, which is the
+      // per-Competition collection doing for a cup what it does for a league.
+      const { rows } = await client.query(
+        "select count(*)::int as fixtures from fixtures where competition = 'PL'"
+      );
+      expect(rows[0]?.fixtures).toBe(380);
+    });
 
   test("a retry completes a partially failed run without duplicating completed work", async () => {
     const bootstrap = JSON.parse(
@@ -809,16 +913,41 @@ describe("the daily fetch", () => {
       );
     });
 
+  /**
+   * Lists a Competition the registry has no entry for.
+   *
+   * Since ticket 0071 there is no such code to hand: the `competition_code`
+   * domain and the registry hold the same set, and `test/schema.test.ts` is
+   * red the moment they differ. So the only way left to reach this guard is
+   * the mistake it exists for — a code a migration admits to the domain whose
+   * author forgets the registry — and the domain's check is dropped here to
+   * stage exactly that. It goes back `not valid`, which restores the rule for
+   * every later insert while leaving the staged row where the fetch can find
+   * it.
+   */
+  const listUnnamedCompetition = async (code: string): Promise<void> => {
+    const { rows } = await client.query<{ definition: string }>(
+      `select pg_get_constraintdef(c.oid) as definition
+         from pg_constraint c
+         join pg_type t on t.oid = c.contypid
+        where t.typname = 'competition_code'`
+    );
+    await client.query(
+      "alter domain competition_code drop constraint competition_code_check"
+    );
+    await client.query(
+      "insert into competitions (competition, season) values ($1, '2026-27')",
+      [code]
+    );
+    await client.query(
+      "alter domain competition_code add constraint competition_code_check "
+      + `${rows[0]!.definition} not valid`
+    );
+  };
+
   test("fails by name for a listed Competition the registry has no entry for",
     async () => {
-      // `UNL` joins the `competition_code` domain with this ticket's migration
-      // and gains its registry entry in ticket 0071, once the four sources
-      // that entry would name exist. Until then it is exactly the state this
-      // guard is for: listed, and named by nothing.
-      await client.query(
-        "insert into competitions (competition, season) values ('UNL', $1)",
-        ["2026-27"]
-      );
+      await listUnnamedCompetition("UCL");
       const responses = await sourceResponses();
       const requested: string[] = [];
 
@@ -836,7 +965,7 @@ describe("the daily fetch", () => {
 
       expect(thrown).toMatchObject({
         name: UnknownCompetitionSourcesError.name,
-        competition: "UNL"
+        competition: "UCL"
       });
       // Nothing was reached on its behalf -- every URL of the run belongs to
       // the Premier League's entry -- and the Premier League's day landed
@@ -857,10 +986,7 @@ describe("the daily fetch", () => {
   // in execution order, so first there means before the run's first request.
   test("refuses an unnamed Competition before the run's first request",
     async () => {
-      await client.query(
-        "insert into competitions (competition, season) values ('UNL', $1)",
-        ["2026-27"]
-      );
+      await listUnnamedCompetition("UCL");
       const bootstrap = JSON.parse(
         await archivedBody("fpl-bootstrap-2026-27.json.gz")
       );
@@ -884,7 +1010,7 @@ describe("the daily fetch", () => {
 
       expect(thrown).toBeInstanceOf(AggregateError);
       expect((thrown as AggregateError).errors).toMatchObject([
-        { name: UnknownCompetitionSourcesError.name, competition: "UNL" },
+        { name: UnknownCompetitionSourcesError.name, competition: "UCL" },
         { message: expect.stringContaining("fpl_bootstrap.events.0.deadline_time") }
       ]);
     });

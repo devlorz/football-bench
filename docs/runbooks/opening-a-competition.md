@@ -56,6 +56,7 @@ numbered 0 because it genuinely comes before the eight, not because it matters l
 | 6 | `src/squad-changes/transfer-window.ts` + `club-identity.ts` | The country's two windows with their page titles and page `format`, and that league's ~20 clubs by live-source spelling | No Squad Changes section, and — with the format wrong — a page parsed as a shape it is not |
 | 7 | `src/head-coach/head-coach-source.ts` — `SEASON_ARTICLES` | The Season's article title for the league, under the Season already listed | No Head Coach changes section, silently — the fetch stores nothing and the packet says the article is not listed |
 | 8 | `src/football-data/team-identity.ts` — `BY_COMPETITION` | Live-source name → football-data.co.uk name, per Competition (§2) | Every club's history section reads "none in stored data" over a complete backfill, and nothing fails |
+| 9 | `src/uefa/fetch-competition.ts` — `UEFA_COMPETITION_IDS` | UEFA's numeric competitionId, only for a Competition whose edit 0 names `"uefa"` for its schedule | `Competition XX reads UEFA, which needs its UEFA competitionId` — that Competition's day, every day |
 
 **Edits 3 to 8 are a league's, and a cup makes none of them.** Edit 0 is what says so: an
 entry naming `null` for a source is a Competition the daily fetch does not walk into that
@@ -68,8 +69,11 @@ Competition's, cup or league.
 implements opens a Competition into a run that reaches nothing and reports success — the
 one failure this whole page is arranged to prevent. Write the fetch, then the entry, then
 the `competitions` row. `UNL` sat in the domain (edit 1) with no entry between tickets
-0070 and 0071 for exactly this reason, and `test/schema.test.ts` names the gap while it
-is open.
+0070 and 0071 for exactly this reason. It has one now, and `test/schema.test.ts` holds
+the domain and the registry to the same set of codes, so the next Competition cannot
+reach production half-listed the way that gap allowed. `UNL`'s three remaining `null`s
+are the same rule inside one entry: each becomes a source name in the ticket that builds
+its fetch (0072 to 0074) and states an absence until then.
 
 Edits 3 and 4 are one change and are checked against each other by
 `test/schema.test.ts`; edit 2's `competitionName` must equal edit 3's top-flight name and

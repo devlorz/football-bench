@@ -11,6 +11,8 @@ import {
   type MovedAttachment,
   type RefusedAttachment
 } from "../football-data-org/fetch-competition.js";
+import { fetchUefaCompetition } from "../uefa/fetch-competition.js";
+import type { WriteCompetitionScheduleResult } from "./write-schedule.js";
 import {
   fetchFplDaily,
   type FetchFplDailyResult
@@ -284,18 +286,38 @@ export async function runDailyFetch({
   // `competitions` insert and its registry entry, and nothing here.
   const movedAttachments: MovedAttachment[] = [];
   const refusedAttachments: RefusedAttachment[] = [];
-  for (const { competition } of listed.filter(
-    ({ sources }) => sources.schedule === "football-data.org"
-  )) {
+  for (const { competition, sources } of listed) {
+    // One loop over one field, rather than one loop per schedule source: the
+    // two fetches differ in what they call and in nothing else — who is read,
+    // whose failure is collected, where the attachments are gathered — and a
+    // second copy of those eleven lines would be a second place to forget one
+    // of them. `"fpl"` reads nothing here by design: the FPL API answers the
+    // Season's own track as well as the Premier League's schedule, so it is
+    // read once above whether or not a Competition names it (ADR-0035).
+    const read = sources.schedule === "football-data.org"
+      ? (): Promise<WriteCompetitionScheduleResult> =>
+        fetchFootballDataOrgCompetition({
+          database,
+          competition,
+          season,
+          apiToken: footballDataOrgToken,
+          http,
+          now: () => observedAt
+        })
+      : sources.schedule === "uefa"
+        ? (): Promise<WriteCompetitionScheduleResult> => fetchUefaCompetition({
+          database,
+          competition,
+          season,
+          http,
+          now: () => observedAt
+        })
+        : null;
+    if (read === null) {
+      continue;
+    }
     try {
-      const outcome = await fetchFootballDataOrgCompetition({
-        database,
-        competition,
-        season,
-        apiToken: footballDataOrgToken,
-        http,
-        now: () => observedAt
-      });
+      const outcome = await read();
       movedAttachments.push(...outcome.movedAttachments);
       refusedAttachments.push(...outcome.refusedAttachments);
     } catch (error) {

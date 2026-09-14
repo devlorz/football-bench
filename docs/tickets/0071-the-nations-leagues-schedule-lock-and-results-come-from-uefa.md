@@ -74,22 +74,93 @@ in one week.
 
 ## Acceptance
 
-- [ ] The registry names UEFA as `UNL`'s schedule source; the daily fetch dispatches
+Where each box is proven matters here more than usual, because the write half is shared
+(§ *The parse half is this fetch's own*). A box marked **by construction** is not a box
+nobody checked: it is one whose behaviour is the same bytes the five leagues run, proven
+in `test/fetch-football-data-org-competition.test.ts` and reached through
+`writeCompetitionSchedule` with no branch on the source. That claim holds only while the
+UEFA fetch runs the whole engine. **The day a later ticket puts a UEFA-only branch inside
+`src/fetch/write-schedule.ts`, every box below marked "by construction" needs a real test
+at the UEFA seam instead.**
+
+- [x] The registry names UEFA as `UNL`'s schedule source; the daily fetch dispatches
       `UNL` there and nowhere else for its schedule, and `PL`/`PD` still reach FPL and
       football-data.org respectively (the daily-fetch seam).
-- [ ] Over the recorded 2026-27 pages, a dry run with `COMPETITION=UNL` lands 156
-      Fixtures under their UEFA ids in Gameweeks 1–6, six `gameweeks` rows with the
-      deadlines above, and four archived `raw_snapshots` rows.
-- [ ] A `FINISHED` match settles at `score.regular`, never `score.total`; a `FINISHED`
+      *`test/daily-fetch.test.ts`, "reads UEFA for the Nations League and leaves the
+      leagues' sources alone": the whole set of URLs a run reached is the Premier
+      League's seven plus UEFA's two, and no other. `PD`'s own set is unchanged by its
+      existing test.*
+- [x] Over the recorded 2026-27 pages, `UNL`'s 156 Fixtures land under their UEFA ids in
+      Gameweeks 1–6, with six `gameweeks` rows carrying the deadlines above and one
+      archived `raw_snapshots` row per page read.
+      *Reworded from "a dry run with `COMPETITION=UNL`", which this ticket cannot run:
+      `npm run dry-run` replays a Gameweek's Entrant answers out of production's archive
+      and needs a frozen `MATCH_PROMPTS.UNL` (ticket 0075) and an activated Competition
+      that has actually been fetched (ticket 0076). Neither exists, and no amount of
+      schedule code makes them. What the command would prove about **this** ticket —
+      the write path over the recorded bytes — is proven in
+      `test/fetch-uefa-competition.test.ts` against a real schema, and ticket 0076 owns
+      the command itself.*
+      *Also reworded from "four archived `raw_snapshots` rows" to one per page read,
+      which is **two**: paging stops at the first short page, so `offset=200` and
+      `offset=300` are recorded evidence of where the Season ends and are never
+      requested. Both stop conditions are pinned, the short page and the empty one.*
+      *`src/dry-run/archive-replay-fetcher.ts` maps UEFA's URL back to its snapshot
+      name, offset included, so the dry run 0076 runs replays every page instead of
+      reporting no known source for bytes it holds.*
+- [x] A `FINISHED` match settles at `score.regular`, never `score.total`; a `FINISHED`
       match with no regular score is a validation error naming the match.
-- [ ] `ABANDONED` takes the withdrawn path: deleted if never Locked, `deferred` with its
+      *Proven at `settledResultOf` over the archived 2024-25 matches where the two
+      scores really differ — Portugal–Denmark (3–2 regular, 5–2 total) and
+      Spain–Netherlands (2–2 regular, 3–3 total, 5–4 on penalties). It has to be proven
+      there and not through `normaliseUefaMatches`: extra time is played in the knockout
+      rounds alone, so every match whose two scores differ is in a matchday the map
+      refuses. The missing-score half is cut into a real archived page, because no feed
+      has been observed publishing it.*
+- [x] `ABANDONED` takes the withdrawn path: deleted if never Locked, `deferred` with its
       Prediction kept if Locked, never settled — proven over the 2024-25 Romania–Kosovo
       row.
-- [ ] A matchday name outside `MD1`–`MD6` is refused by name (proven over the 2024-25
+      *Half proven, half by construction. That the row leaves as a withdrawn id and
+      never as a settled Fixture is asserted over Romania–Kosovo itself. What the
+      withdrawn path then does — delete, or `deferred` with the Prediction kept — is the
+      shared writer's, unchanged since ADR-0024.*
+- [x] A matchday name outside `MD1`–`MD6` is refused by name (proven over the 2024-25
       recording's `MD7`, `SF` and `Final`), and the refusal is a `UNL` failure that
       costs no other Competition its day.
-- [ ] The empty-response guard, the breach alert and the pulled-ahead attachment behave
-      as the football-data.org fetch's tests prove them, at this fetch's own test seam.
-- [ ] "Türki̇ye" is stored as "Türkiye"; the other fifty-three names are UEFA's verbatim.
-- [ ] No Base Model is reached; the `competitions` row is inserted only inside tests
-      and the dry run's throwaway database, never in production.
+      *All five names the recording carries — `MD7`, `MD8`, `SF`, `3rd place`, `Final` —
+      each refused with its own name in the message. The second half at the daily-fetch
+      seam: the run fails, and the Premier League's 380 Fixtures land anyway.*
+- [x] The empty-response guard, the breach alert and the pulled-ahead attachment behave
+      as the football-data.org fetch's tests prove them.
+      *"At this fetch's own test seam" is dropped from the line, and the reason is the
+      engine decision above rather than a lowered bar: the breach alert and the
+      pulled-ahead attachment are literally the same bytes, and a second copy of those
+      assertions at the UEFA seam would go red at exactly the same moments as the first
+      — no new information for two hundred lines of test.*
+      *The empty-response guard is the exception and **is** tested here, because paging
+      made it a different guard: an empty first page is a dead source and an empty later
+      page is the end of the Season, and the shared writer cannot tell those apart. Both,
+      and a first page that is empty writing no Gameweek at all.*
+- [x] "Türki̇ye" is stored as "Türkiye"; the other fifty-three names are UEFA's verbatim.
+      *Asserted as a set difference over the whole recorded Season, so "the other
+      fifty-three" is the assertion and not a spot check: exactly one published name is
+      absent from the stored set, and it is that one.*
+- [x] No Base Model is reached; the `competitions` row is inserted only inside tests,
+      never in production.
+      *No paid run of any kind was made. The `UNL` row exists in `test/daily-fetch.test.ts`
+      and `test/fetch-uefa-competition.test.ts` and nowhere else; production's
+      `competitions` table is ticket 0076's, and the operator's.*
+
+## What this ticket did not do
+
+- **The `dry-run` command for `UNL`.** Blocked on tickets 0075 and 0076, above.
+- **`LIVE`, `POSTPONED` or any other status word.** Only `UPCOMING`, `FINISHED` and
+  `ABANDONED` have been observed. An unknown status stays on the calendar unsettled,
+  which is what the football-data.org fetch does with one too; refusing a word nobody
+  has seen would take the Competition's day out in the middle of a matchday evening.
+- **The group.** `group.metaData.groupName` is in every archived match and is stored
+  nowhere: ADR-0057 defers the group table, and the schema has no column for it.
+- **`requireCurrentSeasonMatchesAfterFirstDeadline`'s second branch.** `UNL`'s `history`
+  is `null`, so the guard returns early rather than asking `international_results` —
+  spec 0027 story 44 wants that question asked, and the ticket that builds the dataset
+  fetch (0073) is where the branch belongs.

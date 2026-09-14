@@ -3,6 +3,10 @@ import {
   ArchiveReplayMissError,
   createArchiveReplayFetcher
 } from "../src/dry-run/archive-replay-fetcher.js";
+import {
+  sourceName as uefaSourceName,
+  sourceUrl as uefaSourceUrl
+} from "../src/uefa/fetch-competition.js";
 
 describe("the archive replay fetcher", () => {
   test("serves an archived source body for the URL that produced it", async () => {
@@ -81,6 +85,43 @@ describe("the archive replay fetcher", () => {
     expect((await http("https://understat.com/getLeagueData/EPL/2099")).body)
       .toBe("{\"dates\":[]}");
   });
+
+  /**
+   * The first paged source the record reads, so the first whose snapshot name
+   * has to carry an offset: two pages filed under one name would be one page
+   * overwriting the other, and a Season would replay half its schedule.
+   *
+   * Driven from the fetch's own `sourceUrl` and `sourceName` rather than from
+   * URLs written out here, because what this has to catch is the two drifting
+   * apart — a URL this file spells itself would keep matching a pattern the
+   * fetch had stopped producing.
+   */
+  test("replays every page of a UEFA Season under its own offset", async () => {
+    const http = createArchiveReplayFetcher([
+      { source: uefaSourceName("UNL", "2026-27", 0), body: "[{\"id\":\"1\"}]" },
+      { source: uefaSourceName("UNL", "2026-27", 100), body: "[{\"id\":\"2\"}]" }
+    ]);
+
+    expect((await http(uefaSourceUrl("UNL", "2026-27", 0))).body)
+      .toBe("[{\"id\":\"1\"}]");
+    expect((await http(uefaSourceUrl("UNL", "2026-27", 100))).body)
+      .toBe("[{\"id\":\"2\"}]");
+  });
+
+  test("names no source for a UEFA Competition the record does not read",
+    async () => {
+      // A competitionId nothing maps is a URL this replay has no name for,
+      // which is the honest answer: inventing `uefa:2026-27:?` would report a
+      // missing snapshot for a Competition that was never archived.
+      const http = createArchiveReplayFetcher([
+        { source: uefaSourceName("UNL", "2026-27", 0), body: "[]" }
+      ]);
+
+      await expect(http(
+        "https://match.uefa.com/v5/matches"
+        + "?competitionId=1&seasonYear=2027&limit=100&offset=0"
+      )).rejects.toThrow(ArchiveReplayMissError);
+    });
 
   /**
    * The two Wikipedia pages a packet is built from, told apart by their

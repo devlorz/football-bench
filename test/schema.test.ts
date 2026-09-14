@@ -259,17 +259,7 @@ describe("the benchmark database", () => {
     const held = [...definition.rows[0]!.definition.matchAll(/'([^']*)'/g)]
       .map(([, code]) => code!);
 
-    // `UNL` is in the domain from migration 0042 and gains its registry entry
-    // in ticket 0071, once the four sources that entry would name exist: an
-    // entry naming sources that do not exist is a lie the fetch believes, so
-    // the two sides cannot be one change. The gap is named here rather than
-    // left as a hole this test does not look at, and closing it is deleting
-    // this line.
-    const awaitingARegistryEntry = ["UNL"];
-
-    expect([...held].sort()).toEqual(
-      [...COMPETITIONS_WITH_SOURCES, ...awaitingARegistryEntry].sort()
-    );
+    expect([...held].sort()).toEqual([...COMPETITIONS_WITH_SOURCES].sort());
   });
 
   // Keyed by date and the two sides, and by nothing else: national sides meet
