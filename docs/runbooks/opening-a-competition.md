@@ -1,8 +1,8 @@
 # Opening a Competition
 
-Every edit a new league needs, in one place. Three comments in the codebase each say
-opening a league is "one entry" or "a single edit"; each is true about its own file and
-none of them is true about the change. There are **eight** places, plus what §2's
+Every edit a new Competition needs, in one place. Three comments in the codebase each say
+opening a Competition is "one entry" or "a single edit"; each is true about its own file
+and none of them is true about the change. There are **nine** places, plus what §2's
 Wikipedia club map still holds only in prose, and this page is the only thing that
 gathers them — a review found the gap after La Liga's history landed, when four of the
 then-five had been made and nothing said what the fifth was. The sixth arrived with
@@ -13,6 +13,13 @@ Ticket 0059 found the same gap one row lower down: the live-source → football-
 map (§2) had no row of its own in the table below, only prose, so the table grew its
 eighth row here — the next reader counts what the change is rather than finding the gap
 the way this one was found.
+
+Ticket 0070 made it nine, and this one is not a section that reads wrong — it is the run.
+The source registry (ADR-0057) decides which loops of the daily fetch a Competition is
+walked into, and a Competition listed without an entry fails the whole run by name, every
+day, until one is written. It is the first row here whose absence is loud rather than
+quiet, and it goes **first** for that reason: with the entry in place every other missing
+edit is the section-shaped failure the rest of this table describes.
 
 Vocabulary: [CONTEXT.md](../../CONTEXT.md) — Competition, Division, Track.
 Decisions: [ADR-0035](../adr/0035-the-match-track-grows-a-competition-dimension.md)
@@ -29,13 +36,19 @@ This page is what to write before that one runs.
 
 ---
 
-## 1. The eight edits
+## 1. The nine edits
 
 In this order. Each is small; the risk is entirely in stopping one short.
 
+Edit **0** was added by ticket 0070 and the eight below keep the numbers they have had
+since ticket 0059 — four tickets cite them by number, and renumbering a list other
+documents point into buys a tidier column and costs every one of those references. It is
+numbered 0 because it genuinely comes before the eight, not because it matters least.
+
 | # | Where | What | If it is missing |
 | --- | --- | --- | --- |
-| 1 | `migrations/00XX` — `competition_code` domain | The code, if beyond the five 0022 listed | Every write of the code is refused |
+| 0 | `src/fetch/competition-sources.ts` — `BY_COMPETITION` | Which schedule, history, stats, Squad Changes and head-coach source this Competition reads, or `null` for each it has none of | `Competition XX has no source registry entry` — the whole daily fetch fails by name, every day |
+| 1 | `migrations/00XX` — `competition_code` domain | The code, if beyond the six `0022` and `0042` listed | Every write of the code is refused |
 | 2 | `src/predictions/openrouter-entrant.ts` — `MATCH_PROMPTS` | Version, `competitionName`, and the sha once read | `Competition XX has no frozen Prompt Version`; no seats |
 | 3 | `src/football-data/divisions.ts` — `BY_COMPETITION` | Top and second division, source codes and stored names | The packet says the league table is unavailable |
 | 4 | `migrations/00XX` — `historical_matches_division_check` | The two names edit 3 added, character for character | The backfill fails on its first insert |
@@ -44,9 +57,25 @@ In this order. Each is small; the risk is entirely in stopping one short.
 | 7 | `src/head-coach/head-coach-source.ts` — `SEASON_ARTICLES` | The Season's article title for the league, under the Season already listed | No Head Coach changes section, silently — the fetch stores nothing and the packet says the article is not listed |
 | 8 | `src/football-data/team-identity.ts` — `BY_COMPETITION` | Live-source name → football-data.co.uk name, per Competition (§2) | Every club's history section reads "none in stored data" over a complete backfill, and nothing fails |
 
+**Edits 3 to 8 are a league's, and a cup makes none of them.** Edit 0 is what says so: an
+entry naming `null` for a source is a Competition the daily fetch does not walk into that
+loop, so there is no map for it to be missing. `UNL` reads four sources of its own
+instead (ADR-0057), and its rows go in `international_results` and `team_match_stats`
+rather than in `historical_matches` and `understat_match_xg`. Edits 0, 1 and 2 are every
+Competition's, cup or league.
+
+**Edit 0 names nothing that does not exist yet.** An entry pointing at a source no fetch
+implements opens a Competition into a run that reaches nothing and reports success — the
+one failure this whole page is arranged to prevent. Write the fetch, then the entry, then
+the `competitions` row. `UNL` sat in the domain (edit 1) with no entry between tickets
+0070 and 0071 for exactly this reason, and `test/schema.test.ts` names the gap while it
+is open.
+
 Edits 3 and 4 are one change and are checked against each other by
 `test/schema.test.ts`; edit 2's `competitionName` must equal edit 3's top-flight name and
-`test/openrouter-entrant.test.ts` requires it.
+`test/openrouter-entrant.test.ts` requires it. `test/competition-sources.test.ts` checks
+edit 0 against edits 3, 5, 6 and 7 in one direction: an entry naming a source that has no
+map for that Competition is a red test rather than a section that reads calm.
 
 **Edit 6 moves edit 2's sha.** A Competition with no transfer window renders no Squad
 Changes section at all; writing its windows down opens the gate, and the packet grows the

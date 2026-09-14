@@ -27,6 +27,11 @@ import {
   type FetchHeadCoachChangesResult
 } from "../head-coach/fetch-head-coach-changes.js";
 import { errorText } from "../error-text.js";
+import {
+  sourcesOf,
+  UnknownCompetitionSourcesError,
+  type CompetitionSources
+} from "./competition-sources.js";
 import type { HttpFetcher } from "../http.js";
 
 export type { MovedAttachment, RefusedAttachment };
@@ -124,10 +129,20 @@ export class StaleFootballDataSeasonError extends Error {
 async function requireCurrentSeasonMatchesAfterFirstDeadline(
   database: Database,
   competition: string,
+  sources: CompetitionSources,
   season: string,
   footballDataSeason: string,
   observedAt: Date
 ): Promise<void> {
+  // The registry's history source decides which table answers "has this
+  // Competition produced a current-Season result yet", and it is read here
+  // rather than inherited from a filter the caller happens to have applied: a
+  // Competition whose history is elsewhere needs a different table, not a
+  // skipped question, and the next source to arrive adds a branch here rather
+  // than unpicking a loop.
+  if (sources.history !== "football-data.co.uk") {
+    return;
+  }
   const currentSeasonState = await database.query(
     `select
        g.deadline_at,
@@ -156,26 +171,52 @@ async function requireCurrentSeasonMatchesAfterFirstDeadline(
   }
 }
 
+interface ListedCompetition {
+  competition: string;
+  sources: CompetitionSources;
+}
+
+interface ListedCompetitions {
+  /** Those the registry names sources for, in code order. */
+  named: ListedCompetition[];
+  /** Those it does not, in code order. */
+  unnamed: string[];
+}
+
 /**
- * Every Competition the Season lists, in code order.
+ * Every Competition the Season lists, in code order, split by whether the
+ * registry names its sources.
  *
  * Read once and walked by each source, rather than each source deciding for
- * itself which leagues it is for. The dispatch keys on the Competition code —
- * a field already read — rather than on a mode flag, so opening a league is
- * the `competitions` insert and nothing here. The one league this list is
- * filtered for is the Premier League, which keeps the FPL API for its schedule
- * (ADR-0036) and reads football-data.org for nothing.
+ * itself which Competitions it is for. The dispatch keys on the registry —
+ * data the fetch reads (ADR-0057) — rather than on a mode flag or a literal
+ * code, so opening a Competition is the `competitions` insert plus its entry
+ * and nothing here.
+ *
+ * Returns the unnamed rather than recording them: the caller owns the run's
+ * failures, and a reader of this name should not have to guess that it also
+ * appends to something.
  */
 async function listedCompetitions(
   database: Database,
   season: string
-): Promise<string[]> {
+): Promise<ListedCompetitions> {
   const active = await database.query<{ competition: string }>(
     `select competition from competitions
       where season = $1 order by competition`,
     [season]
   );
-  return active.rows.map(({ competition }) => competition);
+  const named: ListedCompetition[] = [];
+  const unnamed: string[] = [];
+  for (const { competition } of active.rows) {
+    const sources = sourcesOf(competition);
+    if (sources === undefined) {
+      unnamed.push(competition);
+    } else {
+      named.push({ competition, sources });
+    }
+  }
+  return { named, unnamed };
 }
 
 export async function runDailyFetch({
@@ -188,6 +229,14 @@ export async function runDailyFetch({
 }: RunDailyFetchOptions): Promise<DailyFetchResult> {
   const observedAt = now();
   const errors: unknown[] = [];
+  // Read before the first request of the run, so a Competition the registry
+  // does not name fails before any source is reached rather than part-way
+  // through a day the rest of the record has already started. Its error being
+  // first in `errors` is what says so, and what the daily-fetch suite asserts.
+  const { named: listed, unnamed } = await listedCompetitions(database, season);
+  for (const competition of unnamed) {
+    errors.push(new UnknownCompetitionSourcesError(competition));
+  }
   let fpl: FetchFplDailyResult | undefined;
   try {
     fpl = await fetchFplDaily({
@@ -228,15 +277,16 @@ export async function runDailyFetch({
       }
     }
   }
-  // Every source below walks the listed Competitions, and each Competition's
-  // failure is collected rather than thrown: one league's dead token must not
-  // cost another league its schedule, and the run still fails loudly at the
-  // end. Opening a league is the `competitions` insert and nothing here.
-  const listed = await listedCompetitions(database, season);
+  // Every source below walks the listed Competitions whose registry entry
+  // names it, and each Competition's failure is collected rather than thrown:
+  // one league's dead token must not cost another league its schedule, and the
+  // run still fails loudly at the end. Opening a Competition is the
+  // `competitions` insert and its registry entry, and nothing here.
   const movedAttachments: MovedAttachment[] = [];
   const refusedAttachments: RefusedAttachment[] = [];
-  // The Premier League alone keeps the FPL API for its schedule (ADR-0036).
-  for (const competition of listed.filter((code) => code !== "PL")) {
+  for (const { competition } of listed.filter(
+    ({ sources }) => sources.schedule === "football-data.org"
+  )) {
     try {
       const outcome = await fetchFootballDataOrgCompetition({
         database,
@@ -252,72 +302,84 @@ export async function runDailyFetch({
       errors.push(error);
     }
   }
-  // The three remaining sources took a `PL` literal until La Liga went live,
+  // The four remaining sources took a `PL` literal until La Liga went live,
   // which is exactly as long as that was honest: a Competition nobody predicts
   // has no stale table to leave behind. From the moment one is listed, a
   // literal here means its history, its xG and its Squad Changes are whatever
   // the backfill left and never move again — and every one of those staleness
-  // failures renders as a section that reads calm rather than broken.
-  for (const competition of listed) {
-    try {
-      await fetchFootballDataSeason({
-        database,
-        competition,
-        season: footballDataSeason,
-        http
-      });
-    } catch (error) {
-      errors.push(error);
-      // ADR-0056 projects only when football-data.co.uk could not be
-      // reached at all -- a non-2xx response, `FootballDataSourceHttpError`'s
-      // one job. A `FootballDataSourceValidationError` means the opposite:
-      // the site answered and its body is the problem, whether a malformed
-      // row in the *other* division (a Ligue 2 hiccup must not cost Ligue 1
-      // its shots) or a redirect to another division's file entirely (the
-      // co.uk-to-Portugal case ADR-0050 records) -- and projecting over
-      // either would paper over a data bug with results that read clean.
-      //
-      // `footballDataSeason === season` besides: the projection is "temporary
-      // by construction" only because the *next* successful fetch targets the
-      // same Season it wrote into and rewrites the division whole. A fetch
-      // still pointed at last Season's file by a stale `FOOTBALL_DATA_SEASON`
-      // will never do that, so a projection made here would never heal --
-      // and it would also erase the one signal that tells an operator the env
-      // is behind, `StaleFootballDataSeasonError`'s own "advance
-      // FOOTBALL_DATA_SEASON" guidance, by giving the guard a current-Season
-      // result to find.
-      if (
-        error instanceof FootballDataSourceHttpError
-        && footballDataSeason === season
-      ) {
-        // The same settled Fixtures were already stored this morning from
-        // football-data.org or the FPL API. Written here rather than left
-        // absent, and the run still fails on the line above: saving the
-        // projected results was never the reason it was failing.
-        try {
-          await projectSettledFixturesIntoHistoricalMatches({
-            database,
-            competition,
-            season
-          });
-        } catch (projectionError) {
-          errors.push(projectionError);
+  // failures renders as a section that reads calm rather than broken. The
+  // registry is what replaced the literal, and it says the same thing about a
+  // Competition that has no such source at all: it is not walked here, so it
+  // never fails for lacking one (ADR-0057).
+  for (const { competition, sources } of listed) {
+    if (sources.history === "football-data.co.uk") {
+      try {
+        await fetchFootballDataSeason({
+          database,
+          competition,
+          season: footballDataSeason,
+          http
+        });
+      } catch (error) {
+        errors.push(error);
+        // ADR-0056 projects only when football-data.co.uk could not be
+        // reached at all -- a non-2xx response, `FootballDataSourceHttpError`'s
+        // one job. A `FootballDataSourceValidationError` means the opposite:
+        // the site answered and its body is the problem, whether a malformed
+        // row in the *other* division (a Ligue 2 hiccup must not cost Ligue 1
+        // its shots) or a redirect to another division's file entirely (the
+        // co.uk-to-Portugal case ADR-0050 records) -- and projecting over
+        // either would paper over a data bug with results that read clean.
+        //
+        // `footballDataSeason === season` besides: the projection is "temporary
+        // by construction" only because the *next* successful fetch targets the
+        // same Season it wrote into and rewrites the division whole. A fetch
+        // still pointed at last Season's file by a stale `FOOTBALL_DATA_SEASON`
+        // will never do that, so a projection made here would never heal --
+        // and it would also erase the one signal that tells an operator the env
+        // is behind, `StaleFootballDataSeasonError`'s own "advance
+        // FOOTBALL_DATA_SEASON" guidance, by giving the guard a current-Season
+        // result to find.
+        if (
+          error instanceof FootballDataSourceHttpError
+          && footballDataSeason === season
+        ) {
+          // The same settled Fixtures were already stored this morning from
+          // football-data.org or the FPL API. Written here rather than left
+          // absent, and the run still fails on the line above: saving the
+          // projected results was never the reason it was failing.
+          try {
+            await projectSettledFixturesIntoHistoricalMatches({
+              database,
+              competition,
+              season
+            });
+          } catch (projectionError) {
+            errors.push(projectionError);
+          }
         }
       }
     }
     // Each Competition against its own clock, which is ADR-0036's consequence
-    // read literally: a league whose feed has produced no current-Season
-    // result by its own Gameweek 1 deadline fails by name, and a league still
+    // read literally: a Competition whose feed has produced no current-Season
+    // result by its own Gameweek 1 deadline fails by name, and one still
     // inside its own deadline stays quiet whatever the others are doing.
     //
     // Run whether or not the fetch above threw, and after the projection: a
     // Competition whose results arrived by projection has a current-Season
     // result now, and asking before the projection ran would answer a
     // question ADR-0056 has already changed the answer to.
+    //
+    // Outside the gate above and passed the whole entry, so that it reads the
+    // registry's history source itself rather than inheriting a filter: which
+    // table answers "has it produced a result yet" is that source's business,
+    // and a Competition with a history source of its own gets a branch in
+    // there rather than a second guard out here.
     try {
       await requireCurrentSeasonMatchesAfterFirstDeadline(
         database,
         competition,
+        sources,
         season,
         footballDataSeason,
         observedAt
@@ -329,65 +391,93 @@ export async function runDailyFetch({
   // The Premier League's outcome is the one this job has always reported, and
   // that shape is a contract with the workflow that reads it. Every other
   // Competition's failure joins `errors` and fails the run at the end.
+  //
+  // One shape for all three, extracted when the registry gate made them three
+  // near-identical copies of eighteen lines rather than three of twelve: what
+  // differs between them is the source they call and the absence they report,
+  // and everything else — who is reported, who is collected, who wins when two
+  // Competitions both answer — is the same sentence said three times.
+  //
+  // The `competition === "PL"` literals live here and are the last ones in this
+  // file. They are not the dispatch the registry replaced: the registry decides
+  // who is *read*, and these decide whose outcome is *reported* in the result
+  // shape the fetch workflow has always consumed. A Competition still reports
+  // when it is the only one to answer, so a `PL`-less Season is not silent.
   let xg: DailyXgOutcome | undefined;
   let squadChanges: DailySquadChangeOutcome | undefined;
   let headCoachChanges: DailyHeadCoachOutcome | undefined;
-  for (const competition of listed) {
+  async function reported<T>(
+    competition: string,
+    previous: T | undefined,
+    read: () => Promise<T>,
+    absence: (failure: string) => T
+  ): Promise<T | undefined> {
     try {
-      await fetchUnderstatSeasonXg({ database, competition, season, http });
-      if (competition === "PL" || xg === undefined) {
-        xg = { stored: true };
-      }
+      const outcome = await read();
+      return competition === "PL" || previous === undefined
+        ? outcome
+        : previous;
     } catch (error) {
       if (competition === "PL") {
-        xg = { stored: false, failure: errorText(error) };
-      } else {
-        errors.push(error);
+        return absence(errorText(error));
       }
+      errors.push(error);
+      return previous;
     }
-    try {
-      const outcome = await fetchSquadChanges({
-        database,
+  }
+  for (const { competition, sources } of listed) {
+    if (sources.stats === "understat") {
+      xg = await reported<DailyXgOutcome>(
         competition,
-        season,
-        http,
-        now: () => observedAt
-      });
-      if (competition === "PL" || squadChanges === undefined) {
-        squadChanges = outcome;
-      }
-    } catch (error) {
-      if (competition === "PL") {
-        squadChanges = { stored: false, failure: errorText(error) };
-      } else {
-        errors.push(error);
-      }
+        xg,
+        async () => {
+          await fetchUnderstatSeasonXg({ database, competition, season, http });
+          return { stored: true };
+        },
+        (failure) => ({ stored: false, failure })
+      );
     }
-    try {
-      const outcome = await fetchHeadCoachChanges({
-        database,
+    if (sources.squadChanges === "wikipedia-transfers") {
+      squadChanges = await reported<DailySquadChangeOutcome>(
         competition,
-        season,
-        http,
-        now: () => observedAt
-      });
-      if (competition === "PL" || headCoachChanges === undefined) {
-        headCoachChanges = outcome;
-      }
-    } catch (error) {
-      if (competition === "PL") {
-        headCoachChanges = { stored: false, failure: errorText(error) };
-      } else {
-        errors.push(error);
-      }
+        squadChanges,
+        () => fetchSquadChanges({
+          database,
+          competition,
+          season,
+          http,
+          now: () => observedAt
+        }),
+        (failure) => ({ stored: false, failure })
+      );
+    }
+    if (sources.headCoaches === "wikipedia-season-article") {
+      headCoachChanges = await reported<DailyHeadCoachOutcome>(
+        competition,
+        headCoachChanges,
+        () => fetchHeadCoachChanges({
+          database,
+          competition,
+          season,
+          http,
+          now: () => observedAt
+        }),
+        (failure) => ({ stored: false, failure })
+      );
     }
   }
   // A Season with no Competition listed reaches no source at all, which the
   // pre-cron checklist calls the quietest way for a deployment to do nothing.
-  const unlisted = "no Competition is listed for the Season";
-  xg ??= { stored: false, failure: unlisted };
-  squadChanges ??= { stored: false, failure: unlisted };
-  headCoachChanges ??= { stored: false, failure: unlisted };
+  // A Season that lists Competitions none of which read these three is the
+  // other way, and it arrives with the first cup: reporting it as "nothing is
+  // listed" would send an operator to the `competitions` table over a row that
+  // is there and correct.
+  const unreached = listed.length === 0
+    ? "no Competition is listed for the Season"
+    : "no listed Competition reads this source";
+  xg ??= { stored: false, failure: unreached };
+  squadChanges ??= { stored: false, failure: unreached };
+  headCoachChanges ??= { stored: false, failure: unreached };
   if (errors.length === 1) {
     throw errors[0];
   }

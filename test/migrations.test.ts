@@ -245,7 +245,8 @@ describe("applying migrations", () => {
       "0038_a_shadow_seat_asks_without_being_ranked.sql",
       "0039_three_shadow_seats_join_the_premier_league.sql",
       "0040_the_glm_shadow_leaves_before_it_is_asked.sql",
-      "0041_la_liga_gameweek_6_takes_its_nine_back.sql"
+      "0041_la_liga_gameweek_6_takes_its_nine_back.sql",
+      "0042_the_nations_league_joins_the_domain_with_its_two_tables.sql"
     ]);
 
     // Relabelled, not rewritten: every row of every rekeyed table comes back
@@ -693,7 +694,8 @@ describe("applying migrations", () => {
       "0038_a_shadow_seat_asks_without_being_ranked.sql",
       "0039_three_shadow_seats_join_the_premier_league.sql",
       "0040_the_glm_shadow_leaves_before_it_is_asked.sql",
-      "0041_la_liga_gameweek_6_takes_its_nine_back.sql"
+      "0041_la_liga_gameweek_6_takes_its_nine_back.sql",
+      "0042_the_nations_league_joins_the_domain_with_its_two_tables.sql"
     ]);
     const backfill = await client.query<{
       observed_at: Date;

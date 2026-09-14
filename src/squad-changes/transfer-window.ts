@@ -201,6 +201,21 @@ const TRANSFER_WINDOWS: Readonly<Record<string, readonly TransferWindow[]>> = {
 };
 
 /**
+ * One Competition's windows, for the read that has to see whether the map
+ * holds this Competition at all rather than whether one date falls inside a
+ * window — `understatTeamNamesOf` is exposed for the same reason. The source
+ * registry's test is that reader: an entry naming `wikipedia-transfers` for a
+ * Competition with no windows listed is a Squad Changes section that never
+ * arrives, and asking `squadChangeWindow` would need a date inside a window
+ * this Competition might not share with any other.
+ */
+export function transferWindowsOf(
+  competition: string
+): readonly TransferWindow[] | undefined {
+  return TRANSFER_WINDOWS[competition];
+}
+
+/**
  * The window a Gameweek's context states the movement of, or undefined for a
  * Gameweek that states none. The gate opens with the window and closes 21 days
  * after it does, so deadline-day deals stay visible for exactly three further

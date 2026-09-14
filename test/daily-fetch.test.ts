@@ -10,6 +10,9 @@ import {
 import {
   FootballDataSourceHttpError
 } from "../src/football-data/fetch-season.js";
+import {
+  UnknownCompetitionSourcesError
+} from "../src/fetch/competition-sources.js";
 import { archivedBody } from "./archived-fixture.js";
 import { resetSchema } from "./schema-fixture.js";
 
@@ -54,6 +57,30 @@ const ENGLISH_SEASON_ARTICLE_URL =
 const SPANISH_SEASON_ARTICLE_URL =
   "https://en.wikipedia.org/w/index.php"
   + "?title=2026%E2%80%9327_La_Liga&action=raw";
+
+/**
+ * Every URL one Competition's registry entry names, so that a test can assert
+ * the whole set a run reached rather than a filter over one host. "And no
+ * other" is the half a `filter(...).toEqual([...])` cannot see, and it is the
+ * half that catches a loop which stopped reading the registry.
+ */
+const PREMIER_LEAGUE_URLS = [
+  "https://fantasy.premierleague.com/api/bootstrap-static/",
+  "https://fantasy.premierleague.com/api/fixtures/",
+  "https://www.football-data.co.uk/mmz4281/2526/E0.csv",
+  "https://www.football-data.co.uk/mmz4281/2526/E1.csv",
+  UNDERSTAT_LEAGUE_DATA_URL,
+  SUMMER_TRANSFERS_URL,
+  ENGLISH_SEASON_ARTICLE_URL
+] as const;
+
+const LA_LIGA_URLS = [
+  LA_LIGA_MATCHES_URL,
+  ...SPANISH_DIVISION_URLS,
+  UNDERSTAT_LA_LIGA_DATA_URL,
+  SPANISH_SUMMER_TRANSFERS_URL,
+  SPANISH_SEASON_ARTICLE_URL
+] as const;
 
 const UNDERSTAT_LEAGUE_BODY = JSON.stringify({
   dates: [{
@@ -732,6 +759,133 @@ describe("the daily fetch", () => {
       expect(rows).toEqual([
         { competition: "PD", fixtures: 380 },
         { competition: "PL", fixtures: 380 }
+      ]);
+    });
+
+  // The registry, at the seam ADR-0057 put it behind. The two tests above
+  // assert which Competition reaches football-data.org; this one asserts the
+  // whole set, because the registry's promise is "exactly the sources its
+  // entry names" and a loop that grew a source back would pass every filter
+  // written over one host.
+  test("reaches exactly the sources each listed Competition's entry names",
+    async () => {
+      await client.query(
+        "insert into competitions (competition, season) values ('PD', $1)",
+        ["2026-27"]
+      );
+      // The row that keeps La Liga off its own staleness guard, as in the
+      // first test of this suite: what is under test here is which sources
+      // are reached, not what the guard says about them.
+      await client.query(
+        `insert into historical_matches
+           (competition, season, division, played_on,
+            home_team, away_team, home_goals, away_goals)
+         values ('PD', '2026-27', 'La Liga', '2026-08-16T19:00:00Z',
+                 'Barcelona', 'Getafe', 2, 0)`
+      );
+      const responses = await sourceResponses([[
+        LA_LIGA_MATCHES_URL,
+        await archivedBody("football-data-org-2026-27-PD-recorded.json.gz")
+      ]]);
+      const requested: string[] = [];
+
+      await runDailyFetch({
+        database: client,
+        season: "2026-27",
+        footballDataSeason: "2025-26",
+        footballDataOrgToken: "a-football-data-org-token",
+        now: () => new Date("2026-08-21T17:00:00.000Z"),
+        http: async (url: string) => {
+          requested.push(url);
+          return { status: 200, body: responses.get(url) ?? "" };
+        }
+      });
+
+      // Not de-duplicated: each of these is requested exactly once a run, and
+      // a loop that asked twice is a doubled source read that a `Set` would
+      // hide behind the same green.
+      expect([...requested].sort()).toEqual(
+        [...PREMIER_LEAGUE_URLS, ...LA_LIGA_URLS].sort()
+      );
+    });
+
+  test("fails by name for a listed Competition the registry has no entry for",
+    async () => {
+      // `UNL` joins the `competition_code` domain with this ticket's migration
+      // and gains its registry entry in ticket 0071, once the four sources
+      // that entry would name exist. Until then it is exactly the state this
+      // guard is for: listed, and named by nothing.
+      await client.query(
+        "insert into competitions (competition, season) values ('UNL', $1)",
+        ["2026-27"]
+      );
+      const responses = await sourceResponses();
+      const requested: string[] = [];
+
+      const thrown = await runDailyFetch({
+        database: client,
+        season: "2026-27",
+        footballDataSeason: "2025-26",
+        footballDataOrgToken: "a-football-data-org-token",
+        now: () => new Date("2026-08-21T17:00:00.000Z"),
+        http: async (url: string) => {
+          requested.push(url);
+          return { status: 200, body: responses.get(url) ?? "" };
+        }
+      }).catch((error: unknown) => error);
+
+      expect(thrown).toMatchObject({
+        name: UnknownCompetitionSourcesError.name,
+        competition: "UNL"
+      });
+      // Nothing was reached on its behalf -- every URL of the run belongs to
+      // the Premier League's entry -- and the Premier League's day landed
+      // whole, which is the per-Competition collection working as it does for
+      // every other failure.
+      expect([...requested].sort()).toEqual([...PREMIER_LEAGUE_URLS].sort());
+      const { rows } = await client.query(
+        "select count(*)::int as fixtures from fixtures where competition = 'PL'"
+      );
+      expect(rows[0]?.fixtures).toBe(380);
+    });
+
+  // The set assertion above proves the unnamed Competition reached nothing; it
+  // cannot prove *when* it was refused, and moving the registry check back
+  // below the FPL fetch would leave it green. This one dates the refusal: the
+  // FPL bootstrap is made invalid so that it fails too, and the registry's
+  // error has to arrive first in the `AggregateError`. `errors` is appended to
+  // in execution order, so first there means before the run's first request.
+  test("refuses an unnamed Competition before the run's first request",
+    async () => {
+      await client.query(
+        "insert into competitions (competition, season) values ('UNL', $1)",
+        ["2026-27"]
+      );
+      const bootstrap = JSON.parse(
+        await archivedBody("fpl-bootstrap-2026-27.json.gz")
+      );
+      bootstrap.events[0].deadline_time = 42;
+      const responses = await sourceResponses([[
+        "https://fantasy.premierleague.com/api/bootstrap-static/",
+        JSON.stringify(bootstrap)
+      ]]);
+
+      const thrown = await runDailyFetch({
+        database: client,
+        season: "2026-27",
+        footballDataSeason: "2025-26",
+        footballDataOrgToken: "a-football-data-org-token",
+        now: () => new Date("2026-08-21T17:00:00.000Z"),
+        http: async (url: string) => ({
+          status: 200,
+          body: responses.get(url) ?? ""
+        })
+      }).catch((error: unknown) => error);
+
+      expect(thrown).toBeInstanceOf(AggregateError);
+      expect((thrown as AggregateError).errors).toMatchObject([
+        { name: UnknownCompetitionSourcesError.name, competition: "UNL" },
+        { message: expect.stringContaining("fpl_bootstrap.events.0.deadline_time") }
       ]);
     });
 

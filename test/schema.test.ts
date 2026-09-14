@@ -8,6 +8,9 @@ import {
 import {
   CURATED_COMPETITIONS, divisionsOf
 } from "../src/football-data/divisions.js";
+import {
+  COMPETITIONS_WITH_SOURCES
+} from "../src/fetch/competition-sources.js";
 
 const { Client } = pg;
 
@@ -28,7 +31,8 @@ describe("the benchmark database", () => {
       `truncate
          predictions, contexts, fixtures, manager_states, attempts, scores,
          models, gameweeks, raw_snapshots, historical_matches, fpl_players,
-         fpl_player_points, squad_changes, head_coach_changes, head_coaches
+         fpl_player_points, squad_changes, head_coach_changes, head_coaches,
+         international_results, team_match_stats
        restart identity cascade`
     );
   });
@@ -105,6 +109,7 @@ describe("the benchmark database", () => {
       "head_coach_changes",
       "head_coaches",
       "historical_matches",
+      "international_results",
       "manager_states",
       "models",
       "prediction_runs",
@@ -114,6 +119,7 @@ describe("the benchmark database", () => {
       "schema_migrations",
       "scores",
       "squad_changes",
+      "team_match_stats",
       "understat_match_xg"
     ]);
   });
@@ -235,6 +241,83 @@ describe("the benchmark database", () => {
          'Home', 'Away', 1, 0
        )`
     )).rejects.toMatchObject({ code: "23514" });
+  });
+
+  // The `historical_matches` half of this pair has had its "and no others"
+  // test since a review found the gap; the `competition_code` domain, the
+  // other list a Competition's arrival has to be added to, had neither half.
+  // Read off the domain's own constraint so a surplus is named rather than
+  // counted (ADR-0057: which sources a Competition has is data, and the codes
+  // that data may hold are the domain's).
+  test("holds the source registry's codes and no others", async () => {
+    const definition = await client.query<{ definition: string }>(
+      `select pg_get_constraintdef(c.oid) as definition
+         from pg_constraint c
+         join pg_type t on t.oid = c.contypid
+        where t.typname = 'competition_code'`
+    );
+    const held = [...definition.rows[0]!.definition.matchAll(/'([^']*)'/g)]
+      .map(([, code]) => code!);
+
+    // `UNL` is in the domain from migration 0042 and gains its registry entry
+    // in ticket 0071, once the four sources that entry would name exist: an
+    // entry naming sources that do not exist is a lie the fetch believes, so
+    // the two sides cannot be one change. The gap is named here rather than
+    // left as a hole this test does not look at, and closing it is deleting
+    // this line.
+    const awaitingARegistryEntry = ["UNL"];
+
+    expect([...held].sort()).toEqual(
+      [...COMPETITIONS_WITH_SOURCES, ...awaitingARegistryEntry].sort()
+    );
+  });
+
+  // Keyed by date and the two sides, and by nothing else: national sides meet
+  // twice a year in different competitions under no Division and no Season, so
+  // the same pair playing twice in one year is two rows and the same match
+  // read twice is one (ADR-0057).
+  test("keeps one international per date and pair", async () => {
+    const row =
+      `insert into international_results (
+         played_on, home_team, away_team, home_goals, away_goals,
+         tournament, country, neutral
+       ) values ($1, 'England', 'Germany', 2, 1, $2, 'England', false)`;
+    await client.query(row, ["2026-09-24", "UEFA Nations League"]);
+    await client.query(row, ["2026-11-15", "Friendly"]);
+
+    await expect(client.query(row, ["2026-09-24", "Friendly"]))
+      .rejects.toMatchObject({ code: "23505" });
+    const { rows } = await client.query(
+      "select count(*)::int as results from international_results"
+    );
+    expect(rows[0]?.results).toBe(2);
+  });
+
+  // Keyed by source and source match id, because the id means nothing without
+  // the source that issued it, and nullable per side, because a hole is a row
+  // that is read again and not a row that is absent (ADR-0058).
+  test("keeps one team-stats row per source match, holes and all", async () => {
+    const row =
+      `insert into team_match_stats (
+         season, competition, source, source_match_id, kicked_off_at,
+         home_team, away_team, home_shots, away_shots,
+         home_shots_on_target, away_shots_on_target, home_xg, away_xg
+       ) values (
+         '2026-27', 'UNL', $1, '4750321', '2026-09-24T18:45:00Z',
+         'England', 'Germany', 14, 9, 6, 3, $2, $3
+       )`;
+    await client.query(row, ["365scores", null, null]);
+    await client.query(row, ["another-source", "2.31", "0.78"]);
+
+    await expect(client.query(row, ["365scores", "1.10", "0.40"]))
+      .rejects.toMatchObject({ code: "23505" });
+    const stored = await client.query(
+      `select source, home_xg from team_match_stats order by source`
+    );
+    expect(stored.rows).toEqual([
+      { source: "365scores", home_xg: null },
+      { source: "another-source", home_xg: "2.31" }
+    ]);
   });
 
   test("refuses a negative stat on a player's Settled Gameweek", async () => {

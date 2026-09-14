@@ -483,8 +483,9 @@ export function readFplExhibitionJobConfig(
  * opened or a Base Model is called.
  *
  * A shape and not a list: the `competition_code` domain
- * (`migrations/0022_the_competition_dimension.sql`) names the five codes there
- * are, and restating them here would be a second place to add the sixth. The
+ * (`migrations/0022_the_competition_dimension.sql`, widened by `0042`) names
+ * the codes there are, and restating them here would be a second place to add
+ * the next one. The
  * shape has to admit every one of them, though, and the letters-only pattern
  * this carried admitted three: `BL1` and `FL1` end in a digit, so the
  * pre-flight and the preview refused Ligue 1 and the Bundesliga by their own
