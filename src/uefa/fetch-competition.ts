@@ -324,6 +324,43 @@ export function normaliseUefaMatches(
   return { scheduled, withdrawnIds };
 }
 
+/**
+ * The stored Fixtures this Competition's feed no longer carries at all.
+ *
+ * The other two schedule sources never need this. football-data.org keeps a
+ * postponed match in the response with its old matchday, and the FPL API keeps
+ * one with `event: null` — in both, a withdrawn Fixture is a row to read a
+ * status off, which is why `WITHDRAWN_STATUSES` and a null round are the whole
+ * question there. UEFA keeps nothing: a match that is off is absent, and the
+ * only way to see it is to compare what is stored against what arrived. The
+ * comparison is made here rather than in the shared writer because it is this
+ * source's shape that requires it, and putting it there would change what
+ * five running leagues do with a response that dropped a row.
+ *
+ * Asked only after every page has validated and the stale guard has passed, so
+ * a half-read Season can never answer "gone" for a hundred Fixtures at once.
+ * A feed that truncates for a day still withdraws whatever it dropped, which
+ * is ADR-0024's trade and not a new one: a never-Locked Fixture is deleted and
+ * the next fetch rebuilds it, and a Locked one keeps its row, its Predictions
+ * and its Gameweek.
+ */
+async function fixturesGoneFromTheFeed(
+  database: Database,
+  competition: string,
+  season: string,
+  matches: readonly UefaMatch[]
+): Promise<number[]> {
+  const inTheFeed = new Set(matches.map((match) => Number(match.id)));
+  const stored = await database.query<{ fixture_id: number }>(
+    `select fixture_id from fixtures
+      where competition = $1 and season = $2`,
+    [competition, season]
+  );
+  return stored.rows
+    .map(({ fixture_id: fixtureId }) => fixtureId)
+    .filter((fixtureId) => !inTheFeed.has(fixtureId));
+}
+
 export type FetchUefaCompetitionResult = WriteCompetitionScheduleResult;
 
 export interface FetchUefaCompetitionOptions {
@@ -385,6 +422,9 @@ export async function fetchUefaCompetition({
     season,
     observedAt,
     scheduled,
-    withdrawnIds
+    withdrawnIds: [
+      ...withdrawnIds,
+      ...await fixturesGoneFromTheFeed(database, competition, season, matches)
+    ]
   });
 }

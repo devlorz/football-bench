@@ -346,6 +346,105 @@ describe("the Nations League read from UEFA", () => {
     ]);
   });
 
+  /**
+   * The same page with one match taken out of it, which is how this feed says
+   * a Fixture is off: UEFA keeps no withdrawn row to read a status from, so a
+   * match that is gone is simply absent.
+   *
+   * Taken from the second page on purpose — dropping one from the first would
+   * make it ninety-nine, which this fetch reads as the end of the Season.
+   */
+  const withoutMatch = (page: string, id: string): string =>
+    JSON.stringify(
+      (JSON.parse(page) as { id: string }[]).filter((match) => match.id !== id)
+    );
+
+  test("a Fixture gone from the feed is withdrawn, not left scheduled",
+    async () => {
+      const [first, second] = await thisSeasonPages();
+      await fetchAt("2026-09-14T09:00:00Z", { 0: first!, 100: second! });
+
+      await fetchAt("2026-09-14T09:00:00Z", {
+        0: first!,
+        100: withoutMatch(second!, "2047952")
+      });
+
+      // Never Locked, so it is deleted: the feed can rebuild it if it returns,
+      // and a row left behind is a Fixture Entrants can still be asked to
+      // predict (ADR-0024).
+      const { rows } = await client.query(
+        `select fixture_id from fixtures
+          where competition = $1 and season = $2 and fixture_id = 2047952`,
+        [COMPETITION, SEASON]
+      );
+      expect(rows).toEqual([]);
+      const { rows: remaining } = await client.query<{ count: string }>(
+        "select count(*) from fixtures where competition = $1 and season = $2",
+        [COMPETITION, SEASON]
+      );
+      expect(Number(remaining[0]!.count)).toBe(155);
+    });
+
+  test("an ABANDONED Fixture is withdrawn while the feed still carries it",
+    async () => {
+      // The other half of the withdrawn path, and the half the reconciliation
+      // above cannot cover: this match is still in the feed, on every page,
+      // every day. Only its status says it is off. Written onto the recorded
+      // page because this Season has not abandoned a match — the 2024-25
+      // edition's Romania–Kosovo is proven at the normaliser, and what is
+      // proven here is that the id reaches the writer at all.
+      const [first, second] = await thisSeasonPages();
+      await fetchAt("2026-09-14T09:00:00Z", { 0: first!, 100: second! });
+
+      const abandoned = JSON.parse(second!) as { id: string; status: string }[];
+      abandoned.find((match) => match.id === "2047952")!.status = "ABANDONED";
+      await fetchAt("2026-09-14T09:00:00Z", {
+        0: first!,
+        100: JSON.stringify(abandoned)
+      });
+
+      const { rows } = await client.query(
+        `select fixture_id from fixtures
+          where competition = $1 and season = $2 and fixture_id = 2047952`,
+        [COMPETITION, SEASON]
+      );
+      expect(rows).toEqual([]);
+    });
+
+  test("a Locked Fixture gone from the feed is deferred and keeps its row",
+    async () => {
+      const [first, second] = await thisSeasonPages();
+      await fetchAt("2026-09-14T09:00:00Z", { 0: first!, 100: second! });
+      // Israel–Kosovo is in Gameweek 3, whose deadline was 1 October at 14:30Z.
+      await client.query(
+        `update fixtures set locked_in_gw = gw
+          where competition = $1 and season = $2 and fixture_id = 2047952`,
+        [COMPETITION, SEASON]
+      );
+
+      await fetchAt("2026-10-02T09:00:00Z", {
+        0: first!,
+        100: withoutMatch(second!, "2047952")
+      });
+
+      // Deleting it would take a Locked Fixture's Predictions with it, so the
+      // row stays and records what happened (ADR-0013, ADR-0024).
+      const { rows } = await client.query<{
+        locked_in_gw: number;
+        deferred: boolean;
+        unscheduled: boolean;
+      }>(
+        `select locked_in_gw, deferred, unscheduled from fixtures
+          where competition = $1 and season = $2 and fixture_id = 2047952`,
+        [COMPETITION, SEASON]
+      );
+      expect(rows[0]).toMatchObject({
+        locked_in_gw: 3,
+        deferred: true,
+        unscheduled: true
+      });
+    });
+
   test("the response is archived before it is validated", async () => {
     const unusable = JSON.stringify([{ id: "1", status: "UPCOMING" }]);
 

@@ -120,10 +120,21 @@ at the UEFA seam instead.**
 - [x] `ABANDONED` takes the withdrawn path: deleted if never Locked, `deferred` with its
       Prediction kept if Locked, never settled — proven over the 2024-25 Romania–Kosovo
       row.
-      *Half proven, half by construction. That the row leaves as a withdrawn id and
-      never as a settled Fixture is asserted over Romania–Kosovo itself. What the
-      withdrawn path then does — delete, or `deferred` with the Prediction kept — is the
-      shared writer's, unchanged since ADR-0024.*
+      *That the row leaves the normaliser as a withdrawn id and never as a settled
+      Fixture is asserted over Romania–Kosovo itself; that the id reaches the writer and
+      the row goes is asserted at the fetch seam, over a recorded page with the status
+      written onto it.*
+- [x] A Fixture gone from the feed takes the same path.
+      *Added after review found it missing. UEFA is the first source where this is a
+      separate question at all: football-data.org keeps a postponed match in the
+      response with its old matchday and the FPL API keeps one with `event: null`, so in
+      both a withdrawn Fixture is a row to read a status off. UEFA keeps nothing, so the
+      stored ids are compared against every validated page and the difference joins
+      `withdrawnIds`. The comparison is in the UEFA fetch and not in the shared writer,
+      because it is this source's shape that needs it and five running leagues would
+      otherwise get a new answer to a response that dropped a row.*
+      *Both outcomes tested at the fetch seam: never Locked is deleted, Locked keeps its
+      row with `deferred` and `unscheduled` set and its Gameweek intact.*
 - [x] A matchday name outside `MD1`–`MD6` is refused by name (proven over the 2024-25
       recording's `MD7`, `SF` and `Final`), and the refusal is a `UNL` failure that
       costs no other Competition its day.
