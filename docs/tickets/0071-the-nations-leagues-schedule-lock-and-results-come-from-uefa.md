@@ -40,10 +40,22 @@ ninety minutes, frozen once a Lock is observed; attachment by kickoff with `lock
 written on insert and update; the withdrawn path for a withdrawn status or a Fixture
 gone from the feed; the settled statuses; the stale-source guard on an empty response;
 `KickoffInsideDeadlineError` on a breach; every response archived under its own source
-name before validation. Copy that fetch's structure, do not generalise the two into one:
-the paging, the matchday map, the score field and the status set are the four
-differences, and a shared function with four switches is what the football-data.org
-fetch's own comments warn against.
+name before validation.
+
+**The parse half is this fetch's own; the write half is shared.** Do not generalise the
+parsing into one function: the paging, the matchday map, the score field and the status
+set are the four differences, and a shared function with four switches is what the
+football-data.org fetch's own comments warn against. Every one of those four happens
+before the write, and none of them is visible from inside it — so ADR-0036's derivation,
+attachment and write live in `src/fetch/write-schedule.ts`, moved out of the
+football-data.org fetch unchanged and taking matches each source has already normalised
+(integer matchday, `Date` kickoff, stored team names, a settled flag and the result as
+JSON). It is shared rather than copied because of what that half's history costs:
+ADR-0036 was amended twice inside a fortnight, both times there, once at the price of
+fifty-nine withdrawn Predictions — and a third amendment applied to one copy and not the
+other would be wrong in the Competition nobody is watching. The stale-source guard is the
+exception and stays with each source: a feed that pages answers an empty body both when
+it is dead and when its pages have run out, and only the source can tell those apart.
 
 **The matchday map is six entries and refuses the rest.** `MD1`–`MD6` → Gameweek 1–6.
 Any other name — including `MD7` the day the November draw puts it in the feed — is
