@@ -105,6 +105,27 @@ at the UEFA seam instead.**
       which is **two**: paging stops at the first short page, so `offset=200` and
       `offset=300` are recorded evidence of where the Season ends and are never
       requested. Both stop conditions are pinned, the short page and the empty one.*
+- [x] A read that is missing a page is refused before anything is written.
+      *Added after review. UEFA pages this feed last match first: the first page holds
+      `MD6` down to `MD3` and only twenty-two of `MD3`'s twenty-six, so `MD2`, `MD1` and
+      the earliest kickoff of `MD3` are all on the second. A second page that came back
+      empty or short was written as if it were the whole calendar — Gameweek 3 would
+      have Locked at 17:15Z off an 18:45Z kickoff, an hour and a quarter after the
+      16:00Z match the read never saw — and after the withdrawal fix above it would also
+      have deleted the fifty-six Fixtures that page carries. Nothing downstream could
+      see it: the stale guard fires only on nothing at all, and the breach alert has no
+      stored deadline to breach on a first read. The assembled Season is now held
+      against the matchday map, and both halves of that are pinned — a read missing
+      `MD1` and `MD2`, and a read missing only `MD4`.*
+      *This is the gap "by construction" does not reach: the engine is the same bytes,
+      but paging changed what is handed to it.*
+      *Not closed: a page truncated **inside** a round an earlier page also carries — a
+      second page cut off after forty of its fifty-six still holds some `MD1`. Closing
+      it needs a total from the source, which this feed publishes nowhere, or a request
+      at a non-multiple offset, whose behaviour no recording covers; a probe of
+      `offset=130` recorded alongside the others would settle it. The standing
+      mitigation is ADR-0036's: an unLocked deadline is re-derived every fetch, so a bad
+      read is corrected by the next good one unless it is the last before the Lock.*
       *`src/dry-run/archive-replay-fetcher.ts` maps UEFA's URL back to its snapshot
       name, offset included, so the dry run 0076 runs replays every page instead of
       reporting no known source for bytes it holds.*
@@ -165,6 +186,9 @@ at the UEFA seam instead.**
 ## What this ticket did not do
 
 - **The `dry-run` command for `UNL`.** Blocked on tickets 0075 and 0076, above.
+- **A recorded probe at a non-multiple offset.** What would let the paging advance by
+  the number of matches received rather than by the page size, and so read a truncated
+  page's remainder instead of guarding against it.
 - **`LIVE`, `POSTPONED` or any other status word.** Only `UPCOMING`, `FINISHED` and
   `ABANDONED` have been observed. An unknown status stays on the calendar unsettled,
   which is what the football-data.org fetch does with one too; refusing a word nobody

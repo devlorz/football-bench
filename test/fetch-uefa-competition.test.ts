@@ -2,6 +2,7 @@ import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import {
   fetchUefaCompetition,
+  IncompleteUefaSeasonError,
   normaliseUefaMatches,
   parseUefaMatches,
   settledResultOf,
@@ -292,26 +293,92 @@ describe("the Nations League read from UEFA", () => {
     expect(Number(rows[0]!.count)).toBe(156);
   });
 
-  test("a Season whose matches divide by the page size ends on an empty page", async () => {
-    // Nothing observed proves this one: 156 has always stopped the paging
-    // early. A Season of exactly two hundred would ask for a third page, and
-    // without this the answer to what happens then is whatever the loop
-    // happens to do.
-    const [first] = await thisSeasonPages();
-    const requests = await fetchAt(
-      "2026-09-14T09:00:00Z",
-      { 0: first!, 100: await pastTheEnd() }
-    );
+  test("an empty page ends the paging, and a Season short of a matchday is refused",
+    async () => {
+      // Two rules in one scenario because the feed makes them one. The empty
+      // page stops the loop — nothing observed proves that on its own, since
+      // 156 has always stopped it at a short page, and a Season of exactly two
+      // hundred would ask for a third.
+      //
+      // And what the loop stopped on is not a Season. UEFA answers this feed
+      // last match first: the first page holds `MD6` down to `MD3`, and only
+      // twenty-two of `MD3`'s twenty-six — the other four, `MD2` and `MD1` are
+      // all on the second page. A second page that came back empty or short
+      // for a moment used to be written as if it were the whole calendar, and
+      // Gameweek 3's deadline would have been derived from an 18:45Z kickoff
+      // rather than the 16:00Z one it never saw: 17:15Z, an hour and a quarter
+      // after a match had already kicked off. Nothing would have raised it.
+      // The breach alert cannot: there is no stored deadline to breach on a
+      // Season's first fetch, and on a later one the reconciliation would
+      // first have withdrawn the fifty-six Fixtures the missing page holds.
+      const [first] = await thisSeasonPages();
+      const { http, requests } = respondingWith(
+        { 0: first!, 100: await pastTheEnd() }
+      );
 
-    expect(requests).toHaveLength(2);
-    expect(requests[1]).toContain("offset=100");
+      await expect(fetchUefaCompetition({
+        database: client,
+        competition: COMPETITION,
+        season: SEASON,
+        http,
+        now: () => new Date("2026-09-14T09:00:00Z")
+      })).rejects.toThrow(IncompleteUefaSeasonError);
 
-    const { rows } = await client.query<{ count: string }>(
-      "select count(*) from fixtures where competition = $1 and season = $2",
-      [COMPETITION, SEASON]
-    );
-    expect(Number(rows[0]!.count)).toBe(100);
+      expect(requests).toHaveLength(2);
+      expect(requests[1]).toContain("offset=100");
+
+      const { rows } = await client.query<{ count: string }>(
+        `select
+           (select count(*) from fixtures) as fixtures,
+           (select count(*) from gameweeks) as gameweeks,
+           (select count(*) from raw_snapshots) as snapshots`
+      );
+      // Both pages are archived — they are the evidence — and nothing else
+      // was written at all.
+      expect(rows[0]).toEqual({
+        fixtures: "0",
+        gameweeks: "0",
+        snapshots: "2"
+      });
+    });
+
+  test("every round has to be in the read, not just the first", async () => {
+    // Both pages arrive whole and the Season is still not one: `MD4` is
+    // absent. Guarding only the earliest round would pass this, and the
+    // Gameweek it would then write is one with no Fixtures in it and a
+    // deadline nothing justifies.
+    const [first, second] = await thisSeasonPages();
+    const withoutMd4 = [...JSON.parse(first!), ...JSON.parse(second!)]
+      .filter((match: { matchday: { name: string } }) =>
+        match.matchday.name !== "MD4");
+    expect(withoutMd4).toHaveLength(130);
+
+    await expect(fetchAt("2026-09-14T09:00:00Z", {
+      0: JSON.stringify(withoutMd4.slice(0, 100)),
+      100: JSON.stringify(withoutMd4.slice(100))
+    })).rejects.toThrow(/\bMD4\b/);
   });
+
+  test("a short second read withdraws nothing from a Season already stored",
+    async () => {
+      // The refusal above is what stands between a flaky page and a third of
+      // the calendar: a Fixture gone from the feed is withdrawn (ADR-0024), so
+      // without it the fifty-six the missing page carries would be deleted for
+      // being absent from a read that never reached them.
+      const [first, second] = await thisSeasonPages();
+      await fetchAt("2026-09-14T09:00:00Z", { 0: first!, 100: second! });
+
+      await expect(fetchAt(
+        "2026-09-15T09:00:00Z",
+        { 0: first!, 100: await pastTheEnd() }
+      )).rejects.toThrow(IncompleteUefaSeasonError);
+
+      const { rows } = await client.query<{ count: string }>(
+        "select count(*) from fixtures where competition = $1 and season = $2",
+        [COMPETITION, SEASON]
+      );
+      expect(Number(rows[0]!.count)).toBe(156);
+    });
 
   test("an empty first page is a dead source, not a finished Season", async () => {
     await expect(fetchAt("2026-09-14T09:00:00Z", { 0: await pastTheEnd() }))

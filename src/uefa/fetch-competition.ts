@@ -177,6 +177,53 @@ export class StaleUefaSourceError extends Error {
   }
 }
 
+/**
+ * The completeness guard paging makes necessary.
+ *
+ * UEFA answers this feed last match first: the Nations League's first page
+ * holds `MD6` down to `MD3`, and only twenty-two of `MD3`'s twenty-six. Every
+ * remaining `MD3` match — including the earliest kickoff of the round — plus
+ * all of `MD2` and `MD1` are on the second page. So a second page that comes
+ * back empty or short for a moment is not a smaller Season, it is most of a
+ * Season missing, and nothing downstream can see that:
+ *
+ * - the stale-source guard only fires on nothing at all;
+ * - the derived deadline is computed from whatever arrived, so Gameweek 3
+ *   would Lock at 17:15Z off an 18:45Z kickoff, an hour and a quarter after
+ *   the 16:00Z match the read never saw;
+ * - the breach alert has nothing to breach on a first read, and on a later one
+ *   `fixturesGoneFromTheFeed` would have withdrawn the fifty-six Fixtures the
+ *   missing page carries before it could look.
+ *
+ * So the assembled Season is held against the matchday map before anything is
+ * written: every round this Competition plays has to be in the read.
+ *
+ * What it does not catch: a page truncated *inside* a matchday that an earlier
+ * page also carries — a second page cut off after forty of its fifty-six would
+ * still hold some `MD1`, and that round's deadline could be derived from the
+ * wrong kickoff. Closing that needs a total from the source, which this feed
+ * publishes nowhere, or a request at a non-multiple offset, whose behaviour no
+ * recording covers. The mitigation is the one ADR-0036 already relies on: an
+ * unLocked deadline is re-derived on every fetch, so a bad read is corrected
+ * by the next good one unless it is the last before the Lock.
+ */
+export class IncompleteUefaSeasonError extends Error {
+  constructor(
+    public readonly competition: string,
+    public readonly season: string,
+    public readonly missing: string[],
+    public readonly matchesRead: number
+  ) {
+    super(
+      `Competition ${competition} Season ${season} was read as `
+      + `${matchesRead} matches carrying no ${missing.join(", ")}; UEFA pages `
+      + "the Season last match first, so a missing round is a page that did "
+      + "not arrive and not a smaller Season — nothing has been written"
+    );
+    this.name = "IncompleteUefaSeasonError";
+  }
+}
+
 export function sourceName(
   competition: string,
   season: string,
@@ -410,6 +457,17 @@ export async function fetchUefaCompetition({
   }
   if (matches.length === 0) {
     throw new StaleUefaSourceError(competition, season);
+  }
+  const roundsRead = new Set(matches.map((match) => match.matchday.name));
+  const missing = [...GAMEWEEK_BY_MATCHDAY.keys()]
+    .filter((round) => !roundsRead.has(round));
+  if (missing.length > 0) {
+    throw new IncompleteUefaSeasonError(
+      competition,
+      season,
+      missing,
+      matches.length
+    );
   }
 
   const { scheduled, withdrawnIds } = normaliseUefaMatches(

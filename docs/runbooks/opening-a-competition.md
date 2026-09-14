@@ -2,7 +2,7 @@
 
 Every edit a new Competition needs, in one place. Three comments in the codebase each say
 opening a Competition is "one entry" or "a single edit"; each is true about its own file
-and none of them is true about the change. There are **nine** places, plus what §2's
+and none of them is true about the change. There are **ten** places, plus what §2's
 Wikipedia club map still holds only in prose, and this page is the only thing that
 gathers them — a review found the gap after La Liga's history landed, when four of the
 then-five had been made and nothing said what the fifth was. The sixth arrived with
@@ -21,6 +21,11 @@ day, until one is written. It is the first row here whose absence is loud rather
 quiet, and it goes **first** for that reason: with the entry in place every other missing
 edit is the section-shaped failure the rest of this table describes.
 
+Ticket 0071 made it ten. Edit 9 is loud in the same way and for the same kind of reason:
+a Competition whose entry names UEFA for its schedule needs UEFA's own numeric id for it,
+and without one that Competition's day fails by name. It is a row rather than a sentence
+in edit 0 because it is a second file, which is the whole reason this page exists.
+
 Vocabulary: [CONTEXT.md](../../CONTEXT.md) — Competition, Division, Track.
 Decisions: [ADR-0035](../adr/0035-the-match-track-grows-a-competition-dimension.md)
 (a Competition is a dimension, not a Track),
@@ -36,14 +41,16 @@ This page is what to write before that one runs.
 
 ---
 
-## 1. The nine edits
+## 1. The ten edits
 
 In this order. Each is small; the risk is entirely in stopping one short.
 
-Edit **0** was added by ticket 0070 and the eight below keep the numbers they have had
+Edit **0** was added by ticket 0070 and edits 1 to 8 keep the numbers they have had
 since ticket 0059 — four tickets cite them by number, and renumbering a list other
 documents point into buys a tidier column and costs every one of those references. It is
-numbered 0 because it genuinely comes before the eight, not because it matters least.
+numbered 0 because it genuinely comes before the rest, not because it matters least.
+Ticket 0071 appended edit **9** at the end for the same reason: a row goes on the bottom
+so that nothing above it moves.
 
 | # | Where | What | If it is missing |
 | --- | --- | --- | --- |
