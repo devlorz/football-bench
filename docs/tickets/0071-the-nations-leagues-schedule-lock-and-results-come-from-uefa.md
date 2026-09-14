@@ -13,7 +13,18 @@ recorded feed writes exactly that record. Source:
 **Blocked by:** 0070 — the registry entry for `UNL` is written here and needs the
 registry to exist; the `UNL` code must be in the domain before the first Gameweek row.
 
-**Status:** ready-for-agent
+**Status:** built 2026-09-15 in `a53fc83`, `f841969`, `24c8985` and `600a89e` — the
+UEFA fetch, the registry entry, the daily-fetch dispatch, the dry run's replay mapping
+and their tests. `a53fc83` moves ADR-0036's derivation, attachment and write out of the
+football-data.org fetch unchanged so that both sources run one copy; the § below on the
+two halves is what that decision is.
+
+Nothing here is pending on an operator: no migration, no `competitions` row, no paid
+call. What is **open** is other tickets' and is not this one's to finish — the `dry-run`
+command for `UNL` needs a frozen `MATCH_PROMPTS.UNL` (ticket 0075) and an activated,
+fetched Competition (0076), and `UNL`'s three remaining `null` registry entries become
+source names in tickets 0072 to 0074. The per-box notes under *Acceptance* say which
+claim rests on what, and *What this ticket did not do* is the rest.
 
 ---
 
@@ -105,6 +116,9 @@ at the UEFA seam instead.**
       which is **two**: paging stops at the first short page, so `offset=200` and
       `offset=300` are recorded evidence of where the Season ends and are never
       requested. Both stop conditions are pinned, the short page and the empty one.*
+      *`src/dry-run/archive-replay-fetcher.ts` maps UEFA's URL back to its snapshot
+      name, offset included, so the dry run 0076 runs replays every page instead of
+      reporting no known source for bytes it holds.*
 - [x] A read that is missing a page is refused before anything is written.
       *Added after review. UEFA pages this feed last match first: the first page holds
       `MD6` down to `MD3` and only twenty-two of `MD3`'s twenty-six, so `MD2`, `MD1` and
@@ -126,9 +140,15 @@ at the UEFA seam instead.**
       `offset=130` recorded alongside the others would settle it. The standing
       mitigation is ADR-0036's: an unLocked deadline is re-derived every fetch, so a bad
       read is corrected by the next good one unless it is the last before the Lock.*
-      *`src/dry-run/archive-replay-fetcher.ts` maps UEFA's URL back to its snapshot
-      name, offset included, so the dry run 0076 runs replays every page instead of
-      reporting no known source for bytes it holds.*
+      *A third close was considered and rejected: every round of a league phase holds
+      the same number of matches — twenty-six in both recorded editions — so the counts
+      could be held against each other, and that would catch a truncation inside a round
+      using only evidence already archived. It is rejected because it fires on the one
+      event this ticket also taught the fetch to handle. A Fixture gone from the feed is
+      withdrawn (ADR-0024), and it leaves its round one short; the guard would refuse the
+      Competition's whole day for a schedule change the record is meant to absorb
+      quietly. A guard whose false alarm is the normal case is worse than the hole it
+      closes.*
 - [x] A `FINISHED` match settles at `score.regular`, never `score.total`; a `FINISHED`
       match with no regular score is a validation error naming the match.
       *Proven at `settledResultOf` over the archived 2024-25 matches where the two

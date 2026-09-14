@@ -202,9 +202,11 @@ export async function writeCompetitionSchedule({
   // The kickoff is the test, not the result: a Fixture already played is caught
   // by it, and so is one this fetch found in flight or one whose result the
   // source has not posted yet — the recorded first response for La Liga
-  // carried all ten of its opening Fixtures as `TIMED` hours after they
-  // kicked off, and a result-only test would have queued six of them for a
-  // Lock five days later.
+  // carried all ten of its opening Fixtures as football-data.org's `TIMED`
+  // hours after they kicked off, and a result-only test would have queued six
+  // of them for a Lock five days later. The word is that source's and the
+  // lesson is not: every source this writer serves has some way of saying
+  // "kicked off, no score yet", and none of them is read here.
   const isPastKickoffForKnownGameweek = (match: {
     fixtureId: number;
     matchday: number;
@@ -481,12 +483,10 @@ export async function writeCompetitionSchedule({
       // the next open Gameweek (ADR-0015, ADR-0036, ticket 0064) — but only if
       // that Gameweek's Lock still precedes its kick-off.
       //
-      // The kickoff is the test, not the result: a Fixture already played is
-      // caught by it, and so is one this fetch found in flight or one whose
-      // result the source has not posted yet — the recorded first response for
-      // La Liga carried all ten of its opening Fixtures as `TIMED` hours after
-      // they kicked off, and a result-only test would have queued six of them
-      // for a Lock five days later.
+      // The kickoff is the test, not the result, for the reason the deadline
+      // derivation above gives at length: football-data.org's `TIMED` is one
+      // source's way of saying "kicked off, no score yet", every source has
+      // one, and none of them is read here.
       //
       // A Fixture brought forward ahead of a lower-numbered open Gameweek
       // attaches to the Gameweek it is played in (ticket 0064, ADR-0036).
