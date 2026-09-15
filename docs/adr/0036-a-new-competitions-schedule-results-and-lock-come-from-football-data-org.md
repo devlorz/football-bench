@@ -157,6 +157,61 @@
 > What is bought is four days of freshness on nine Fixtures: predicted zero to two days
 > before kick-off instead of four to six.
 
+> Amended 2026-09-15 by ticket 0078. **La Liga Gameweek 6's Lock was moved out by
+> seventy-five minutes, from 15:30Z to 16:45Z on the day, so that forty Gaps left by a
+> funding failure could be repaired before any of the Fixtures were played.** This is the
+> second Lock in the benchmark set by hand rather than derived, and the 2026-08-15 banner
+> at the top of this file says of the first: "a record of a decision taken once under a
+> clock, not a precedent." That sentence is not withdrawn. It is overruled once, here,
+> knowingly, and the cost is stated below rather than smoothed over.
+>
+> What happened: Gameweek 6 ran on 2026-09-15 under the Lock migration 0041 wrote. Neither
+> run failed — `main` at 09:39–09:48Z and `fill` at 13:36–13:41Z both completed — but
+> eighty-three of their calls came back HTTP 402 `in_flight_budget_exhausted`. The
+> OpenRouter account held $10.43, and the reservation OpenRouter takes against ten
+> concurrent calls at the 32,000-token output ceiling exceeds that, so most calls were
+> refused before reaching a provider. The Gameweek held 60 Predictions of 100; three of its
+> ten Fixtures had the full roster. Total spend on the two runs: $1.63. The failure is a
+> funding one, not a modelling one: no seat answered badly, most were never asked.
+>
+> Why it was repairable at all, and why the repair does not disturb what is measured. Eight
+> of the ten Fixtures had not kicked off. ADR-0006's whole-Gameweek Lock exists so that
+> every Entrant sees the same information cut-off, and the mechanism that delivers that
+> guarantee is the stored `contexts` row, not the clock: a `fill` run reads the row built
+> at 09:39Z rather than building a new one, so a seat answering at 16:00Z reads the same
+> bytes, as of the same instant, that the seats answering at 09:40Z read. The Entrants
+> cannot tell the two runs apart, because the context is the whole of what they see. That
+> is what makes this a repair of an unasked question rather than a second, better-informed
+> question put only to the seats that happened to fail — and it is why no Prediction had to
+> be withdrawn, unlike the 2026-09-03 amendment above.
+>
+> What is decided: migration 0044 lifts migration 0025's trigger for one transaction and
+> writes Gameweek 6's deadline out to 2026-09-15 16:45Z, the latest instant still earlier
+> than every kickoff the Gameweek had left. A `fill` run then repaired thirty-eight of the
+> forty Gaps in forty-six calls for $1.14, between 15:57Z and 16:01Z — fifty-nine minutes
+> before the first kick-off. Nine of the ten Fixtures now hold all ten Predictions.
+>
+> What it costs, stated. **The margin.** Rayo Vallecano–Espanyol kicks off at 17:00Z, so
+> its Lock now stands fifteen minutes before it where the rule derives ninety. Nothing in
+> its packet differs — it held all ten Predictions from 09:39Z, no seat was asked again,
+> and the context reads only stored data — but the margin does, exactly as it did for La
+> Liga Gameweek 1, so this Gameweek is not strictly comparable to the others on that axis
+> and a cross-Gameweek claim should say so. **The buffer.** The ninety minutes plus the
+> daily fetch cadence are what keep "a Prediction precedes its kick-off" true when a league
+> moves a kickoff earlier; at fifteen minutes that guard is effectively spent for this one
+> Gameweek. The migration refuses to write a Lock at or after the earliest kickoff still
+> ahead, read off the record at apply time, so the promise itself could not be broken by a
+> kickoff that had moved since the file was written. **The two that stay.** Real
+> Sociedad–Celta was played on 2026-09-03; the two seats that Gapped it then Gap it for
+> ever, because a Fixture whose kickoff has passed is never queued again. Thirty-eight of
+> forty were reachable; two were not. **The precedent.** The alternative the rule provides
+> — let the Gameweek go — costs a Gameweek whose Fixtures were still ahead and whose seats
+> had not been asked. That is what tipped it. The condition under which this may be done
+> again is narrow and is the whole of what makes it defensible: every Fixture still
+> unplayed, the repair run a `fill` over contexts already stored, no Prediction withdrawn,
+> and the new Lock earlier than every remaining kickoff. A repair that fails any of those
+> is a different decision and needs its own.
+
 For every Competition except the Premier League, the daily fetch reads football-data.org:
 the Fixture list, each Fixture's matchday (stored as its Gameweek), kickoff times and final
 scores. The free tier covers all four target leagues under one API and one rate limit that
