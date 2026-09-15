@@ -110,6 +110,7 @@ describe("the benchmark database", () => {
       "head_coaches",
       "historical_matches",
       "international_results",
+      "international_results_source",
       "manager_states",
       "models",
       "prediction_runs",

@@ -13,6 +13,10 @@ import {
   sheetSource,
   sheetUrl
 } from "../src/365scores/fetch-match-stats.js";
+import {
+  RESULTS_SNAPSHOT,
+  RESULTS_URL
+} from "../src/international-results/fetch-results.js";
 
 describe("the archive replay fetcher", () => {
   test("serves an archived source body for the URL that produced it", async () => {
@@ -137,6 +141,20 @@ describe("the archive replay fetcher", () => {
         .toBe("{\"games\":[]}");
       expect((await http(sheetUrl("4444714"))).body)
         .toBe("{\"statistics\":[]}");
+    });
+
+  test("replays the international results dataset under its one name",
+    async () => {
+      // The one source whose URL and archived name are both constants: one
+      // file for every Competition that reads it, no Season in either, and so
+      // none of the translation the four sources around it need.
+      const http = createArchiveReplayFetcher([
+        { source: RESULTS_SNAPSHOT, body: "date,home_team\n2026-08-26,Vietnam" }
+      ]);
+
+      const response = await http(RESULTS_URL);
+
+      expect(response.body).toBe("date,home_team\n2026-08-26,Vietnam");
     });
 
   test("names the Season it looked for when no 365Scores snapshot matches",

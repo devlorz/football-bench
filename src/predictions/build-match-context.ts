@@ -21,8 +21,20 @@ import {
   type MatchPromptFixture
 } from "./openrouter-entrant.js";
 import { resolveUnderstatTeamName } from "../understat/team-identity.js";
-import { sourcesOf } from "../fetch/competition-sources.js";
+import {
+  sourcesOf,
+  type CompetitionSources
+} from "../fetch/competition-sources.js";
 import { SCORES_365_SOURCE } from "../365scores/fetch-match-stats.js";
+import {
+  INTERNATIONAL_RESULTS_SOURCE,
+  RESULTS_SNAPSHOT
+} from "../international-results/fetch-results.js";
+import {
+  buildInternationalsContext,
+  type InternationalMatch,
+  type PlayedFixture
+} from "../context/build-internationals-context.js";
 
 type Database = Pick<Client, "query">;
 
@@ -73,42 +85,22 @@ function joinXg(
   });
 }
 
-/**
- * One settled Fixture of this Season with the shots and xG a Fixture-keyed
- * stats source stored against it (ADR-0058), which is how a Competition that
- * is not a league carries the numbers a league carries on its stored results.
- *
- * Read from `team_match_stats` and from nowhere else: `understat_match_xg` is
- * keyed by an Understat match id in a league Understat covers, and
- * `historical_matches` is keyed by a Division a national side does not have
- * (migration 0042). A `null` figure is the source's hole and never a zero.
- *
- * Loaded here and rendered by the section ticket 0073 builds, which is the
- * ticket that decides what a cup's Season lines say and merges these with the
- * recent internationals they would otherwise be listed twice beside. Putting
- * them on the league form lines in the meantime would render a Division a cup
- * does not have.
- */
-export interface PlayedFixture {
-  kicked_off_at: Date;
-  home_team: string;
-  away_team: string;
-  home_goals: number;
-  away_goals: number;
-  home_shots: number | null;
-  away_shots: number | null;
-  home_shots_on_target: number | null;
-  away_shots_on_target: number | null;
-  home_xg: number | null;
-  away_xg: number | null;
-}
-
 export interface MatchContextData {
   competition: string;
   season: string;
   deadline: Date;
   historicalMatches: HistoricalMatch[];
   playedFixtures: PlayedFixture[];
+  /**
+   * The registry entry the reads above were dispatched by, carried rather than
+   * resolved twice: which sections this packet has is the same question as
+   * which tables it read, and answering it once is what keeps the two from
+   * disagreeing.
+   */
+  sources: CompetitionSources | undefined;
+  internationals: InternationalMatch[];
+  /** The date of the dataset's latest row, or null where it was never read. */
+  datasetUpdatedOn: string | null;
   fplPlayers: FplPlayer[];
   squadChanges: SquadChangeRow[];
   headCoachChanges: HeadCoachChangeRow[];
@@ -162,7 +154,8 @@ export async function loadMatchContextData(
   // the two sources agree on the day and on the spelling -- the fetch resolves
   // 365Scores' three into the record's before it writes -- and on nothing
   // else, least of all a match id.
-  const statsSource = sourcesOf(competition)?.stats;
+  const sources = sourcesOf(competition);
+  const statsSource = sources?.stats;
   const playedFixtures = statsSource === SCORES_365_SOURCE
     ? await database.query<PlayedFixture>(
       `select
@@ -192,6 +185,45 @@ export async function loadMatchContextData(
       [competition, season, deadline, statsSource]
     )
     : undefined;
+  // The registry again, and the same rule the shots and xG above are read by:
+  // a Competition whose history is the GitHub dataset reads
+  // `international_results`, and one that does not name it never opens that
+  // table at all (ADR-0057).
+  //
+  // Not the symmetric claim, deliberately: `historical_matches` above is read
+  // for every Competition and filtered by its `competition` column, which
+  // returns nothing for a cup because nothing may be written there for one
+  // (migration 0042 leaves the Division check where it is). The gate is here
+  // because this table has no such column to filter by, and could not have
+  // one -- a national side plays in several competitions under none of this
+  // record's codes.
+  //
+  // Bounded by the Lock's own UTC day, exclusive, because the dataset carries
+  // days and not instants -- and read back as text for the same reason, since
+  // a `date` handed over as local midnight would be a day out on either side
+  // of UTC. The renderer bounds the rows again; this keeps the read honest on
+  // its own.
+  const internationals = sources?.history === INTERNATIONAL_RESULTS_SOURCE
+    ? await database.query<InternationalMatch>(
+      `select
+         played_on::text as played_on, home_team, away_team,
+         home_goals, away_goals, tournament, country, neutral
+         from international_results
+        where played_on < ($1 at time zone 'utc')::date
+        order by played_on`,
+      [deadline]
+    )
+    : undefined;
+  // How fresh that file was when it was last read, which is a fact about the
+  // file and not about its rows: its latest row is usually a match between two
+  // sides no Competition here stores (migration 0043).
+  const datasetRead = internationals === undefined
+    ? undefined
+    : await database.query<{ latest_row_on: string }>(
+      `select latest_row_on::text as latest_row_on
+         from international_results_source where source = $1`,
+      [RESULTS_SNAPSHOT]
+    );
   const fplPlayers = await database.query<FplPlayer>(
     `select
        fpl_id, team_name, web_name, position, price_tenths, status,
@@ -237,6 +269,9 @@ export async function loadMatchContextData(
       competition, historicalMatches.rows, storedXg.rows
     ),
     playedFixtures: playedFixtures?.rows ?? [],
+    sources,
+    internationals: internationals?.rows ?? [],
+    datasetUpdatedOn: datasetRead?.rows[0]?.latest_row_on ?? null,
     fplPlayers: fplPlayers.rows,
     squadChanges: squadChanges.rows,
     headCoachChanges: headCoachChanges.rows,
@@ -255,14 +290,31 @@ export function buildMatchContext(
   return matchContext(
     fixture,
     [
-      buildHistoricalContext({
-        competition: data.competition,
-        season: data.season,
-        asOf: data.deadline,
-        homeTeam: fixture.home_team,
-        awayTeam: fixture.away_team,
-        matches: data.historicalMatches
-      }),
+      // One history section, chosen by the registry the fetch that wrote the
+      // rows was dispatched by (ADR-0057). A cup gets the recent-internationals
+      // section *instead of* the league one and not beside it: the league
+      // section is built on Divisions, a table and prior-Season positions, and
+      // for a Competition with none of those it renders four lines saying so
+      // and one -- "no matches played" -- that stops being true the moment a
+      // matchday settles.
+      data.sources?.history === INTERNATIONAL_RESULTS_SOURCE
+        ? buildInternationalsContext({
+          competition: data.competition,
+          asOf: data.deadline,
+          homeTeam: fixture.home_team,
+          awayTeam: fixture.away_team,
+          internationals: data.internationals,
+          playedFixtures: data.playedFixtures,
+          datasetUpdatedOn: data.datasetUpdatedOn
+        })
+        : buildHistoricalContext({
+          competition: data.competition,
+          season: data.season,
+          asOf: data.deadline,
+          homeTeam: fixture.home_team,
+          awayTeam: fixture.away_team,
+          matches: data.historicalMatches
+        }),
       // Availability is Premier League only and structurally so (ADR-0037):
       // the section is built from the FPL player feed, which has no equivalent
       // in the other leagues. Absent rather than empty -- the empty section

@@ -19,6 +19,10 @@ import {
   Scores365ValidationError,
   sheetUrl
 } from "../src/365scores/fetch-match-stats.js";
+import {
+  RESULTS_SNAPSHOT,
+  RESULTS_URL
+} from "../src/international-results/fetch-results.js";
 import { archivedBody } from "./archived-fixture.js";
 import { resetSchema } from "./schema-fixture.js";
 
@@ -81,15 +85,27 @@ const PREMIER_LEAGUE_URLS = [
 ] as const;
 
 /**
- * The only source a Nations League entry names today. Two pages, because the
- * feed answers a hundred matches at a time and the league phase is 156.
+ * The two sources a Nations League entry names on every run: UEFA's schedule
+ * over two pages, because the feed answers a hundred matches at a time and the
+ * league phase is 156, and the GitHub dataset's one file. Its shots and xG are
+ * not here — those are read only for a Fixture that has settled and is short
+ * of a figure (ADR-0058), so they belong to the tests that settle one.
  */
 const NATIONS_LEAGUE_URLS = [
   "https://match.uefa.com/v5/matches"
   + "?competitionId=2014&seasonYear=2027&limit=100&offset=0",
   "https://match.uefa.com/v5/matches"
-  + "?competitionId=2014&seasonYear=2027&limit=100&offset=100"
+  + "?competitionId=2014&seasonYear=2027&limit=100&offset=100",
+  RESULTS_URL
 ] as const;
+
+/**
+ * The dataset as it really was on 2026-09-14: every men's international since
+ * 1872, 2,360 of them from `STORED_FROM` forward, and a last row dated
+ * 2026-08-26 that no Competition here stores.
+ */
+const INTERNATIONAL_RESULTS =
+  "martj42-international-results-2026-08-26-recorded.csv.gz";
 
 const UEFA_PAGES = [
   "uefa-2026-27-UNL-recorded-offset-0.json.gz",
@@ -207,7 +223,8 @@ describe("the daily fetch", () => {
       `truncate
          historical_matches, fpl_players, fixtures, gameweeks, raw_snapshots,
          understat_match_xg, team_match_stats, squad_changes,
-         head_coach_changes, competitions
+         head_coach_changes, competitions, international_results,
+         international_results_source
        restart identity cascade`
     );
     // Every source the fetch reaches, it reaches per listed Competition, so a
@@ -359,7 +376,8 @@ describe("the daily fetch", () => {
       );
       const responses = await sourceResponses([
         [NATIONS_LEAGUE_URLS[0], await archivedBody(UEFA_PAGES[0])],
-        [NATIONS_LEAGUE_URLS[1], await archivedBody(UEFA_PAGES[1])]
+        [NATIONS_LEAGUE_URLS[1], await archivedBody(UEFA_PAGES[1])],
+        [RESULTS_URL, await archivedBody(INTERNATIONAL_RESULTS)]
       ]);
       const requested: string[] = [];
 
@@ -379,10 +397,93 @@ describe("the daily fetch", () => {
         [...PREMIER_LEAGUE_URLS, ...NATIONS_LEAGUE_URLS].sort()
       );
       const { rows } = await client.query(
-        `select count(*)::int as fixtures from fixtures
-          where competition = 'UNL' and season = '2026-27'`
+        `select
+           (select count(*)::int from fixtures
+             where competition = 'UNL' and season = '2026-27') as fixtures,
+           (select count(*)::int from international_results) as internationals,
+           (select count(*)::int from raw_snapshots
+             where source = $1) as archived`,
+        [RESULTS_SNAPSHOT]
       );
-      expect(rows[0]?.fixtures).toBe(156);
+      // The schedule, the dataset's rows and the dataset's own bytes, from one
+      // run: the registry names two sources for this Competition and the day
+      // lands both. The Premier League's history is in `historical_matches`
+      // and its own count is unchanged above; neither Competition's rows are
+      // in the other's table.
+      expect(rows[0]).toEqual({
+        fixtures: 156, internationals: 758, archived: 1
+      });
+    });
+
+  test("a cup whose dataset has not been read since its Lock fails by name",
+    async () => {
+      // ADR-0036's rule, asked of the source the registry names (spec 0027,
+      // story 44): a Competition past its own Gameweek 1 deadline whose
+      // history source has produced nothing this Season fails by name. `UNL` has no row in `historical_matches`
+      // and never can -- the Division check refuses one (migration 0042) -- so
+      // a guard still reading that table would fail this Competition every day
+      // for ever, and one skipping it would never fail it at all. The error's
+      // own name is what says which of the two happened.
+      await client.query(
+        "insert into competitions (competition, season) values ('UNL', $1)",
+        ["2026-27"]
+      );
+      await client.query(
+        `insert into historical_matches
+           (competition, season, division, played_on,
+            home_team, away_team, home_goals, away_goals)
+         values ('PL', '2026-27', 'Premier League', '2026-08-15T14:00:00Z',
+                 'Liverpool', 'Bournemouth', 2, 0)`
+      );
+      // Rows from a read that happened before this Competition Locked, which
+      // is the case "does the table hold any row at all" would have passed:
+      // the fetch has not reached the file since, and the packet is reading a
+      // window nobody has refreshed.
+      await client.query(
+        `insert into international_results (
+           played_on, home_team, away_team, home_goals, away_goals,
+           tournament, country, neutral
+         ) values ('2026-06-11', 'Kosovo', 'Sweden', 1, 0, 'Friendly',
+                   'Kosovo', false)`
+      );
+      await client.query(
+        `insert into international_results_source
+           (source, latest_row_on, read_at)
+         values ($1, '2026-06-20', '2026-09-01T06:00:00Z')`,
+        [RESULTS_SNAPSHOT]
+      );
+      // Every source answers but the dataset, whose host is down.
+      const responses = await sourceResponses([
+        [NATIONS_LEAGUE_URLS[0], await archivedBody(UEFA_PAGES[0])],
+        [NATIONS_LEAGUE_URLS[1], await archivedBody(UEFA_PAGES[1])]
+      ]);
+
+      const thrown = await runDailyFetch({
+        database: client,
+        season: "2026-27",
+        footballDataSeason: "2025-26",
+        footballDataOrgToken: "a-football-data-org-token",
+        now: () => new Date("2026-09-25T06:00:00.000Z"),
+        http: async (url: string) => url === RESULTS_URL
+          ? { status: 502, body: "<html>502 Bad Gateway</html>" }
+          : { status: 200, body: responses.get(url) ?? "" }
+      }).catch((error: unknown) => error);
+
+      const errors = (thrown as AggregateError).errors as unknown[];
+      expect(errors.map((error) => (error as Error).name)).toEqual([
+        "InternationalResultsHttpError", "StaleInternationalResultsError"
+      ]);
+      // Two failures and one Competition: the source that went down and the
+      // question that went unanswered because of it. The Premier League's day
+      // landed whole beside them, which is the promise the registry makes.
+      const { rows } = await client.query(
+        `select
+           (select count(*)::int from fixtures
+             where competition = 'PL') as premier_league,
+           (select count(*)::int from fixtures
+             where competition = 'UNL') as nations_league`
+      );
+      expect(rows[0]).toEqual({ premier_league: 380, nations_league: 156 });
     });
 
   test("reads 365Scores for the day a settled Nations League Fixture was played",
@@ -427,6 +528,7 @@ describe("the daily fetch", () => {
       const responses = await sourceResponses([
         [NATIONS_LEAGUE_URLS[0], await archivedBody(UEFA_PAGES[0])],
         [NATIONS_LEAGUE_URLS[1], await archivedBody(UEFA_PAGES[1])],
+        [RESULTS_URL, await archivedBody(INTERNATIONAL_RESULTS)],
         [
           listingUrl("UNL", "2026-09-24"),
           await archivedBody("365scores-UNL-games-2026-09-24-recorded.json.gz")
@@ -502,7 +604,8 @@ describe("the daily fetch", () => {
       // Every source answers but 365Scores, which answers with nothing.
       const responses = await sourceResponses([
         [NATIONS_LEAGUE_URLS[0], await archivedBody(UEFA_PAGES[0])],
-        [NATIONS_LEAGUE_URLS[1], await archivedBody(UEFA_PAGES[1])]
+        [NATIONS_LEAGUE_URLS[1], await archivedBody(UEFA_PAGES[1])],
+        [RESULTS_URL, await archivedBody(INTERNATIONAL_RESULTS)]
       ]);
 
       const thrown = await runDailyFetch({

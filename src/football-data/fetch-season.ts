@@ -1,9 +1,20 @@
 import type { Client } from "pg";
 import type { HttpFetcher } from "../http.js";
+import { parseCsv } from "../csv.js";
 import { storeRawSnapshots } from "../snapshots/store-raw-snapshots.js";
 import { divisionsOf, type Division } from "./divisions.js";
 
 type Database = Pick<Client, "query">;
+
+/**
+ * What the registry names this source by, and the word the daily fetch and its
+ * guard dispatch on. Exported for the same reason `SCORES_365_SOURCE` and
+ * `INTERNATIONAL_RESULTS_SOURCE` are: the comparison is tied by the compiler
+ * on one side and by nothing on the other, and three sources spelling their
+ * own name and two leaving a bare literal is the drift that makes a reader
+ * check which is which.
+ */
+export const FOOTBALL_DATA_SOURCE = "football-data.co.uk";
 
 const REQUIRED_COLUMNS = [
   "Div",
@@ -90,49 +101,6 @@ function sourceName(season: string, division: Division): string {
 
 function sourceUrl(season: string, division: Division): string {
   return `https://www.football-data.co.uk/mmz4281/${seasonPath(season)}/${division.code}.csv`;
-}
-
-function parseCsv(body: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let field = "";
-  let quoted = false;
-
-  for (let index = 0; index < body.length; index += 1) {
-    const character = body[index];
-    if (character === "\"") {
-      if (quoted && body[index + 1] === "\"") {
-        field += "\"";
-        index += 1;
-      } else {
-        quoted = !quoted;
-      }
-    } else if (character === "," && !quoted) {
-      row.push(field);
-      field = "";
-    } else if ((character === "\n" || character === "\r") && !quoted) {
-      if (character === "\r" && body[index + 1] === "\n") {
-        index += 1;
-      }
-      row.push(field);
-      if (row.some((value) => value.length > 0)) {
-        rows.push(row);
-      }
-      row = [];
-      field = "";
-    } else {
-      field += character;
-    }
-  }
-
-  if (quoted) {
-    throw new Error("unterminated quoted CSV field");
-  }
-  if (field.length > 0 || row.length > 0) {
-    row.push(field);
-    rows.push(row);
-  }
-  return rows;
 }
 
 function parsePlayedOn(value: string): Date | undefined {

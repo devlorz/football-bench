@@ -1,6 +1,7 @@
 import type { Client } from "pg";
 import {
   fetchFootballDataSeason,
+  FOOTBALL_DATA_SOURCE,
   FootballDataSourceHttpError
 } from "../football-data/fetch-season.js";
 import {
@@ -26,6 +27,11 @@ import {
   type ResultDisagreement,
   type UnlistedFixture
 } from "../365scores/fetch-match-stats.js";
+import {
+  fetchInternationalResults,
+  INTERNATIONAL_RESULTS_SOURCE,
+  RESULTS_SNAPSHOT
+} from "../international-results/fetch-results.js";
 import {
   fetchSquadChanges,
   type FetchSquadChangesResult
@@ -136,20 +142,35 @@ export class StaleFootballDataSeasonError extends Error {
   }
 }
 
+export class StaleInternationalResultsError extends Error {
+  constructor(public readonly competition: string) {
+    super(
+      `Competition ${competition} has read no international results since `
+      + "its own Gameweek 1 deadline; the martj42/international_results "
+      + "dataset has not reached this record since that Competition Locked"
+    );
+    this.name = "StaleInternationalResultsError";
+  }
+}
+
 /**
- * Whether one Competition's football-data.co.uk feed has produced any
- * current-Season result by the time that Competition's own Gameweek 1 has
- * Locked.
+ * Whether one Competition's history source has produced a result by the time
+ * that Competition's own Gameweek 1 has Locked.
  *
  * A literal `'PL'` on both halves guaranteed one league that and denied it to
  * every other: `gw = 1` returns a row per listed Competition, and a Spanish
  * result answered "the English feed is live".
  *
- * The `exists` half is correlated to the row rather than to `$2`, which today
- * buys nothing — the outer filter already pins one league. It is what keeps
- * the two halves together if that filter is ever widened.
+ * Which table answers is the registry's business and not the caller's
+ * (ADR-0057), so the whole entry comes in and the question is asked of the
+ * source it names. The deadline is read once and the table asked only past it,
+ * which is also what replaced a single query with a correlated `exists`: the
+ * two sources' rows are found by different columns -- a league's by Season and
+ * Competition, a cup's by neither, because `international_results` holds no
+ * Season and no Competition at all (migration 0042) -- and one query that can
+ * ask either is one query with a table name in a string.
  */
-async function requireCurrentSeasonMatchesAfterFirstDeadline(
+async function requireHistoryAfterFirstDeadline(
   database: Database,
   competition: string,
   sources: CompetitionSources,
@@ -157,40 +178,53 @@ async function requireCurrentSeasonMatchesAfterFirstDeadline(
   footballDataSeason: string,
   observedAt: Date
 ): Promise<void> {
-  // The registry's history source decides which table answers "has this
-  // Competition produced a current-Season result yet", and it is read here
-  // rather than inherited from a filter the caller happens to have applied: a
-  // Competition whose history is elsewhere needs a different table, not a
-  // skipped question, and the next source to arrive adds a branch here rather
-  // than unpicking a loop.
-  if (sources.history !== "football-data.co.uk") {
+  if (sources.history === null) {
     return;
   }
-  const currentSeasonState = await database.query(
-    `select
-       g.deadline_at,
-       exists (
-         select 1
-           from historical_matches h
-          where h.season = g.season and h.competition = g.competition
-       ) as has_matches
-       from gameweeks g
-      where g.season = $1 and g.gw = 1 and g.competition = $2`,
+  const firstGameweek = await database.query<{ deadline_at: Date }>(
+    `select deadline_at from gameweeks
+      where season = $1 and gw = 1 and competition = $2`,
     [season, competition]
   );
-  const state = currentSeasonState.rows[0] as
-    | { deadline_at: Date; has_matches: boolean }
-    | undefined;
+  const deadline = firstGameweek.rows[0]?.deadline_at;
   if (
-    state !== undefined
-    && observedAt.getTime() >= state.deadline_at.getTime()
-    && !state.has_matches
+    deadline === undefined
+    || observedAt.getTime() < deadline.getTime()
   ) {
-    throw new StaleFootballDataSeasonError(
-      competition,
-      season,
-      footballDataSeason
+    return;
+  }
+  if (sources.history === FOOTBALL_DATA_SOURCE) {
+    const stored = await database.query(
+      `select 1 from historical_matches
+        where season = $1 and competition = $2 limit 1`,
+      [season, competition]
     );
+    if (stored.rows.length === 0) {
+      throw new StaleFootballDataSeasonError(
+        competition, season, footballDataSeason
+      );
+    }
+    return;
+  }
+  // The same question the league half asks, in the only terms this table can
+  // answer it: one file of every men's international is read for whichever
+  // Competitions name it, so it carries no Season and no Competition to filter
+  // by, and "has this record read it since this Competition Locked its first
+  // Gameweek" is what stands in for "has the feed produced a current-Season
+  // result". Asking merely whether the table holds a row would be answered by
+  // rows a read last year left behind.
+  //
+  // How fresh the *file* is, which is the other half an operator wants, is
+  // deliberately not asked here: a dataset that is committed monthly is stale
+  // by this guard's standards every month, and ADR-0057 puts that fact in the
+  // line the Entrant reads rather than in a failure.
+  const read = await database.query(
+    `select 1 from international_results_source
+      where source = $1 and read_at >= $2 limit 1`,
+    [RESULTS_SNAPSHOT, deadline]
+  );
+  if (read.rows.length === 0) {
+    throw new StaleInternationalResultsError(competition);
   }
 }
 
@@ -355,7 +389,7 @@ export async function runDailyFetch({
   // Competition that has no such source at all: it is not walked here, so it
   // never fails for lacking one (ADR-0057).
   for (const { competition, sources } of listed) {
-    if (sources.history === "football-data.co.uk") {
+    if (sources.history === FOOTBALL_DATA_SOURCE) {
       try {
         await fetchFootballDataSeason({
           database,
@@ -403,6 +437,20 @@ export async function runDailyFetch({
         }
       }
     }
+    // One file for every Competition that names it, read once a day whatever
+    // is outstanding (ADR-0057). Unlike the four above it is not a league's
+    // source under a cup's name: `historical_matches` is keyed by a Division a
+    // national side does not have, so a cup's history has its own table and
+    // its own read, and the ADR-0056 projection above can never reach it.
+    if (sources.history === INTERNATIONAL_RESULTS_SOURCE) {
+      try {
+        await fetchInternationalResults({
+          database, competition, season, http, now: () => observedAt
+        });
+      } catch (error) {
+        errors.push(error);
+      }
+    }
     // Each Competition against its own clock, which is ADR-0036's consequence
     // read literally: a Competition whose feed has produced no current-Season
     // result by its own Gameweek 1 deadline fails by name, and one still
@@ -419,7 +467,7 @@ export async function runDailyFetch({
     // and a Competition with a history source of its own gets a branch in
     // there rather than a second guard out here.
     try {
-      await requireCurrentSeasonMatchesAfterFirstDeadline(
+      await requireHistoryAfterFirstDeadline(
         database,
         competition,
         sources,

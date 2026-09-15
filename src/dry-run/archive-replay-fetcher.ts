@@ -13,6 +13,10 @@ import {
   scores365CompetitionOf,
   SHEET_SOURCE_ENDING
 } from "../365scores/fetch-match-stats.js";
+import {
+  RESULTS_SNAPSHOT,
+  RESULTS_URL
+} from "../international-results/fetch-results.js";
 
 export interface ArchivedSnapshot {
   source: string;
@@ -293,7 +297,12 @@ function archiveSource(
   options: HttpRequestOptions | undefined,
   sources: Iterable<string>
 ): string | null {
-  return FPL_SOURCE_BY_URL.get(url)
+  // The one source whose URL and whose archived name are both constants: one
+  // file, every Competition that reads it, and no Season in either (ADR-0057).
+  // The four translations below exist because a URL said less than the name
+  // the archive chose; this one says exactly as much.
+  return (url === RESULTS_URL ? RESULTS_SNAPSHOT : null)
+    ?? FPL_SOURCE_BY_URL.get(url)
     ?? fplLiveSource(url, sources)
     ?? footballDataSource(url)
     ?? understatSource(url)

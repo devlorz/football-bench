@@ -206,10 +206,20 @@ function positionIn(
 
 interface StatSpec {
   label: string;
-  home: (match: HistoricalMatch) => number | null | undefined;
-  away: (match: HistoricalMatch) => number | null | undefined;
+  home: (match: MatchPerformance) => number | null | undefined;
+  away: (match: MatchPerformance) => number | null | undefined;
   decimals: number;
 }
+
+/**
+ * Whether the side a record line is about was the home side of this match.
+ *
+ * A predicate rather than a name and an alias map, because the two sections
+ * answer it differently and neither can answer the other's way: a league
+ * resolves a club through its identity map, and a cup compares the stored
+ * spelling of a national side, which is the only spelling there is (ADR-0057).
+ */
+type IsHome = (match: SideMatch) => boolean;
 
 const XG_SPEC: StatSpec = {
   label: "xG",
@@ -242,16 +252,15 @@ const STAT_SPECS: StatSpec[] = [
  * sentence, not this one's.
  */
 function coveredSums(
-  names: TeamNames | undefined,
-  matches: HistoricalMatch[],
-  canonical: string,
+  matches: readonly SideMatch[],
+  isHome: IsHome,
   spec: StatSpec
 ): { forSum: number; againstSum: number; covered: number } {
   let forSum = 0;
   let againstSum = 0;
   let covered = 0;
   for (const match of matches) {
-    const home = footballDataTeamName(names, match.home_team) === canonical;
+    const home = isHome(match);
     const teamValue = home ? spec.home(match) : spec.away(match);
     const oppValue = home ? spec.away(match) : spec.home(match);
     if (typeof teamValue === "number" && typeof oppValue === "number") {
@@ -273,13 +282,12 @@ function coverageOf(covered: number, of: number): string {
  * rather than a silent zero.
  */
 function statSegment(
-  names: TeamNames | undefined,
-  matches: HistoricalMatch[],
-  canonical: string,
+  matches: readonly SideMatch[],
+  isHome: IsHome,
   spec: StatSpec
 ): string {
   const { forSum, againstSum, covered } =
-    coveredSums(names, matches, canonical, spec);
+    coveredSums(matches, isHome, spec);
   if (covered === 0) {
     return `${spec.label} unavailable`;
   }
@@ -295,13 +303,12 @@ function statSegment(
  * silent zero. A promoted club is unavailable by nature -- Understat carries no
  * second division.
  */
-function xgRatePerGame(
-  names: TeamNames | undefined,
-  matches: HistoricalMatch[],
-  canonical: string
+export function xgRatePerGame(
+  matches: readonly SideMatch[],
+  isHome: IsHome
 ): string {
   const { forSum, againstSum, covered } =
-    coveredSums(names, matches, canonical, XG_SPEC);
+    coveredSums(matches, isHome, XG_SPEC);
   if (covered === 0) {
     return "unavailable";
   }
@@ -319,8 +326,10 @@ function formatRecord(
   if (record.played === 0) {
     return emptyText;
   }
+  const isHome: IsHome = (match) =>
+    footballDataTeamName(names, match.home_team) === canonical;
   const aggregates = STAT_SPECS
-    .map((spec) => statSegment(names, matches, canonical, spec))
+    .map((spec) => statSegment(matches, isHome, spec))
     .join(", ");
   return `${record.played} played, ${record.wins}W ${record.draws}D `
     + `${record.losses}L, GF ${record.goalsFor}, GA ${record.goalsAgainst}, `
@@ -349,13 +358,39 @@ function bothSides(
 }
 
 /**
+ * The six figures a performance line is made of, and nothing else a match has.
+ * Narrower than `HistoricalMatch` because the cup section renders these off a
+ * Fixture, which carries no Season and no Division: one format for both
+ * packets, or two that drift.
+ */
+/**
+ * A match a record line can be read from one side of: the two names, and the
+ * six figures a performance line is made of. Everything both sections share
+ * and nothing either adds -- a cup's Fixture has no Season and no Division, a
+ * league's row has no kickoff instant.
+ */
+export interface SideMatch extends MatchPerformance {
+  home_team: string;
+  away_team: string;
+}
+
+export interface MatchPerformance {
+  home_shots?: number | null;
+  away_shots?: number | null;
+  home_shots_on_target?: number | null;
+  away_shots_on_target?: number | null;
+  home_xg?: number | null;
+  away_xg?: number | null;
+}
+
+/**
  * Shots, shots on target and xG for the Match, every pair ordered
  * home-team-first so the numbers count from the same end as the scoreline they
  * sit beside. A pair the source did not carry is dropped rather than zeroed;
  * missing xG is stated outright, because an Entrant weighing a number it cannot
  * see is worse off than one told the number is absent.
  */
-function performanceSegments(match: HistoricalMatch): string[] {
+export function performanceSegments(match: MatchPerformance): string[] {
   const shots = bothSides(match.home_shots, match.away_shots);
   const onTarget = bothSides(
     match.home_shots_on_target,
@@ -424,9 +459,9 @@ function priorSeasonLine(
   const clubMatches = divisionMatches.filter((match) =>
     includesTeam(names, match, canonical)
   );
-  const homeMatches = clubMatches.filter((match) =>
-    footballDataTeamName(names, match.home_team) === canonical
-  );
+  const isHome: IsHome = (match) =>
+    footballDataTeamName(names, match.home_team) === canonical;
+  const homeMatches = clubMatches.filter(isHome);
   const awayMatches = clubMatches.filter((match) =>
     footballDataTeamName(names, match.away_team) === canonical
   );
@@ -446,9 +481,9 @@ function priorSeasonLine(
       // Appended to the points-per-game line rather than given one of its own
       // (ADR-0043): one Prior-Season rate line, two rates on it.
       + `xG for and against per game `
-      + `${xgRatePerGame(names, clubMatches, canonical)} overall, `
-      + `${xgRatePerGame(names, homeMatches, canonical)} home, `
-      + `${xgRatePerGame(names, awayMatches, canonical)} away.`,
+      + `${xgRatePerGame(clubMatches, isHome)} overall, `
+      + `${xgRatePerGame(homeMatches, isHome)} home, `
+      + `${xgRatePerGame(awayMatches, isHome)} away.`,
     promoted
   };
 }
@@ -575,6 +610,39 @@ function tableSection(
   ];
 }
 
+/** The count as both sections announce it, singular and plural. */
+export function matchCount(matches: number): string {
+  return `${matches} match${matches === 1 ? "" : "es"}`;
+}
+
+/**
+ * The three outcome shares and the goals per match, worded as ADR-0043 words
+ * them. Shared between the two sections that carry a base-rates line, because
+ * the wording is the ADR's and not either section's: which matches the rates
+ * are over, and how to describe that set, is what the two differ in, and each
+ * says it in its own prefix.
+ *
+ * Extracted at the second caller rather than the first, on this project's own
+ * rule: what forces it is that a change to the ADR's sentence would otherwise
+ * have to be made in two places at once.
+ */
+export function baseRatesClause(
+  matches: readonly { home_goals: number; away_goals: number }[]
+): string {
+  const share = (count: number): string =>
+    ((count / matches.length) * 100).toFixed(1);
+  const homeWins = matches
+    .filter((match) => match.home_goals > match.away_goals).length;
+  const draws = matches
+    .filter((match) => match.home_goals === match.away_goals).length;
+  const goals = matches
+    .reduce((sum, match) => sum + match.home_goals + match.away_goals, 0);
+  return `home wins ${share(homeWins)}%, `
+    + `draws ${share(draws)}%, `
+    + `away wins ${share(matches.length - homeWins - draws)}%, `
+    + `${(goals / matches.length).toFixed(2)} goals per match.`;
+}
+
 /**
  * The prior Season's top flight in one line: the three outcome shares, goals
  * per match, and the match count they are computed over (ADR-0043). Once per
@@ -599,21 +667,9 @@ function baseRatesSection(
       + "stored."
     ];
   }
-  const share = (count: number): string =>
-    ((count / matches.length) * 100).toFixed(1);
-  const homeWins = matches
-    .filter((match) => match.home_goals > match.away_goals).length;
-  const draws = matches
-    .filter((match) => match.home_goals === match.away_goals).length;
-  const goals = matches
-    .reduce((sum, match) => sum + match.home_goals + match.away_goals, 0);
   return [
     `Prior-Season base rates (${priorSeason} ${divisions.top}, `
-    + `${matches.length} match${matches.length === 1 ? "" : "es"}): `
-    + `home wins ${share(homeWins)}%, `
-    + `draws ${share(draws)}%, `
-    + `away wins ${share(matches.length - homeWins - draws)}%, `
-    + `${(goals / matches.length).toFixed(2)} goals per match.`
+    + `${matchCount(matches.length)}): ${baseRatesClause(matches)}`
   ];
 }
 

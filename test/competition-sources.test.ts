@@ -3,19 +3,26 @@ import {
   COMPETITIONS_WITH_SOURCES, sourcesOf
 } from "../src/fetch/competition-sources.js";
 import { divisionsOf } from "../src/football-data/divisions.js";
+import {
+  FOOTBALL_DATA_SOURCE
+} from "../src/football-data/fetch-season.js";
 import { understatTeamNamesOf } from "../src/understat/team-identity.js";
 import {
   scores365CompetitionIdOf,
   SCORES_365_SOURCE
 } from "../src/365scores/fetch-match-stats.js";
 import {
+  datasetNameOf,
+  INTERNATIONAL_RESULTS_SOURCE
+} from "../src/international-results/fetch-results.js";
+import {
   transferWindowsOf
 } from "../src/squad-changes/transfer-window.js";
 import { headCoachSource } from "../src/head-coach/head-coach-source.js";
 
 /**
- * The registry names sources; the four maps decide whether naming one means
- * anything for a given Competition. Split across five files, they can disagree
+ * The registry names sources; the five maps decide whether naming one means
+ * anything for a given Competition. Split across six files, they can disagree
  * in a direction the daily-fetch suite cannot see: it lists two Competitions,
  * so `SA`, `BL1` and `FL1` reach no source in any test, and an entry of theirs
  * pointing at a map that has no row for them is a section that renders as a
@@ -32,13 +39,21 @@ describe("the source registry", () => {
         const sources = sourcesOf(competition)!;
 
         // The Season is the one these entries describe. A Season article is
-        // the only one of the four maps that is keyed by Season as well as by
+        // the only one of the five maps that is keyed by Season as well as by
         // Competition, so the absence it can produce is "this Season, not
         // listed" rather than "this Competition, never mapped".
         const held = {
-          history: sources.history === "football-data.co.uk"
+          // Two sources under one name here too: a league's history is a
+          // division file and a cup's is one CSV of every international ever
+          // played (ADR-0057). The dataset needs no per-Competition id and no
+          // club map -- the sides it filters by are read off the record's own
+          // Fixtures -- so what it has to have a row for is the name it calls
+          // the Competition, which every merged line in the packet carries.
+          history: sources.history === FOOTBALL_DATA_SOURCE
             ? divisionsOf(competition) !== undefined
-            : null,
+            : sources.history === INTERNATIONAL_RESULTS_SOURCE
+              ? datasetNameOf(competition) !== undefined
+              : null,
           // Two sources under one name, because a cup's shots come from
           // neither of the leagues' (ADR-0058): each is asked for its own map,
           // and an entry naming one while the other has the row would be the

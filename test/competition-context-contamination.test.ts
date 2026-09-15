@@ -63,7 +63,8 @@ describe("a context packet holds one Competition's data", () => {
     await client.query(
       `truncate
          competitions, gameweeks, fixtures, historical_matches,
-         understat_match_xg, team_match_stats, fpl_players
+         understat_match_xg, team_match_stats, fpl_players,
+         international_results, international_results_source
        restart identity cascade`
     );
     // `UNL` is listed with the five because the cup's own case below needs a
@@ -223,6 +224,74 @@ describe("a context packet holds one Competition's data", () => {
       // stored under its own code naming that Fixture's clubs: it is the
       // registry entry and nothing else that keeps the table shut.
       expect(premierLeague.playedFixtures).toEqual([]);
+    });
+
+  test("a cup's history comes from its own table, and no league reads it",
+    async () => {
+      // `international_results` is the one shared table in this file: it has
+      // no `competition` column and cannot have one, because a national side
+      // plays in several competitions under none of this record's codes
+      // (migration 0042). So the filter here is not a `where` clause -- it is
+      // the registry, and this is the test of it.
+      //
+      // The row names the Premier League's own clubs, in the Premier League's
+      // own spelling, and is dated before its Lock: a packet that read this
+      // table without asking the registry would put it on Arsenal's form
+      // line, and nothing else would stop it.
+      await client.query(
+        `insert into international_results (
+           played_on, home_team, away_team, home_goals, away_goals,
+           tournament, country, neutral
+         ) values
+           ('2026-08-07', 'Arsenal', 'Chelsea', 9, 9, 'Friendly',
+            'England', false),
+           ('2026-08-07', 'Kosovo', 'Republic of Ireland', 1, 0,
+            'UEFA Nations League', 'Kosovo', false)`
+      );
+      await client.query(
+        `insert into international_results_source
+           (source, latest_row_on, read_at)
+         values ('martj42:international_results', '2026-08-26',
+                 '2026-08-27T06:00:00Z')`
+      );
+
+      const nationsLeague = await loadMatchContextData(
+        client, "UNL", SEASON, 1
+      );
+      const premierLeague = await loadMatchContextData(client, "PL", SEASON, 1);
+
+      // The cup reads both rows: what is stored is every international either
+      // of its sides played, and the table holds no claim about which
+      // Competition a row belongs to.
+      expect(nationsLeague.internationals.map((match) => match.home_team))
+        .toEqual(["Arsenal", "Kosovo"]);
+      expect(nationsLeague.datasetUpdatedOn).toBe("2026-08-26");
+      // And the league reads neither, nor the date: its registry entry names
+      // football-data.co.uk for its history, so this table is never opened
+      // for it.
+      expect(premierLeague.internationals).toEqual([]);
+      expect(premierLeague.datasetUpdatedOn).toBeNull();
+
+      const fixture = {
+        fixture_id: 1,
+        home_team: "Arsenal",
+        away_team: "Chelsea",
+        kickoff_at: new Date("2026-08-21T19:00:00Z")
+      };
+      // The other half, at the render: a league packet does not grow the
+      // section even over a row naming its own two clubs.
+      const packet = buildMatchContext(fixture, premierLeague);
+      expect(packet).toContain(HISTORICAL_SECTION);
+      expect(packet).not.toContain("Recent internationals as of");
+      expect(packet).not.toContain("Dataset last updated");
+
+      // The cup's own packet cannot be rendered yet, and this is what it is
+      // waiting for: `MATCH_PROMPTS` grows `UNL` with ticket 0075, which pins
+      // a sha over the render these sections make. Asserting the one error it
+      // raises is what says the sections themselves build -- a section that
+      // threw would fail here with a different message.
+      expect(() => buildMatchContext(fixture, nationsLeague))
+        .toThrow("Competition UNL has no frozen Prompt Version");
     });
 
   test("each Competition reads only its own history, both directions",

@@ -66,7 +66,9 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0039_three_shadow_seats_join_the_premier_league.sql",
       "0040_the_glm_shadow_leaves_before_it_is_asked.sql",
       "0041_la_liga_gameweek_6_takes_its_nine_back.sql",
-      "0042_the_nations_league_joins_the_domain_with_its_two_tables.sql"
+      "0042_the_nations_league_joins_the_domain_with_its_two_tables.sql",
+      "0043_the_dataset_says_when_it_was_last_updated.sql",
+      "0044_la_liga_gameweek_6_holds_its_lock_open_to_the_last_kickoff.sql"
     ]);
     // The record the copy carried, not a shape asserted about the schema: an
     // operator reading a rehearsal needs to see that it ran over rows.
@@ -144,7 +146,9 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0039_three_shadow_seats_join_the_premier_league.sql",
       "0040_the_glm_shadow_leaves_before_it_is_asked.sql",
       "0041_la_liga_gameweek_6_takes_its_nine_back.sql",
-      "0042_the_nations_league_joins_the_domain_with_its_two_tables.sql"
+      "0042_the_nations_league_joins_the_domain_with_its_two_tables.sql",
+      "0043_the_dataset_says_when_it_was_last_updated.sql",
+      "0044_la_liga_gameweek_6_holds_its_lock_open_to_the_last_kickoff.sql"
     ]);
     expect(rehearsal.rows).toMatchObject({ gameweeks: 1, squad_changes: 1 });
   });
@@ -183,7 +187,9 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0039_three_shadow_seats_join_the_premier_league.sql",
       "0040_the_glm_shadow_leaves_before_it_is_asked.sql",
       "0041_la_liga_gameweek_6_takes_its_nine_back.sql",
-      "0042_the_nations_league_joins_the_domain_with_its_two_tables.sql"
+      "0042_the_nations_league_joins_the_domain_with_its_two_tables.sql",
+      "0043_the_dataset_says_when_it_was_last_updated.sql",
+      "0044_la_liga_gameweek_6_holds_its_lock_open_to_the_last_kickoff.sql"
     ]);
     // Compared rather than skipped, and back whole: `verifyRelabelledAsPl`
     // raises, so this row reaching the count is the comparison having run over

@@ -8,12 +8,12 @@
  * The entries here describe exactly what those Competitions read today and
  * change nothing about their days. `UNL` names UEFA for its schedule from
  * ticket 0071 and 365Scores for its shots and xG from ticket 0072, each the
- * ticket that built that fetch, and `null` for the two whose fetches tickets
- * 0073 and 0074 build. A `null` is not a placeholder: it says this
- * Competition has no such source, the daily fetch does not walk it, and the
- * packet states the absence — which is the truth about `UNL` on each of those
- * two until its ticket lands. Naming a source before its fetch exists would
- * be the lie, because the fetch would believe it.
+ * ticket that built that fetch, the GitHub dataset for its history from ticket
+ * 0073, and `null` for the one whose fetch ticket 0074 builds. A `null` is not
+ * a placeholder: it says this Competition has no such source, the daily fetch
+ * does not walk it, and the packet states the absence — which is the truth
+ * about `UNL`'s head coaches until its ticket lands. Naming a source before
+ * its fetch exists would be the lie, because the fetch would believe it.
  *
  * A listed Competition with no entry fails the run by name (ADR-0054: a
  * missing map fails loudly, a wrong one fails nothing).
@@ -34,7 +34,17 @@ export interface CompetitionSources {
    * sources its entry names; the FPL API is read whether or not one does.
    */
   readonly schedule: "fpl" | "football-data.org" | "uefa";
-  readonly history: "football-data.co.uk" | null;
+  /**
+   * Where "what each side did last" comes from, and the table the
+   * after-first-deadline guard asks. The two names are two sources and not two
+   * spellings of one: a league's results are rows of `historical_matches`
+   * under a Division, and a cup's are rows of `international_results` under
+   * none (migration 0042).
+   */
+  readonly history:
+    | "football-data.co.uk"
+    | "martj42/international_results"
+    | null;
   readonly stats: "understat" | "365scores" | null;
   readonly squadChanges: "wikipedia-transfers" | null;
   readonly headCoaches: "wikipedia-season-article" | null;
@@ -70,14 +80,15 @@ const BY_COMPETITION: Readonly<Record<string, CompetitionSources>> = {
   // Wikipedia list for the head coaches — arrive with tickets 0072 to 0074
   // and replace a `null` each.
   //
-  // `stats` is the first of them and reads nothing a league reads: Understat
-  // has no international competition at all (ADR-0058), so the two names in
-  // that union are two sources and not two spellings of one. A cup keeps
+  // `stats` and `history` are the first two of them and read nothing a league
+  // reads: Understat has no international competition at all (ADR-0058) and
+  // football-data.co.uk no international file (ADR-0057), so each of those two
+  // unions holds two sources and not two spellings of one. A cup keeps
   // `squadChanges` null for good — a national team has no transfer window —
-  // and the two remaining nulls are tickets 0073 and 0074.
+  // and the one remaining null is ticket 0074.
   UNL: {
     schedule: "uefa",
-    history: null,
+    history: "martj42/international_results",
     stats: "365scores",
     squadChanges: null,
     headCoaches: null

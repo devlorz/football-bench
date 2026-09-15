@@ -10,6 +10,7 @@ import {
   openRouterRequest
 } from "../src/predictions/openrouter-entrant.js";
 import { divisionsOf } from "../src/football-data/divisions.js";
+import { sourcesOf } from "../src/fetch/competition-sources.js";
 import { headCoachSource } from "../src/head-coach/head-coach-source.js";
 import {
   buildMatchContext,
@@ -36,10 +37,18 @@ const contextData = (competition: string): MatchContextData => ({
   competition,
   season: "2026-27",
   deadline: new Date("2026-08-21T17:30:00Z"),
-  // Empty for every Competition here, and the pins say so: a Fixture-keyed
-  // stats source is loaded by ticket 0072 and rendered by the section ticket
-  // 0073 builds, so nothing in this render reads it yet.
+  // Empty for every Competition here, and the pins say so: both are read only
+  // by the recent-internationals section (ticket 0073), which is rendered for
+  // a Competition whose registry entry names the GitHub dataset for its
+  // history — and every Competition pinned below is a league whose history is
+  // football-data.co.uk's.
   playedFixtures: [],
+  internationals: [],
+  datasetUpdatedOn: null,
+  // The Competition's own entry, as the loader carries it: every Competition
+  // pinned below is a league whose history is football-data.co.uk's, so none
+  // of them renders the cup's section.
+  sources: sourcesOf(competition),
   // Between them these four span every way a form line can render, so
   // the pinned hash moves if the shots or xG formatting changes -- not
   // only if the template or the builder's overall shape does.
