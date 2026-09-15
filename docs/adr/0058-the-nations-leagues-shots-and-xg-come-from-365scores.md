@@ -1,5 +1,13 @@
 # The Nations League's shots and xG come from 365Scores
 
+> Amended 2026-09-15 by ticket 0072, the ticket that built this fetch: **a hole is a
+> sheet with no xG and both sides' shots still on it** — the recorded Spain–Switzerland
+> sheet carries 21 and 11 — so "the packet renders 'no shots or xG stored for this
+> Fixture'" below is true only of a settled Fixture that has neither. A hole renders its
+> shots beside the "xG unavailable" the other five Competitions already read. Spec 0027
+> story 24 ("a settled Fixture with no stored shots or xG") already reads this way; this
+> note's own prose did not, and the sentence is what ticket 0073 renders.
+
 **For `UNL`, per-team expected goals, total shots and shots on target are read from
 365Scores' web API, and its scores are the second source of results ADR-0056 asks for.**
 The Nations League opens on it ([ADR-0057](0057-the-nations-league-opens-as-the-first-cup-on-sources-nobody-documents.md));

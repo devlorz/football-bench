@@ -14,6 +14,11 @@ import {
   UnknownCompetitionSourcesError
 } from "../src/fetch/competition-sources.js";
 import { UnknownUefaMatchdayError } from "../src/uefa/fetch-competition.js";
+import {
+  listingUrl,
+  Scores365ValidationError,
+  sheetUrl
+} from "../src/365scores/fetch-match-stats.js";
 import { archivedBody } from "./archived-fixture.js";
 import { resetSchema } from "./schema-fixture.js";
 
@@ -99,6 +104,32 @@ const LA_LIGA_URLS = [
   SPANISH_SEASON_ARTICLE_URL
 ] as const;
 
+/**
+ * The match sheet for Kosovo v Republic of Ireland, matchday 1, constructed:
+ * the recorded sheets are of matches this Season's recorded schedule does not
+ * contain, and what this seam is for is which sources a run reaches, not what
+ * a real sheet looks like. The real shapes -- the full sheet, the hole, the
+ * thirty-eight rows -- are held against the recorded bytes in
+ * `test/fetch-365scores-stats.test.ts`. The ids and the kickoff are the
+ * recorded listing's own.
+ */
+const NATIONS_LEAGUE_SHEET = JSON.stringify({
+  games: [{
+    id: 4672062,
+    startTime: "2026-09-24T18:45:00+00:00",
+    homeCompetitor: { id: 19414, name: "Kosovo", score: 1 },
+    awayCompetitor: { id: 5064, name: "Ireland", score: 0 }
+  }],
+  statistics: [
+    { name: "Expected Goals", competitorId: 19414, value: "1.31" },
+    { name: "Total Shots", competitorId: 19414, value: "14" },
+    { name: "Shots On Target", competitorId: 19414, value: "5" },
+    { name: "Expected Goals", competitorId: 5064, value: "0.88" },
+    { name: "Total Shots", competitorId: 5064, value: "9" },
+    { name: "Shots On Target", competitorId: 5064, value: "3" }
+  ]
+});
+
 const UNDERSTAT_LEAGUE_BODY = JSON.stringify({
   dates: [{
     id: "29001",
@@ -175,7 +206,8 @@ describe("the daily fetch", () => {
     await client.query(
       `truncate
          historical_matches, fpl_players, fixtures, gameweeks, raw_snapshots,
-         understat_match_xg, squad_changes, head_coach_changes, competitions
+         understat_match_xg, team_match_stats, squad_changes,
+         head_coach_changes, competitions
        restart identity cascade`
     );
     // Every source the fetch reaches, it reaches per listed Competition, so a
@@ -351,6 +383,150 @@ describe("the daily fetch", () => {
           where competition = 'UNL' and season = '2026-27'`
       );
       expect(rows[0]?.fixtures).toBe(156);
+    });
+
+  test("reads 365Scores for the day a settled Nations League Fixture was played",
+    async () => {
+      // The registry's second `UNL` source, at the same seam. The listing is
+      // asked for once a Fixture has settled and a figure is outstanding, and
+      // never for the rest of the Season's dates: ADR-0058 budgets one
+      // listing a day and one sheet per settled Fixture.
+      await client.query(
+        "insert into competitions (competition, season) values ('UNL', $1)",
+        ["2026-27"]
+      );
+      // Matchday 1's Kosovo v Republic of Ireland, settled before the run.
+      // Seeded rather than fetched because UEFA's recorded pages are of a
+      // Season whose first match had not been played when they were made; the
+      // schedule fetch upserts this row and keeps the result it finds.
+      await client.query(
+        `insert into gameweeks (competition, season, gw, deadline_at)
+         values ('UNL', $1, 1, '2026-09-24T14:30:00Z')`,
+        ["2026-27"]
+      );
+      await client.query(
+        `insert into fixtures (
+           competition, season, fixture_id, gw, home_team, away_team,
+           kickoff_at, result
+         ) values ('UNL', $1, 2048007, 1, 'Kosovo', 'Republic of Ireland',
+                   '2026-09-24T18:45:00Z',
+                   '{"home_goals":1,"away_goals":0,"outcome":"H"}')`,
+        ["2026-27"]
+      );
+      // The clock has to be past a Nations League kickoff for there to be a
+      // date to ask about, which puts it past the Premier League's own
+      // Gameweek 1 deadline as well: the row that makes the league not stale
+      // is held here for the same reason the La Liga test above holds one.
+      await client.query(
+        `insert into historical_matches
+           (competition, season, division, played_on,
+            home_team, away_team, home_goals, away_goals)
+         values ('PL', '2026-27', 'Premier League', '2026-08-15T14:00:00Z',
+                 'Liverpool', 'Bournemouth', 2, 0)`
+      );
+      const responses = await sourceResponses([
+        [NATIONS_LEAGUE_URLS[0], await archivedBody(UEFA_PAGES[0])],
+        [NATIONS_LEAGUE_URLS[1], await archivedBody(UEFA_PAGES[1])],
+        [
+          listingUrl("UNL", "2026-09-24"),
+          await archivedBody("365scores-UNL-games-2026-09-24-recorded.json.gz")
+        ],
+        [sheetUrl("4672062"), NATIONS_LEAGUE_SHEET]
+      ]);
+      const requested: string[] = [];
+
+      const outcome = await runDailyFetch({
+        database: client,
+        season: "2026-27",
+        footballDataSeason: "2025-26",
+        footballDataOrgToken: "a-football-data-org-token",
+        now: () => new Date("2026-09-25T06:00:00.000Z"),
+        http: async (url: string) => {
+          requested.push(url);
+          return { status: 200, body: responses.get(url) ?? "" };
+        }
+      });
+
+      // The Premier League's seven less the transfer list: the summer window
+      // shut a month before this clock, and a day outside the render gate
+      // reads nothing (ADR-0031). Spelled as a filter rather than as six URLs
+      // so that a source dropping out of the set is still a red test.
+      expect([...requested].sort()).toEqual([
+        ...PREMIER_LEAGUE_URLS.filter((url) => url !== SUMMER_TRANSFERS_URL),
+        ...NATIONS_LEAGUE_URLS,
+        listingUrl("UNL", "2026-09-24"),
+        sheetUrl("4672062")
+      ].sort());
+      // One row, for the one Fixture that had settled, and nothing to report:
+      // the listing's score is the stored one and the day's listing carried
+      // the Fixture.
+      const { rows } = await client.query<{ count: string }>(
+        "select count(*) from team_match_stats"
+      );
+      expect(Number(rows[0]!.count)).toBe(1);
+      expect(outcome.resultDisagreements).toEqual([]);
+      expect(outcome.unlistedFixtures).toEqual([]);
+    });
+
+  test("an unreadable 365Scores answer costs the Nations League its day alone",
+    async () => {
+      // Shots and xG are not enrichment here the way Understat's are for a
+      // league: `UNL` has one source for them, so a body that cannot be read
+      // fails the run by name rather than degrading a form line quietly. What
+      // it must not do is cost the Premier League its morning.
+      await client.query(
+        "insert into competitions (competition, season) values ('UNL', $1)",
+        ["2026-27"]
+      );
+      await client.query(
+        `insert into gameweeks (competition, season, gw, deadline_at)
+         values ('UNL', $1, 1, '2026-09-24T14:30:00Z')`,
+        ["2026-27"]
+      );
+      await client.query(
+        `insert into fixtures (
+           competition, season, fixture_id, gw, home_team, away_team,
+           kickoff_at, result
+         ) values ('UNL', $1, 2048007, 1, 'Kosovo', 'Republic of Ireland',
+                   '2026-09-24T18:45:00Z',
+                   '{"home_goals":1,"away_goals":0,"outcome":"H"}')`,
+        ["2026-27"]
+      );
+      await client.query(
+        `insert into historical_matches
+           (competition, season, division, played_on,
+            home_team, away_team, home_goals, away_goals)
+         values ('PL', '2026-27', 'Premier League', '2026-08-15T14:00:00Z',
+                 'Liverpool', 'Bournemouth', 2, 0)`
+      );
+      // Every source answers but 365Scores, which answers with nothing.
+      const responses = await sourceResponses([
+        [NATIONS_LEAGUE_URLS[0], await archivedBody(UEFA_PAGES[0])],
+        [NATIONS_LEAGUE_URLS[1], await archivedBody(UEFA_PAGES[1])]
+      ]);
+
+      const thrown = await runDailyFetch({
+        database: client,
+        season: "2026-27",
+        footballDataSeason: "2025-26",
+        footballDataOrgToken: "a-football-data-org-token",
+        now: () => new Date("2026-09-25T06:00:00.000Z"),
+        http: async (url: string) => ({
+          status: 200,
+          body: responses.get(url) ?? ""
+        })
+      }).catch((error: unknown) => error);
+
+      expect(thrown).toBeInstanceOf(Scores365ValidationError);
+      const { rows } = await client.query(
+        `select
+           (select count(*)::int from fixtures where competition = 'PL')
+             as premier_league,
+           (select count(*)::int from fixtures where competition = 'UNL')
+             as nations_league`
+      );
+      // The cup's schedule landed too: what failed is the source that failed.
+      expect(rows[0]).toEqual({ premier_league: 380, nations_league: 156 });
     });
 
   test("a knockout matchday costs the Nations League its day and no other",

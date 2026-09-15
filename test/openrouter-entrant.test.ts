@@ -36,6 +36,10 @@ const contextData = (competition: string): MatchContextData => ({
   competition,
   season: "2026-27",
   deadline: new Date("2026-08-21T17:30:00Z"),
+  // Empty for every Competition here, and the pins say so: a Fixture-keyed
+  // stats source is loaded by ticket 0072 and rendered by the section ticket
+  // 0073 builds, so nothing in this render reads it yet.
+  playedFixtures: [],
   // Between them these four span every way a form line can render, so
   // the pinned hash moves if the shots or xG formatting changes -- not
   // only if the template or the builder's overall shape does.

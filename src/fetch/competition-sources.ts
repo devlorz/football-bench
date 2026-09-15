@@ -7,13 +7,13 @@
  *
  * The entries here describe exactly what those Competitions read today and
  * change nothing about their days. `UNL` names UEFA for its schedule from
- * ticket 0071, which is the ticket that built that fetch, and `null` for the
- * three sources whose fetches tickets 0072 to 0074 build. A `null` is not a
- * placeholder: it says this Competition has no such source, the daily fetch
- * does not walk it, and the packet states the absence — which is the truth
- * about `UNL` on each of those three until its ticket lands. Naming a source
- * before its fetch exists would be the lie, because the fetch would believe
- * it.
+ * ticket 0071 and 365Scores for its shots and xG from ticket 0072, each the
+ * ticket that built that fetch, and `null` for the two whose fetches tickets
+ * 0073 and 0074 build. A `null` is not a placeholder: it says this
+ * Competition has no such source, the daily fetch does not walk it, and the
+ * packet states the absence — which is the truth about `UNL` on each of those
+ * two until its ticket lands. Naming a source before its fetch exists would
+ * be the lie, because the fetch would believe it.
  *
  * A listed Competition with no entry fails the run by name (ADR-0054: a
  * missing map fails loudly, a wrong one fails nothing).
@@ -35,7 +35,7 @@ export interface CompetitionSources {
    */
   readonly schedule: "fpl" | "football-data.org" | "uefa";
   readonly history: "football-data.co.uk" | null;
-  readonly stats: "understat" | null;
+  readonly stats: "understat" | "365scores" | null;
   readonly squadChanges: "wikipedia-transfers" | null;
   readonly headCoaches: "wikipedia-season-article" | null;
 }
@@ -69,10 +69,16 @@ const BY_COMPETITION: Readonly<Record<string, CompetitionSources>> = {
   // 365Scores for shots and xG, a dataset for recent internationals, a
   // Wikipedia list for the head coaches — arrive with tickets 0072 to 0074
   // and replace a `null` each.
+  //
+  // `stats` is the first of them and reads nothing a league reads: Understat
+  // has no international competition at all (ADR-0058), so the two names in
+  // that union are two sources and not two spellings of one. A cup keeps
+  // `squadChanges` null for good — a national team has no transfer window —
+  // and the two remaining nulls are tickets 0073 and 0074.
   UNL: {
     schedule: "uefa",
     history: null,
-    stats: null,
+    stats: "365scores",
     squadChanges: null,
     headCoaches: null
   }

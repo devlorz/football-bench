@@ -21,6 +21,8 @@ import {
   type MatchPromptFixture
 } from "./openrouter-entrant.js";
 import { resolveUnderstatTeamName } from "../understat/team-identity.js";
+import { sourcesOf } from "../fetch/competition-sources.js";
+import { SCORES_365_SOURCE } from "../365scores/fetch-match-stats.js";
 
 type Database = Pick<Client, "query">;
 
@@ -71,11 +73,42 @@ function joinXg(
   });
 }
 
+/**
+ * One settled Fixture of this Season with the shots and xG a Fixture-keyed
+ * stats source stored against it (ADR-0058), which is how a Competition that
+ * is not a league carries the numbers a league carries on its stored results.
+ *
+ * Read from `team_match_stats` and from nowhere else: `understat_match_xg` is
+ * keyed by an Understat match id in a league Understat covers, and
+ * `historical_matches` is keyed by a Division a national side does not have
+ * (migration 0042). A `null` figure is the source's hole and never a zero.
+ *
+ * Loaded here and rendered by the section ticket 0073 builds, which is the
+ * ticket that decides what a cup's Season lines say and merges these with the
+ * recent internationals they would otherwise be listed twice beside. Putting
+ * them on the league form lines in the meantime would render a Division a cup
+ * does not have.
+ */
+export interface PlayedFixture {
+  kicked_off_at: Date;
+  home_team: string;
+  away_team: string;
+  home_goals: number;
+  away_goals: number;
+  home_shots: number | null;
+  away_shots: number | null;
+  home_shots_on_target: number | null;
+  away_shots_on_target: number | null;
+  home_xg: number | null;
+  away_xg: number | null;
+}
+
 export interface MatchContextData {
   competition: string;
   season: string;
   deadline: Date;
   historicalMatches: HistoricalMatch[];
+  playedFixtures: PlayedFixture[];
   fplPlayers: FplPlayer[];
   squadChanges: SquadChangeRow[];
   headCoachChanges: HeadCoachChangeRow[];
@@ -118,6 +151,47 @@ export async function loadMatchContextData(
       where competition = $1 and kicked_off_at < $2`,
     [competition, deadline]
   );
+  // The registry decides which table the shots and xG come from, on the same
+  // terms as the daily fetch that wrote them (ADR-0057): a league's are keyed
+  // by the league's own match id and joined onto stored results above, and a
+  // Competition whose stats source is keyed by Fixture reads its own table
+  // here. A Competition that names neither reads nothing and gets no rows,
+  // rather than an empty read of a table that has none for it.
+  //
+  // The join is by date and both stored names, the one `joinXg` above makes:
+  // the two sources agree on the day and on the spelling -- the fetch resolves
+  // 365Scores' three into the record's before it writes -- and on nothing
+  // else, least of all a match id.
+  const statsSource = sourcesOf(competition)?.stats;
+  const playedFixtures = statsSource === SCORES_365_SOURCE
+    ? await database.query<PlayedFixture>(
+      `select
+         f.kickoff_at as kicked_off_at,
+         f.home_team,
+         f.away_team,
+         (f.result->>'home_goals')::int as home_goals,
+         (f.result->>'away_goals')::int as away_goals,
+         s.home_shots,
+         s.away_shots,
+         s.home_shots_on_target,
+         s.away_shots_on_target,
+         s.home_xg::float8 as home_xg,
+         s.away_xg::float8 as away_xg
+         from fixtures f
+         left join team_match_stats s
+           on s.competition = f.competition
+          and s.season = f.season
+          and s.source = $4
+          and s.home_team = f.home_team
+          and s.away_team = f.away_team
+          and (s.kicked_off_at at time zone 'utc')::date
+              = (f.kickoff_at at time zone 'utc')::date
+        where f.competition = $1 and f.season = $2
+          and f.result is not null and f.kickoff_at < $3
+        order by f.kickoff_at`,
+      [competition, season, deadline, statsSource]
+    )
+    : undefined;
   const fplPlayers = await database.query<FplPlayer>(
     `select
        fpl_id, team_name, web_name, position, price_tenths, status,
@@ -162,6 +236,7 @@ export async function loadMatchContextData(
     historicalMatches: joinXg(
       competition, historicalMatches.rows, storedXg.rows
     ),
+    playedFixtures: playedFixtures?.rows ?? [],
     fplPlayers: fplPlayers.rows,
     squadChanges: squadChanges.rows,
     headCoachChanges: headCoachChanges.rows,

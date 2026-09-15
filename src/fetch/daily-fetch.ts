@@ -21,6 +21,12 @@ import { fetchFplPlayerPoints } from "../fpl/fetch-player-points.js";
 import { scoreFplGameweek } from "../fpl/score-fpl-gameweek.js";
 import { fetchUnderstatSeasonXg } from "../understat/fetch-season-xg.js";
 import {
+  fetchScores365Stats,
+  SCORES_365_SOURCE,
+  type ResultDisagreement,
+  type UnlistedFixture
+} from "../365scores/fetch-match-stats.js";
+import {
   fetchSquadChanges,
   type FetchSquadChangesResult
 } from "../squad-changes/fetch-squad-changes.js";
@@ -36,7 +42,9 @@ import {
 } from "./competition-sources.js";
 import type { HttpFetcher } from "../http.js";
 
-export type { MovedAttachment, RefusedAttachment };
+export type {
+  MovedAttachment, RefusedAttachment, ResultDisagreement, UnlistedFixture
+};
 
 type Database = Pick<Client, "query">;
 
@@ -91,6 +99,19 @@ export interface DailyFetchResult {
   headCoachChanges: DailyHeadCoachOutcome;
   movedAttachments: MovedAttachment[];
   refusedAttachments: RefusedAttachment[];
+  /**
+   * Fixtures whose stored result the second source of results does not agree
+   * with (ADR-0056), reported on the same terms as the attachments above: a
+   * line for an operator to read on the day, and no row moved either way.
+   */
+  resultDisagreements: ResultDisagreement[];
+  /**
+   * Settled Fixtures a stats source did not carry on the day the record says
+   * they were played, so nothing was stored for them and the packet will say
+   * their figures are unavailable. Reported for the reason the disagreements
+   * are: the alternative is a join rate that falls with nothing saying so.
+   */
+  unlistedFixtures: UnlistedFixture[];
 }
 
 export class StaleFootballDataSeasonError extends Error {
@@ -447,7 +468,29 @@ export async function runDailyFetch({
       return previous;
     }
   }
+  const resultDisagreements: ResultDisagreement[] = [];
+  const unlistedFixtures: UnlistedFixture[] = [];
   for (const { competition, sources } of listed) {
+    // Outside `reported` and collected rather than reported, unlike the three
+    // below: `xg` is the Premier League's Understat outcome the fetch
+    // workflow has always consumed, and a cup's shots are not that outcome
+    // under another name. A 365Scores failure is this Competition's failure,
+    // it fails the run at the end, and it costs no other Competition its day.
+    if (sources.stats === SCORES_365_SOURCE) {
+      try {
+        const outcome = await fetchScores365Stats({
+          database,
+          competition,
+          season,
+          http,
+          now: () => observedAt
+        });
+        resultDisagreements.push(...outcome.disagreements);
+        unlistedFixtures.push(...outcome.unlistedFixtures);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
     if (sources.stats === "understat") {
       xg = await reported<DailyXgOutcome>(
         competition,
@@ -515,6 +558,8 @@ export async function runDailyFetch({
     squadChanges,
     headCoachChanges,
     movedAttachments,
-    refusedAttachments
+    refusedAttachments,
+    resultDisagreements,
+    unlistedFixtures
   };
 }

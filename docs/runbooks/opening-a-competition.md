@@ -21,10 +21,12 @@ day, until one is written. It is the first row here whose absence is loud rather
 quiet, and it goes **first** for that reason: with the entry in place every other missing
 edit is the section-shaped failure the rest of this table describes.
 
-Ticket 0071 made it ten. Edit 9 is loud in the same way and for the same kind of reason:
-a Competition whose entry names UEFA for its schedule needs UEFA's own numeric id for it,
-and without one that Competition's day fails by name. It is a row rather than a sentence
-in edit 0 because it is a second file, which is the whole reason this page exists.
+Ticket 0071 made it ten and ticket 0072 made it eleven. Edits 9 and 10 are loud in the
+same way and for the same kind of reason: a Competition whose entry names UEFA for its
+schedule, or 365Scores for its shots and xG, needs that source's own numeric id for it,
+and without one that Competition's day fails by name. Each is a row rather than a
+sentence in edit 0 because each is a second file, which is the whole reason this page
+exists.
 
 Vocabulary: [CONTEXT.md](../../CONTEXT.md) — Competition, Division, Track.
 Decisions: [ADR-0035](../adr/0035-the-match-track-grows-a-competition-dimension.md)
@@ -41,7 +43,7 @@ This page is what to write before that one runs.
 
 ---
 
-## 1. The ten edits
+## 1. The eleven edits
 
 In this order. Each is small; the risk is entirely in stopping one short.
 
@@ -49,8 +51,8 @@ Edit **0** was added by ticket 0070 and edits 1 to 8 keep the numbers they have 
 since ticket 0059 — four tickets cite them by number, and renumbering a list other
 documents point into buys a tidier column and costs every one of those references. It is
 numbered 0 because it genuinely comes before the rest, not because it matters least.
-Ticket 0071 appended edit **9** at the end for the same reason: a row goes on the bottom
-so that nothing above it moves.
+Ticket 0071 appended edit **9** at the end for the same reason, and ticket 0072
+appended edit **10**: a row goes on the bottom so that nothing above it moves.
 
 | # | Where | What | If it is missing |
 | --- | --- | --- | --- |
@@ -64,6 +66,13 @@ so that nothing above it moves.
 | 7 | `src/head-coach/head-coach-source.ts` — `SEASON_ARTICLES` | The Season's article title for the league, under the Season already listed | No Head Coach changes section, silently — the fetch stores nothing and the packet says the article is not listed |
 | 8 | `src/football-data/team-identity.ts` — `BY_COMPETITION` | Live-source name → football-data.co.uk name, per Competition (§2) | Every club's history section reads "none in stored data" over a complete backfill, and nothing fails |
 | 9 | `src/uefa/fetch-competition.ts` — `UEFA_COMPETITION_IDS` | UEFA's numeric competitionId, only for a Competition whose edit 0 names `"uefa"` for its schedule | `Competition XX reads UEFA, which needs its UEFA competitionId` — that Competition's day, every day |
+| 10 | `src/365scores/fetch-match-stats.ts` — `SCORES_365_COMPETITION_IDS` and the name map beside it | 365Scores' numeric competition id, and every side it spells differently from the record, only for a Competition whose edit 0 names `"365scores"` for its stats | The id: `Competition XX reads 365Scores, which needs its 365Scores competition id`. A name: `365Scores lists YY in Competition XX, which is not a side this record stores` — either way that Competition's day, every day |
+
+**Edit 10's name map is not the curation §2 describes.** Three names and not twenty, and
+they do not move between Seasons: a cup's sides are countries, so the map is written once
+against the source's own spellings and reviewed once (ADR-0058). What it shares with §2
+is the rule that matters — derive it from the archived bytes rather than transcribing it,
+and require nothing left over on either side.
 
 **Edits 3 to 8 are a league's, and a cup makes none of them.** Edit 0 is what says so: an
 entry naming `null` for a source is a Competition the daily fetch does not walk into that
@@ -78,15 +87,16 @@ one failure this whole page is arranged to prevent. Write the fetch, then the en
 the `competitions` row. `UNL` sat in the domain (edit 1) with no entry between tickets
 0070 and 0071 for exactly this reason. It has one now, and `test/schema.test.ts` holds
 the domain and the registry to the same set of codes, so the next Competition cannot
-reach production half-listed the way that gap allowed. `UNL`'s three remaining `null`s
+reach production half-listed the way that gap allowed. `UNL`'s two remaining `null`s
 are the same rule inside one entry: each becomes a source name in the ticket that builds
-its fetch (0072 to 0074) and states an absence until then.
+its fetch (0073 and 0074) and states an absence until then. Its `stats` was the third
+and became `"365scores"` with ticket 0072, which is the ticket that wrote that fetch.
 
 Edits 3 and 4 are one change and are checked against each other by
 `test/schema.test.ts`; edit 2's `competitionName` must equal edit 3's top-flight name and
 `test/openrouter-entrant.test.ts` requires it. `test/competition-sources.test.ts` checks
-edit 0 against edits 3, 5, 6 and 7 in one direction: an entry naming a source that has no
-map for that Competition is a red test rather than a section that reads calm.
+edit 0 against edits 3, 5, 6, 7 and 10 in one direction: an entry naming a source that
+has no map for that Competition is a red test rather than a section that reads calm.
 
 **Edit 6 moves edit 2's sha.** A Competition with no transfer window renders no Squad
 Changes section at all; writing its windows down opens the gate, and the packet grows the

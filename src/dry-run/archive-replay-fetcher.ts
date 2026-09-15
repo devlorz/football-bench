@@ -9,6 +9,10 @@ import {
   sourceName as uefaSourceName,
   uefaCompetitionOf
 } from "../uefa/fetch-competition.js";
+import {
+  scores365CompetitionOf,
+  SHEET_SOURCE_ENDING
+} from "../365scores/fetch-match-stats.js";
 
 export interface ArchivedSnapshot {
   source: string;
@@ -161,6 +165,63 @@ function uefaSource(url: string): string | null {
   return uefaSourceName(competition, season, Number(offset));
 }
 
+const SCORES_365_LISTING_URL =
+  /^https:\/\/webws\.365scores\.com\/web\/games\/\?.*&competitions=(\d+)&startDate=(\d{2})\/(\d{2})\/(\d{4})&endDate=/;
+
+const SCORES_365_SHEET_URL =
+  /^https:\/\/webws\.365scores\.com\/web\/game\/stats\/\?.*&games=(\d+)$/;
+
+/**
+ * The archived name whose ending this URL names, or null if the archive holds
+ * none. The same read `fplLiveSource` above makes, and for the same reason: a
+ * snapshot's name says which Season its bytes are from and the URL does not,
+ * so the Season is found among the names rather than invented from the URL.
+ */
+function endingIn(sources: Iterable<string>, ending: string): string | null {
+  for (const source of sources) {
+    if (source.startsWith("365scores:") && source.endsWith(ending)) {
+      return source;
+    }
+  }
+  return null;
+}
+
+/**
+ * 365Scores asks for a day as `DD/MM/YYYY` and a Competition by a number, so
+ * both are read back — the fourth source whose URL says nothing the archive's
+ * own names say, after Understat's, football-data.org's and UEFA's.
+ *
+ * Neither URL carries a Season, which is why the ending is matched rather than
+ * the whole name built. A miss returns the ending with `<season>` in it, so
+ * the error names what was looked for rather than reporting no known source
+ * for bytes the archive may well be holding under another Season.
+ *
+ * Written with the fetch, on the evidence of the three sources above that each
+ * earned that sentence the other way round.
+ */
+function scores365Source(
+  url: string,
+  sources: Iterable<string>
+): string | null {
+  const sheet = SCORES_365_SHEET_URL.exec(url);
+  if (sheet !== null) {
+    const ending = `${SHEET_SOURCE_ENDING}${sheet[1]}`;
+    return endingIn(sources, ending)
+      ?? `365scores:<season>:<competition>${ending}`;
+  }
+  const listing = SCORES_365_LISTING_URL.exec(url);
+  if (listing === null) {
+    return null;
+  }
+  const [, id, day, month, year] = listing;
+  const competition = scores365CompetitionOf(id!);
+  if (competition === undefined) {
+    return null;
+  }
+  const ending = `:${competition}:games:${year}-${month}-${day}`;
+  return endingIn(sources, ending) ?? `365scores:<season>${ending}`;
+}
+
 const WIKIPEDIA_PAGE_URL =
   /^https:\/\/en\.wikipedia\.org\/w\/index\.php\?title=([^&]+)&action=raw$/;
 
@@ -238,6 +299,7 @@ function archiveSource(
     ?? understatSource(url)
     ?? footballDataOrgSource(url)
     ?? uefaSource(url)
+    ?? scores365Source(url, sources)
     ?? squadChangeSourceFor(url)
     ?? headCoachChangeSourceFor(url)
     ?? openRouterSource(url, options);

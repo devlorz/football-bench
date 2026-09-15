@@ -42,6 +42,36 @@ try {
       + `${moved.fixtureId} attached to Gameweek ${moved.attachedGameweek}`
     );
   }
+  // Five loops of the same shape and not one formatter over them: each names
+  // different fields of a different fact, and the shared version would be a
+  // switch on which fact it was handed. What they do share is the rule -- a
+  // thing the record absorbed quietly is said out loud on the day it happens,
+  // and none of them fails the run.
+  //
+  // Neither result is changed and neither source is preferred (ADR-0056), so
+  // the only place a disagreement exists at all is this line.
+  for (const disagreement of result.resultDisagreements) {
+    console.warn(
+      `Competition ${disagreement.competition}: Fixture `
+      + `${disagreement.fixtureId} (${disagreement.homeTeam} v `
+      + `${disagreement.awayTeam}, kickoff `
+      + `${disagreement.kickoffAt.toISOString()}) is stored `
+      + `${disagreement.stored} and the second source reports `
+      + `${disagreement.reported}; neither has been changed`
+    );
+  }
+  // The signal that a stats source and the schedule source disagree about the
+  // day a match was played, which is otherwise only visible as a packet line
+  // reading "unavailable" over a source that was answering.
+  for (const unlisted of result.unlistedFixtures) {
+    console.warn(
+      `Competition ${unlisted.competition}: Fixture ${unlisted.fixtureId} `
+      + `(${unlisted.homeTeam} v ${unlisted.awayTeam}) is settled and was not `
+      + `in the stats source's listing for `
+      + `${unlisted.kickoffAt.toISOString().slice(0, 10)}; no shots or xG `
+      + "were stored for it and the next run will ask again"
+    );
+  }
   for (const refused of result.refusedAttachments) {
     console.warn(
       `Competition ${refused.competition}: matchday ${refused.matchday} Fixture `

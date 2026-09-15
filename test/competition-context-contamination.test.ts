@@ -5,6 +5,9 @@ import {
   loadMatchContextData,
   type MatchContextData
 } from "../src/predictions/build-match-context.js";
+import {
+  SCORES_365_SOURCE
+} from "../src/365scores/fetch-match-stats.js";
 import { resetSchema } from "./schema-fixture.js";
 
 const { Client } = pg;
@@ -60,10 +63,14 @@ describe("a context packet holds one Competition's data", () => {
     await client.query(
       `truncate
          competitions, gameweeks, fixtures, historical_matches,
-         understat_match_xg, fpl_players
+         understat_match_xg, team_match_stats, fpl_players
        restart identity cascade`
     );
-    for (const competition of ["PL", "PD", "SA", "FL1", "BL1"]) {
+    // `UNL` is listed with the five because the cup's own case below needs a
+    // Gameweek to read a deadline off; it seeds no league rows at all, which
+    // is the truth about a Competition whose history is in neither of the two
+    // tables above.
+    for (const competition of ["PL", "PD", "SA", "FL1", "BL1", "UNL"]) {
       await client.query(
         "insert into competitions (competition, season) values ($1, $2)",
         [competition, SEASON]
@@ -133,6 +140,90 @@ describe("a context packet holds one Competition's data", () => {
       [SEASON, EARLIER, LATER]
     );
   });
+
+  test("a cup's shots and xG come from its own table, and no league's do",
+    async () => {
+      // The cup's half of the same rule, at the table ADR-0058 put its
+      // readings in. Two Fixtures again: the first has only a *league's*
+      // stats row naming its two sides, the second has its own.
+      await client.query(
+        `insert into fixtures (
+           competition, season, fixture_id, gw, home_team, away_team,
+           kickoff_at, result
+         ) values
+           ('UNL', $1, 2048007, 1, 'Kosovo', 'Republic of Ireland', $2,
+            '{"home_goals":1,"away_goals":0,"outcome":"H"}'),
+           ('UNL', $1, 2048006, 1, 'Austria', 'Israel', $3,
+            '{"home_goals":2,"away_goals":2,"outcome":"D"}'),
+           -- Played after the Lock this packet is built for, and settled: a
+           -- Fixture an Entrant could not have known the result of.
+           ('UNL', $1, 2048005, 1, 'Norway', 'Denmark',
+            '2026-08-28T18:45:00Z',
+            '{"home_goals":3,"away_goals":1,"outcome":"H"}'),
+           -- Before the Lock and not settled: a Fixture with no result is not
+           -- a played Fixture with no figures.
+           ('UNL', $1, 2048004, 1, 'Serbia', 'Greece', $2, null),
+           -- And a league's own Fixture, so that the league below is read
+           -- against rows rather than against an empty table.
+           ('PL', $1, 91001, 1, 'Arsenal', 'Chelsea', $2,
+            '{"home_goals":2,"away_goals":1,"outcome":"H"}')`,
+        [SEASON, EARLIER, LATER]
+      );
+      await client.query(
+        `insert into team_match_stats (
+           season, competition, source, source_match_id, kicked_off_at,
+           home_team, away_team, home_shots, away_shots,
+           home_shots_on_target, away_shots_on_target, home_xg, away_xg
+         ) values
+           ($1, 'PL', $4, 'pl-contaminant', $2,
+            'Kosovo', 'Republic of Ireland', 99, 99, 99, 99, 9.9, 9.9),
+           ($1, 'PL', $4, 'pl-own', $2,
+            'Arsenal', 'Chelsea', 99, 99, 99, 99, 9.9, 9.9),
+           ($1, 'UNL', $4, '4672061', $3,
+            'Austria', 'Israel', 14, 9, 5, 3, 1.31, 0.88)`,
+        // The source name the fetch writes, not a copy of it: renamed on one
+        // side only, this seed would stop matching and the test would still
+        // be green over a packet that had quietly stopped finding rows.
+        [SEASON, EARLIER, LATER, SCORES_365_SOURCE]
+      );
+      // A league's table, under the cup's own code and naming the cup's own
+      // sides: the row a packet reading the wrong table would find.
+      await client.query(
+        `insert into understat_match_xg (
+           competition, season, understat_match_id, kicked_off_at,
+           home_team, away_team, home_xg, away_xg
+         ) values ('UNL', $1, 'unl-understat', $2, 'Kosovo',
+                   'Republic of Ireland', 9.9, 9.9)`,
+        [SEASON, EARLIER]
+      );
+
+      const nationsLeague = await loadMatchContextData(
+        client, "UNL", SEASON, 1
+      );
+      const premierLeague = await loadMatchContextData(client, "PL", SEASON, 1);
+
+      expect(nationsLeague.playedFixtures.map((fixture) => [
+        fixture.home_team, fixture.home_shots, fixture.home_xg
+      ])).toEqual([
+        // The league's row does not join across `competition`, so the
+        // Fixture it names carries no figure at all rather than a 99.
+        ["Kosovo", null, null],
+        // And the cup's own row does, which is what makes that absence mean
+        // something: the join is not simply broken.
+        ["Austria", 14, 1.31]
+        // And Norway's is not here at all: the read is bounded by the
+        // Gameweek's deadline, as every other read in this builder is.
+      ]);
+      // Neither of the two league tables is read for a cup: the Understat row
+      // stored under `UNL` reaches nothing, because there is no league result
+      // for it to be joined onto.
+      expect(nationsLeague.historicalMatches).toEqual([]);
+      // And the other direction, against a league that has both halves of
+      // what the read would need — a settled Fixture of its own and a row
+      // stored under its own code naming that Fixture's clubs: it is the
+      // registry entry and nothing else that keeps the table shut.
+      expect(premierLeague.playedFixtures).toEqual([]);
+    });
 
   test("each Competition reads only its own history, both directions",
     async () => {

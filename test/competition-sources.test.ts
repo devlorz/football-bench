@@ -5,6 +5,10 @@ import {
 import { divisionsOf } from "../src/football-data/divisions.js";
 import { understatTeamNamesOf } from "../src/understat/team-identity.js";
 import {
+  scores365CompetitionIdOf,
+  SCORES_365_SOURCE
+} from "../src/365scores/fetch-match-stats.js";
+import {
   transferWindowsOf
 } from "../src/squad-changes/transfer-window.js";
 import { headCoachSource } from "../src/head-coach/head-coach-source.js";
@@ -35,9 +39,15 @@ describe("the source registry", () => {
           history: sources.history === "football-data.co.uk"
             ? divisionsOf(competition) !== undefined
             : null,
+          // Two sources under one name, because a cup's shots come from
+          // neither of the leagues' (ADR-0058): each is asked for its own map,
+          // and an entry naming one while the other has the row would be the
+          // drift this file exists to catch.
           stats: sources.stats === "understat"
             ? understatTeamNamesOf(competition) !== undefined
-            : null,
+            : sources.stats === SCORES_365_SOURCE
+              ? scores365CompetitionIdOf(competition) !== undefined
+              : null,
           squadChanges: sources.squadChanges === "wikipedia-transfers"
             ? transferWindowsOf(competition) !== undefined
             : null,

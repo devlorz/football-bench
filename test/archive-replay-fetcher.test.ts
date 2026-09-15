@@ -7,6 +7,12 @@ import {
   sourceName as uefaSourceName,
   sourceUrl as uefaSourceUrl
 } from "../src/uefa/fetch-competition.js";
+import {
+  listingSource,
+  listingUrl,
+  sheetSource,
+  sheetUrl
+} from "../src/365scores/fetch-match-stats.js";
 
 describe("the archive replay fetcher", () => {
   test("serves an archived source body for the URL that produced it", async () => {
@@ -107,6 +113,50 @@ describe("the archive replay fetcher", () => {
     expect((await http(uefaSourceUrl("UNL", "2026-27", 100))).body)
       .toBe("[{\"id\":\"2\"}]");
   });
+
+  /**
+   * Driven from the fetch's own URL and name builders, for the reason the
+   * UEFA case above is: what this catches is the two drifting apart. Neither
+   * 365Scores URL carries the Season its snapshot is named for, so what is
+   * proven here is the ending match that finds it.
+   */
+  test("replays a 365Scores day and a match sheet under their own names",
+    async () => {
+      const http = createArchiveReplayFetcher([
+        {
+          source: listingSource("UNL", "2026-27", "2026-09-24"),
+          body: "{\"games\":[]}"
+        },
+        {
+          source: sheetSource("UNL", "2026-27", "4444714"),
+          body: "{\"statistics\":[]}"
+        }
+      ]);
+
+      expect((await http(listingUrl("UNL", "2026-09-24"))).body)
+        .toBe("{\"games\":[]}");
+      expect((await http(sheetUrl("4444714"))).body)
+        .toBe("{\"statistics\":[]}");
+    });
+
+  test("names the Season it looked for when no 365Scores snapshot matches",
+    async () => {
+      // The miss has to name the ending rather than report no known source:
+      // these bytes may be archived under another Season, and "no archived
+      // snapshot source is known" would send a reader to this file instead of
+      // to the archive.
+      const http = createArchiveReplayFetcher([
+        {
+          source: listingSource("UNL", "2026-27", "2026-09-24"),
+          body: "{\"games\":[]}"
+        }
+      ]);
+
+      await expect(http(sheetUrl("4444714"))).rejects
+        .toThrow("365scores:<season>:<competition>:stats:4444714");
+      await expect(http(listingUrl("UNL", "2026-10-01"))).rejects
+        .toThrow("365scores:<season>:UNL:games:2026-10-01");
+    });
 
   test("names no source for a UEFA Competition the record does not read",
     async () => {
