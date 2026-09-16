@@ -12,6 +12,14 @@ import {
   type SquadChangeRow
 } from "../context/build-squad-changes-context.js";
 import {
+  buildNationalTeamHeadCoachContext,
+  type NationalTeamHeadCoachRow
+} from "../context/build-national-team-head-coach-context.js";
+import { NATIONAL_TEAM_HEAD_COACHES_SOURCE }
+  from "../head-coach/fetch-national-team-head-coaches.js";
+import { HEAD_COACH_SEASON_ARTICLE_SOURCE }
+  from "../head-coach/head-coach-source.js";
+import {
   buildHeadCoachContext,
   type HeadCoachChangeRow,
   type HeadCoachRow
@@ -105,6 +113,7 @@ export interface MatchContextData {
   squadChanges: SquadChangeRow[];
   headCoachChanges: HeadCoachChangeRow[];
   headCoaches: HeadCoachRow[];
+  nationalTeamHeadCoaches: NationalTeamHeadCoachRow[];
 }
 
 export async function loadMatchContextData(
@@ -242,25 +251,63 @@ export async function loadMatchContextData(
     [competition, season, gameweek]
   );
   // The Gameweek's own partition, on the same terms as the Squad Changes
-  // above. `dated_on` comes back as text: the render both bounds by it and
+  // above, and only for a Competition whose registry entry names the season
+  // articles. `dated_on` comes back as text: the render both bounds by it and
   // prints it, and a `date` handed over as local midnight would be a day out
   // on either side of UTC.
-  const headCoachChanges = await database.query<HeadCoachChangeRow>(
-    `select club, direction, head_coach, manner, dated_on::text as dated_on
-       from head_coach_changes
-      where competition = $1 and season = $2 and gw = $3`,
-    [competition, season, gameweek]
-  );
+  //
+  // The gate is the registry's and not the `where` clause's, though both these
+  // tables carry a `competition` column and a cup's partition is empty. That
+  // is the asymmetry ticket 0073 left between `historical_matches` and
+  // `international_results` and ticket 0074 did not want twice: which of the
+  // two Head Coach stores a Competition reads is one fact, it is written in
+  // one place, and a reader that asks it in one direction and leans on an
+  // empty partition in the other has to be read twice to be believed.
+  const seasonArticles =
+    sources?.headCoaches === HEAD_COACH_SEASON_ARTICLE_SOURCE;
+  const headCoachChanges = seasonArticles
+    ? await database.query<HeadCoachChangeRow>(
+      `select club, direction, head_coach, manner, dated_on::text as dated_on
+         from head_coach_changes
+        where competition = $1 and season = $2 and gw = $3`,
+      [competition, season, gameweek]
+    )
+    : undefined;
   // The same partition again, and the state beside the events: one row per
   // club. Every row comes back and the deadline bound is the renderer's, where
   // the deadline is and where the Changes are bounded too -- no `where` here
   // holds it back.
-  const headCoaches = await database.query<HeadCoachRow>(
-    `select club, head_coach, observed_at
-       from head_coaches
-      where competition = $1 and season = $2 and gw = $3`,
-    [competition, season, gameweek]
-  );
+  const headCoaches = seasonArticles
+    ? await database.query<HeadCoachRow>(
+      `select club, head_coach, observed_at
+         from head_coaches
+        where competition = $1 and season = $2 and gw = $3`,
+      [competition, season, gameweek]
+    )
+    : undefined;
+  // The cup's Head Coaches, from the other of the two sources the registry
+  // dispatches on, and read only for a Competition whose entry names it -- the
+  // gate `international_results` is behind, for the same reason (ADR-0057):
+  // this table has no Competition column to filter by and could not have one,
+  // because the same side's Head Coach answers for every Competition it plays
+  // in.
+  //
+  // Every day's snapshot and not only the newest, because a Change here is the
+  // difference between two of them (migration 0045). Bounded by the Lock, and
+  // the renderer bounds it again: this store has no trigger holding that line
+  // for itself, so the read is kept honest on its own.
+  const nationalTeamHeadCoaches =
+    sources?.headCoaches === NATIONAL_TEAM_HEAD_COACHES_SOURCE
+      ? await database.query<NationalTeamHeadCoachRow>(
+        `select
+           team, observed_on::text as observed_on, observed_at,
+           head_coach, assumed_on::text as assumed_on
+           from national_team_head_coaches
+          where observed_at < $1
+          order by team, observed_on`,
+        [deadline]
+      )
+      : undefined;
   return {
     competition,
     season,
@@ -274,8 +321,9 @@ export async function loadMatchContextData(
     datasetUpdatedOn: datasetRead?.rows[0]?.latest_row_on ?? null,
     fplPlayers: fplPlayers.rows,
     squadChanges: squadChanges.rows,
-    headCoachChanges: headCoachChanges.rows,
-    headCoaches: headCoaches.rows
+    headCoachChanges: headCoachChanges?.rows ?? [],
+    headCoaches: headCoaches?.rows ?? [],
+    nationalTeamHeadCoaches: nationalTeamHeadCoaches?.rows ?? []
   };
 }
 
@@ -336,17 +384,33 @@ export function buildMatchContext(
         awayTeam: fixture.away_team,
         changes: data.squadChanges
       }),
-      // Undefined for a Season whose article is not listed, and then the
-      // section is absent rather than empty.
-      buildHeadCoachContext({
-        competition: data.competition,
-        season: data.season,
-        deadline: data.deadline,
-        homeTeam: fixture.home_team,
-        awayTeam: fixture.away_team,
-        headCoaches: data.headCoaches,
-        changes: data.headCoachChanges
-      })
+      // One Head Coach section, chosen by the registry the fetch that wrote
+      // the rows was dispatched by, exactly as the history section above is
+      // (ADR-0057). A cup gets the current-list section *instead of* the
+      // season-article one and not beside it: that one is built on a club
+      // competition's dated Managerial changes, and this source publishes no
+      // event at all -- who is in post today, and a Change is the difference
+      // between two mornings of it.
+      //
+      // The season-article builder is still the `else`, and still undefined
+      // for a Season whose article is not listed, and then the section is
+      // absent rather than empty.
+      data.sources?.headCoaches === NATIONAL_TEAM_HEAD_COACHES_SOURCE
+        ? buildNationalTeamHeadCoachContext({
+          deadline: data.deadline,
+          homeTeam: fixture.home_team,
+          awayTeam: fixture.away_team,
+          headCoaches: data.nationalTeamHeadCoaches
+        })
+        : buildHeadCoachContext({
+          competition: data.competition,
+          season: data.season,
+          deadline: data.deadline,
+          homeTeam: fixture.home_team,
+          awayTeam: fixture.away_team,
+          headCoaches: data.headCoaches,
+          changes: data.headCoachChanges
+        })
     ].filter((section) => section !== undefined).join("\n\n"),
     data.competition
   );

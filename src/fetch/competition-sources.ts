@@ -9,11 +9,12 @@
  * change nothing about their days. `UNL` names UEFA for its schedule from
  * ticket 0071 and 365Scores for its shots and xG from ticket 0072, each the
  * ticket that built that fetch, the GitHub dataset for its history from ticket
- * 0073, and `null` for the one whose fetch ticket 0074 builds. A `null` is not
- * a placeholder: it says this Competition has no such source, the daily fetch
- * does not walk it, and the packet states the absence — which is the truth
- * about `UNL`'s head coaches until its ticket lands. Naming a source before
- * its fetch exists would be the lie, because the fetch would believe it.
+ * 0073, and the current national team head coaches list from ticket 0074. Its
+ * one remaining `null` is `squadChanges`, and that one is not a placeholder: a
+ * national side has no transfer window, so it says this Competition has no
+ * such source, the daily fetch does not walk it, and the packet states the
+ * absence. Naming a source before its fetch exists would be the lie, because
+ * the fetch would believe it.
  *
  * A listed Competition with no entry fails the run by name (ADR-0054: a
  * missing map fails loudly, a wrong one fails nothing).
@@ -47,7 +48,19 @@ export interface CompetitionSources {
     | null;
   readonly stats: "understat" | "365scores" | null;
   readonly squadChanges: "wikipedia-transfers" | null;
-  readonly headCoaches: "wikipedia-season-article" | null;
+  /**
+   * Where "who picks this team" comes from, and which of the two Head Coach
+   * pipelines the day walks. Two sources and not two spellings of one: a
+   * season article publishes a club competition's Managerial changes as dated
+   * events, and the current list publishes who is in post today and no event
+   * at all, so a Change from it is the difference between two mornings
+   * (migration 0045). No national side appears in a season article and no club
+   * on the current list.
+   */
+  readonly headCoaches:
+    | "wikipedia-season-article"
+    | "wikipedia-national-team-head-coaches"
+    | null;
 }
 
 /**
@@ -77,21 +90,22 @@ const BY_COMPETITION: Readonly<Record<string, CompetitionSources>> = {
   // none of the domestic four: no club plays in it, so none of the four
   // sources that hold clubs can answer for it (ADR-0057). Its own three —
   // 365Scores for shots and xG, a dataset for recent internationals, a
-  // Wikipedia list for the head coaches — arrive with tickets 0072 to 0074
-  // and replace a `null` each.
+  // Wikipedia list for the head coaches — arrived with tickets 0072 to 0074
+  // and replaced a `null` each.
   //
-  // `stats` and `history` are the first two of them and read nothing a league
-  // reads: Understat has no international competition at all (ADR-0058) and
-  // football-data.co.uk no international file (ADR-0057), so each of those two
-  // unions holds two sources and not two spellings of one. A cup keeps
-  // `squadChanges` null for good — a national team has no transfer window —
-  // and the one remaining null is ticket 0074.
+  // None of the three reads anything a league reads: Understat has no
+  // international competition at all (ADR-0058), football-data.co.uk no
+  // international file (ADR-0057), and no season article names a national
+  // side's Head Coach — so each of those three unions holds two sources and
+  // not two spellings of one. A cup keeps `squadChanges` null for good, a
+  // national team having no transfer window, and that is the whole of what a
+  // cup does not have.
   UNL: {
     schedule: "uefa",
     history: "martj42/international_results",
     stats: "365scores",
     squadChanges: null,
-    headCoaches: null
+    headCoaches: "wikipedia-national-team-head-coaches"
   }
 };
 

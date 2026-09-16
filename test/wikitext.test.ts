@@ -150,6 +150,24 @@ describe("reading a wikitext date", () => {
     expect(parseDate("24 May 2026")).toBe("2026-05-24");
   });
 
+  test("reads the three numbers the Italian transfer list writes", () => {
+    // Year first whatever `format` says, and the leading named parameters are
+    // display instructions rather than part of the date.
+    expect(parseDate("{{dts|format=dmy|2026|2|12}}")).toBe("2026-02-12");
+    expect(parseDate("{{dts|2026|11|3}}")).toBe("2026-11-03");
+  });
+
+  test("reads the written date the head coaches list wraps instead", () => {
+    // Three spellings of two templates, all on that one page and all in its
+    // `Assumed role` column (ticket 0074): a wikitable is written by whoever
+    // edits a row, and the wrapper is a sorting instruction rather than part
+    // of the date.
+    expect(parseDate("{{dts|format=dmy|19 May 2026}}")).toBe("2026-05-19");
+    expect(parseDate("{{DTS|17 February 2025}}")).toBe("2025-02-17");
+    expect(parseDate("{{Date table sorting|6 August 2025}}"))
+      .toBe("2025-08-06");
+  });
+
   /**
    * A table by hand, and not `Date.parse`, which would answer for `May 2026`
    * and for `2026-05-24` and for a dozen forms these pages never write -- and
@@ -157,7 +175,15 @@ describe("reading a wikitext date", () => {
    */
   test("refuses anything else", () => {
     for (const value of [
-      "May 2026", "2026-05-24", "24 Mayo 2026", "Pre-season", "", "24 May"
+      "May 2026", "2026-05-24", "24 Mayo 2026", "Pre-season", "", "24 May",
+      // A wrapper is only ever taken off a date. What is inside these is not
+      // one, and unwrapping a template this project has not read is how a
+      // parameter ends up rendered as a day.
+      "{{dts|format=dmy|Pre-season}}", "{{Date table sorting|}}",
+      "{{start date|2026|5|24}}",
+      // Two positional parameters is neither shape, and guessing which of
+      // them is the date is the guess this function exists not to make.
+      "{{dts|24 May 2026|2026|5}}"
     ]) {
       expect(parseDate(value)).toBeUndefined();
     }

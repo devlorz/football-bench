@@ -2,7 +2,7 @@
 
 Every edit a new Competition needs, in one place. Three comments in the codebase each say
 opening a Competition is "one entry" or "a single edit"; each is true about its own file
-and none of them is true about the change. There are **ten** places, plus what §2's
+and none of them is true about the change. There are **thirteen** places, plus what §2's
 Wikipedia club map still holds only in prose, and this page is the only thing that
 gathers them — a review found the gap after La Liga's history landed, when four of the
 then-five had been made and nothing said what the fifth was. The sixth arrived with
@@ -21,13 +21,18 @@ day, until one is written. It is the first row here whose absence is loud rather
 quiet, and it goes **first** for that reason: with the entry in place every other missing
 edit is the section-shaped failure the rest of this table describes.
 
-Ticket 0071 made it ten, ticket 0072 eleven and ticket 0073 twelve. Edits 9 to 11 are
-loud in the same way and for the same kind of reason: a Competition whose entry names
-UEFA for its schedule, or 365Scores for its shots and xG, needs that source's own numeric
-id for it, and one whose entry names the GitHub dataset for its history needs that
-dataset's own word for it; without one, that Competition's day fails by name. Each is a
-row rather than a sentence in edit 0 because each is a second file, which is the whole
-reason this page exists.
+Ticket 0071 made it ten, ticket 0072 eleven, ticket 0073 twelve and ticket 0074
+thirteen. Edits 9 to 12 are loud in the same way and for the same kind of reason: a
+Competition whose entry names UEFA for its schedule, or 365Scores for its shots and xG,
+needs that source's own numeric id for it; one whose entry names the GitHub dataset for
+its history needs that dataset's own word for it; and one whose entry names the current
+head coaches list needs the section of that page its sides are listed under. Without one,
+that Competition's day fails by name. Each is a row rather than a sentence in edit 0
+because each is a second file, which is the whole reason this page exists.
+
+The count in the first paragraph had been left at ten by tickets 0072 and 0073 while this
+one grew twice; 0074 corrected it. A page that counts the change is only worth reading
+while its own count is right.
 
 Vocabulary: [CONTEXT.md](../../CONTEXT.md) — Competition, Division, Track.
 Decisions: [ADR-0035](../adr/0035-the-match-track-grows-a-competition-dimension.md)
@@ -44,7 +49,7 @@ This page is what to write before that one runs.
 
 ---
 
-## 1. The twelve edits
+## 1. The thirteen edits
 
 In this order. Each is small; the risk is entirely in stopping one short.
 
@@ -53,8 +58,8 @@ since ticket 0059 — four tickets cite them by number, and renumbering a list o
 documents point into buys a tidier column and costs every one of those references. It is
 numbered 0 because it genuinely comes before the rest, not because it matters least.
 Ticket 0071 appended edit **9** at the end for the same reason, ticket 0072
-appended edit **10** and ticket 0073 edit **11**: a row goes on the bottom so
-that nothing above it moves.
+appended edit **10**, ticket 0073 edit **11** and ticket 0074 edit **12**: a row goes on
+the bottom so that nothing above it moves.
 
 | # | Where | What | If it is missing |
 | --- | --- | --- | --- |
@@ -70,6 +75,7 @@ that nothing above it moves.
 | 9 | `src/uefa/fetch-competition.ts` — `UEFA_COMPETITION_IDS` | UEFA's numeric competitionId, only for a Competition whose edit 0 names `"uefa"` for its schedule | `Competition XX reads UEFA, which needs its UEFA competitionId` — that Competition's day, every day |
 | 10 | `src/365scores/fetch-match-stats.ts` — `SCORES_365_COMPETITION_IDS` and the name map beside it | 365Scores' numeric competition id, and every side it spells differently from the record, only for a Competition whose edit 0 names `"365scores"` for its stats | The id: `Competition XX reads 365Scores, which needs its 365Scores competition id`. A name: `365Scores lists YY in Competition XX, which is not a side this record stores` — either way that Competition's day, every day |
 | 11 | `src/international-results/fetch-results.ts` — `DATASET_NAME_BY_COMPETITION` and the name map beside it | The dataset's own word for the Competition, which every merged line in the packet carries, and every side it spells differently from the record, only for a Competition whose edit 0 names `"martj42/international_results"` for its history | The name: `Competition XX reads the international results dataset, which needs the dataset's own name for it` — that Competition's day, every day. A side: `The international results dataset names no side resolving to YY` — the same, and it is the *only* way a renamed side is caught |
+| 12 | `src/head-coach/fetch-national-team-head-coaches.ts` — `BY_COMPETITION` | The confederation section of the current head coaches list this Competition's sides are listed under, and every one of those sides by the FIFA trigram the page keys its rows with, only for a Competition whose edit 0 names `"wikipedia-national-team-head-coaches"` for its head coaches | The section: `Competition XX reads the current national team head coaches list, which needs its confederation's section` — that Competition's day, every day. A side: `The trigram map reaches no side spelled YY`, a page row the map has never seen, or one of the map's own trigrams the page has dropped — the same |
 
 **Edit 10's name map is not the curation §2 describes.** Three names and not twenty, and
 they do not move between Seasons: a cup's sides are countries, so the map is written once
@@ -86,11 +92,21 @@ side the record stores has played since the window opened, so every one of them 
 reachable in the file, and one that is not is a spelling that moved. Naming that in the
 error is what stops a rename from reading as a side that did not play.
 
+**Edit 12's map is checked in both directions, because it can be.** Its page lists one
+confederation per section and the Competition holds all but a named few of that
+section — so a trigram on the page that the map has never seen, one of the map's own that
+the page has dropped, and a stored side the map cannot reach are three different edits
+and each is refused by name. That is the strongest of the three shapes on this page, and
+it is available only because both lists are closed. Do not reach for it where one side is
+open: edit 11's dataset lists every side there is, and asking it this way would refuse
+every morning.
+
 **Edits 3 to 8 are a league's, and a cup makes none of them.** Edit 0 is what says so: an
 entry naming `null` for a source is a Competition the daily fetch does not walk into that
 loop, so there is no map for it to be missing. `UNL` reads four sources of its own
-instead (ADR-0057), and its rows go in `international_results` and `team_match_stats`
-rather than in `historical_matches` and `understat_match_xg`. Edits 0, 1 and 2 are every
+instead (ADR-0057), and its rows go in `international_results`, `team_match_stats` and
+`national_team_head_coaches` rather than in `historical_matches`, `understat_match_xg`
+and `head_coaches`. Edits 0, 1 and 2 are every
 Competition's, cup or league.
 
 **Edit 0 names nothing that does not exist yet.** An entry pointing at a source no fetch
@@ -99,16 +115,16 @@ one failure this whole page is arranged to prevent. Write the fetch, then the en
 the `competitions` row. `UNL` sat in the domain (edit 1) with no entry between tickets
 0070 and 0071 for exactly this reason. It has one now, and `test/schema.test.ts` holds
 the domain and the registry to the same set of codes, so the next Competition cannot
-reach production half-listed the way that gap allowed. `UNL`'s one remaining `null`
-is the same rule inside one entry: it becomes a source name in the ticket that builds its
-fetch (0074) and states an absence until then. Its `stats` became `"365scores"` with
-ticket 0072 and its `history` the GitHub dataset with ticket 0073, each the ticket that
-wrote that fetch.
+reach production half-listed the way that gap allowed. Each of `UNL`'s three own sources became a
+name in the ticket that wrote its fetch and stated an absence until then: `stats` with
+ticket 0072, `history` with 0073 and `headCoaches` with 0074. Its one remaining `null`,
+`squadChanges`, is not waiting for a ticket — a national side has no transfer window, so
+that entry says the Competition has no such source at all.
 
 Edits 3 and 4 are one change and are checked against each other by
 `test/schema.test.ts`; edit 2's `competitionName` must equal edit 3's top-flight name and
 `test/openrouter-entrant.test.ts` requires it. `test/competition-sources.test.ts` checks
-edit 0 against edits 3, 5, 6, 7, 10 and 11 in one direction: an entry naming a source that
+edit 0 against edits 3, 5, 6, 7, 10, 11 and 12 in one direction: an entry naming a source that
 has no map for that Competition is a red test rather than a section that reads calm.
 
 **Edit 6 moves edit 2's sha.** A Competition with no transfer window renders no Squad
@@ -117,12 +133,14 @@ stated absence "no Squad Change data stored for this Gameweek" even before a fet
 Do edit 6 first, or expect the pin to move once — it is legitimate only while the version
 is unused.
 
-**Edit 0 moves it too, for a cup.** A Competition whose `history` names the GitHub dataset
-renders the recent-internationals section *instead of* the historical-results one (ticket
-0073), so the entry decides which of two sections the sha is taken over. That is the
-second rendering change arriving from a registry rather than from a builder, and it is
-why ticket 0075 pins `UNL` only after 0073 and 0074 have landed: pinning between them
-would pin a render that is about to grow a section.
+**Edit 0 moves it too, for a cup, in two places now.** A Competition whose `history`
+names the GitHub dataset renders the recent-internationals section *instead of* the
+historical-results one (ticket 0073), and one whose `headCoaches` names the current list
+renders that section instead of the season article's (ticket 0074) — so the entry decides
+which of two sections the sha is taken over, twice. Those are the second and third
+rendering changes arriving from a registry rather than from a builder, and they are why
+ticket 0075 pins `UNL` only after 0073 and 0074 have landed: pinning between them would
+pin a render that was about to grow a section.
 
 **The `competitions` row is not on this list.** Inserting it is what *activates* a
 Competition and it comes last, after the curation and the backfill — a row present before

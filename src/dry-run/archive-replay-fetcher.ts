@@ -17,6 +17,10 @@ import {
   RESULTS_SNAPSHOT,
   RESULTS_URL
 } from "../international-results/fetch-results.js";
+import {
+  HEAD_COACHES_SNAPSHOT,
+  PAGE_URL as HEAD_COACHES_URL
+} from "../head-coach/fetch-national-team-head-coaches.js";
 
 export interface ArchivedSnapshot {
   source: string;
@@ -292,16 +296,26 @@ function openRouterSource(
     : null;
 }
 
+const CONSTANT_URL_SOURCES = new Map([
+  [RESULTS_URL, RESULTS_SNAPSHOT],
+  [HEAD_COACHES_URL, HEAD_COACHES_SNAPSHOT]
+]);
+
 function archiveSource(
   url: string,
   options: HttpRequestOptions | undefined,
   sources: Iterable<string>
 ): string | null {
-  // The one source whose URL and whose archived name are both constants: one
-  // file, every Competition that reads it, and no Season in either (ADR-0057).
-  // The four translations below exist because a URL said less than the name
-  // the archive chose; this one says exactly as much.
-  return (url === RESULTS_URL ? RESULTS_SNAPSHOT : null)
+  // The two sources whose URL and whose archived name are both constants: one
+  // file or one page, every Competition that reads it, and no Season in either
+  // (ADR-0057). The four translations below exist because a URL said less than
+  // the name the archive chose; these two say exactly as much.
+  //
+  // The head coaches list is here rather than beside the season articles two
+  // lines down, though both are Wikipedia, because that translation exists to
+  // turn a page title back into the Season it was archived under and this page
+  // has no Season to turn into.
+  return CONSTANT_URL_SOURCES.get(url)
     ?? FPL_SOURCE_BY_URL.get(url)
     ?? fplLiveSource(url, sources)
     ?? footballDataSource(url)

@@ -40,6 +40,13 @@ import {
   fetchHeadCoachChanges,
   type FetchHeadCoachChangesResult
 } from "../head-coach/fetch-head-coach-changes.js";
+import {
+  HEAD_COACH_SEASON_ARTICLE_SOURCE
+} from "../head-coach/head-coach-source.js";
+import {
+  fetchNationalTeamHeadCoaches,
+  NATIONAL_TEAM_HEAD_COACHES_SOURCE
+} from "../head-coach/fetch-national-team-head-coaches.js";
 import { errorText } from "../error-text.js";
 import {
   sourcesOf,
@@ -564,7 +571,7 @@ export async function runDailyFetch({
         (failure) => ({ stored: false, failure })
       );
     }
-    if (sources.headCoaches === "wikipedia-season-article") {
+    if (sources.headCoaches === HEAD_COACH_SEASON_ARTICLE_SOURCE) {
       headCoachChanges = await reported<DailyHeadCoachOutcome>(
         competition,
         headCoachChanges,
@@ -577,6 +584,22 @@ export async function runDailyFetch({
         }),
         (failure) => ({ stored: false, failure })
       );
+    }
+    // Outside `reported` and collected rather than reported, on the same terms
+    // as the 365Scores read above: `headCoachChanges` is the season articles'
+    // outcome the fetch workflow has always consumed -- a Gameweek's partition
+    // and a count of dated changes -- and a page listing who is in post at
+    // every national side today is not that outcome under another name
+    // (migration 0045). This Competition's failure fails the run at the end
+    // and costs no other Competition its day.
+    if (sources.headCoaches === NATIONAL_TEAM_HEAD_COACHES_SOURCE) {
+      try {
+        await fetchNationalTeamHeadCoaches({
+          database, competition, season, http, now: () => observedAt
+        });
+      } catch (error) {
+        errors.push(error);
+      }
     }
   }
   // A Season with no Competition listed reaches no source at all, which the

@@ -45,6 +45,9 @@ const contextData = (competition: string): MatchContextData => ({
   playedFixtures: [],
   internationals: [],
   datasetUpdatedOn: null,
+  // Empty for the same reason, and read only by the cup's Head Coach section
+  // (ticket 0074), which no league's registry entry names.
+  nationalTeamHeadCoaches: [],
   // The Competition's own entry, as the loader carries it: every Competition
   // pinned below is a league whose history is football-data.co.uk's, so none
   // of them renders the cup's section.

@@ -73,3 +73,32 @@ the property the packet needs and the reason the phrase already exists.
   from a test's.
 - ADR-0044 is not withdrawn. Its term, its source, its events shape and its cutoff
   discipline all stand; what falls is one sentence of its rejected options.
+
+## Amendment: a national side may have nobody in post (ticket 0074)
+
+This ADR was written about clubs and says so in one rule that does not survive the first
+cup: "every club has a Head Coach, so no packet reaches a reader with a heading and
+nothing under it." The heading is still never empty — a national side always renders a
+line — but what that line may say has grown a third state.
+
+`UNL` reads its Head Coaches from a *current* list rather than from a season article
+(ADR-0057), and that list publishes vacancies. So a side's line is one of three things,
+and the three mean different things:
+
+- **a name**, with the date the list says the role was assumed;
+- **vacant**, which is a fact the source states and an ordinary thing for a national side
+  between appointments. Rendering the previous holder instead would be the one error this
+  section exists to prevent — the packet would name somebody who has left;
+- **the Gap sentence**, unchanged and shared with the leagues' section, for a side this
+  record could reach no row for at all.
+
+A club keeps the rule as written: no source this record reads publishes a club post as
+vacant, so a club with no Head Coach named is still a Gap and never an ordinary state.
+The distinction is the source's, not the sport's, and it is stored rather than inferred —
+migration `0045` keeps a vacancy as a row with a null name, exactly so that it can be
+told from a side nobody asked about.
+
+Nothing else here moves. The section is still one section, still populated for both
+sides, and a Change is still an event beneath the state that it explains — though for
+this source a Change is the difference between two archived mornings rather than a row
+the page publishes, which ADR-0057 had already decided.

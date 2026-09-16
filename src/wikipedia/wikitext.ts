@@ -1,5 +1,6 @@
 /**
- * Reading English Wikipedia's raw wikitext, for the two pipelines that do it.
+ * Reading English Wikipedia's raw wikitext, for the three pipelines that do
+ * it.
  *
  * Extracted when the second one arrived: Squad Changes (ADR-0031) wrote all of
  * this against the transfer lists, and Head Coach changes (ADR-0044) reads the
@@ -7,7 +8,27 @@
  * say, what does it link to, what date is that, and what is decoration. They
  * are one thing now because a fix to any of them is a fix both pages need, and
  * that is a different test from "these look alike".
+ *
+ * The third is the current national team head coaches list (ADR-0057), which
+ * asks the same four questions of a fourth page shape and answered the test
+ * the same way: its date column wraps the same templates the Italian transfer
+ * list wraps, so widening `parseDate` was a fix the older pages would have
+ * needed the day an editor wrote a date that way there.
  */
+
+/**
+ * What Wikimedia's user-agent policy asks every request to carry: a contactable
+ * identifier. One fact about this project and not one per page, so the three
+ * fetches that read these articles send the same string — and this module is
+ * where those three already meet.
+ *
+ * Not a fact about wikitext, which is what everything else here is about. It
+ * lives here anyway because the alternative was a fourth file holding two
+ * lines, or a third copy of the string.
+ */
+export const WIKIMEDIA_REQUEST_HEADERS = {
+  "User-Agent": "football-bench/1.0 (https://github.com/football-bench)"
+};
 
 /**
  * A page with its citations and its editorial comments taken out, which is the
@@ -42,17 +63,39 @@ const MONTHS = [
 
 /**
  * `{{dts|format=dmy|2026|2|12}}` — the Italian transfer list's date cell, and
- * the only page of the three that writes its dates as a template rather than
- * as text. Its leading named parameters are display instructions; the three
- * numbers after them are the date, always year first whatever `format` says.
+ * the only one of these pages that writes a date as three separate numbers.
+ * Its leading named parameters are display instructions; the three numbers
+ * after them are the date, always year first whatever `format` says.
  */
 const SORTABLE_DATE =
   /^\{\{dts\|(?:[^|}]*=[^|}]*\|)*(\d{4})\|(\d{1,2})\|(\d{1,2})\}\}$/i;
 
 /**
- * "6 February 2026", or the `{{dts}}` template that says the same thing.
- * Undefined for anything else, which is what refuses a page whose date column
- * has changed shape.
+ * `{{dts|format=dmy|19 May 2026}}`, `{{DTS|17 February 2025}}` and
+ * `{{Date table sorting|6 August 2025}}` — the current national team head
+ * coaches list's whole date column, which wraps the same sortable templates
+ * round a written date rather than round the three numbers above. All three
+ * forms appear on that one page, which is why they are one pattern and not
+ * three: they are one editor's habit varying, not three facts.
+ *
+ * The wrapper is a display and sorting instruction and the date inside it is
+ * the date, so this takes the wrapper off and the written form below reads
+ * what is left. Nothing here decides whether what is left *is* a date: the
+ * anchored pattern below is the only gate, and it refuses `2026|2|12`,
+ * `format=dmy` and `Pre-season` alike. A second guard in this character class
+ * would refuse exactly the same strings one line earlier, and a guard that
+ * cannot be observed is a guard nobody can be sure still works.
+ *
+ * The three-number form is not this one's business either: the pattern above
+ * is tried first and takes it.
+ */
+const WRAPPED_DATE =
+  /^\{\{(?:dts|date table sorting)\|(?:[^|}]*=[^|}]*\|)*([^}]+)\}\}$/i;
+
+/**
+ * "6 February 2026", or either of the two date templates these pages wrap that
+ * round it. Undefined for anything else, which is what refuses a page whose
+ * date column has changed shape.
  */
 export function parseDate(value: string): string | undefined {
   const sortable = SORTABLE_DATE.exec(value);
@@ -62,7 +105,8 @@ export function parseDate(value: string): string | undefined {
     const day = (sortable[3] as string).padStart(2, "0");
     return `${year}-${month}-${day}`;
   }
-  const match = /^(\d{1,2}) ([A-Za-z]+) (\d{4})$/.exec(value);
+  const written = WRAPPED_DATE.exec(value)?.[1]?.trim() ?? value;
+  const match = /^(\d{1,2}) ([A-Za-z]+) (\d{4})$/.exec(written);
   const month = MONTHS.indexOf((match?.[2] ?? "").toLowerCase());
   if (match?.[1] === undefined || match[3] === undefined || month < 0) {
     return undefined;

@@ -48,8 +48,16 @@ const MONTHS = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
 ];
 
-/** `2026-05-24` as `24 May 2026`, from the text and never through a Date. */
-function formatDate(date: string): string {
+/**
+ * `2026-05-24` as `24 May 2026`, from the text and never through a Date.
+ *
+ * Exported for the cup's Head Coach section, which prints the same two dates
+ * this one does -- when a role was assumed, and when something changed -- and
+ * must print them the same way: the two sections answer one question for a
+ * reader moving down a packet, and a date that read `24 May 2026` in one and
+ * anything else in the other would say they came from different records.
+ */
+export function formatDate(date: string): string {
   const [year, month, day] = date.split("-");
   return `${Number(day)} ${MONTHS[Number(month) - 1]} ${year}`;
 }
@@ -112,7 +120,9 @@ function changeText(change: HeadCoachChangeRow): string {
 
 /**
  * Every club has a Head Coach, so a club with none to render is a Gap in the
- * record and is announced as one (ADR-0045).
+ * record and is announced as one (ADR-0045). A national side is the same, and
+ * reads this same sentence from the cup's section: the promise is ADR-0045's
+ * and one wording of it changing would have to change both.
  *
  * The sentence states what this render could reach, not what the record
  * holds, because those are not the same thing: no fetch landed, a fetch
@@ -121,7 +131,7 @@ function changeText(change: HeadCoachChangeRow): string {
  * no Head Coach would be worse still -- that is a claim about football, of
  * the kind ADR-0045 struck out of this section's other empty state.
  */
-const NO_HEAD_COACH =
+export const NO_HEAD_COACH =
   "unavailable; no Head Coach is readable for this Gameweek.";
 
 /**

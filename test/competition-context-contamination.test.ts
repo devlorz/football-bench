@@ -8,6 +8,10 @@ import {
 import {
   SCORES_365_SOURCE
 } from "../src/365scores/fetch-match-stats.js";
+import { sourcesOf } from "../src/fetch/competition-sources.js";
+import {
+  NATIONAL_TEAM_HEAD_COACHES_SOURCE
+} from "../src/head-coach/fetch-national-team-head-coaches.js";
 import { resetSchema } from "./schema-fixture.js";
 
 const { Client } = pg;
@@ -64,7 +68,8 @@ describe("a context packet holds one Competition's data", () => {
       `truncate
          competitions, gameweeks, fixtures, historical_matches,
          understat_match_xg, team_match_stats, fpl_players,
-         international_results, international_results_source
+         international_results, international_results_source,
+         head_coaches, head_coach_changes, national_team_head_coaches
        restart identity cascade`
     );
     // `UNL` is listed with the five because the cup's own case below needs a
@@ -290,6 +295,108 @@ describe("a context packet holds one Competition's data", () => {
       // a sha over the render these sections make. Asserting the one error it
       // raises is what says the sections themselves build -- a section that
       // threw would fail here with a different message.
+      expect(() => buildMatchContext(fixture, nationsLeague))
+        .toThrow("Competition UNL has no frozen Prompt Version");
+    });
+
+  test("a cup's Head Coaches come from its own table, and no league reads it",
+    async () => {
+      // `national_team_head_coaches` is the second shared table in this file
+      // and it is shared for the same reason as the first: a national side has
+      // one Head Coach whoever it is playing, so the table has no
+      // `competition` column and could not have one (migration 0045). The
+      // filter is the registry, and this is the test of it -- in both
+      // directions, which is story 42 of spec 0027.
+      //
+      // Both rows are dated before the Lock and the first names the Premier
+      // League's own two clubs: a packet that read this table without asking
+      // the registry would put a Head Coach on Arsenal's line, and nothing
+      // else would stop it.
+      await client.query(
+        `insert into national_team_head_coaches (
+           team, observed_on, observed_at, head_coach, assumed_on
+         ) values
+           ('Arsenal', '2026-08-20', '2026-08-20T06:00:00Z',
+            'Mikel Arteta', '2019-12-20'),
+           ('Chelsea', '2026-08-20', '2026-08-20T06:00:00Z',
+            'Enzo Maresca', '2024-07-01'),
+           ('Kosovo', '2026-08-20', '2026-08-20T06:00:00Z',
+            'Franco Foda', '2024-02-17')`
+      );
+      // The other direction's contaminant: a league's own two stores, holding
+      // the cup's two sides under the cup's code. Nothing writes these today,
+      // which is the point -- the read is what decides, and a partition that
+      // happens to be empty proves nothing about it.
+      await client.query(
+        `insert into head_coaches (
+           competition, season, gw, club, head_coach, observed_at
+         ) values ('UNL', $1, 1, 'Kosovo', 'Somebody Else', $2)`,
+        [SEASON, "2026-08-20T06:00:00Z"]
+      );
+      await client.query(
+        `insert into head_coach_changes (
+           competition, season, gw, club, direction, head_coach, manner,
+           dated_on, observed_at
+         ) values ('UNL', $1, 1, 'Kosovo', 'in', 'Somebody Else', null,
+                   '2026-08-19', $2)`,
+        [SEASON, "2026-08-20T06:00:00Z"]
+      );
+
+      const nationsLeague = await loadMatchContextData(
+        client, "UNL", SEASON, 1
+      );
+      const premierLeague = await loadMatchContextData(client, "PL", SEASON, 1);
+
+      // The cup reads the shared table whole -- the same side answers for
+      // every Competition it plays in -- and reads neither league store, so
+      // the rows filed under its own code never reach it.
+      expect(nationsLeague.nationalTeamHeadCoaches.map(({ team }) => team))
+        .toEqual(["Arsenal", "Chelsea", "Kosovo"]);
+      expect(nationsLeague.headCoaches).toEqual([]);
+      expect(nationsLeague.headCoachChanges).toEqual([]);
+      // And the league reads its own two and never the shared one, so a row
+      // naming its own clubs is not a Head Coach it can be handed.
+      expect(premierLeague.nationalTeamHeadCoaches).toEqual([]);
+
+      const fixture = {
+        fixture_id: 1,
+        home_team: "Arsenal",
+        away_team: "Chelsea",
+        kickoff_at: new Date("2026-08-21T19:00:00Z")
+      };
+      // At the render, both halves. The league's packet grows the season
+      // article's section and none of the cup's wording, over rows naming its
+      // own two clubs.
+      const leaguePacket = buildMatchContext(fixture, premierLeague);
+      expect(leaguePacket).toContain("Head Coach and changes this Season:");
+      expect(leaguePacket).not.toContain("in the role since");
+      expect(leaguePacket).not.toContain("A change is visible from");
+      expect(leaguePacket).not.toContain("Mikel Arteta");
+
+      // And the registry is what chooses, not the Competition code: the same
+      // Competition, the same rows and the same clubs, with one field of the
+      // entry swapped for the source naming the current head coaches list.
+      // This is the dispatch itself under test -- `UNL`'s own packet cannot be
+      // rendered until `MATCH_PROMPTS` grows it with ticket 0075, and
+      // asserting the one error it raises (below) says the sections build, not
+      // which of them was picked.
+      //
+      // One field and not the whole entry, because the whole entry moves two
+      // dispatches: `history` chooses the history section as well, and
+      // swapping both would test them together and name neither.
+      const asACup = buildMatchContext(fixture, {
+        ...premierLeague,
+        sources: {
+          ...sourcesOf("PL")!,
+          headCoaches: NATIONAL_TEAM_HEAD_COACHES_SOURCE
+        },
+        nationalTeamHeadCoaches: nationsLeague.nationalTeamHeadCoaches
+      });
+      expect(asACup).toContain(
+        "Arsenal\nHead Coach: Mikel Arteta, in the role since 20 Dec 2019"
+      );
+      expect(asACup).not.toContain("Head Coach and changes this Season:");
+
       expect(() => buildMatchContext(fixture, nationsLeague))
         .toThrow("Competition UNL has no frozen Prompt Version");
     });

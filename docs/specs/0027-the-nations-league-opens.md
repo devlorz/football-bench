@@ -282,9 +282,17 @@ Fixture, including the roughly four per cent of Fixtures 365Scores holds no xG f
 - **The head-coach section for `UNL` is a new builder over a new store**, not an
   extension of the Season-article one: the Wikipedia table gives the current holder and
   assumption date per side, the store keeps one row per (side, observed date), and a
-  Change is the difference between the latest snapshot and the one before it. The
-  existing `head_coaches`/`head_coach_changes` tables may be reused if their shape fits
-  without a Division; otherwise a table keyed by side.
+  Change is the difference between two consecutive snapshots — **every** pair in the
+  window that disagrees, not only the last two. Ticket 0074 widened this bullet from "the
+  latest snapshot and the one before it", which read literally loses the changes story 35
+  asks for: snapshots of A, B, B show no difference between the last two, and a packet
+  reading only that pair would say nothing had happened while the Change sat one row
+  further back. Taking every consecutive disagreement is the same single pass.
+  The existing `head_coaches`/`head_coach_changes` tables were **not** reusable, on two
+  counts ticket 0074 records: neither has a column for the assumption date, and
+  `head_coaches` is keyed by Gameweek and rewritten whole on every read, which deletes
+  the previous answer a Change is the difference from. Migration `0045` keys by side and
+  observed day instead.
 - **Three name maps, each reviewed before the first packet**: 365Scores → stored (3),
   dataset → stored (2), FIFA trigram → stored (54, derived from UEFA's `countryCode`).
   Each is derived from the archived sources by a test the way the league maps are, and a

@@ -23,6 +23,9 @@ import {
   RESULTS_SNAPSHOT,
   RESULTS_URL
 } from "../src/international-results/fetch-results.js";
+import {
+  PAGE_URL as HEAD_COACHES_PAGE_URL
+} from "../src/head-coach/fetch-national-team-head-coaches.js";
 import { archivedBody } from "./archived-fixture.js";
 import { resetSchema } from "./schema-fixture.js";
 
@@ -85,19 +88,28 @@ const PREMIER_LEAGUE_URLS = [
 ] as const;
 
 /**
- * The two sources a Nations League entry names on every run: UEFA's schedule
+ * The three sources a Nations League entry names on every run: UEFA's schedule
  * over two pages, because the feed answers a hundred matches at a time and the
- * league phase is 156, and the GitHub dataset's one file. Its shots and xG are
- * not here — those are read only for a Fixture that has settled and is short
- * of a figure (ADR-0058), so they belong to the tests that settle one.
+ * league phase is 156, the GitHub dataset's one file, and the page listing who
+ * is in post at every national side today. Its shots and xG are not here —
+ * those are read only for a Fixture that has settled and is short of a figure
+ * (ADR-0058), so they belong to the tests that settle one.
  */
 const NATIONS_LEAGUE_URLS = [
   "https://match.uefa.com/v5/matches"
   + "?competitionId=2014&seasonYear=2027&limit=100&offset=0",
   "https://match.uefa.com/v5/matches"
   + "?competitionId=2014&seasonYear=2027&limit=100&offset=100",
-  RESULTS_URL
+  RESULTS_URL,
+  HEAD_COACHES_PAGE_URL
 ] as const;
+
+/**
+ * The page as it really was on 2026-09-14: one section per confederation, and
+ * fifty-five rows under UEFA's.
+ */
+const NATIONAL_TEAM_HEAD_COACHES =
+  "wikipedia-current-national-team-head-coaches-2026-09-14-recorded.wikitext.gz";
 
 /**
  * The dataset as it really was on 2026-09-14: every men's international since
@@ -201,6 +213,10 @@ async function sourceResponses(
     [
       SPANISH_SEASON_ARTICLE_URL,
       await archivedBody("wikipedia-2026-27-la-liga.txt.gz")
+    ],
+    [
+      HEAD_COACHES_PAGE_URL,
+      await archivedBody(NATIONAL_TEAM_HEAD_COACHES)
     ],
     ...overrides
   ]);
@@ -365,11 +381,13 @@ describe("the daily fetch", () => {
   test("reads UEFA for the Nations League and leaves the leagues' sources alone",
     async () => {
       // The registry's whole promise, at the seam where it is kept: `UNL`
-      // names one source and reads that one, the Premier League's seven are
+      // names its own sources and reads those, the Premier League's seven are
       // untouched beside it, and neither Competition reaches the other's. A
-      // cup has no history, no xG, no Squad Changes and no head coaches yet,
-      // and the entries that say so are `null` — so the absence is a set this
-      // test can name rather than a failure nobody sees.
+      // cup has no Squad Changes — a national side has no transfer window —
+      // and the entry that says so is `null`, so the absence is a set this
+      // test can name rather than a failure nobody sees. Its shots and xG are
+      // read only for a settled Fixture short of a figure and so are absent
+      // here for a reason of their own (ADR-0058).
       await client.query(
         "insert into competitions (competition, season) values ('UNL', $1)",
         ["2026-27"]

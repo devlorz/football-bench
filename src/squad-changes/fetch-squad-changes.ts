@@ -1,6 +1,7 @@
 import type { Client } from "pg";
 import type { HttpFetcher } from "../http.js";
 import { storeRawSnapshots } from "../snapshots/store-raw-snapshots.js";
+import { WIKIMEDIA_REQUEST_HEADERS } from "../wikipedia/wikitext.js";
 import {
   resolveWikipediaClub,
   type WikipediaClub
@@ -37,11 +38,6 @@ function sourceUrl(window: TransferWindow): string {
   const title = encodeURIComponent(window.page.replace(/ /g, "_"));
   return `https://en.wikipedia.org/w/index.php?title=${title}&action=raw`;
 }
-
-/** Wikimedia's user-agent policy asks for a contactable identifier. */
-const REQUEST_HEADERS = {
-  "User-Agent": "football-bench/1.0 (https://github.com/football-bench)"
-};
 
 export interface FetchSquadChangesOptions {
   database: Database;
@@ -134,7 +130,7 @@ export async function fetchSquadChanges({
   const url = sourceUrl(window);
   const response = await http(url, {
     method: "GET",
-    headers: REQUEST_HEADERS
+    headers: WIKIMEDIA_REQUEST_HEADERS
   });
 
   // Archived before anything is read from it, so an unusable response is

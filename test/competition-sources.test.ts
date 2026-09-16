@@ -18,16 +18,23 @@ import {
 import {
   transferWindowsOf
 } from "../src/squad-changes/transfer-window.js";
-import { headCoachSource } from "../src/head-coach/head-coach-source.js";
+import {
+  headCoachSource,
+  HEAD_COACH_SEASON_ARTICLE_SOURCE
+} from "../src/head-coach/head-coach-source.js";
+import {
+  nationalTeamSectionOf,
+  NATIONAL_TEAM_HEAD_COACHES_SOURCE
+} from "../src/head-coach/fetch-national-team-head-coaches.js";
 
 /**
- * The registry names sources; the five maps decide whether naming one means
- * anything for a given Competition. Split across six files, they can disagree
- * in a direction the daily-fetch suite cannot see: it lists two Competitions,
- * so `SA`, `BL1` and `FL1` reach no source in any test, and an entry of theirs
- * pointing at a map that has no row for them is a section that renders as a
- * calm absence over a source that was there all along — the failure
- * `docs/runbooks/opening-a-competition.md` exists to count.
+ * The registry names sources; the maps behind them decide whether naming one
+ * means anything for a given Competition. Split across seven files, they can
+ * disagree in a direction the daily-fetch suite cannot see: it lists two
+ * Competitions, so `SA`, `BL1` and `FL1` reach no source in any test, and an
+ * entry of theirs pointing at a map that has no row for them is a section that
+ * renders as a calm absence over a source that was there all along — the
+ * failure `docs/runbooks/opening-a-competition.md` exists to count.
  *
  * Driven from the registry's own key set, so a sixth entry is tested the day
  * it is written rather than the day someone remembers this file.
@@ -66,9 +73,16 @@ describe("the source registry", () => {
           squadChanges: sources.squadChanges === "wikipedia-transfers"
             ? transferWindowsOf(competition) !== undefined
             : null,
-          headCoaches: sources.headCoaches === "wikipedia-season-article"
+          // Two sources under one name for the fourth time, and the last of
+          // the five to grow its second (ticket 0074): a season article is
+          // keyed by Season and Competition, and the current list is keyed by
+          // the confederation section the Competition's sides are listed
+          // under, with its own sides by trigram beside it.
+          headCoaches: sources.headCoaches === HEAD_COACH_SEASON_ARTICLE_SOURCE
             ? headCoachSource(competition, "2026-27") !== undefined
-            : null
+            : sources.headCoaches === NATIONAL_TEAM_HEAD_COACHES_SOURCE
+              ? nationalTeamSectionOf(competition) !== undefined
+              : null
         };
 
         // `null` for a source the entry does not name, which is a Competition

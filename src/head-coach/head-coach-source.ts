@@ -63,6 +63,15 @@ export interface HeadCoachSource {
   fields?: HeadCoachChangeFields;
 }
 
+/**
+ * What the registry names this source by, and the word both the daily fetch
+ * and the context loader dispatch on. A constant rather than a literal at each
+ * comparison because `headCoaches` now holds two sources, and the other one
+ * (ticket 0074) is reached through a constant: two arms of one `if` spelled
+ * two different ways is a switch a reader has to check twice.
+ */
+export const HEAD_COACH_SEASON_ARTICLE_SOURCE = "wikipedia-season-article";
+
 const SEASON_ARTICLES: Readonly<
   Record<string, Readonly<Record<string, HeadCoachSource>>>
 > = {

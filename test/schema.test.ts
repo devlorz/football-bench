@@ -32,7 +32,7 @@ describe("the benchmark database", () => {
          predictions, contexts, fixtures, manager_states, attempts, scores,
          models, gameweeks, raw_snapshots, historical_matches, fpl_players,
          fpl_player_points, squad_changes, head_coach_changes, head_coaches,
-         international_results, team_match_stats
+         international_results, team_match_stats, national_team_head_coaches
        restart identity cascade`
     );
   });
@@ -113,6 +113,7 @@ describe("the benchmark database", () => {
       "international_results_source",
       "manager_states",
       "models",
+      "national_team_head_coaches",
       "prediction_runs",
       "predictions",
       "raw_snapshots",
@@ -283,6 +284,45 @@ describe("the benchmark database", () => {
     );
     expect(rows[0]?.results).toBe(2);
   });
+
+  // Keyed by the side and the day the page was read, because a Head Coach
+  // Change from this source is the difference between two mornings of a list
+  // that publishes no event at all (migration 0045).
+  test("keeps one head coach per side per morning, vacancies and all",
+    async () => {
+      const row =
+        `insert into national_team_head_coaches (
+           team, observed_on, observed_at, head_coach, assumed_on
+         ) values ('Germany', $1, $2, $3, $4)`;
+      await client.query(
+        row, ["2026-09-24", "2026-09-24T06:00:00Z", "Jürgen Klopp", "2026-07-24"]
+      );
+      // A vacant post is an ordinary fact about a national side, where a club
+      // with no Head Coach named is a Gap (ADR-0045), so the pair of columns
+      // is null together.
+      await client.query(
+        row, ["2026-09-25", "2026-09-25T06:00:00Z", null, null]
+      );
+
+      await expect(client.query(
+        row,
+        ["2026-09-24", "2026-09-24T11:00:00Z", "Julian Nagelsmann", "2023-09-22"]
+      )).rejects.toMatchObject({ code: "23505" });
+      // Half a pair is neither a name nor a vacancy: a Head Coach with no date
+      // is a page whose shape moved, and a date with nobody in post is a
+      // vacancy claiming to have started somewhere.
+      for (const half of [
+        ["2026-09-26", "2026-09-26T06:00:00Z", "Jürgen Klopp", null],
+        ["2026-09-27", "2026-09-27T06:00:00Z", null, "2026-07-24"]
+      ]) {
+        await expect(client.query(row, half))
+          .rejects.toMatchObject({ code: "23514" });
+      }
+      const { rows } = await client.query(
+        "select count(*)::int as snapshots from national_team_head_coaches"
+      );
+      expect(rows[0]?.snapshots).toBe(2);
+    });
 
   // Keyed by source and source match id, because the id means nothing without
   // the source that issued it, and nullable per side, because a hole is a row

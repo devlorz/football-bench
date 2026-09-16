@@ -211,17 +211,20 @@ Entrant changes its Squad only through Transfers.
 _Avoid_: transfer (a Transfer is the FPL track's swap and nothing else)
 
 **Head Coach**:
-The person in post at a real club, as the public record names them. A fact about a club,
-like a Squad Change — never an Entrant. Every club has one, so a club with no Head Coach
-named is a Gap in the record and never an ordinary state (ADR-0045).
+The person in post at a real club or national side, as the public record names them. A
+fact about that club or side, like a Squad Change — never an Entrant. Every club has one,
+so a club with no Head Coach named is a Gap in the record and never an ordinary state
+(ADR-0045). A national side may genuinely have none: a vacancy its source states is a
+fact and not a Gap (ADR-0045, amended).
 _Avoid_: manager (a Manager is the FPL track's persona — see Manager State — and nothing
 else)
 
 **Head Coach Change**:
-One club's move from one Head Coach to the next — who left, the stated manner, who
-arrived, and when. An event, where a Head Coach is a state, and the two are stored and
-read apart: a club with no Change is a club that kept its Head Coach, which is ordinary
-and says so.
+One club's or side's move from one Head Coach to the next. An event, where a Head Coach is
+a state, and the two are stored and read apart: one with no Change kept its Head Coach,
+which is ordinary and says so. What a Change carries is its source's to decide — a club's
+names who left, the manner, who arrived and when; a national side's names the two and the
+day this record first read the second (ADR-0057).
 _Avoid_: managerial change (the source's own heading, quoted only where the source is
 being matched)
 
