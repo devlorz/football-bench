@@ -44,3 +44,40 @@ and the freeze binds at first use exactly as before.
   in ADR-0035.
 - An Exhibition Run (ADR-0032) is Competition-scoped for the same reason: it replays one
   Competition's stored contexts under that Competition's Prompt Version.
+
+## Amendment: a cup's rendering differs by its sections too (ticket 0075)
+
+This ADR's opening sentence — the prompt text is one template "whose only variable is the
+Competition's name" — was written when every Competition was a domestic league, and read
+literally it refuses the first Competition that is not one. `match-unl/2026-27-v1` renders
+sections the Premier League's does not and omits sections it has, and it is not an
+exception to the rule but a case the rule never met.
+
+What stands, unamended, is the claim the rule was for: **the template is one template and
+its only variable is still the Competition's name.** The instruction block, the Fixture
+line and the two ADR-0043 sentences are byte-identical across every Competition once that
+name is substituted, and `test/openrouter-entrant.test.ts` asserts exactly that for every
+code in `MATCH_PROMPT_COMPETITIONS`, cup included. No Competition is asked a differently
+worded question.
+
+What moves is the *context* the template carries, and it moves by source and never by
+wording (ADR-0057):
+
+- a Competition whose registry entry names the internationals dataset renders the
+  recent-internationals section **instead of** the league history section;
+- one whose entry names the current head coaches list renders that section **instead of**
+  the season article's;
+- one whose entry names no Squad Change source states that absence **instead of** the
+  window's section;
+- availability stays Premier League only, absent rather than stated (ADR-0037).
+
+Each is the registry's answer and not a Competition code's, which is what keeps this from
+becoming "independently worded prompts per league" — the rejected option above. Two
+Competitions reading the same sources render the same sections; two reading different
+sources render what their sources can answer, in the shared wording of whichever section
+that is.
+
+The freeze is unchanged: the sha is still over one fully rendered context, and a
+Competition whose sections are decided by its registry entry must therefore have every
+one of those entries settled before its pin is taken. Ticket 0075 is the worked example —
+`UNL` was pinned only after the three tickets that opened its render gates had landed.

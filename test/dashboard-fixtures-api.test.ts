@@ -422,6 +422,11 @@ describe("the Fixtures endpoint on the design's Season", () => {
       // from covering an unserved-but-admitted code.
       expect(await get("/api/fixtures")).toBe(404);
       expect(await get("/api/xx/fixtures")).toBe(404);
+      // And the other side of the same lookup, so the 404s above say
+      // "unserved" rather than "this endpoint answers nothing": a Competition
+      // with a frozen Prompt Version and no `competitions` row is served
+      // (ticket 0075's `UNL`, whose row is 0076's).
+      expect(await get("/api/unl/fixtures")).toBe(200);
       expect(await get("/api/PL/fixtures")).toBe(404);
       expect(await get("/api/pl/fixtures/1")).toBe(404);
     });

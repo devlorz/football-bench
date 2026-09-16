@@ -290,13 +290,28 @@ describe("a context packet holds one Competition's data", () => {
       expect(packet).not.toContain("Recent internationals as of");
       expect(packet).not.toContain("Dataset last updated");
 
-      // The cup's own packet cannot be rendered yet, and this is what it is
-      // waiting for: `MATCH_PROMPTS` grows `UNL` with ticket 0075, which pins
-      // a sha over the render these sections make. Asserting the one error it
-      // raises is what says the sections themselves build -- a section that
-      // threw would fail here with a different message.
-      expect(() => buildMatchContext(fixture, nationsLeague))
-        .toThrow("Competition UNL has no frozen Prompt Version");
+      // And the cup's own packet, which ticket 0075 made renderable: the same
+      // two rows, read from the shared table and put on the form lines of the
+      // two sides this Fixture names. It is the other half of the claim --
+      // a league packet without the section says only that nothing leaked,
+      // and this says the section it did not get is a section that works.
+      const cupPacket = buildMatchContext(
+        {
+          ...fixture,
+          home_team: "Kosovo",
+          away_team: "Republic of Ireland"
+        },
+        nationsLeague
+      );
+      expect(cupPacket).toContain("Predict this UEFA Nations League Fixture.");
+      expect(cupPacket).toContain(
+        "- UEFA Nations League | 2026-08-07 | Kosovo 1-0 Republic of Ireland"
+      );
+      expect(cupPacket).toContain("Dataset last updated 2026-08-26.");
+      // The league's own row is in the same table and reaches no line of it:
+      // neither of these two sides played it.
+      expect(cupPacket).not.toContain("Arsenal");
+      expect(cupPacket).not.toContain("Historical context as of");
     });
 
   test("a cup's Head Coaches come from its own table, and no league reads it",
@@ -397,8 +412,21 @@ describe("a context packet holds one Competition's data", () => {
       );
       expect(asACup).not.toContain("Head Coach and changes this Season:");
 
-      expect(() => buildMatchContext(fixture, nationsLeague))
-        .toThrow("Competition UNL has no frozen Prompt Version");
+      // And the cup's own packet, renderable since ticket 0075: its side's
+      // Head Coach comes from the shared table, and the row filed under its
+      // own code in the league's two stores reaches nothing.
+      const cupPacket = buildMatchContext(
+        {
+          ...fixture,
+          home_team: "Kosovo",
+          away_team: "Republic of Ireland"
+        },
+        nationsLeague
+      );
+      expect(cupPacket).toContain(
+        "Kosovo\nHead Coach: Franco Foda, in the role since 17 Feb 2024"
+      );
+      expect(cupPacket).not.toContain("Somebody Else");
     });
 
   test("each Competition reads only its own history, both directions",

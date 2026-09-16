@@ -127,20 +127,33 @@ Edits 3 and 4 are one change and are checked against each other by
 edit 0 against edits 3, 5, 6, 7, 10, 11 and 12 in one direction: an entry naming a source that
 has no map for that Competition is a red test rather than a section that reads calm.
 
-**Edit 6 moves edit 2's sha.** A Competition with no transfer window renders no Squad
-Changes section at all; writing its windows down opens the gate, and the packet grows the
-stated absence "no Squad Change data stored for this Gameweek" even before a fetch lands.
-Do edit 6 first, or expect the pin to move once — it is legitimate only while the version
-is unused.
+**Edit 6 moves edit 2's sha, for a league.** A league whose transfer windows are not yet
+written down renders no Squad Changes section at all; writing them down opens the gate,
+and the packet grows the stated absence "no Squad Change data stored for this Gameweek"
+even before a fetch lands. Do edit 6 first, or expect the pin to move once — it is
+legitimate only while the version is unused.
 
-**Edit 0 moves it too, for a cup, in two places now.** A Competition whose `history`
+For a cup that gate never opens, and since ticket 0075 it is not the gate that is asked:
+a Competition whose edit 0 names `null` for `squadChanges` renders the stated absence
+"Squad changes: none for this Competition; a national side has no transfer window."
+`squadChangeWindow` also answers `undefined` for a cup — no window is written down for
+one — but that answer is the same one a league between two windows gives, and a section
+that leaned on it could not tell a Competition with no window from a Competition between
+windows. So the registry decides, and a cup's absence is its freeze's final state rather
+than a pin waiting for edit 6.
+
+**Edit 0 moves it too, for a cup, in three places now.** A Competition whose `history`
 names the GitHub dataset renders the recent-internationals section *instead of* the
-historical-results one (ticket 0073), and one whose `headCoaches` names the current list
-renders that section instead of the season article's (ticket 0074) — so the entry decides
-which of two sections the sha is taken over, twice. Those are the second and third
-rendering changes arriving from a registry rather than from a builder, and they are why
-ticket 0075 pins `UNL` only after 0073 and 0074 have landed: pinning between them would
-pin a render that was about to grow a section.
+historical-results one (ticket 0073), one whose `headCoaches` names the current list
+renders that section instead of the season article's (ticket 0074), and one whose
+`squadChanges` names nothing states the absence above instead of rendering the window's
+section (ticket 0075) — so the entry decides which of two things the sha is taken over,
+three times. Those are the second, third and fourth rendering changes arriving from a
+registry rather than from a builder, and the first two are why ticket 0075 pinned `UNL`
+only after 0073 and 0074 had landed: pinning between them would have pinned a render that
+was about to grow a section. The third arrived with the pin itself, in the same commit,
+which is the shape to repeat — a dispatch that changes the render is taken before the
+freeze or not at all.
 
 **The `competitions` row is not on this list.** Inserting it is what *activates* a
 Competition and it comes last, after the curation and the backfill — a row present before

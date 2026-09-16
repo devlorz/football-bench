@@ -11,7 +11,11 @@ import {
 } from "../src/predictions/openrouter-entrant.js";
 import { divisionsOf } from "../src/football-data/divisions.js";
 import { sourcesOf } from "../src/fetch/competition-sources.js";
-import { headCoachSource } from "../src/head-coach/head-coach-source.js";
+import { FOOTBALL_DATA_SOURCE } from "../src/football-data/fetch-season.js";
+import {
+  HEAD_COACH_SEASON_ARTICLE_SOURCE,
+  headCoachSource
+} from "../src/head-coach/head-coach-source.js";
 import {
   buildMatchContext,
   type MatchContextData
@@ -37,17 +41,139 @@ const contextData = (competition: string): MatchContextData => ({
   competition,
   season: "2026-27",
   deadline: new Date("2026-08-21T17:30:00Z"),
-  // Empty for every Competition here, and the pins say so: both are read only
-  // by the recent-internationals section (ticket 0073), which is rendered for
-  // a Competition whose registry entry names the GitHub dataset for its
-  // history — and every Competition pinned below is a league whose history is
-  // football-data.co.uk's.
-  playedFixtures: [],
-  internationals: [],
-  datasetUpdatedOn: null,
-  // Empty for the same reason, and read only by the cup's Head Coach section
-  // (ticket 0074), which no league's registry entry names.
-  nationalTeamHeadCoaches: [],
+  // The cup's four stores, and the five leagues' pins are what say no league
+  // reads them: these rows arrived with ticket 0075 and not one of the five
+  // hashes below moved. They are read only by the two sections the registry
+  // dispatches for a Competition whose entry names the GitHub dataset and the
+  // head coaches list (tickets 0073, 0074), and every league here names
+  // football-data.co.uk and a Season article instead.
+  //
+  // Their shapes are chosen the way the league rows below are: between them
+  // every line the cup's two sections can render, so `UNL`'s pin moves if any
+  // of them is reformatted -- and two of them sit after the deadline, so it
+  // moves if either bound stops holding.
+  playedFixtures: [
+    {
+      // The Season's own meeting of these two sides, with a full sheet: a
+      // form line each, the head-to-head's newest line, and the Season's
+      // coverage count.
+      kicked_off_at: new Date("2026-08-18T18:45:00Z"),
+      home_team: "Arsenal",
+      away_team: "Coventry City",
+      home_goals: 1,
+      away_goals: 0,
+      home_shots: 14,
+      away_shots: 9,
+      home_shots_on_target: 5,
+      away_shots_on_target: 3,
+      home_xg: 1.31,
+      away_xg: 0.88
+    },
+    {
+      // Settled and no sheet stored at all, which is the one line ADR-0058
+      // has its own sentence for.
+      kicked_off_at: new Date("2026-08-19T18:45:00Z"),
+      home_team: "Coventry City",
+      away_team: "Denmark",
+      home_goals: 2,
+      away_goals: 2,
+      home_shots: null,
+      away_shots: null,
+      home_shots_on_target: null,
+      away_shots_on_target: null,
+      home_xg: null,
+      away_xg: null
+    },
+    {
+      // After the Lock: on no line, in no count, and in neither side's rates.
+      kicked_off_at: new Date("2026-08-22T18:45:00Z"),
+      home_team: "Arsenal",
+      away_team: "Israel",
+      home_goals: 3,
+      away_goals: 0,
+      home_shots: 20,
+      away_shots: 4,
+      home_shots_on_target: 9,
+      away_shots_on_target: 1,
+      home_xg: 2.4,
+      away_xg: 0.3
+    }
+  ],
+  internationals: [
+    {
+      // The dataset's own meeting of the two, older than the record's: the
+      // head-to-head's second line, and a form line for each side.
+      played_on: "2026-06-10",
+      home_team: "Arsenal",
+      away_team: "Coventry City",
+      home_goals: 2,
+      away_goals: 1,
+      tournament: "FIFA World Cup qualification",
+      country: "England",
+      neutral: false
+    },
+    {
+      // A neutral venue, which is named on the line and left out of the base
+      // rates.
+      played_on: "2026-06-14",
+      home_team: "Spain",
+      away_team: "Arsenal",
+      home_goals: 1,
+      away_goals: 0,
+      tournament: "FIFA World Cup",
+      country: "United States",
+      neutral: true
+    },
+    {
+      // A third side's match, so the base rates are over more than one
+      // result and the head-to-head has something to leave out.
+      played_on: "2026-03-25",
+      home_team: "Coventry City",
+      away_team: "Norway",
+      home_goals: 0,
+      away_goals: 0,
+      tournament: "Friendly",
+      country: "England",
+      neutral: false
+    }
+  ],
+  datasetUpdatedOn: "2026-08-14",
+  nationalTeamHeadCoaches: [
+    {
+      // Two mornings that disagree: a name with its assumption date, and the
+      // Change line the difference between them makes.
+      team: "Arsenal",
+      observed_on: "2026-08-19",
+      observed_at: new Date("2026-08-19T06:00:00Z"),
+      head_coach: "Departed Coach",
+      assumed_on: "2024-02-17"
+    },
+    {
+      team: "Arsenal",
+      observed_on: "2026-08-20",
+      observed_at: new Date("2026-08-20T06:00:00Z"),
+      head_coach: "Arrived Coach",
+      assumed_on: "2026-08-20"
+    },
+    {
+      // A post the list shows vacant, which is a fact about a national side
+      // and never a Gap (ADR-0045).
+      team: "Coventry City",
+      observed_on: "2026-08-20",
+      observed_at: new Date("2026-08-20T06:00:00Z"),
+      head_coach: null,
+      assumed_on: null
+    },
+    {
+      // Read after the Lock: this record has no trigger holding that line, so
+      // the filter is the builder's and the pin is what proves it holds.
+      team: "Coventry City",
+      observed_on: "2026-08-21",
+      observed_at: new Date("2026-08-21T18:00:00Z"),
+      head_coach: "Unseen Coach",
+      assumed_on: "2026-08-21"
+    }
+  ],
   // The Competition's own entry, as the loader carries it: every Competition
   // pinned below is a league whose history is football-data.co.uk's, so none
   // of them renders the cup's section.
@@ -278,6 +404,49 @@ describe("the Match Prompt Version", () => {
         .toBe(matchPromptOf(competition).sha256);
     });
 
+  // Story 8 and story 39, at the one seam that can answer them: what the cup's
+  // rendering has that the Premier League's does not, and the reverse, over
+  // the same facts. The template around these sections is the same template
+  // and the test below says so mechanically; this is the claim about the
+  // sections themselves, and it is a list rather than a diff because the
+  // point is which sections differ, not how many bytes do.
+  //
+  // Each heading is asserted in both directions. A one-directional list stays
+  // green if a section is rendered for both Competitions, which is exactly
+  // the failure this ticket's three dispatches exist to prevent.
+  test("swaps two sections and states three absences, against a league's "
+    + "rendering of the same facts", () => {
+    const league = buildMatchContext(FIXTURE, contextData("PL"));
+    const cup = buildMatchContext(FIXTURE, contextData("UNL"));
+
+    for (const heading of [
+      // The league's history section, its availability section, and the
+      // Squad Changes and Head Coach sections its own two sources fill.
+      "Historical context as of",
+      "FPL-derived player context",
+      "Squad changes since ",
+      "Head Coach and changes this Season:"
+    ]) {
+      expect([heading, league.includes(heading), cup.includes(heading)])
+        .toEqual([heading, true, false]);
+    }
+
+    for (const heading of [
+      // The cup's two sections, and the two absences it states in words.
+      // Two and not the three spec 0027's story 39 asks for: availability is
+      // absent and silent, as it is in four leagues' packets (ADR-0037), and
+      // ADR-0057's amendment records why the third is right to be wordless.
+      // It is the "FPL-derived player context" `false` above that asserts it.
+      "Recent internationals as of",
+      "Head Coach and changes:\n",
+      "League table: no league table for this Competition;",
+      "Squad changes: none for this Competition;"
+    ]) {
+      expect([heading, cup.includes(heading), league.includes(heading)])
+        .toEqual([heading, true, false]);
+    }
+  });
+
   // Story 38: the only-variable claim, checked mechanically rather than read
   // off two constants that happen to look alike. The history is one literal
   // for every rendering so that the template is the only thing under test.
@@ -317,12 +486,23 @@ describe("the Match Prompt Version", () => {
       }))
       .filter(({ division }) => division !== undefined);
 
-    // Every Competition with a frozen Prompt Version now has divisions, so the
-    // count is exact rather than merely non-zero: `toBeGreaterThan(0)` stayed
-    // green if `DIVISIONS.PD` were deleted, which is the edit this test is
-    // here to refuse. A Competition legitimately awaiting curation moves this
-    // number and should have to say so. **Found by review.**
-    expect(named.length).toBe(MATCH_PROMPT_COMPETITIONS.length);
+    // The count is exact rather than merely non-zero: `toBeGreaterThan(0)`
+    // stayed green if `DIVISIONS.PD` were deleted, which is the edit this test
+    // is here to refuse. A Competition legitimately awaiting curation moves
+    // this number and should have to say so. **Found by review.**
+    //
+    // Exact against the registry and not against the whole list, from ticket
+    // 0075: `UNL` has a frozen Prompt Version and no divisions, and has none
+    // by nature rather than by omission -- a national side plays in no
+    // Division, and migration 0042 keeps a cup's results out of
+    // `historical_matches` altogether. Counting the Competitions whose
+    // history is football-data.co.uk's is the same claim about the leagues
+    // that the bare length used to make, and it is a claim a cup cannot
+    // soften.
+    expect(named.length).toBe(MATCH_PROMPT_COMPETITIONS.filter(
+      (competition) =>
+        sourcesOf(competition)?.history === FOOTBALL_DATA_SOURCE
+    ).length);
     for (const { competition, prompt, division } of named) {
       expect([competition, prompt]).toEqual([competition, division]);
     }
@@ -340,12 +520,24 @@ describe("the Match Prompt Version", () => {
   // league whose article is titled otherwise fails here and is written out as
   // the exception it is, which is the outcome wanted -- an unread title is how
   // this list goes wrong.
-  test("lists a Season article for every Competition, en dash and all", () => {
+  //
+  // Both directions since ticket 0075, and the registry says which: a
+  // Competition whose Head Coaches come from a Season article has one listed,
+  // and `UNL`, whose come from the current national team head coaches list,
+  // has none and must have none. No Season article names a national side's
+  // Head Coach, so a title listed for one would be a page that does not exist
+  // -- the 404 this test's en dash is here to prevent, arrived at from the
+  // other end.
+  test("lists a Season article for every league, and none for a cup", () => {
     for (const competition of MATCH_PROMPT_COMPETITIONS) {
       const article = headCoachSource(competition, "2026-27");
+      const fromAnArticle = sourcesOf(competition)?.headCoaches
+        === HEAD_COACH_SEASON_ARTICLE_SOURCE;
       expect([competition, article?.page]).toEqual([
         competition,
-        `2026–27 ${matchPromptOf(competition).competitionName}`
+        fromAnArticle
+          ? `2026–27 ${matchPromptOf(competition).competitionName}`
+          : undefined
       ]);
     }
   });

@@ -202,3 +202,29 @@ standing commitment to about $554 a Season across six Competitions.
   stored** and moves only for the reasons ADR-0026 allows, as every Competition's does.
 - **CONTEXT.md moves with this ADR**: Competition stops meaning "league", Division
   records that a cup curates none, Gameweek names what a Gameweek is for `UNL`.
+
+## Amendment: two of the three absences are stated, the third is silent (ticket 0075)
+
+The packet section above says a cup's three missing sections are "each a stated absence
+and not a Gap", and spec 0027's story 39 says the same. Building it found that the third
+cannot be, and should not be:
+
+- **the league table** is stated — `League table: no league table for this Competition; a
+  national side plays no league.`;
+- **Squad Changes** is stated — `Squad changes: none for this Competition; a national
+  side has no transfer window.`;
+- **availability** is *absent*, silently, exactly as it is for La Liga, Serie A, Ligue 1
+  and the Bundesliga.
+
+Availability is Premier League only and structurally so (ADR-0037): the section is built
+from the FPL player feed, which has no equivalent anywhere else. Stating its absence in a
+cup's packet and nowhere else would make the Nations League the one Competition that
+apologises for a feed four leagues also lack — and stating it in all five would be a new
+line in four frozen renders, which ADR-0026 does not allow for a used version.
+
+So the count in the sentence above is two, not three. The distinction the original
+sentence was reaching for still holds whole: none of the three is a Gap, and no Entrant
+is shown a section that reads as though a fetch had failed. What decides whether an
+absence is worth words is whether a reader would otherwise wonder — a Competition with no
+table where every other Competition has one is a question worth answering, and a section
+no Competition but the Premier League has ever carried is not.

@@ -1,6 +1,8 @@
 import {
   baseRatesClause,
   matchCount,
+  NO_PRIOR_MEETING,
+  NO_RESULT_YET,
   performanceSegments,
   xgRatePerGame,
   type SideMatch
@@ -84,6 +86,19 @@ const NO_STATS = "no shots or xG stored for this Fixture";
 
 /** What a side with nothing in the window says, rather than an absent block. */
 const NO_INTERNATIONAL = "no international stored for this side.";
+
+/**
+ * The first of the packet's stated absences (ADR-0057, story 39 of spec
+ * 0027), and it is stated rather than dropped for the reason the whole
+ * section exists: the league section this one replaces opens with a table, so
+ * a cup packet that simply had no table would leave an Entrant to work out
+ * whether one was missing or whether the Competition has none. The second
+ * clause says which -- these sides play no league, so there is no table to be
+ * missing, and what a group of four playing six matches did is on the form
+ * lines below.
+ */
+const NO_LEAGUE_TABLE = "League table: no league table for this Competition; "
+  + "a national side plays no league.";
 
 const NO_DATASET_READ = "Dataset last updated: no read of the dataset is "
   + "stored.";
@@ -169,13 +184,19 @@ function outcome(match: RecentMatch, team: string): "W" | "D" | "L" {
   return goalsFor > goalsAgainst ? "W" : goalsFor === goalsAgainst ? "D" : "L";
 }
 
-function matchLine(match: RecentMatch, team: string): string {
+/**
+ * A form line where a side is named, and a score-only line where none is: the
+ * head-to-head section carries neither the outcome letter nor the
+ * performance, on the same rule the league section's does -- an outcome is
+ * relative to a side, and performance signals belong on the form lines, where
+ * recent performance is what the section is for.
+ */
+function matchLine(match: RecentMatch, team?: string): string {
   return [
     `- ${match.tournament}`,
     match.playedOn,
     `${match.homeTeam} ${match.homeGoals}-${match.awayGoals} ${match.awayTeam}`,
-    outcome(match, team),
-    ...match.tail
+    ...(team === undefined ? [] : [outcome(match, team), ...match.tail])
   ].join(" | ");
 }
 
@@ -238,6 +259,59 @@ function xgRatesLine(played: PlayedFixture[], team: string): string {
     + `${xgRatePerGame(mine, isHome)} overall, `
     + `${xgRatePerGame(mine.filter(isHome), isHome)} home, `
     + `${xgRatePerGame(mine.filter((match) => !isHome(match)), isHome)} away.`;
+}
+
+/**
+ * How much of this Season the form lines above are drawn from: the count of
+ * its settled Fixtures and the day the latest was played. It does the job
+ * ADR-0021 gives the league table's heading -- date what is being shown by
+ * its latest included result -- and it is a third wording rather than that
+ * heading's: the league dates a table (`Premier League table (results through
+ * DATE):`), the FPL track dates the same table from another track's fetch,
+ * and this dates a set of results that is not a table at all.
+ *
+ * The Fixtures themselves are on the two sides' lines and not listed again
+ * here -- a cup's Season is a hundred and fifty-six of them and a packet is
+ * one Fixture's.
+ *
+ * The empty case is not a third wording: it is `NO_RESULT_YET`, the sentence
+ * every league's Gameweek 1 renders, which is the whole of story 40.
+ */
+function seasonResultsLine(played: PlayedFixture[]): string {
+  if (played.length === 0) {
+    return `This Season's results: ${NO_RESULT_YET}`;
+  }
+  const through = Math.max(
+    ...played.map((fixture) => fixture.kicked_off_at.getTime())
+  );
+  return `This Season's results: ${matchCount(played.length)} played, `
+    + `through ${utcDate(new Date(through))}.`;
+}
+
+/**
+ * What these two sides have done to each other, from both sources at once and
+ * newest first, which is the section the league packet ends with and the one
+ * thing replacing that packet's history section took away. `RECENT` meetings
+ * at most, as the form lines carry `RECENT` matches: two national sides meet
+ * across decades and the oldest of those is a different team.
+ */
+function headToHead(
+  matches: RecentMatch[],
+  homeTeam: string,
+  awayTeam: string
+): string[] {
+  const meetings = matches
+    .filter((match) =>
+      (match.homeTeam === homeTeam && match.awayTeam === awayTeam)
+      || (match.homeTeam === awayTeam && match.awayTeam === homeTeam))
+    .sort((left, right) => right.playedOn.localeCompare(left.playedOn))
+    .slice(0, RECENT);
+  return [
+    "Head-to-head history:",
+    ...(meetings.length === 0
+      ? [NO_PRIOR_MEETING]
+      : meetings.map((match) => matchLine(match)))
+  ];
 }
 
 function teamSection(
@@ -324,11 +398,21 @@ export function buildInternationalsContext(
   return [
     `Recent internationals as of ${options.asOf.toISOString()}`,
     "",
+    // What the league section opens with, answered for a Competition that has
+    // no table: that it has none, and how much of its own Season has been
+    // played. Here rather than anywhere else because here is where the league
+    // puts its table and that table's coverage statement -- ahead of the base
+    // rates and the two sides.
+    NO_LEAGUE_TABLE,
+    seasonResultsLine(played),
+    "",
     baseRatesLine(internationals),
     "",
     ...teamSection(matches, played, options.homeTeam),
     "",
     ...teamSection(matches, played, options.awayTeam),
+    "",
+    ...headToHead(matches, options.homeTeam, options.awayTeam),
     "",
     options.datasetUpdatedOn === null
       ? NO_DATASET_READ

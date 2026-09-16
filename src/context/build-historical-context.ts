@@ -46,6 +46,32 @@ const NO_DIVISIONS = "unavailable; no division history is stored for this "
   + "Competition.";
 
 /**
+ * What a head-to-head section says where the two sides have never met in
+ * stored data, in the one wording both sections that carry one use: this one,
+ * over a league's results, and the cup's over the internationals dataset. A
+ * constant from the second caller, on this project's own rule -- what forces
+ * it is that a change to the sentence would otherwise have to be made in two
+ * places at once, and a packet whose two Competitions worded the same absence
+ * differently would be two questions asked.
+ */
+export const NO_PRIOR_MEETING = "No prior meeting in stored data.";
+
+/**
+ * What every track and every Competition says where this Season has produced
+ * no result yet, in the one wording all three sections that say it use: this
+ * one, the FPL track's league table, and the cup's Season line. Each puts its
+ * own prefix in front -- the top flight's name and `table: `, "Premier League
+ * table: ", "This Season's results: " -- and the sentence after the colon is
+ * this constant everywhere.
+ *
+ * A constant on the same rule as `NO_PRIOR_MEETING` above, and with a stronger
+ * case than either: the Nations League packet renders this sentence *because*
+ * it is the one every league's Gameweek 1 renders, so a change made in one
+ * place would break the very claim the cup's line exists to make.
+ */
+export const NO_RESULT_YET = "no result has been played yet this Season.";
+
+/**
  * The names this Competition's rows are stored under, read from the one list
  * the fetch writes them by (`football-data/divisions.ts`). Undefined means the
  * Competition has no curated divisions, and therefore no stored rows for the
@@ -593,7 +619,7 @@ function tableSection(
   }
   if (currentMatches.length === 0) {
     return [
-      `${divisions.top} table: no result has been played yet this Season.`
+      `${divisions.top} table: ${NO_RESULT_YET}`
     ];
   }
   const through = Math.max(
@@ -713,7 +739,7 @@ export function buildHistoricalContext(
     "",
     "Head-to-head history:",
     ...(headToHead.length === 0
-      ? ["No prior meeting in stored data."]
+      ? [NO_PRIOR_MEETING]
       : headToHead.map((match) => matchLine(names, match)))
   ].join("\n");
 }

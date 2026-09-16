@@ -178,6 +178,45 @@ const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
     sha256:
       "3597a571d1bebc0d2e355f5c1e9df49a42ccfc963d3eee7e639daac1944b127e",
     competitionName: "Bundesliga"
+  },
+  // The first Competition here that is not a league, and the first whose
+  // rendering differs from the Premier League's by more than its name
+  // (ADR-0057). Two of its sections are other builders' -- the
+  // recent-internationals section stands where the league's history section
+  // stands, and the current-list Head Coach section where the season
+  // article's does -- and three things a league's packet carries it does not:
+  // the league table and the Squad Changes are absences it states in words,
+  // and availability is absent outright, as it is for every non-`PL`
+  // Competition (ADR-0037). Which of each pair renders is the source
+  // registry's answer and not this code's, so nothing in the builder says
+  // `UNL`.
+  //
+  // Frozen unused and unamendable from its first Lock, 2026-09-24T14:30Z, on
+  // the same terms as the three leagues above. The pin was read from this
+  // suite's render on 2026-09-16 with every gate that can move this rendering
+  // already open: the 365Scores shots and xG (ticket 0072), the dataset's
+  // internationals (0073) and the head coaches list (0074). The UEFA schedule
+  // (0071) is not among them -- it decides which Fixtures exist and not what
+  // a packet says about one -- so three gates and one reading. The
+  // `squadChanges` gate is the one that will never open: a national side has
+  // no transfer window, so the absence this render carries is the freeze's
+  // final state and not a pin waiting for a source.
+  //
+  // The rendering differs from the shared template's only by its sections,
+  // which is the amendment ADR-0038 carries: the template is still one
+  // template and its one variable is still the Competition's name.
+  //
+  // Read rather than predicted, like every pin here. `context:show` renders
+  // no `UNL` packet yet -- production has no Nations League Gameweek until
+  // the operator's `competitions` insert (ticket 0076), which is the first
+  // step that spends money -- so the reading that stands behind this pin is
+  // the suite's own render, printed whole and read line by line, with the
+  // ticket recording what it says.
+  UNL: {
+    version: "match-unl/2026-27-v1",
+    sha256:
+      "90d0c3f01c459670b9f47143a61c9c4d65214ccdc47fe755787b06ca3bffc616",
+    competitionName: "UEFA Nations League"
   }
 };
 

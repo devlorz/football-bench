@@ -11,7 +11,10 @@ import {
   type PoolPlayer,
   type Position
 } from "../fpl/apply-gameweek-action.js";
-import type { LeagueTableRow } from "./build-historical-context.js";
+import {
+  NO_RESULT_YET,
+  type LeagueTableRow
+} from "./build-historical-context.js";
 
 /** Frozen (prompt template + context builder) pair for the FPL track. */
 export const FPL_PROMPT_VERSION = "fpl/2026-27-v2";
@@ -471,7 +474,7 @@ function fixturesSection(schedule: FplFixture[]): string[] {
  */
 function leagueSection(league: FplLeagueTable | null): string[] {
   if (league === null) {
-    return ["Premier League table: no result has been played yet this Season."];
+    return [`Premier League table: ${NO_RESULT_YET}`];
   }
   return [
     "Premier League table, from results through "

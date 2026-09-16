@@ -18,6 +18,20 @@ export interface SquadChangeRow {
   dated_on: Date | null;
 }
 
+/**
+ * What a Competition whose registry entry names no Squad Change source says
+ * in this section's place (ADR-0057, story 39 of spec 0027). A stated absence
+ * and not the empty section's sentence: "no Squad Change data stored for this
+ * Gameweek" says a fetch did not land, which for a Competition that has no
+ * such fetch and never will would apologise for a Gap that is not one.
+ *
+ * A constant here rather than in the dispatch that renders it, beside the
+ * wording it stands in place of: the two are read together or the difference
+ * between them is invisible.
+ */
+export const NO_TRANSFER_WINDOW = "Squad changes: none for this Competition; "
+  + "a national side has no transfer window.";
+
 export interface BuildSquadChangesContextOptions {
   competition: string;
   deadline: Date;

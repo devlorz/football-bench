@@ -315,15 +315,21 @@ describe("the dashboard read API", () => {
     expect((await get("/api/xx/leaderboard")).status).toBe(404);
   });
 
-  // The other half of what opening `bl1` (ticket 0058) means for this
-  // endpoint: it is served, and served with 200 rather than a 404, despite
-  // having no `competitions` row -- that row is 0060's, not this ticket's.
-  // `MATCH_PROMPT_COMPETITIONS` deciding what is *served* and `competitions`
-  // deciding what is *open* are two different gates, and this is the case
-  // that walks the first without ever reaching the second.
+  // The other half of what freezing a Prompt Version means for this endpoint:
+  // the Competition is served, and served with 200 rather than a 404, despite
+  // having no `competitions` row. `MATCH_PROMPT_COMPETITIONS` deciding what is
+  // *served* and `competitions` deciding what is *open* are two different
+  // gates, and this is the case that walks the first without ever reaching the
+  // second.
+  //
+  // `bl1` held this case from ticket 0058 until ticket 0060 opened it; `unl`
+  // is the Competition in that state now (ticket 0075), and its row is ticket
+  // 0076's -- the first step that spends money. The case follows whichever
+  // Competition is genuinely frozen-but-unopened rather than naming one that
+  // has since been opened everywhere but in this file's fixtures.
   test("answers a Competition with no competitions row as an unopened "
-    + "league, not a 404", async () => {
-    const response = await get("/api/bl1/leaderboard");
+    + "Competition, not a 404", async () => {
+    const response = await get("/api/unl/leaderboard");
     expect(response.status).toBe(200);
     expect(await response.json() as LeaderboardBody).toEqual({
       season: SEASON,

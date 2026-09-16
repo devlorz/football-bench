@@ -218,8 +218,21 @@ describe("this Season's own Fixtures merged into the same list", () => {
       ]
     });
 
-    expect(section.match(/2026-09-06/g)).toHaveLength(2);
-    expect(section).toContain("xG 1.31-0.88");
+    // Every line the merged match reaches, written out: the Season's own
+    // coverage line, one form line per side carrying the record's figures,
+    // and the score-only head-to-head. The dataset's copy of it is nowhere,
+    // which is what "the record wins" means -- a second line for either side
+    // would be the same match twice.
+    const line = "- UEFA Nations League | 2026-09-06 | "
+      + "Kosovo 1-0 Republic of Ireland";
+    const stats = " | shots 14-9, on target 5-3, xG 1.31-0.88";
+    expect(section.split("\n").filter((row) => row.includes("2026-09-06")))
+      .toEqual([
+        "This Season's results: 1 match played, through 2026-09-06.",
+        `${line} | W${stats}`,
+        `${line} | L${stats}`,
+        line
+      ]);
   });
 
   test("carries each side's xG for and against per game, home and away",
@@ -301,6 +314,128 @@ describe("this Season's own Fixtures merged into the same list", () => {
         + " | shots 14-9, on target 5-3, xG unavailable"
       );
     });
+});
+
+describe("what a cup does not have, and what its Season has done", () => {
+  test("states the absent league table rather than saying nothing at all",
+    () => {
+      // A stated absence and not a Gap (ADR-0057, story 39): the league
+      // section this one replaces opens with a table, and a packet that
+      // simply dropped it would leave an Entrant to guess whether the table
+      // was missing or the Competition has none.
+      expect(build()).toContain(
+        "League table: no league table for this Competition; a national side "
+        + "plays no league."
+      );
+    });
+
+  test("reads no result has been played yet this Season at Gameweek 1", () => {
+    // Story 40, in the words every league's Gameweek 1 already renders: the
+    // first Gameweek of a cup reads as the first Gameweek of a league does.
+    expect(build()).toContain(
+      "This Season's results: no result has been played yet this Season."
+    );
+  });
+
+  test("counts the Season's settled Fixtures and dates the count", () => {
+    // The coverage statement the league table's heading makes (ADR-0021),
+    // over the one set a cup has: its own settled Fixtures. The Fixtures
+    // themselves are on the two sides' form lines above; this line is what
+    // says how much of the Season those lines are drawn from.
+    const section = build({
+      playedFixtures: [
+        fixture({ kicked_off_at: new Date("2026-09-06T18:45:00Z") }),
+        fixture({
+          kicked_off_at: new Date("2026-09-09T18:45:00Z"),
+          home_team: "Denmark",
+          away_team: "Norway"
+        }),
+        // After the Lock, so it is in neither the count nor the date.
+        fixture({
+          kicked_off_at: new Date("2026-09-24T18:45:00Z"),
+          home_team: "Austria",
+          away_team: "Israel"
+        })
+      ]
+    });
+
+    expect(section).toContain(
+      "This Season's results: 2 matches played, through 2026-09-09."
+    );
+  });
+});
+
+describe("what the two sides have done to each other", () => {
+  test("shows their meetings from both sources, newest first and score-only",
+    () => {
+      // The section the league packet ends with, over the one table that can
+      // answer it for a cup: two national sides have usually met, and
+      // `international_results` holds the meetings. Score-only, on the rule
+      // the league's section is score-only by -- performance signals belong
+      // on the form lines, where recent performance is what the section is
+      // for.
+      const section = build({
+        internationals: [
+          international({
+            played_on: "2025-10-10",
+            home_team: "Republic of Ireland",
+            away_team: "Kosovo",
+            home_goals: 2,
+            away_goals: 1,
+            tournament: "FIFA World Cup qualification"
+          }),
+          // A third side's match, which is not a meeting of these two.
+          international({ played_on: "2026-03-25", away_team: "Sweden" })
+        ],
+        playedFixtures: [
+          fixture({ kicked_off_at: new Date("2026-09-06T18:45:00Z") })
+        ]
+      });
+
+      // The whole block and not its first two lines: a third meeting that
+      // should not be there -- the third side's match, or the same match
+      // from both sources -- is only visible if the list is closed.
+      const block = section
+        .split("Head-to-head history:\n")[1]!
+        .split("\n\n")[0]!;
+      expect(block.split("\n")).toEqual([
+        "- UEFA Nations League | 2026-09-06 | Kosovo 1-0 Republic of Ireland",
+        "- FIFA World Cup qualification | 2025-10-10 | "
+        + "Republic of Ireland 2-1 Kosovo"
+      ]);
+    });
+
+  test("shows five meetings and no sixth, as the form lines do", () => {
+    // The cap, which is the form lines' cap and is here for the same reason:
+    // two national sides meet across decades and the oldest of those was a
+    // different team. Six stored, five shown, and the one left out is the
+    // oldest -- and they alternate ends, so the direction filter is walked
+    // six times rather than once.
+    const section = build({
+      internationals: [
+        "2024-09-05", "2025-03-21", "2025-10-10", "2026-03-25", "2026-06-11",
+        "2026-06-16"
+      ].map((played_on, index) => international({
+        played_on,
+        home_team: index % 2 === 0 ? "Kosovo" : "Republic of Ireland",
+        away_team: index % 2 === 0 ? "Republic of Ireland" : "Kosovo",
+        tournament: "FIFA World Cup qualification"
+      }))
+    });
+
+    const block = section
+      .split("Head-to-head history:\n")[1]!
+      .split("\n\n")[0]!;
+    expect(block.split("\n").map((line) => line.split(" | ")[1])).toEqual([
+      "2026-06-16", "2026-06-11", "2026-03-25", "2025-10-10", "2025-03-21"
+    ]);
+  });
+
+  test("says so where the two have never met", () => {
+    expect(build({
+      internationals: [international({ played_on: "2026-03-25" })]
+    })).toContain("Head-to-head history:\nNo prior meeting in stored data.");
+  });
 });
 
 describe("what the section says about its own source", () => {

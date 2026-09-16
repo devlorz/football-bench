@@ -19,9 +19,11 @@ describe("the Match track's Competition routes", () => {
     // Written out rather than derived from the same list the module reads: a
     // route set that recomputed the answer the way the module does could not
     // disagree with it, and disagreeing is the whole job. The site advertises
-    // a league once its Prompt Version is frozen and not before (ADR-0039),
-    // which is why Serie A, Ligue 1 and the Bundesliga all appear here from
-    // their freeze and before any of the three is listed in `competitions`.
+    // a Competition once its Prompt Version is frozen and not before
+    // (ADR-0039), which is why Serie A, Ligue 1, the Bundesliga and now the
+    // Nations League all appear here from their freeze and before any of them
+    // is listed in `competitions` -- the cup's row is ticket 0076's, and the
+    // first step that spends money.
     expect(competitionRoutes()).toEqual([
       {
         params: { competition: "pl" },
@@ -69,6 +71,14 @@ describe("the Match track's Competition routes", () => {
         props: {
           competition: "BL1", competitionName: "Bundesliga",
           path: "/bl1", api: "/api/bl1",
+          retiredLabel: null
+        }
+      },
+      {
+        params: { competition: "unl" },
+        props: {
+          competition: "UNL", competitionName: "UEFA Nations League",
+          path: "/unl", api: "/api/unl",
           retiredLabel: null
         }
       }
@@ -168,24 +178,24 @@ describe("the link to a page of a Competition", () => {
   test("gives every built route its own copy of both pages under it", () => {
     // Written out rather than derived: a list that recomputed the href the way
     // the function does could not disagree with it, and disagreeing is the job.
-    // Every one of these ten is a file the build emits, from the one
+    // Every one of these twelve is a file the build emits, from the one
     // function both pages under the segment now call.
     expect(competitionRoutes().map(({ props }) => pageHref(props.path, "fixtures")))
       .toEqual([
         "/pl/fixtures", "/pd/fixtures", "/sa/fixtures", "/fl1/fixtures",
-        "/bl1/fixtures"
+        "/bl1/fixtures", "/unl/fixtures"
       ]);
     expect(competitionRoutes().map(({ props }) => pageHref(props.path, "entrants")))
       .toEqual([
         "/pl/entrants", "/pd/entrants", "/sa/entrants", "/fl1/entrants",
-        "/bl1/entrants"
+        "/bl1/entrants", "/unl/entrants"
       ]);
   });
 });
 
 /**
  * The header's crossing from one Competition to another, which is the same
- * function as the nav's applied to another league's path.
+ * function as the nav's applied to another Competition's path.
  *
  * Tested here for the reason every other href in this file is: it renders
  * perfectly while being wrong. A switcher that sends a reader from La Liga's
@@ -200,8 +210,9 @@ describe("the Competition switcher", () => {
   const SWITCHER = competitionRoutes().map(({ props }) => props);
 
   test("holds the reader's page across every crossing", () => {
-    // Every combination of the page a reader is on and the league they cross
-    // to, written out. Fifteen files, all emitted by the route list above.
+    // Every combination of the page a reader is on and the Competition they
+    // cross to, written out. Eighteen files, all emitted by the route list
+    // above, across six Competitions of which one is now a cup.
     const crossings = Object.fromEntries(
       (["leaderboard", "fixtures", "entrants"] as const).map((page) => [
         page, SWITCHER.map(({ path }) => pageHref(path, page))
@@ -209,14 +220,14 @@ describe("the Competition switcher", () => {
     );
 
     expect(crossings).toEqual({
-      leaderboard: ["/pl", "/pd", "/sa", "/fl1", "/bl1"],
+      leaderboard: ["/pl", "/pd", "/sa", "/fl1", "/bl1", "/unl"],
       fixtures: [
         "/pl/fixtures", "/pd/fixtures", "/sa/fixtures", "/fl1/fixtures",
-        "/bl1/fixtures"
+        "/bl1/fixtures", "/unl/fixtures"
       ],
       entrants: [
         "/pl/entrants", "/pd/entrants", "/sa/entrants", "/fl1/entrants",
-        "/bl1/entrants"
+        "/bl1/entrants", "/unl/entrants"
       ]
     });
   });

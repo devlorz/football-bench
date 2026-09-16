@@ -9,6 +9,7 @@ import {
 } from "../context/build-fpl-context.js";
 import {
   buildSquadChangesContext,
+  NO_TRANSFER_WINDOW,
   type SquadChangeRow
 } from "../context/build-squad-changes-context.js";
 import {
@@ -375,15 +376,37 @@ export function buildMatchContext(
           players: data.fplPlayers
         })
         : undefined,
-      // Undefined outside the render gate, and then the section is absent
-      // rather than empty.
-      buildSquadChangesContext({
-        competition: data.competition,
-        deadline: data.deadline,
-        homeTeam: fixture.home_team,
-        awayTeam: fixture.away_team,
-        changes: data.squadChanges
-      }),
+      // The registry once more, and the third of the three dispatches this
+      // builder makes on it: a Competition whose entry names no Squad Change
+      // source states the absence, and one that names a source renders the
+      // window's own section (ADR-0057). The gate is the registry's and not
+      // the window table's, for the reason ticket 0074 gave for the Head
+      // Coach reads -- `squadChangeWindow` also returns undefined for a cup,
+      // because no window is written down for one, but that is a Competition
+      // between two windows and this is a Competition that has none, and a
+      // reader cannot tell those apart from an `undefined`.
+      //
+      // The two above match on a source name and this one matches on `null`,
+      // which is the shape of the question and not an inconsistency: those
+      // fields hold two sources each and the dispatch picks between them,
+      // while `squadChanges` holds one source or nothing and what is being
+      // asked is whether this Competition has it at all. A Competition with
+      // no registry entry is neither, and falls to the builder below exactly
+      // as it does for the history section.
+      //
+      // Undefined inside the other branch is still the render gate: a league
+      // Gameweek outside its window states no squad movement at all rather
+      // than a stale list (ADR-0031), and then the section is absent rather
+      // than empty.
+      data.sources?.squadChanges === null
+        ? NO_TRANSFER_WINDOW
+        : buildSquadChangesContext({
+          competition: data.competition,
+          deadline: data.deadline,
+          homeTeam: fixture.home_team,
+          awayTeam: fixture.away_team,
+          changes: data.squadChanges
+        }),
       // One Head Coach section, chosen by the registry the fetch that wrote
       // the rows was dispatched by, exactly as the history section above is
       // (ADR-0057). A cup gets the current-list section *instead of* the
