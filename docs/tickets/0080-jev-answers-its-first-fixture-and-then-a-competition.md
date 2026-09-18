@@ -89,3 +89,57 @@ proves the shape.
       rate limit or `state` size stopped it, and ADR-0059 carries a one-line closure
       naming that reason.
       *Not this path — the pre-flight cleared and the replay ran.*
+
+## Past the Premier League: what running the other four found
+
+The ticket's own text says a second Competition is a second permission request, not a
+loop — the operator asked for four more anyway (La Liga, Serie A, Ligue 1, Bundesliga),
+each stated and approved separately. What that turned up, beyond the Premier League leg
+this ticket was scoped to:
+
+**An Exhibition row's id has to carry the Competition in its prefix, not its slug, or
+`/overall` never sums it.** The combined ranking (`dashboard/src/overall-view.ts`) keys
+each row by `entrantSlug(id)` — everything after the last `/` — the same rule real
+Entrant rows follow (`match/NAME` and `match-pd/NAME` both slug to `NAME`). The first
+attempt at the four extra rows used `exhibition/jev-latest-pd` and siblings, which slug
+to `jev-latest-pd` and would never have combined with the Premier League's
+`exhibition/jev-latest` row (`jev-latest`). Corrected to `exhibition-pd/jev-latest`,
+`exhibition-sa/jev-latest`, `exhibition-fl1/jev-latest`, `exhibition-bl1/jev-latest` —
+all slug to `jev-latest`, and `/overall` now sums all five into one row (272 Match
+Points, 767 Bet Points, confirmed by calling `overallRanking` directly against the five
+leaderboard bodies).
+
+**A restarted Competition's retired Gameweek is unreachable by the replay, without any
+guard needed for it.** La Liga's Prompt Version carries `retired: { version:
+"match-pd/2026-27-v1", gw: 1 }`; the concern going in was that the replay might still
+spend a call answering into Gameweek 1, a round the ranking excludes by construction
+(`rankedFrom` in `read-api.ts`). It doesn't: `playedGameweeks` in
+`replay-match-exhibition.ts` reads its Gameweek list off `contexts`, and the retired
+Gameweek's contexts are not in that live set — ADR-0042 already keeps them out "the
+moment the constant moved." The replay ran Gameweeks 2–6 only, unprompted.
+
+**A replay writes Predictions but does not score them — `match:score` is a separate,
+free step per Competition.** Each league's leaderboard read `n: 0, matchPoints: 0` until
+`COMPETITION=<code> npm run match:score` ran for it (no Base Model call, a local
+computation over stored Predictions and results). The leaderboard endpoint also carries
+a 5-minute edge cache (`SCORED_CACHE` in `read-api.ts`), so a browser view taken right
+after a score run can still show the pre-scoring figures briefly — not a data problem,
+confirmed by reading the same `handleDashboardRequest` path directly against production.
+
+**A schema failure is a genuine, un-repaired Gap for a typesafe row, exactly as
+ADR-0059 says.** Serie A wrote 39 Predictions against 40 played Fixtures. The missing
+one, Fixture 558617, has a single `attempts` row with `error_kind: 'probs_sum'` and no
+second attempt — Jev's outcome probabilities didn't sum to 1 within tolerance, and
+because a typesafe row gets no Repair chain, that one call is the whole of what was
+asked. Not a bug; the mechanism working as designed.
+
+**Final standing, all five Competitions, after each was scored:**
+
+| Competition | n | Match Points | Bet Points |
+| --- | ---: | ---: | ---: |
+| Premier League (PL) | 40 | 52 | 157 |
+| La Liga (PD) | 53 | 61 | 201 |
+| Serie A (SA) | 39 | 74 | 165 |
+| Ligue 1 (FL1) | 36 | 53 | 137 |
+| Bundesliga (BL1) | 27 | 32 | 107 |
+| **`/overall` (summed)** | — | **272** | **767** |
