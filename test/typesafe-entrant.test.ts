@@ -43,9 +43,9 @@ describe("the TypeSafe request (ADR-0059)", () => {
     expect(Object.keys(body.questions)).toHaveLength(2);
 
     const [outcome, score] = Object.values(body.questions);
-    expect(outcome!.type).toBe("Choice");
+    expect(outcome!.type).toBe("choice");
     expect(Object.keys(outcome!.criteria).sort()).toEqual(["A", "D", "H"]);
-    expect(score!.type).toBe("Choice");
+    expect(score!.type).toBe("choice");
     expect(Object.keys(score!.criteria).sort()).toEqual(scorelines().sort());
   });
 });

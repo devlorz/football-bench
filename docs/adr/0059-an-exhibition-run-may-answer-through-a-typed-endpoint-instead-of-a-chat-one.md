@@ -2,8 +2,11 @@
 
 > Status: accepted. Ticket 0079 (2026-09-18) landed the code this ADR describes — the
 > typed request and response, the attempt engine's branch on `provider`, the roster's
-> refusal of the provider by name, and the dashboard's caveat. No `models` row has been
-> inserted and no call has reached `api.typesafe.ai`; that is ticket 0080's.
+> refusal of the provider by name, and the dashboard's caveat. Ticket 0080 (2026-09-18)
+> inserted `exhibition/jev-latest`, pre-flighted it against one Premier League Fixture,
+> and replayed it over all 40 played Fixtures of the 2026-27 Premier League — see
+> [the report](../reports/2026-09-18-jev-latest-preflight-and-premier-league-replay.md).
+> The row stands on the Premier League's readable rankings.
 
 **TypeSafe's Jev (`jev-latest`) may enter the Match track as an Exhibition Run, called
 at `https://api.typesafe.ai/v1/systemone` rather than through OpenRouter, shown the

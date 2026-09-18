@@ -110,8 +110,8 @@ export function typesafeRequest(apiKey: string, state: string): HttpRequest {
       model: TYPESAFE_MODEL,
       state,
       questions: {
-        outcome: { type: "Choice", criteria: OUTCOME_CRITERIA },
-        score: { type: "Choice", criteria: SCORELINE_CRITERIA }
+        outcome: { type: "choice", criteria: OUTCOME_CRITERIA },
+        score: { type: "choice", criteria: SCORELINE_CRITERIA }
       }
     })
   };

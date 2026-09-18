@@ -53,18 +53,39 @@ proves the shape.
 
 ## Acceptance
 
-- [ ] The Exhibition row exists: `role = 'exhibition'`, `provider = 'typesafe'`,
+- [x] The Exhibition row exists: `role = 'exhibition'`, `provider = 'typesafe'`,
       `base_model = 'jev-latest'`, `quantization` null, at the named Competition's frozen
       Prompt Version, inserted by the operator.
-- [ ] One pre-flight against one played Fixture has run, its report is in
+      *The operator ran the `insert into models (...)` statement against production
+      with `prompt_version = 'match/2026-27-v2'`, the Premier League's frozen version;
+      the row is what both the pre-flight and the replay below called against.*
+- [x] One pre-flight against one played Fixture has run, its report is in
       `docs/reports`, and it records: HTTP status, whether the answer was parseable, the
       two Choice distributions, `usage`, latency, and the per-call price derived from
       the account.
-- [ ] The permission request for the replay stated the Fixture count, the derived total,
+      *[docs/reports/2026-09-18-jev-latest-preflight-and-premier-league-replay.md](../reports/2026-09-18-jev-latest-preflight-and-premier-league-replay.md)
+      — HTTP 200/`parseable`, both Choice distributions, `usage: {input_tokens: 3212,
+      output_tokens: 379}`, latency (<10s, observed), and $0.042/MTok input from the
+      TypeSafe account. The first call 422'd on a request-shape bug in ticket 0079's
+      code (`"Choice"` vs the required `"choice"`), fixed in
+      `src/predictions/typesafe-entrant.ts` and re-run before this evidence was taken.*
+- [x] The permission request for the replay stated the Fixture count, the derived total,
       and the Competition, and the operator's yes is in the report.
-- [ ] The replay over that Competition completed, and the row stands on its readable
+      *Same report, "The replay permission request" section: 40 Premier League Fixtures,
+      $0.005–$0.01 derived total, operator confirmed before
+      `EXHIBITION_MODEL_ID=exhibition/jev-latest COMPETITION=PL npm run
+      exhibition:replay` ran.*
+- [x] The replay over that Competition completed, and the row stands on its readable
       rankings with the Exhibition label and the typed-endpoint caveat; it is absent from
       the Comparison Anchor, the intersection and every interval.
+      *40/40 Predictions and Attempts, 0 errored. `/api/pl/leaderboard` (read live
+      against production via `handleDashboardRequest`) shows `exhibition/jev-latest`
+      with `exhibition: { ranAfterGw: 4 }`, `n: 40`, `matchPoints: 52`, `betPoints: 157`,
+      and the body's `typesafeCaveat` field present. `matchRoster` in
+      `score-match-gameweek.ts` selects `role = 'entrant'` only, so the row is excluded
+      from the Comparison Anchor and every complete case by the same construction
+      every other Exhibition row already relies on — see the report's "Surface check".*
 - [ ] Or: the pre-flight refused, the row is deleted, the report says which of price,
       rate limit or `state` size stopped it, and ADR-0059 carries a one-line closure
       naming that reason.
+      *Not this path — the pre-flight cleared and the replay ran.*
