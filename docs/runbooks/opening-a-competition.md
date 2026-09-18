@@ -34,6 +34,12 @@ The count in the first paragraph had been left at ten by tickets 0072 and 0073 w
 one grew twice; 0074 corrected it. A page that counts the change is only worth reading
 while its own count is right.
 
+Ticket 0076 added no row and changed no count. It added the table's **second column**,
+because thirteen rows had come to describe two different changes — a league's and a cup's —
+and the sentences below the table were the only thing saying which was which. A column says
+it per row, which is what a page that exists to be counted off owes the Competition after
+next.
+
 Vocabulary: [CONTEXT.md](../../CONTEXT.md) — Competition, Division, Track.
 Decisions: [ADR-0035](../adr/0035-the-match-track-grows-a-competition-dimension.md)
 (a Competition is a dimension, not a Track),
@@ -61,21 +67,21 @@ Ticket 0071 appended edit **9** at the end for the same reason, ticket 0072
 appended edit **10**, ticket 0073 edit **11** and ticket 0074 edit **12**: a row goes on
 the bottom so that nothing above it moves.
 
-| # | Where | What | If it is missing |
-| --- | --- | --- | --- |
-| 0 | `src/fetch/competition-sources.ts` — `BY_COMPETITION` | Which schedule, history, stats, Squad Changes and head-coach source this Competition reads, or `null` for each it has none of | `Competition XX has no source registry entry` — the whole daily fetch fails by name, every day |
-| 1 | `migrations/00XX` — `competition_code` domain | The code, if beyond the six `0022` and `0042` listed | Every write of the code is refused |
-| 2 | `src/predictions/openrouter-entrant.ts` — `MATCH_PROMPTS` | Version, `competitionName`, and the sha once read | `Competition XX has no frozen Prompt Version`; no seats |
-| 3 | `src/football-data/divisions.ts` — `BY_COMPETITION` | Top and second division, source codes and stored names | The packet says the league table is unavailable |
-| 4 | `migrations/00XX` — `historical_matches_division_check` | The two names edit 3 added, character for character | The backfill fails on its first insert |
-| 5 | `src/understat/team-identity.ts` + `UNDERSTAT_LEAGUES` | The league slug and that league's ~20 club names | No xG, or — with the slug wrong — another league's rows relabelled |
-| 6 | `src/squad-changes/transfer-window.ts` + `club-identity.ts` | The country's two windows with their page titles and page `format`, and that league's ~20 clubs by live-source spelling | No Squad Changes section, and — with the format wrong — a page parsed as a shape it is not |
-| 7 | `src/head-coach/head-coach-source.ts` — `SEASON_ARTICLES` | The Season's article title for the league, under the Season already listed | No Head Coach changes section, silently — the fetch stores nothing and the packet says the article is not listed |
-| 8 | `src/football-data/team-identity.ts` — `BY_COMPETITION` | Live-source name → football-data.co.uk name, per Competition (§2) | Every club's history section reads "none in stored data" over a complete backfill, and nothing fails |
-| 9 | `src/uefa/fetch-competition.ts` — `UEFA_COMPETITION_IDS` | UEFA's numeric competitionId, only for a Competition whose edit 0 names `"uefa"` for its schedule | `Competition XX reads UEFA, which needs its UEFA competitionId` — that Competition's day, every day |
-| 10 | `src/365scores/fetch-match-stats.ts` — `SCORES_365_COMPETITION_IDS` and the name map beside it | 365Scores' numeric competition id, and every side it spells differently from the record, only for a Competition whose edit 0 names `"365scores"` for its stats | The id: `Competition XX reads 365Scores, which needs its 365Scores competition id`. A name: `365Scores lists YY in Competition XX, which is not a side this record stores` — either way that Competition's day, every day |
-| 11 | `src/international-results/fetch-results.ts` — `DATASET_NAME_BY_COMPETITION` and the name map beside it | The dataset's own word for the Competition, which every merged line in the packet carries, and every side it spells differently from the record, only for a Competition whose edit 0 names `"martj42/international_results"` for its history | The name: `Competition XX reads the international results dataset, which needs the dataset's own name for it` — that Competition's day, every day. A side: `The international results dataset names no side resolving to YY` — the same, and it is the *only* way a renamed side is caught |
-| 12 | `src/head-coach/fetch-national-team-head-coaches.ts` — `BY_COMPETITION` | The confederation section of the current head coaches list this Competition's sides are listed under, and every one of those sides by the FIFA trigram the page keys its rows with, only for a Competition whose edit 0 names `"wikipedia-national-team-head-coaches"` for its head coaches | The section: `Competition XX reads the current national team head coaches list, which needs its confederation's section` — that Competition's day, every day. A side: `The trigram map reaches no side spelled YY`, a page row the map has never seen, or one of the map's own trigrams the page has dropped — the same |
+| # | Needed when edit 0 names | Where | What | If it is missing |
+| --- | --- | --- | --- | --- |
+| 0 | always | `src/fetch/competition-sources.ts` — `BY_COMPETITION` | Which schedule, history, stats, Squad Changes and head-coach source this Competition reads, or `null` for each it has none of | `Competition XX has no source registry entry` — the whole daily fetch fails by name, every day |
+| 1 | always | `migrations/00XX` — `competition_code` domain | The code, if beyond the six `0022` and `0042` listed | Every write of the code is refused |
+| 2 | always | `src/predictions/openrouter-entrant.ts` — `MATCH_PROMPTS` | Version, `competitionName`, and the sha once read | `Competition XX has no frozen Prompt Version`; no seats |
+| 3 | `history: "football-data.co.uk"` | `src/football-data/divisions.ts` — `BY_COMPETITION` | Top and second division, source codes and stored names | The packet says the league table is unavailable |
+| 4 | `history: "football-data.co.uk"` | `migrations/00XX` — `historical_matches_division_check` | The two names edit 3 added, character for character | The backfill fails on its first insert |
+| 5 | `stats: "understat"` | `src/understat/team-identity.ts` + `UNDERSTAT_LEAGUES` | The league slug and that league's ~20 club names | No xG, or — with the slug wrong — another league's rows relabelled |
+| 6 | `squadChanges: "wikipedia-transfers"` | `src/squad-changes/transfer-window.ts` + `club-identity.ts` | The country's two windows with their page titles and page `format`, and that league's ~20 clubs by live-source spelling | No Squad Changes section, and — with the format wrong — a page parsed as a shape it is not |
+| 7 | `headCoaches: "wikipedia-season-article"` | `src/head-coach/head-coach-source.ts` — `SEASON_ARTICLES` | The Season's article title for the league, under the Season already listed | No Head Coach changes section, silently — the fetch stores nothing and the packet says the article is not listed |
+| 8 | `history: "football-data.co.uk"` | `src/football-data/team-identity.ts` — `BY_COMPETITION` | Live-source name → football-data.co.uk name, per Competition (§2) | Every club's history section reads "none in stored data" over a complete backfill, and nothing fails |
+| 9 | `schedule: "uefa"` | `src/uefa/fetch-competition.ts` — `UEFA_COMPETITION_IDS` | UEFA's numeric competitionId | `Competition XX reads UEFA, which needs its UEFA competitionId` — that Competition's day, every day |
+| 10 | `stats: "365scores"` | `src/365scores/fetch-match-stats.ts` — `SCORES_365_COMPETITION_IDS` and the name map beside it | 365Scores' numeric competition id, and every side it spells differently from the record | The id: `Competition XX reads 365Scores, which needs its 365Scores competition id`. A name: `365Scores lists YY in Competition XX, which is not a side this record stores` — either way that Competition's day, every day |
+| 11 | `history: "martj42/international_results"` | `src/international-results/fetch-results.ts` — `DATASET_NAME_BY_COMPETITION` and the name map beside it | The dataset's own word for the Competition, which every merged line in the packet carries, and every side it spells differently from the record | The name: `Competition XX reads the international results dataset, which needs the dataset's own name for it` — that Competition's day, every day. A side: `The international results dataset names no side resolving to YY` — the same, and it is the *only* way a renamed side is caught |
+| 12 | `headCoaches: "wikipedia-national-team-head-coaches"` | `src/head-coach/fetch-national-team-head-coaches.ts` — `BY_COMPETITION` | The confederation section of the current head coaches list this Competition's sides are listed under, and every one of those sides by the FIFA trigram the page keys its rows with | The section: `Competition XX reads the current national team head coaches list, which needs its confederation's section` — that Competition's day, every day. A side: `The trigram map reaches no side spelled YY`, a page row the map has never seen, or one of the map's own trigrams the page has dropped — the same |
 
 **Edit 10's name map is not the curation §2 describes.** Three names and not twenty, and
 they do not move between Seasons: a cup's sides are countries, so the map is written once
@@ -101,13 +107,21 @@ it is available only because both lists are closed. Do not reach for it where on
 open: edit 11's dataset lists every side there is, and asking it this way would refuse
 every morning.
 
-**Edits 3 to 8 are a league's, and a cup makes none of them.** Edit 0 is what says so: an
-entry naming `null` for a source is a Competition the daily fetch does not walk into that
-loop, so there is no map for it to be missing. `UNL` reads four sources of its own
-instead (ADR-0057), and its rows go in `international_results`, `team_match_stats` and
-`national_team_head_coaches` rather than in `historical_matches`, `understat_match_xg`
-and `head_coaches`. Edits 0, 1 and 2 are every
+**Edits 3 to 8 are a league's, and a cup makes none of them.** Edit 0 is what says so, and
+the second column is edit 0 read back: every row but the first three is needed only by a
+Competition whose registry entry names that source, and an entry naming `null` for a source
+is a Competition the daily fetch does not walk into that loop, so there is no map for it to
+be missing. `UNL` reads four sources of its own instead (ADR-0057), and its rows go in
+`international_results`, `team_match_stats` and `national_team_head_coaches` rather than in
+`historical_matches`, `understat_match_xg` and `head_coaches`. Edits 0, 1 and 2 are every
 Competition's, cup or league.
+
+**So the count is nine or seven, and never thirteen.** A domestic league makes edits 0 to 8
+and none of 9 to 12. `UNL` makes 0, 1, 2, 9, 10, 11 and 12 — seven. No Competition has made
+all thirteen and none can: edits 3, 4 and 8 answer a football-data.co.uk history where 11
+answers the dataset's, 5 a league's xG where 10 answers a cup's, 7 a season article where 12
+answers the current list — and an entry names one source per field. Count the second column
+against the entry you are about to write, not the row numbers.
 
 **Edit 0 names nothing that does not exist yet.** An entry pointing at a source no fetch
 implements opens a Competition into a run that reaches nothing and reports success — the

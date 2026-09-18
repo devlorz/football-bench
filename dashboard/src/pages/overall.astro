@@ -8,8 +8,8 @@ import { COMBINED_RANKING_QUALIFICATION } from "../overall-caveat.js";
  * The one page with no Competition of its own (spec 0025). `routes` is the
  * build-time list every other Match track page is built from too, read here
  * only for the `{competition, api}` pairs the client fetches and for an
- * anchor league the three Competition-scoped nav links (Leaderboard, Fixtures,
- * Entrant record) can point at.
+ * anchor Competition the three Competition-scoped nav links (Leaderboard,
+ * Fixtures, Entrant record) can point at.
  */
 const routes = competitionRoutes().map(({ props }) => props);
 // `PL` by the same literal `_redirects` sends `/`, `/fixtures` and
@@ -29,22 +29,22 @@ const fetches = routes.map(({ competition, api }) => ({
   competitionPath={anchor.path}
 >
   {/*
-    As on a league's leaderboard: every heading, label, column header and both
-    explanations are in the built HTML, and only the figures wait on the
-    fetch.
+    As on a Competition's leaderboard: every heading, label, column header
+    and both explanations are in the built HTML, and only the figures wait on
+    the fetch.
   */}
   <section class="hero">
     <div>
-      <h1>Every league, added up</h1>
+      <h1>Every Competition, added up</h1>
       <p>
-        Match Points and Bet Points summed raw across every league that is
-        Active and has scored, ranked the same way each league's own
+        Match Points and Bet Points summed raw across every Competition that
+        is Active and has scored, ranked the same way each Competition's own
         leaderboard already ranks them.
       </p>
     </div>
     <div class="soft stats">
       <div>
-        <div class="stat-label">Leagues covered</div>
+        <div class="stat-label">Competitions covered</div>
         <div class="stat-value" id="stat-covered">&nbsp;</div>
       </div>
       <div>
@@ -63,10 +63,10 @@ const fetches = routes.map(({ competition, api }) => ({
   <section class="preseason" id="nothing-covered" hidden>
     <div>
       <div class="kicker">No result yet</div>
-      <h2>The table fills once a league has been scored</h2>
+      <h2>The table fills once a Competition has been scored</h2>
       <p>
-        No league covered here is both open and settled yet. Check back after
-        the first Gameweek of one of them is scored.
+        No Competition covered here is both open and settled yet. Check back
+        after the first Gameweek of one of them is scored.
       </p>
     </div>
   </section>
@@ -238,9 +238,9 @@ const fetches = routes.map(({ competition, api }) => ({
       });
       $("rows").replaceChildren(fragment);
 
-      // The evidence line: the total and the per-league breakdown together,
-      // in the covered order, ending in the same clause every league page
-      // ends its own in (spec 0025).
+      // The evidence line: the total and the per-Competition breakdown
+      // together, in the covered order, ending in the same clause every
+      // Competition's own page ends its own in (spec 0025).
       const breakdown = covered.fixtures
         .map(({ competition, settledFixtures }) => competition + " " + settledFixtures)
         .join(" · ");
@@ -291,8 +291,9 @@ const fetches = routes.map(({ competition, api }) => ({
         render();
       })
       .catch(() => {
-        // One league unreadable fails the whole page closed: a table missing
-        // a league silently would rank over a covered set it cannot name
+        // One Competition unreadable fails the whole page closed: a table
+        // missing a Competition silently would rank over a covered set it
+        // cannot name
         // (spec 0025).
         $("error").hidden = false;
         for (const id of STATES) $(id).hidden = true;

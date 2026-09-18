@@ -97,13 +97,14 @@ _Avoid_: enabled, live
 **Leaderboard**:
 One Competition's ranking: Match Points and Bet Points over its own Season Roster, read from
 its own `scores` rows and nothing else. Spans one Competition and never two — the benchmark
-question stays "which Base Model forecasts this league best", asked once per league
-(ADR-0035).
+question stays "which Base Model forecasts this league best", asked once per Competition
+(ADR-0035). The quoted question is ADR-0035's own wording, from before the first cup; the
+count beside it is this glossary's and says Competition.
 
 **Combined Ranking**:
 One ranking over every scored Competition of a Season, by raw season-to-date total: each
-Entrant's Match Points and Bet Points summed across every league that is Active and scored,
-published at `/overall` (ADR-0051). Distinct from a Leaderboard, which spans one Competition
+Entrant's Match Points and Bet Points summed across every Competition that is Active and
+scored, published at `/overall` (ADR-0051). Distinct from a Leaderboard, which spans one Competition
 and still never two — a page that called both a leaderboard would lose the distinction in a
 week.
 _Avoid_: leaderboard (for this), overall leaderboard

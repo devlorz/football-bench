@@ -36,6 +36,6 @@ export function exhibitionLabel(ranAfterGw: number): string {
 /**
  * The standard label for an Exhibition Run on surfaces spanning multiple
  * Competitions (e.g. /overall), where a single Gameweek number cannot speak
- * for all covered leagues (ADR-0052, ticket 0054).
+ * for all covered Competitions (ADR-0052, ticket 0054).
  */
 export const EXHIBITION_RUN_LABEL = "Exhibition Run";

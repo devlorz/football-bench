@@ -45,19 +45,19 @@ describe("the qualification", () => {
     expect(COMBINED_RANKING_QUALIFICATION).toContain("weighs more");
     expect(COMBINED_RANKING_QUALIFICATION).toContain("Prompt Version");
     expect(COMBINED_RANKING_QUALIFICATION).not.toContain("fewer Fixtures");
-    expect(COMBINED_RANKING_QUALIFICATION).not.toContain("fewer leagues");
+    expect(COMBINED_RANKING_QUALIFICATION).not.toContain("fewer Competitions");
   });
 
   test("the Exhibition qualification constant carries the fourth clause", () => {
     expect(COMBINED_RANKING_EXHIBITION_CLAUSE).toContain("fewer Fixtures");
-    expect(COMBINED_RANKING_EXHIBITION_CLAUSE).toContain("fewer leagues");
+    expect(COMBINED_RANKING_EXHIBITION_CLAUSE).toContain("fewer Competitions");
     expect(COMBINED_RANKING_EXHIBITION_CLAUSE).toContain("sum does not correct");
 
     expect(COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION).toContain("raw sum");
     expect(COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION).toContain("weighs more");
     expect(COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION).toContain("Prompt Version");
     expect(COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION).toContain("fewer Fixtures");
-    expect(COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION).toContain("fewer leagues");
+    expect(COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION).toContain("fewer Competitions");
   });
 });
 
@@ -75,7 +75,7 @@ describe("which Competitions are covered", () => {
   });
 
   test("excludes an opened Competition that has scored nothing, separately", () => {
-    // Active alone must not be enough -- a league open with a null
+    // Active alone must not be enough -- a Competition open with a null
     // `throughGw` would otherwise contribute a nought that reads as a score.
     const leaderboards: CompetitionLeaderboard[] = [
       { competition: "SA", body: body({ active: true, throughGw: null }) }
@@ -107,11 +107,13 @@ describe("the covered set and its totals", () => {
   const result = overallRanking(leaderboards);
   if (result.kind !== "ranking") throw new Error("expected a ranking");
 
-  test("covers only the leagues that are active and scored, in that order", () => {
+  test("covers only the Competitions that are active and scored, in that order",
+    () => {
     expect(result.covered).toEqual(["PL", "PD"]);
   });
 
-  test("sums both columns across the covered leagues, reconciling by hand", () => {
+  test("sums both columns across the covered Competitions, reconciling by hand",
+    () => {
     expect(result.matchRanked).toEqual([
       expect.objectContaining({ slug: "claude-opus-5", matchPoints: 75, betPoints: 25 })
     ]);
@@ -131,8 +133,9 @@ describe("the covered set and its totals", () => {
   });
 });
 
-describe("a row missing from one covered league", () => {
-  test("still covers the same leagues as every other row, scoring nought where it is absent", () => {
+describe("a row missing from one covered Competition", () => {
+  test("still covers the same Competitions as every other row, scoring nought "
+    + "where it is absent", () => {
     const leaderboards: CompetitionLeaderboard[] = [
       {
         competition: "PL",
@@ -167,7 +170,7 @@ describe("a row missing from one covered league", () => {
   });
 });
 
-describe("a seat that Gapped a whole covered league", () => {
+describe("a seat that Gapped a whole covered Competition", () => {
   test("scores nought there and still ranks", () => {
     const leaderboards: CompetitionLeaderboard[] = [
       {
@@ -281,10 +284,10 @@ describe("an Exhibition Run", () => {
     expect(withExhibition.totalFixtures).toEqual(baseline.totalFixtures);
   });
 
-  test("sums across leagues under its own key, never into the Entrant of the "
-    + "same Base Model", () => {
+  test("sums across Competitions under its own key, never into the Entrant of "
+    + "the same Base Model", () => {
     // The state section 3 of the runbook puts a candidate in: one Base Model
-    // seated as an Entrant in one league while a temporary Exhibition row
+    // seated as an Entrant in one Competition while a temporary Exhibition row
     // answers in another. Two rows, two totals, one name -- and adding them
     // would publish half a competitor and half a replay as one number.
     const leaderboards: CompetitionLeaderboard[] = [
@@ -342,7 +345,7 @@ describe("without an Exhibition Run", () => {
 });
 
 describe("ties", () => {
-  test("rank as the per-league leaderboard ranks them -- each column sorted on its own " +
+  test("rank as the per-Competition leaderboard ranks them -- each column sorted on its own " +
     "terms, and stable in the order rows arrived wherever it is level", () => {
     // Two pairs, each tied on one column and clearly apart on the other, so a
     // column that silently inherited the other's order -- or a sort that

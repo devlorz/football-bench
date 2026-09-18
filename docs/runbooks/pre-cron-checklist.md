@@ -162,6 +162,46 @@ and named in the failure; none of them rides on another's clock.
 Assignees are optional. Without them, notification depends on watch settings rather than being
 addressed to a person.
 
+### A cup reads none of these files, and brings its own four
+
+`UNL` adds no row to the loop above. None of its four sources is football-data.co.uk or
+football-data.org, so `FOOTBALL_DATA_SEASON` does not cover it, ten files stay ten, and the
+first Competition that is not a league can neither be satisfied nor held up by that
+variable (ADR-0057). What it has instead is four sources on four clocks, none of them
+documented and none of them versioned. This is the advance check for those four — each is
+the URL its own fetch builds:
+
+```bash
+# schedule — UEFA; expect this Season's matches
+curl -s --max-time 20 -o /dev/null -w 'uefa      %{http_code} %{size_download}\n' \
+  'https://match.uefa.com/v5/matches?competitionId=2014&seasonYear=2027&limit=100&offset=0'
+# shots and xG — 365Scores; one matchday, asked as DD/MM/YYYY
+curl -s --max-time 20 -o /dev/null -w '365scores %{http_code} %{size_download}\n' \
+  'https://webws.365scores.com/web/games/?appTypeId=5&langId=1&timezoneName=UTC&userCountryId=1&competitions=7016&startDate=24/09/2026&endDate=24/09/2026'
+# history — martj42/international_results; every men's international ever played
+curl -s --max-time 20 -o /dev/null -w 'dataset   %{http_code} %{size_download}\n' \
+  'https://raw.githubusercontent.com/martj42/international_results/master/results.csv'
+# head coaches — Wikipedia's current list, as raw wikitext
+curl -s --max-time 20 -o /dev/null -w 'coaches   %{http_code} %{size_download}\n' \
+  'https://en.wikipedia.org/w/index.php?title=List_of_current_national_association_football_team_managers&action=raw'
+```
+
+Read 2026-09-17, all four answering:
+
+```
+uefa      200 1097660
+365scores 200   21568
+dataset   200 3729861
+coaches   200  108819
+```
+
+**It is a weaker check than the ten-file loop, and knowing why is the point.** That loop
+reads each file's first row and requires it to name its own division, so a redirect to a
+near-miss filename is caught; none of these four carries an equivalent field, so a `200`
+and a plausible size is the whole of what this proves. What actually proves them is the
+dry run in §5, over bytes the daily fetch has stored — which is why a cup's activation
+cannot be ordered the way a league's reads here. See §5.
+
 ## 5. Before trusting cron
 
 - [ ] **GitHub Issues is enabled.** Both alert paths open issues; neither works without it.
@@ -241,6 +281,33 @@ addressed to a person.
       while production renders real numbers. Read the packet from
       `context:show` for the xG, and the rehearsal for the shape.
 
+      **A Competition's first rehearsal cannot precede its `competitions`
+      insert.** The dry run replays production's archived bytes, and a
+      Competition the daily fetch has never walked has none — the fetch walks
+      the `competitions` table, so until that row exists nothing is stored
+      under any of that Competition's sources. Read for `UNL` on 2026-09-17,
+      against an archive of 66 snapshots:
+
+      ```
+      ArchiveReplayMissError: No archived snapshot for source uefa:2026-27:UNL:0
+      ArchiveReplayMissError: No archived snapshot for source wikipedia:national-team-head-coaches
+      ```
+
+      Two misses and not four, because the schedule is read first: with no
+      Fixture stored, `fetchInternationalResults` returns before it fetches
+      and `fetchScores365Stats` has no match to ask about, so those two would
+      miss on the *next* run rather than this one.
+
+      So the insert comes first, and the rehearsal checks the packet rather
+      than gating the insert. Ticket 0060 ran the Bundesliga's activation in
+      that order — insert, `roster:enter`, then `npm run fetch` by hand to
+      populate the archive, then the dry run — and
+      `prepare-archived-gameweek.ts` names the circularity in its own
+      docstring: "a Competition's snapshots only exist once it is activated,
+      and its activation is supposed to wait on a green rehearsal". A ticket
+      that lists the dry run *before* the insert has the order wrong, not the
+      tool.
+
       Replaying archived responses yields Predictions only for the Fixture each response was
       recorded against; the remaining Gaps are an artifact of the archive, not a fault. See
       [§7](#7-known-imperfections).
@@ -290,8 +357,18 @@ evaluation to 23 August and remove the noise.
 
 Those timings are the Premier League's, and every listed Competition now runs the same guard
 against its own deadline and its own feed. So the tolerance is as tight as it ever was and
-there are as many of it as there are listed Competitions — five as this is written — a league
-whose source publishes slowly is one spurious issue per league, not one in total.
+there is one of it per row in `competitions`: a Competition whose source publishes slowly is
+one spurious issue for that Competition, not one in total. The number is deliberately not
+written out here — it was spelled "four" and then "five" and was stale both times, which is
+the failure mode a page like this one has to stop repeating.
+
+**Since the first cup there are two of this guard, not one.** Which one a Competition runs is
+its registry entry's business (ADR-0057): a league's history is football-data.co.uk and its
+guard raises `StaleFootballDataSeasonError`, naming the variable to advance; a cup's is the
+martj42 dataset, which no variable points at, so its guard raises
+`StaleInternationalResultsError` instead. `FOOTBALL_DATA_SEASON` is not what a cup's
+staleness is fixed by, and the error says so rather than sending an operator to a variable
+that cannot reach it.
 
 **A manual Fill that leaves Gaps does not open an issue** — only scheduled Fills do. That is
 the right default for an operator who triggered the run and is watching, and the wrong one for

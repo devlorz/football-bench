@@ -10,6 +10,16 @@ standing on [ADR 0035–0038](../adr/), [ADR-0050](../adr/0050-a-row-the-source-
 [ADR-0054](../adr/0054-the-bundesliga-opens-and-nothing-has-been-lost-yet.md),
 [ADR-0056](../adr/0056-results-have-a-second-source-shots-have-one.md)
 
+> Amended 2026-09-18 by ticket 0076. **The activation order below is wrong in one step and
+> corrected in place.** It put "first daily fetch of the schedule under a temporary listing
+> in a dry run" *before* the `competitions` insert. A dry run does list the Competition
+> temporarily, but it fetches through the archive-replay fetcher and not the network, so it
+> can only replay bytes production has already stored — and production stores none for a
+> Competition with no `competitions` row, because the daily fetch walks that table. The
+> insert therefore comes first, and the rehearsal is a check on the packet rather than a
+> gate on the insert. Nothing else in this spec moves; stories 47–49 and 51–52 stand. The
+> [pre-cron checklist](../runbooks/pre-cron-checklist.md) §5 carries the diagnosis.
+
 ---
 
 ADR-0057 opens `UNL`, the UEFA Nations League, for 2026-27: fifty-four national teams,
@@ -305,10 +315,16 @@ Fixture, including the roughly four per cent of Fixtures 365Scores holds no xG f
   Base Model cost is 156 Fixtures × ten seats, ceiling $47 (ADR-0057), re-read by
   ticket after the first Gameweek settles.
 - **The activation order is fixed and the insert is the operator's**: migration →
-  registry entry → prompt version and pin → the three maps reviewed → first daily fetch
-  of the schedule under a temporary listing in a dry run → `competitions` insert →
-  `roster:enter`. The insert is the first step that spends money and is never taken by
-  the implementing agent.
+  registry entry → prompt version and pin → the three maps reviewed → `competitions`
+  insert → `roster:enter` → the first daily fetch, hand-run, which is what puts this
+  Competition's bytes in the archive → the dry run over them. The insert is the first
+  step that spends money and is never taken by the implementing agent. **Corrected by
+  ticket 0076** — see the banner at the head of this spec; a dry run replays the archive
+  and cannot land a schedule, so it could never have preceded the insert.
+
+  This is the shape ticket 0060 ran for the Bundesliga. `prepare-archived-gameweek.ts`
+  names the circularity in its own docstring: "a Competition's snapshots only exist once
+  it is activated, and its activation is supposed to wait on a green rehearsal".
 - **No hand-set Lock.** If Gameweeks 1 and 2 are missed they are let go; the next
   daily fetch after the insert adopts them as Locked history.
 

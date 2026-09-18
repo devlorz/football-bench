@@ -4,6 +4,15 @@
 > which ranks Exhibition Runs at `/overall` with an `exhibition` flag under their own keys,
 > carrying the recall-versus-skill caveat and qualification clause. Every other decision stands.
 
+> Amended 2026-09-18 by ticket 0076. **Read "league" below as "Competition".** This ADR was
+> written when every row in the sum was a domestic league; `UNL` is the first that is not
+> (ADR-0057), so the title, "sums the leagues", "adds up four leaderboards by hand" and the
+> qualification's own "a league with more settled Fixtures weighs more" all use the word
+> `CONTEXT.md` tells you to avoid for what a Competition is. Every decision stands; only the
+> noun moved, and the published text has moved with it. The amendment at the foot of this
+> page carries the detail and the one decision it takes — that the qualification does **not**
+> grow a fourth clause for a cup.
+
 ADR-0035 made each Competition its own benchmark and closed with a sentence: "no combined
 cross-league ranking is published". This supersedes **that sentence and nothing else in that
 ADR**. A combined ranking is published, at `/overall`, as the raw sum of each Entrant's
@@ -160,3 +169,41 @@ keep their own meaning and are not restated here.
   places that structurally prevent it — the scorer's per-Competition pass and the read API's
   per-path Competition — keep preventing it.
 - The write path, the scorer, the scheduler and the schema are untouched. This ADR is a read.
+
+## Amendment: the sum's word is Competition, and a cup is what proves it (ticket 0076)
+
+This ADR was written when every row in the sum was a domestic league, and it says so
+throughout — in its title, in "sums the leagues", in "a reader who adds up four
+leaderboards by hand", and in the qualification it froze, which told a reader that "a
+league with more settled Fixtures weighs more". `UNL` is the first Competition in the sum
+that is not a league (ADR-0057), so every one of those sentences uses *league as the word
+for what a Competition is*, which `CONTEXT.md` names as the usage to avoid.
+
+**Every decision here stands, unamended.** The sum is still raw and still un-normalised;
+the covered set is still decided once for the whole table rather than per row; it still
+happens in the reader's browser over the per-Competition `/api/{code}/leaderboard`
+answers, with no `/api/overall/leaderboard`, no new query and no edit to the scorer; a
+fetch that fails still fails the page closed; `/` still `302`s to `/pl`. The Considered
+Options are unchanged and this amendment reopens none of them.
+
+**What moves is the word, and nothing else.** The qualification keeps its three clauses
+and each keeps its claim: a raw sum, a Competition with more settled Fixtures weighing
+more, and Competitions running under their own Prompt Versions. `/overall`'s heading, its
+`Competitions covered` tile and its empty state move with it, as do the comments in
+`overall-view.ts` that counted four leaderboard bodies when there are now six.
+
+**A cup makes the second clause do more work, not different work.** A Nations League
+Season's league phase is 156 Fixtures over a handful of matchdays where a league's is 380
+over thirty-eight weeks, so the per-Competition imbalance a raw sum carries is larger and
+arrives in bursts rather than weekly. That is the imbalance this ADR already refused to
+correct for and already requires the page to name: the evidence line carries each
+Competition's own settled count beside the total, which is what keeps a burst legible
+rather than hidden inside one number.
+
+**The third clause needs no fourth.** A cup's packet renders sections a league's does not
+and omits sections it has (ADR-0038's own amendment), so an Entrant compared across a
+league and a cup is confounded by more than wording. That is not a new clause: the Prompt
+Version is exactly what the differing sections are pinned by, so "they run under their own
+Prompt Versions" already names this confound at its source. ADR-0052 fixed the clause
+count at three, or four with an Exhibition Run present, and this amendment does not move
+it.

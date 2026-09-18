@@ -29,7 +29,7 @@ export interface CompetitionLeaderboard {
   body: LeaderboardBody;
 }
 
-/** One ranked row: one seat, summed across the covered leagues. */
+/** One ranked row: one seat, summed across the covered Competitions. */
 export interface OverallRow {
   slug: string;
   name: string;
@@ -38,14 +38,15 @@ export interface OverallRow {
   betPoints: number;
   /**
    * Whether this row is an Exhibition Run's (ADR-0052). A flag and not the
-   * per-league "ran after Gameweek N" the leaderboard carries: that label
-   * names one Competition's Gameweek and this row spans several, so the page
-   * says what the row is and leaves which Gameweek to the league it came from.
+   * per-Competition "ran after Gameweek N" the leaderboard carries: that
+   * label names one Competition's Gameweek and this row spans several, so the
+   * page says what the row is and leaves which Gameweek to the Competition it
+   * came from.
    */
   exhibition: boolean;
 }
 
-/** One covered league's contribution to the evidence line. */
+/** One covered Competition's contribution to the evidence line. */
 export interface OverallFixtures {
   competition: string;
   settledFixtures: number;
@@ -65,7 +66,8 @@ export type OverallRanking =
        * The qualification sentence under the table. When no Exhibition Run is
        * in the ranking, this is the 3-part baseline qualification; when at least
        * one is present, it carries the fourth clause stating that the Exhibition
-       * total may be over fewer Fixtures and fewer leagues uncorrected (ADR-0052).
+       * total may be over fewer Fixtures and fewer Competitions uncorrected
+       * (ADR-0052).
        */
       qualification: string;
       /**
@@ -78,9 +80,9 @@ export type OverallRanking =
 
 /**
  * A Competition enters the sum when it is Active *and* scored: `active` is
- * true and `throughGw` is not null. An Active league with nothing scored
- * would contribute a nought that reads as a score, and a league nobody has
- * opened has no seats to contribute at all (ADR-0051).
+ * true and `throughGw` is not null. An Active Competition with nothing
+ * scored would contribute a nought that reads as a score, and a Competition
+ * nobody has opened has no seats to contribute at all (ADR-0051).
  */
 const isCovered = ({ body }: CompetitionLeaderboard): boolean =>
   body.active && body.throughGw !== null;
@@ -88,23 +90,24 @@ const isCovered = ({ body }: CompetitionLeaderboard): boolean =>
 /**
  * Every row, keyed by the seat's slug and summed only over the Competitions
  * `isCovered` kept. The covered set is decided once, above this function, and
- * never re-derived per row: a slug absent from one covered league's
+ * never re-derived per row: a slug absent from one covered Competition's
  * `entrants` simply adds nothing there, which is the nought ADR-0051 asks
- * for rather than a shrunken set of leagues for that one row.
+ * for rather than a shrunken set of Competitions for that one row.
  *
  * An Exhibition Run is summed and ranked like any other row (ADR-0052), and
  * carries `exhibition` so the page can label it and show the caveat. What it
- * does not carry is the league-by-league story: its Gameweek coverage need
- * not be the roster's, and it may hold seats in fewer leagues than the sum
- * spans, so its total can be over less than every other row's. The page says
- * that in its qualification; the arithmetic does not correct for it, exactly
- * as it does not correct for leagues of different sizes.
+ * does not carry is the Competition-by-Competition story: its Gameweek
+ * coverage need not be the roster's, and it may hold seats in fewer
+ * Competitions than the sum spans, so its total can be over less than every
+ * other row's. The page says that in its qualification; the arithmetic does
+ * not correct for it, exactly as it does not correct for Competitions of
+ * different sizes.
  *
  * Keyed apart from the roster's rows rather than by slug alone. One Base Model
- * can hold an Entrant's seat in one league and an Exhibition Run's in another
- * -- that is the ordinary way a late arrival is checked -- and a shared key
- * would add the two into one row, publishing a total that is half a
- * competitor's and half a replay's under a single name.
+ * can hold an Entrant's seat in one Competition and an Exhibition Run's in
+ * another -- that is the ordinary way a late arrival is checked -- and a
+ * shared key would add the two into one row, publishing a total that is half
+ * a competitor's and half a replay's under a single name.
  */
 const summedRows = (covered: readonly CompetitionLeaderboard[]): OverallRow[] => {
   const rows = new Map<string, OverallRow>();
@@ -113,9 +116,9 @@ const summedRows = (covered: readonly CompetitionLeaderboard[]): OverallRow[] =>
       const exhibition = entrant.exhibition !== null;
       const slug = entrantSlug(entrant.id);
       const key = exhibition ? `exhibition:${slug}` : slug;
-      // Name and Base Model Class are read off whichever covered league's
-      // body names this slug first; every league seats the same Season
-      // Roster (ADR-0038), so they do not vary between them.
+      // Name and Base Model Class are read off whichever covered
+      // Competition's body names this slug first; every Competition seats the
+      // same Season Roster (ADR-0038), so they do not vary between them.
       const row = rows.get(key) ?? {
         slug,
         name: entrant.name,
@@ -143,11 +146,11 @@ const rankedBy = (
 ): OverallRow[] => [...rows].sort((a, b) => b[key] - a[key]);
 
 /**
- * The whole of the combined ranking's arithmetic, from the four leaderboard
- * bodies a page fetched. Two states, and which one applies is read off what
- * this returns rather than an empty array a caller has to interpret: an empty
- * `covered` list is not a ranking of nobody, and every other field below
- * would be there to be misread as one.
+ * The whole of the combined ranking's arithmetic, from the leaderboard bodies
+ * a page fetched, one per listed Competition. Two states, and which one
+ * applies is read off what this returns rather than an empty array a caller
+ * has to interpret: an empty `covered` list is not a ranking of nobody, and
+ * every other field below would be there to be misread as one.
  */
 export const overallRanking = (
   leaderboards: readonly CompetitionLeaderboard[]
