@@ -57,6 +57,7 @@ try {
       exhibitionModelId: config.exhibitionModelId,
       concurrency: config.concurrency,
       apiKey: config.openRouterApiKey,
+      typesafeApiKey: config.typesafeApiKey,
       entrantCallTimeoutMs: config.entrantCallTimeoutMs,
       http: nodeHttpFetcher,
       now: () => new Date()

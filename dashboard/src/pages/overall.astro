@@ -118,6 +118,9 @@ const fetches = routes.map(({ competition, api }) => ({
       {/* Empty unless the table holds an Exhibition Run, and never written from
           here: the sentence is the API's, beside the row that needs it. */}
       <p id="qual-exhibition"></p>
+      {/* ADR-0059: additional to qual-exhibition above, and empty unless a
+          summed row's provider is typesafe. */}
+      <p id="qual-typesafe"></p>
     </div>
 
     <div class="footnotes">
@@ -249,6 +252,7 @@ const fetches = routes.map(({ competition, api }) => ({
         + " · ranks, does not prove");
       text($("qual-overall"), covered.qualification);
       text($("qual-exhibition"), covered.exhibitionCaveat ?? "");
+      text($("qual-typesafe"), covered.typesafeCaveat ?? "");
     }
 
     function render() {

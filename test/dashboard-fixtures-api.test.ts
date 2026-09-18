@@ -1,7 +1,7 @@
 import pg from "pg";
 import { beforeAll, describe, expect, test } from "vitest";
 import {
-  insertOxAlpha, insertShadow, OX_ALPHA_FIXTURE, resetSchema
+  insertExhibition, insertOxAlpha, insertShadow, OX_ALPHA_FIXTURE, resetSchema
 } from "./schema-fixture.js";
 import { workerDriver } from "./worker-driver.js";
 import { seedSeason, type SeedStop } from "../src/seed-season.js";
@@ -11,7 +11,9 @@ import {
 } from "../src/dashboard/read-api.js";
 import { argmaxOutcome, outcomeOf } from "../src/fixture-result.js";
 import { matchPromptOf } from "../src/predictions/openrouter-entrant.js";
-import { EXHIBITION_CAVEAT } from "../src/exhibition/recall-caveat.js";
+import {
+  EXHIBITION_CAVEAT, TYPESAFE_CAVEAT
+} from "../src/exhibition/recall-caveat.js";
 import {
   matchPoints, scoreMatchSeason
 } from "../src/predictions/score-match-gameweek.js";
@@ -541,6 +543,22 @@ describe("the Fixtures endpoint on a Gameweek Locked and not yet scored", () => 
                  $2, 0, $3)`,
       [SEASON, context.rows[0]?.id, "2026-08-14T11:30:00Z"]
     );
+    // ADR-0059: a typesafe row's slot, answering the same locked Fixture, so
+    // the page's typed-endpoint caveat has something to be about.
+    await insertExhibition(writer, {
+      id: "exhibition/jev",
+      name: "Jev",
+      baseModel: "jev-latest",
+      provider: "typesafe"
+    });
+    await writer.query(
+      `insert into predictions (
+         model_id, season, fixture_id, probs, pred_home, pred_away, context_id,
+         attempts_used, predicted_at
+       ) values ('exhibition/jev', $1, 1, '{"H": 0.6, "D": 0.25, "A": 0.15}',
+                 2, 1, $2, 0, $3)`,
+      [SEASON, context.rows[0]?.id, "2026-11-15T09:00:00Z"]
+    );
     return async () => {
       await writer.end();
       await reader.end();
@@ -568,6 +586,14 @@ describe("the Fixtures endpoint on a Gameweek Locked and not yet scored", () => 
         predHome: 2, predAway: 1, coherent: true, repairs: 0
       });
     });
+
+  test("carries the typed-endpoint caveat beside the recall caveat, for the "
+    + "typesafe slot alone", async () => {
+    const body = await fixtures(new Date("2026-08-15T12:00:00Z"));
+
+    expect(body.exhibitionCaveat).toBe(EXHIBITION_CAVEAT);
+    expect(body.typesafeCaveat).toBe(TYPESAFE_CAVEAT);
+  });
 });
 
 describe("the Fixtures endpoint with a deferred Fixture that never settles",

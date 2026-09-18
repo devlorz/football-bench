@@ -150,6 +150,9 @@ const { competition, competitionName, path, api } = Astro.props;
           here: the sentence is the API's, beside the row that needs it. */}
       <div class="qualifications">
         <p id="qual-exhibition"></p>
+        {/* ADR-0059: additional to qual-exhibition above, and empty unless the
+            record holds a typesafe row. */}
+        <p id="qual-typesafe"></p>
       </div>
     </div>
   </section>
@@ -471,6 +474,7 @@ const { competition, competitionName, path, api } = Astro.props;
         $("kpi-gaps").classList.toggle("danger", entrant.gaps > 0);
       }
       $("qual-exhibition").textContent = data.exhibitionCaveat ?? "";
+      $("qual-typesafe").textContent = data.typesafeCaveat ?? "";
 
       renderChart(entrant, data.entrants);
       renderTiers(entrant);

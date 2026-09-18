@@ -6,9 +6,16 @@ import {
   matchPromptOf,
   openRouterRequest,
   TRUNCATED_AT_CEILING,
-  parseOpenRouterResponse,
   type MatchPromptFixture
 } from "../predictions/openrouter-entrant.js";
+import {
+  isTypesafeProvider,
+  parseWireResponse,
+  requireTypesafeApiKey,
+  typesafeApiKeyOrThrow,
+  typesafeRequest,
+  wireNameOf
+} from "../predictions/typesafe-entrant.js";
 import {
   buildMatchContext,
   loadMatchContextData,
@@ -84,6 +91,9 @@ export type PreflightBaseModelsOptions = {
   season: string;
   fixtureId: number;
   apiKey: string;
+  /** `TYPESAFE_API_KEY`, required only when a checked row's provider is
+   * `typesafe` (ADR-0059). */
+  typesafeApiKey?: string | null;
   entrantCallTimeoutMs: number;
   http: HttpFetcher;
 } & PreflightTarget;
@@ -98,22 +108,23 @@ function joinDetails(...details: Array<string | null>): string | null {
 }
 
 function metadataDetail(
+  wireName: string,
   resolvedProvider: string | null,
   resolvedModel: string | null
 ): string | null {
   return joinDetails(
     resolvedProvider === null
-      ? "OpenRouter did not identify a selected provider."
+      ? `${wireName} did not identify a selected provider.`
       : null,
     resolvedModel === null
-      ? "OpenRouter did not identify a selected model."
+      ? `${wireName} did not identify a selected model.`
       : null
   );
 }
 
 async function archiveResponse(
   database: Database,
-  baseModel: string,
+  source: string,
   body: string
 ): Promise<void> {
   await database.query(
@@ -121,7 +132,7 @@ async function archiveResponse(
      values ($1, $2, $3)
      on conflict (source, sha256)
      do update set last_seen_at = now()`,
-    [`openrouter-preflight:${baseModel}`, sha256(body), body]
+    [source, sha256(body), body]
   );
 }
 
@@ -131,22 +142,30 @@ async function callBaseModel(options: {
   fixture: FixtureRow;
   contextData: MatchContextData;
   apiKey: string;
+  typesafeApiKey: string | null | undefined;
   entrantCallTimeoutMs: number;
   http: HttpFetcher;
 }): Promise<PreflightResult> {
   const {
-    database, model, fixture, contextData, apiKey, entrantCallTimeoutMs, http
+    database, model, fixture, contextData, apiKey, typesafeApiKey,
+    entrantCallTimeoutMs, http
   } = options;
-  const request = openRouterRequest(
-    apiKey,
-    {
-      baseModel: model.base_model,
-      provider: model.provider,
-      quantization: model.quantization,
-      config: model.config
-    },
-    buildMatchContext(fixture, contextData)
-  );
+  // The wire is chosen by the row, not by a flag (ADR-0059).
+  const isTypesafe = isTypesafeProvider(model.provider);
+  const wireName = wireNameOf(model.provider);
+  const state = buildMatchContext(fixture, contextData);
+  const request = isTypesafe
+    ? typesafeRequest(typesafeApiKeyOrThrow(typesafeApiKey), state)
+    : openRouterRequest(
+      apiKey,
+      {
+        baseModel: model.base_model,
+        provider: model.provider,
+        quantization: model.quantization,
+        config: model.config
+      },
+      state
+    );
   const { url, ...requestOptions } = request;
   // The window the real run gives this seat, so a seat that clears the check
   // is a seat the run can use — and one that fails it failed on its answer.
@@ -163,7 +182,7 @@ async function callBaseModel(options: {
       modelId: model.id,
       baseModel: model.base_model,
       status: "transport_error",
-      detail: `OpenRouter call failed: ${errorText(error)}.`,
+      detail: `${wireName} call failed: ${errorText(error)}.`,
       resolvedProvider: null,
       resolvedModel: null,
       rawBody: null
@@ -175,22 +194,33 @@ async function callBaseModel(options: {
       modelId: model.id,
       baseModel: model.base_model,
       status: "transport_error",
-      detail: `OpenRouter returned HTTP ${status}.`,
+      detail: `${wireName} returned HTTP ${status}.`,
       resolvedProvider: null,
       resolvedModel: null,
       rawBody: body
     };
   }
 
-  await archiveResponse(database, model.base_model, body);
+  // Off `isTypesafe`, never off `wireName`: the latter is a sentence fragment
+  // for a human ("OpenRouter returned HTTP 429"), and rewording that prose
+  // must not silently move which archive key a response is stored under.
+  // "openrouter", not the seat's own provider slug (`anthropic`, `novita`,
+  // ...): every real seat's key names the wire it went out on, which is the
+  // contract `dry-run/archive-replay-fetcher.ts` and `expected-outcome.ts`
+  // already read.
+  await archiveResponse(
+    database,
+    `${isTypesafe ? "typesafe" : "openrouter"}-preflight:${model.base_model}`,
+    body
+  );
 
-  const parsed = parseOpenRouterResponse(body);
+  const parsed = parseWireResponse(model.provider, body, fixture.fixture_id);
   if (parsed === null) {
     return {
       modelId: model.id,
       baseModel: model.base_model,
       status: "transport_error",
-      detail: "OpenRouter returned an unexpected response shape.",
+      detail: `${wireName} returned an unexpected response shape.`,
       resolvedProvider: null,
       resolvedModel: null,
       rawBody: body
@@ -199,7 +229,7 @@ async function callBaseModel(options: {
 
   const resolvedProvider = parsed.resolvedProvider;
   const resolvedModel = parsed.resolvedModel;
-  const routingDetail = metadataDetail(resolvedProvider, resolvedModel);
+  const routingDetail = metadataDetail(wireName, resolvedProvider, resolvedModel);
   if (parsed.refusal !== null) {
     return {
       modelId: model.id,
@@ -217,7 +247,7 @@ async function callBaseModel(options: {
       baseModel: model.base_model,
       status: "unparseable",
       detail: joinDetails(
-        "OpenRouter returned no message content.",
+        `${wireName} returned no message content.`,
         routingDetail
       ),
       resolvedProvider,
@@ -275,6 +305,7 @@ export async function preflightBaseModels({
   expectedEntrantCount,
   exhibitionModelId,
   apiKey,
+  typesafeApiKey,
   entrantCallTimeoutMs,
   http
 }: PreflightBaseModelsOptions): Promise<PreflightReport> {
@@ -341,6 +372,13 @@ export async function preflightBaseModels({
     checked = entrants.rows;
   }
 
+  // Refused before the first call, not partway through the roster
+  // (ADR-0059): whether the key is owed is a fact about the row named, not
+  // the environment.
+  for (const model of checked) {
+    requireTypesafeApiKey(model.id, model.provider, typesafeApiKey);
+  }
+
   const contextData = await loadMatchContextData(
     database,
     competition,
@@ -355,6 +393,7 @@ export async function preflightBaseModels({
       fixture,
       contextData,
       apiKey,
+      typesafeApiKey,
       entrantCallTimeoutMs,
       http
     }));

@@ -493,7 +493,13 @@ const openRouterResponseSchema = z.looseObject({
   }).optional()
 });
 
-export interface ParsedOpenRouterResponse {
+/**
+ * What any wire's reply reduces to before `attempt-match-calls.ts` judges it —
+ * named for the seat's answer, not the wire, because `typesafe-entrant.ts`'s
+ * `parseTypesafeResponse` returns this same shape for a reply that never went
+ * near OpenRouter (ADR-0059).
+ */
+export interface ParsedEntrantResponse {
   content: string | null;
   refusal: string | null;
   /** `"length"` when the ceiling stopped the answer — see `truncatedAtCeiling`. */
@@ -506,7 +512,7 @@ export interface ParsedOpenRouterResponse {
 
 export function parseOpenRouterResponse(
   body: string
-): ParsedOpenRouterResponse | null {
+): ParsedEntrantResponse | null {
   let value: unknown;
   try {
     value = JSON.parse(body);

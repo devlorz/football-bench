@@ -4,10 +4,17 @@ import type { HttpFetcher, HttpResponse } from "../http.js";
 import { MAX_REPAIRS } from "../repairs.js";
 import {
   openRouterRequest,
-  parseOpenRouterResponse,
   TRUNCATED_AT_CEILING,
   type OpenRouterMessage
 } from "./openrouter-entrant.js";
+import {
+  isTypesafeProvider,
+  parseWireResponse,
+  requireTypesafeApiKey,
+  typesafeApiKeyOrThrow,
+  typesafeRequest,
+  wireNameOf
+} from "./typesafe-entrant.js";
 import {
   predictionRepairMessage,
   validatePrediction,
@@ -53,6 +60,16 @@ export interface AttemptMatchCallsOptions {
   gameweek: number;
   concurrency: number;
   apiKey: string;
+  /**
+   * `TYPESAFE_API_KEY`, read only when a call's provider is `typesafe`
+   * (ADR-0059). Null or omitted for every caller with no such row to call —
+   * the scheduled prediction run among them, whose roster the roster entry
+   * refuses this provider from by name. `| undefined` alongside the optional
+   * marker so a caller threading an already-optional value through needs no
+   * `?? null` of its own; `requireTypesafeApiKey` and `typesafeApiKeyOrThrow`
+   * below read all three states the same way.
+   */
+  typesafeApiKey?: string | null | undefined;
   /** How long one Entrant may think here. Stated by every caller: a window
    * that defaults quietly is a window some path never reaches. */
   entrantCallTimeoutMs: number;
@@ -328,12 +345,21 @@ export async function attemptMatchCalls({
   gameweek,
   concurrency,
   apiKey,
+  typesafeApiKey,
   entrantCallTimeoutMs,
   http,
   now,
   trigger,
   calls
 }: AttemptMatchCallsOptions): Promise<void> {
+  // The engine's own copy of the guard every entry point already runs
+  // (`replayMatchExhibition`, `preflightBaseModels`): a caller that reaches
+  // this function directly must not have a missing key surface only as an
+  // empty bearer token on the wire, several calls in.
+  for (const call of calls) {
+    requireTypesafeApiKey(call.model_id, call.provider, typesafeApiKey);
+  }
+
   let persistenceTail: Promise<void> = Promise.resolve();
   function persist<T>(operation: () => Promise<T>): Promise<T> {
     const result = persistenceTail.then(operation);
@@ -384,18 +410,28 @@ export async function attemptMatchCalls({
         role: "user",
         content: call.context.body
       }];
+      // The wire is chosen by the row, not by a flag (ADR-0059): a `typesafe`
+      // provider selects the second request builder and parser the way a
+      // role selects the Lock. Every other provider keeps the OpenRouter pair
+      // byte-for-byte.
+      const isTypesafe = isTypesafeProvider(call.provider);
+      const wireName = wireNameOf(call.provider);
       for (let attemptNo = 0; attemptNo <= MAX_REPAIRS; attemptNo += 1) {
         const startedAt = now();
-        const request = openRouterRequest(
-          apiKey,
-          {
-            baseModel: call.base_model,
-            provider: call.provider,
-            quantization: call.quantization,
-            ...(call.config === undefined ? {} : { config: call.config })
-          },
-          messages
-        );
+        const request = isTypesafe
+          ? typesafeRequest(
+            typesafeApiKeyOrThrow(typesafeApiKey), call.context.body
+          )
+          : openRouterRequest(
+            apiKey,
+            {
+              baseModel: call.base_model,
+              provider: call.provider,
+              quantization: call.quantization,
+              ...(call.config === undefined ? {} : { config: call.config })
+            },
+            messages
+          );
         const { url, ...requestOptions } = request;
         requestOptions.timeoutMs = entrantCallTimeoutMs;
         let response: HttpResponse;
@@ -409,7 +445,7 @@ export async function attemptMatchCalls({
             call,
             attemptNo,
             kind: isTimeoutError(error) ? "timeout" : "provider",
-            detail: `OpenRouter call failed: ${errorText(error)}.`,
+            detail: `${wireName} call failed: ${errorText(error)}.`,
             telemetry: {
               latencyMs: elapsedMilliseconds(startedAt, completedAt),
               rawResponse: null,
@@ -426,8 +462,13 @@ export async function attemptMatchCalls({
           await persistProviderFailure({
             call,
             attemptNo,
-            kind: response.status === 429 ? "rate_limit" : "provider",
-            detail: `OpenRouter returned HTTP ${response.status}.`,
+            // 529 joins 429 as `rate_limit` only for the TypeSafe wire
+            // (ADR-0059); the OpenRouter path's own taxonomy is unchanged.
+            kind: response.status === 429
+              || (isTypesafe && response.status === 529)
+              ? "rate_limit"
+              : "provider",
+            detail: `${wireName} returned HTTP ${response.status}.`,
             telemetry: {
               latencyMs: elapsedMilliseconds(startedAt, completedAt),
               rawResponse: response.body,
@@ -441,7 +482,8 @@ export async function attemptMatchCalls({
           break;
         }
 
-        const parsedResponse = parseOpenRouterResponse(response.body);
+        const parsedResponse =
+          parseWireResponse(call.provider, response.body, call.fixture_id);
         if (parsedResponse === null || parsedResponse.content === null) {
           await persistProviderFailure({
             call,
@@ -451,7 +493,7 @@ export async function attemptMatchCalls({
               ? "provider"
               : "refusal",
             detail: parsedResponse?.refusal
-              ?? "OpenRouter returned an unexpected response shape.",
+              ?? `${wireName} returned an unexpected response shape.`,
             telemetry: {
               latencyMs: elapsedMilliseconds(startedAt, completedAt),
               rawResponse: response.body,
@@ -515,6 +557,9 @@ export async function attemptMatchCalls({
           || validation.ok
           || !mayRepair
           || attemptNo === MAX_REPAIRS
+          // No second turn on this wire (ADR-0059): a Repair is a chat
+          // message, and Jev is asked once, statelessly, per Fixture.
+          || isTypesafe
         ) {
           break;
         }

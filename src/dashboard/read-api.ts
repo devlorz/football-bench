@@ -1,5 +1,5 @@
 import { FPL_PROMPT_VERSION } from "../context/build-fpl-track-context.js";
-import { EXHIBITION_CAVEAT } from "../exhibition/recall-caveat.js";
+import { EXHIBITION_CAVEAT, TYPESAFE_CAVEAT } from "../exhibition/recall-caveat.js";
 import {
   argmaxOutcome, outcomeOf, type FixtureResult, type Outcome, type Probs
 } from "../fixture-result.js";
@@ -179,6 +179,13 @@ export interface LeaderboardBody {
    * row carries the `exhibition` label that says which row it is about.
    */
   exhibitionCaveat: string | null;
+  /**
+   * Present exactly when a shown row's provider is `typesafe` (ADR-0059), and
+   * omitted otherwise so the body is byte-identical to what it was before
+   * this field existed — the same contract `FixturesBody.exhibitionCaveat`
+   * already keeps. Beside `exhibitionCaveat` and never instead of it.
+   */
+  typesafeCaveat?: string;
   entrants: LeaderboardEntrant[];
 }
 
@@ -293,11 +300,35 @@ async function scoredThrough(
  *   $4 = admit_unscored (boolean: true on fixtures, false on scored surfaces)
  *   $5 = through_gw (int or null)
  */
+
+/**
+ * One row's test for ADR-0059's typed-endpoint caveat: an admitted Exhibition
+ * Run whose provider is `typesafe`. Shared by the leaderboard and the entrant
+ * record, which otherwise each spelled the same two-field check over their
+ * own row shape, and by the Fixtures endpoint's `exhibitions` array, whose
+ * rows are already filtered to `role = 'exhibition'`.
+ */
+function isTypesafeExhibitionRow(row: Record<string, unknown>): boolean {
+  return row.role === "exhibition" && row.provider === "typesafe";
+}
+
+/**
+ * `TYPESAFE_CAVEAT`, spread onto a body exactly when a shown row earns it,
+ * and omitted otherwise so a table or record with no typesafe row stays
+ * byte-identical to what it was before this field existed (ADR-0059) — the
+ * same contract `FixturesBody.exhibitionCaveat` already keeps.
+ */
+function typesafeCaveatField(
+  hasTypesafeRow: boolean
+): { typesafeCaveat: string } | Record<string, never> {
+  return hasTypesafeRow ? { typesafeCaveat: TYPESAFE_CAVEAT } : {};
+}
+
 const SEATS_CTE = `
   -- roster: the match track's, per Competition (ADR-0038) -- every caller
   -- passes matchPromptOf(competition).version as $3, never the FPL track's.
   with seats as (
-    select m.id, m.name, m.role,
+    select m.id, m.name, m.role, m.provider,
            ran_after.gw as ran_after_gw
       from models m
       left join lateral (
@@ -436,7 +467,7 @@ async function leaderboard(
   const rows = await query(
     `-- roster: the match track's, per Competition (ADR-0038).
      ${SEATS_CTE}
-     select s.id, s.name, s.role,
+     select s.id, s.name, s.role, s.provider,
             m.config ->> 'baseModelClass' as base_model_class,
             s.ran_after_gw,
             points.value as match_points, points.n as n,
@@ -572,6 +603,9 @@ async function leaderboard(
     exhibitionCaveat: entrants.some(({ exhibition }) => exhibition !== null)
       ? EXHIBITION_CAVEAT
       : null,
+    // ADR-0059: additional to the recall caveat above, and owed by the same
+    // rule — read off the rows shown, never merely off a row entered.
+    ...typesafeCaveatField(rows.some(isTypesafeExhibitionRow)),
     entrants
   };
 
@@ -639,6 +673,11 @@ export interface FixturesBody {
    * (ticket 0053, ADR-0052).
    */
   exhibitionCaveat?: string;
+  /**
+   * Present exactly when a `typesafe` row's slot is in the body (ADR-0059),
+   * beside `exhibitionCaveat` and never instead of it.
+   */
+  typesafeCaveat?: string;
   /**
    * Every Gameweek of this Competition holding a Fixture the listing below
    * would show, ascending. It is what the page's picker is built from, so the
@@ -760,7 +799,7 @@ async function fixtures(
   const seats = await query(
     `-- roster and exhibition seats: the match track's, per Competition (ADR-0038, ADR-0052).
      ${SEATS_CTE}
-     select s.id, s.name, s.role, s.ran_after_gw
+     select s.id, s.name, s.role, s.provider, s.ran_after_gw
        from seats s
       order by case when s.role = 'entrant' then 0 else 1 end, s.id`,
     [
@@ -873,6 +912,17 @@ async function fixtures(
   const hasExhibition = fixtureViews.some(({ slots }) =>
     slots.some(({ exhibition }) => exhibition !== undefined)
   );
+  // ADR-0059: which of the shown Exhibition slots, if any, is a typesafe row
+  // — read off `exhibitions`, since a slot itself carries no provider.
+  const typesafeExhibitionIds = new Set(
+    exhibitions
+      .filter(isTypesafeExhibitionRow)
+      .map((exhibition) => String(exhibition.id))
+  );
+  const hasTypesafeExhibition = fixtureViews.some(({ slots }) =>
+    slots.some(({ entrant, exhibition }) =>
+      exhibition !== undefined && typesafeExhibitionIds.has(entrant.id))
+  );
 
   const body: FixturesBody = {
     season,
@@ -885,6 +935,7 @@ async function fixtures(
     // otherwise so the body is byte-identical when no Exhibition Run is seated
     // (ADR-0052, ticket 0053).
     ...(hasExhibition ? { exhibitionCaveat: EXHIBITION_CAVEAT } : {}),
+    ...typesafeCaveatField(hasTypesafeExhibition),
     gws,
     fixtures: fixtureViews
   };
@@ -973,6 +1024,13 @@ export interface EntrantsBody {
    * roster alone.
    */
   exhibitionCaveat: string | null;
+  /**
+   * Present exactly when the record holds a `typesafe` row (ADR-0059), and
+   * omitted otherwise so a record with no such row is byte-identical to what
+   * it was before this field existed. Beside `exhibitionCaveat` and never
+   * instead of it.
+   */
+  typesafeCaveat?: string;
 }
 
 /** The Match Points tiers, in the order the design's stacked bar stacks them. */
@@ -1038,7 +1096,7 @@ async function entrants(
   const rows = await query(
     `-- roster: the match track's, per Competition (ADR-0038).
      ${SEATS_CTE}
-     select s.id, s.name, s.role,
+     select s.id, s.name, s.role, s.provider,
             s.ran_after_gw,
             points.value as match_points, points.n as n,
             points.detail as points_detail,
@@ -1123,6 +1181,11 @@ async function entrants(
     exhibitionCaveat: records.some(({ row }) => row.role === "exhibition")
       ? EXHIBITION_CAVEAT
       : null,
+    // ADR-0059: additional to the recall caveat above, and owed by the same
+    // rule.
+    ...typesafeCaveatField(
+      records.some(({ row }) => isTypesafeExhibitionRow(row))
+    ),
     entrants: records.map(({ row, points, bets, rps, gaps }) => {
       const settled = points.flatMap(({ fixtures }) => fixtures);
       const legs = legsOf(bets);

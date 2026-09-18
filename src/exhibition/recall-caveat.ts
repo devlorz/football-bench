@@ -20,6 +20,18 @@ export const EXHIBITION_CAVEAT =
   + "enter no Comparison Anchor, complete case or published interval.";
 
 /**
+ * What a `typesafe` row's figures carry beyond the recall caveat above
+ * (ADR-0059): a second variable this one row alone changes, on any surface
+ * that already shows `EXHIBITION_CAVEAT`. A constant of this module for the
+ * same reason as that one — it says what the row *is*, ADR-0059 froze it, and
+ * no Season can change it.
+ */
+export const TYPESAFE_CAVEAT =
+  "This Exhibition Run was asked through a typed endpoint, not the chat "
+  + "prompt every other seat answers. Its Repair count and its rationale "
+  + "mean nothing here.";
+
+/**
  * The standard prefix for an Exhibition Run's derived label across Match track
  * surfaces (ADR-0032, ADR-0052).
  */

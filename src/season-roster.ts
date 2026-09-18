@@ -440,6 +440,19 @@ export async function enterSeasonRoster(
 ): Promise<readonly string[]> {
   const { version } = matchPromptOf(competition);
   const seatPrefix = seatPrefixOf(version, season);
+  // Refused by name, ahead of the identity check below, rather than left to
+  // surface as an unnamed field disagreeing with the roster of record: an
+  // Entrant is called through OpenRouter alone (ADR-0009), and a `typesafe`
+  // row joins the record only as an Exhibition Run, inserted by the operator
+  // (ADR-0059) — never through this door.
+  const typesafeSeat = roster.find((entrant) => entrant.provider === "typesafe");
+  if (typesafeSeat !== undefined) {
+    throw new Error(
+      `${typesafeSeat.id} names provider 'typesafe', which is not an `
+      + "Entrant's wire (ADR-0009); it may join only as an Exhibition Run, "
+      + "inserted by the operator (ADR-0059)"
+    );
+  }
   // Whole identities and not merely the count or the ids (ADR-0034,
   // ADR-0038): a Competition opening after the Season's first Lock must seat
   // the roster that stood at that Lock, and the substitution the cutoff exists

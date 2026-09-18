@@ -134,6 +134,9 @@ const { competition, competitionName, path, api, retiredLabel } = Astro.props;
       {/* Empty unless the table holds an Exhibition Run, and never written from
           here: the sentence is the API's, beside the row that needs it. */}
       <p id="qual-exhibition"></p>
+      {/* ADR-0059: additional to qual-exhibition above, and empty unless a
+          shown row's provider is typesafe. */}
+      <p id="qual-typesafe"></p>
     </div>
 
     <div class="footnotes">
@@ -340,6 +343,7 @@ const { competition, competitionName, path, api, retiredLabel } = Astro.props;
       text($("qual-match"), body.matchPointsQualification ?? "");
       text($("qual-bet"), body.betPointsQualification ?? "");
       text($("qual-exhibition"), body.exhibitionCaveat ?? "");
+      text($("qual-typesafe"), body.typesafeCaveat ?? "");
     }
 
     function renderPreSeason() {

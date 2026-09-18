@@ -19,7 +19,8 @@ describe("the pre-flight job configuration", () => {
       fixtureId: 42,
       expectedEntrantCount: 9,
       entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
-      openRouterApiKey: "secret-from-environment"
+      openRouterApiKey: "secret-from-environment",
+      typesafeApiKey: null
     });
 
     expect(() => readPreflightJobConfig({
@@ -62,7 +63,8 @@ describe("the pre-flight job configuration", () => {
       fixtureId: 42,
       expectedEntrantCount: 10,
       entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
-      openRouterApiKey: "secret-from-environment"
+      openRouterApiKey: "secret-from-environment",
+      typesafeApiKey: null
     });
 
     expect(() => readPreflightJobConfig({
@@ -106,7 +108,8 @@ describe("the pre-flight job configuration", () => {
       fixtureId: 42,
       exhibitionModelId: "exhibition/late",
       entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
-      openRouterApiKey: "secret-from-environment"
+      openRouterApiKey: "secret-from-environment",
+      typesafeApiKey: null
     });
 
     expect(() => readPreflightJobConfig({
@@ -128,6 +131,20 @@ describe("the pre-flight job configuration", () => {
     })).toThrow(
       "EXHIBITION_MODEL_ID and EXPECTED_ENTRANT_COUNT cannot both be set"
     );
+  });
+
+  // ADR-0059: read plainly on both doors, roster or Exhibition — whether it
+  // is owed is a fact about the row named, not knowable from the environment.
+  test("reads TYPESAFE_API_KEY when the operator set one, and stays null "
+    + "otherwise", () => {
+    expect(readPreflightJobConfig({
+      DATABASE_URL: "postgresql://localhost/benchmark",
+      SEASON: "2026-27",
+      FIXTURE_ID: "42",
+      EXHIBITION_MODEL_ID: "exhibition/jev",
+      OPENROUTER_API_KEY: "secret-from-environment",
+      TYPESAFE_API_KEY: "typesafe-secret"
+    })).toMatchObject({ typesafeApiKey: "typesafe-secret" });
   });
 
   test("the check takes the same window as the run it clears", () => {

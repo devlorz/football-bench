@@ -9,7 +9,9 @@ import {
 import {
   MATCH_PROMPT_VERSION, matchPromptOf
 } from "../src/predictions/openrouter-entrant.js";
-import { EXHIBITION_CAVEAT } from "../src/exhibition/recall-caveat.js";
+import {
+  EXHIBITION_CAVEAT, TYPESAFE_CAVEAT
+} from "../src/exhibition/recall-caveat.js";
 import {
   BET_POINTS_METRIC, BET_POINTS_SEASON_TO_DATE_METRIC,
   GAP_RATE_SEASON_TO_DATE_METRIC, MATCH_POINTS_METRIC,
@@ -652,11 +654,14 @@ describe("the Entrant record endpoint with an Exhibition Run on the Season",
       // it. Each Predicted Score leans to the side the result took, which is
       // the recall the caveat is about.
       for (const id of EXHIBITIONS) {
+        // `EXHIBITION` alone speaks through TypeSafe's wire (ADR-0059); the
+        // second run stays a generic late arrival, so the typed-endpoint
+        // caveat proves it is derived per row and not per Season.
         await insertExhibition(writer, {
           id,
           name: id,
           baseModel: id.replace("/v1", "/base-model"),
-          provider: "late"
+          provider: id === EXHIBITION ? "typesafe" : "late"
         });
       }
       await writer.query(
@@ -850,6 +855,16 @@ describe("the Entrant record endpoint with an Exhibition Run on the Season",
         expect(withoutExhibition.exhibitionCaveat).toBeNull();
       });
 
+    // ADR-0059: additional to the recall caveat above, owed only because
+    // `EXHIBITION`'s row is seated with `provider = 'typesafe'`.
+    test("carries the typed-endpoint caveat beside the recall caveat, for "
+      + "the typesafe row alone", async () => {
+      const body = await entrants();
+
+      expect(body.typesafeCaveat).toBe(TYPESAFE_CAVEAT);
+      expect(withoutExhibition.typesafeCaveat).toBeUndefined();
+    });
+
     test("moves no figure the roster is read on", async () => {
       const body = await entrants();
 
@@ -858,13 +873,20 @@ describe("the Entrant record endpoint with an Exhibition Run on the Season",
       // twice is the proof. Compared as text, so a `numeric` arriving as a
       // string on one pass and a number on the other is a failure rather
       // than a deep-equality that looks past it.
-      const roster = (published: EntrantsBody): string =>
-        JSON.stringify({
-          ...published,
-          exhibitionCaveat: null,
+      //
+      // Both caveats are dropped rather than nulled: `typesafeCaveat` is
+      // present only on the run with a typesafe row, and overriding an absent
+      // key to `null` appends it at the object's end while an already-present
+      // key keeps its place — two different key orders that a byte-for-byte
+      // string comparison would tell apart for no reason this test is about.
+      const roster = (published: EntrantsBody): string => {
+        const { exhibitionCaveat: _e, typesafeCaveat: _t, ...rest } = published;
+        return JSON.stringify({
+          ...rest,
           entrants:
             published.entrants.filter(({ id }) => !EXHIBITIONS.includes(id))
         });
+      };
 
       expect(roster(body)).toBe(roster(withoutExhibition));
       expect(body.entrants).toHaveLength(ROSTER.length + EXHIBITIONS.length);
@@ -894,6 +916,7 @@ describe("the Entrant record endpoint with an Exhibition Run on the Season",
         expect(laLiga.entrants.map(({ exhibition: label }) => label))
           .toEqual([null]);
         expect(laLiga.exhibitionCaveat).toBeNull();
+        expect(laLiga.typesafeCaveat).toBeUndefined();
       });
 
 

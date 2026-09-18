@@ -7,6 +7,7 @@ import {
   type MatchCall
 } from "../predictions/attempt-match-calls.js";
 import { matchPromptOf } from "../predictions/openrouter-entrant.js";
+import { requireTypesafeApiKey } from "../predictions/typesafe-entrant.js";
 import { REPAIRABLE_KINDS } from "../predictions/validate-prediction.js";
 import { MAX_REPAIRS } from "../repairs.js";
 import { loadExhibition } from "./load-exhibition.js";
@@ -35,6 +36,13 @@ export interface ReplayMatchExhibitionOptions {
   concurrency: number;
   entrantCallTimeoutMs: number;
   apiKey: string;
+  /**
+   * `TYPESAFE_API_KEY`, read only when the named row's provider is
+   * `typesafe` (ADR-0059) — required for that row and never asked of any
+   * other. Optional because every other row this replays has no such row to
+   * name.
+   */
+  typesafeApiKey?: string | null;
   http: HttpFetcher;
   now: () => Date;
 }
@@ -205,6 +213,7 @@ async function replayCoveredGameweeks({
   concurrency,
   entrantCallTimeoutMs,
   apiKey,
+  typesafeApiKey,
   http,
   now
 }: ReplayMatchExhibitionOptions): Promise<number[]> {
@@ -214,6 +223,9 @@ async function replayCoveredGameweeks({
     exhibitionModelId,
     prompt.version
   );
+  // Refused before the first Gameweek is even resolved, so a replay aimed at
+  // a typesafe row with no key spends nothing (ADR-0059).
+  requireTypesafeApiKey(exhibitionModelId, exhibition.provider, typesafeApiKey);
 
   const covered: number[] = [];
   // Not the Gameweek a retired Prompt Version owns whole (ADR-0042). Its
@@ -255,6 +267,7 @@ async function replayCoveredGameweeks({
       gameweek,
       concurrency,
       apiKey,
+      typesafeApiKey,
       entrantCallTimeoutMs,
       http,
       now,

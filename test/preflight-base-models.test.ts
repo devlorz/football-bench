@@ -1006,6 +1006,101 @@ describe("pre-flight for the Base Model roster", () => {
     }]);
   });
 
+  // ADR-0059: the same single-model door, aimed at a `typesafe` row -- the
+  // first call ever made to it, which is what a pre-flight is for.
+  test("checks one typesafe Exhibition over its own wire", async () => {
+    await insertExhibition(client, {
+      id: "exhibition/jev",
+      baseModel: "jev-latest",
+      provider: "typesafe"
+    });
+    const requests: HttpRequest[] = [];
+
+    const report = await preflightBaseModels({
+      database: client,
+      competition: "PL",
+      season: "2026-27",
+      fixtureId: 1,
+      exhibitionModelId: "exhibition/jev",
+      apiKey: "test-key",
+      typesafeApiKey: "typesafe-secret",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
+      http: async (url, options) => {
+        requests.push({ url, ...options! });
+        return {
+          status: 200,
+          body: JSON.stringify({
+            model: "jev-latest-20260901",
+            answers: {
+              outcome: {
+                choice: "H",
+                probabilities: { H: 0.6, D: 0.25, A: 0.15 },
+                confidence: 0.7
+              },
+              score: {
+                choice: "2-1",
+                probabilities: { "2-1": 0.2 },
+                confidence: 0.2
+              }
+            },
+            usage: { input_tokens: 1300, output_tokens: 9 }
+          })
+        };
+      }
+    });
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.url).toBe("https://api.typesafe.ai/v1/systemone");
+    expect(requests[0]!.headers?.Authorization).toBe("Bearer typesafe-secret");
+    const sent = JSON.parse(requests[0]!.body!) as {
+      model: string;
+      state: string;
+      questions: Record<string, unknown>;
+    };
+    expect(sent.model).toBe("jev-latest");
+    expect(sent.state).toContain(
+      "Fixture ID: 1\nHome: Arsenal\nAway: Coventry City"
+    );
+    expect(Object.keys(sent.questions)).toHaveLength(2);
+    expect(report.ok).toBe(true);
+    expect(report.results).toEqual([{
+      modelId: "exhibition/jev",
+      baseModel: "jev-latest",
+      status: "parseable",
+      detail: null,
+      resolvedProvider: "typesafe",
+      resolvedModel: "jev-latest-20260901",
+      rawBody: null
+    }]);
+  });
+
+  test("refuses to check a typesafe Exhibition without TYPESAFE_API_KEY",
+    async () => {
+      await insertExhibition(client, {
+        id: "exhibition/jev",
+        baseModel: "jev-latest",
+        provider: "typesafe"
+      });
+      let calls = 0;
+
+      await expect(preflightBaseModels({
+        database: client,
+        competition: "PL",
+        season: "2026-27",
+        fixtureId: 1,
+        exhibitionModelId: "exhibition/jev",
+        apiKey: "test-key",
+        entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
+        http: async () => {
+          calls += 1;
+          return { status: 200, body: "{}" };
+        }
+      })).rejects.toThrow(
+        "TYPESAFE_API_KEY is required to call exhibition/jev"
+      );
+      expect(calls).toBe(0);
+    });
+
   // ADR-0055 / ticket 0066: the same single-model door, aimed at a Shadow
   // instead of an Exhibition -- the only place a Shadow's `config` is
   // exercised before a real Lock calls it.

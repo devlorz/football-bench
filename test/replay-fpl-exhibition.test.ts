@@ -538,6 +538,25 @@ describe("replaying the FPL track as an Exhibition Run", () => {
     );
   });
 
+  // ADR-0059: "The FPL track does not open to this row, and `readExhibitionTrack`
+  // is not taught the provider." Nothing in `load-exhibition.ts` reads
+  // `provider` at all -- the refusal above is what a `typesafe` row hits too,
+  // with no special case either admitting or naming it.
+  test("refuses a typesafe row the same way: TRACK=fpl reads only the "
+    + "Prompt Version, never the provider", async () => {
+    await playTheSeason();
+    await client.query(
+      "update models set prompt_version = $1, provider = 'typesafe' "
+      + "where id = $2",
+      [MATCH_PROMPT_VERSION, EXHIBITION]
+    );
+
+    await expect(replay()).rejects.toThrow(
+      `${EXHIBITION} is at Prompt Version ${MATCH_PROMPT_VERSION}, not `
+      + FPL_PROMPT_VERSION
+    );
+  });
+
   test("stops at the last Settled Gameweek and resumes rather than repeating", async () => {
     await playTheSeason();
     // Gameweek 3 was played by the roster but its points were never stored, so

@@ -210,6 +210,23 @@ describe("entering the Season Roster", () => {
     expect(await entrants()).toHaveLength(0);
   });
 
+  // ADR-0009, ADR-0059: an Entrant is called through OpenRouter alone, and a
+  // `typesafe` row joins the record only as an Exhibition Run — refused by
+  // name here, ahead of the generic identity check, so the reason is legible
+  // rather than "disagrees with the Season Roster ... on provider".
+  test("refuses a row whose provider is 'typesafe', by name", async () => {
+    const typesafeRoster = [
+      { ...SEASON_ROSTER[0]!, provider: "typesafe" },
+      ...SEASON_ROSTER.slice(1)
+    ];
+    await expect(enterSeasonRoster(client, "PL", SEASON, typesafeRoster))
+      .rejects.toThrow(
+        `${SEASON_ROSTER[0]!.id} names provider 'typesafe', which is not an `
+        + "Entrant's wire"
+      );
+    expect(await entrants()).toHaveLength(0);
+  });
+
   // The guard above compares an argument against the constant, which across a
   // deployment is the constant compared with itself: `SEASON_ROSTER` is
   // editable, and an edit that kept the ids would be invisible to it. What

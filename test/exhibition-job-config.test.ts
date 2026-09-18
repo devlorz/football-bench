@@ -22,8 +22,22 @@ describe("the Exhibition replay job configuration", () => {
       exhibitionModelId: "exhibition/late",
       concurrency: 4,
       entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
-      openRouterApiKey: "secret-from-environment"
+      openRouterApiKey: "secret-from-environment",
+      typesafeApiKey: null
     });
+  });
+
+  // ADR-0059: owed only when the named row's provider is `typesafe`, which
+  // this reader cannot know — so it is read plainly, never `required()`.
+  test("reads TYPESAFE_API_KEY when the operator set one, and stays null "
+    + "otherwise", () => {
+    expect(readExhibitionJobConfig({
+      DATABASE_URL: "postgresql://localhost/benchmark",
+      SEASON: "2026-27",
+      EXHIBITION_MODEL_ID: "exhibition/jev",
+      OPENROUTER_API_KEY: "secret-from-environment",
+      TYPESAFE_API_KEY: "typesafe-secret"
+    })).toMatchObject({ typesafeApiKey: "typesafe-secret" });
   });
 
   test("walks the Match track unless the operator names another", () => {

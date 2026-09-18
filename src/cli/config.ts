@@ -132,6 +132,12 @@ export interface ExhibitionJobConfig {
   entrantCallTimeoutMs: number;
   openRouterApiKey: string;
   exhibitionModelId: string;
+  /**
+   * Read only for the Match track's replay, and only for a `typesafe` row
+   * (ADR-0059): null unless an operator set it, and never `required()` —
+   * whether it is owed is a fact about the named row, not the environment.
+   */
+  typesafeApiKey: string | null;
 }
 
 export interface FplExhibitionJobConfig {
@@ -149,6 +155,8 @@ export type PreflightJobConfig = {
   fixtureId: number;
   entrantCallTimeoutMs: number;
   openRouterApiKey: string;
+  /** Read on the same terms as `ExhibitionJobConfig`'s (ADR-0059). */
+  typesafeApiKey: string | null;
 } & PreflightTarget;
 
 function required(environment: NodeJS.ProcessEnv, name: string): string {
@@ -433,7 +441,8 @@ export function readExhibitionJobConfig(
 ): ExhibitionJobConfig {
   return {
     ...readScheduledPredictJobConfig(environment),
-    exhibitionModelId: required(environment, "EXHIBITION_MODEL_ID")
+    exhibitionModelId: required(environment, "EXHIBITION_MODEL_ID"),
+    typesafeApiKey: environment.TYPESAFE_API_KEY?.trim() || null
   };
 }
 
@@ -464,7 +473,9 @@ export function readExhibitionTrack(
 export function readFplExhibitionJobConfig(
   environment: NodeJS.ProcessEnv
 ): FplExhibitionJobConfig {
-  const { concurrency: _unbounded, ...shared } =
+  // The FPL track does not open to a typesafe row (ADR-0059): dropped here
+  // rather than read, so this door never asks for a key it has no use for.
+  const { concurrency: _unbounded, typesafeApiKey: _typesafe, ...shared } =
     readExhibitionJobConfig(environment);
   return {
     ...shared,
@@ -515,6 +526,7 @@ export function readPreflightJobConfig(
     DEFAULT_ENTRANT_CALL_TIMEOUT_MS
   );
   const openRouterApiKey = required(environment, "OPENROUTER_API_KEY");
+  const typesafeApiKey = environment.TYPESAFE_API_KEY?.trim() || null;
   // One Exhibition, or the roster — never both, because an Exhibition is not
   // on the roster and there is nothing for a count to mean beside it. Refused
   // rather than resolved by precedence: an operator who set both stated two
@@ -539,7 +551,8 @@ export function readPreflightJobConfig(
       fixtureId,
       exhibitionModelId,
       entrantCallTimeoutMs,
-      openRouterApiKey
+      openRouterApiKey,
+      typesafeApiKey
     };
   }
 
@@ -557,7 +570,8 @@ export function readPreflightJobConfig(
     fixtureId,
     expectedEntrantCount,
     entrantCallTimeoutMs,
-    openRouterApiKey
+    openRouterApiKey,
+    typesafeApiKey
   };
 }
 

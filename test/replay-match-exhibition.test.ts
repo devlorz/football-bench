@@ -947,4 +947,235 @@ describe("replaying the Match track as an Exhibition Run", () => {
       "match/entrant-1 has role 'entrant', not 'exhibition'"
     );
   });
+
+  // ADR-0059: the second wire, chosen by the row's provider alone.
+  describe("answering through TypeSafe's wire", () => {
+    function jevReply(home: number, away: number): string {
+      const scoreline = `${home}-${away}`;
+      return JSON.stringify({
+        model: "jev-latest-20260901",
+        answers: {
+          outcome: {
+            choice: "H",
+            probabilities: { H: 0.6, D: 0.25, A: 0.15 },
+            confidence: 0.7
+          },
+          score: {
+            choice: scoreline,
+            probabilities: { [scoreline]: 0.2 },
+            confidence: 0.2
+          }
+        },
+        usage: { input_tokens: 1300, output_tokens: 9 }
+      });
+    }
+
+    /**
+     * A reply ADR-0059 says a real Jev never sends -- a scoreline Choice that
+     * cannot parse into a score -- built anyway, to prove what the engine
+     * does with it rather than trust that it cannot happen.
+     */
+    function malformedJevReply(): string {
+      return JSON.stringify({
+        model: "jev-latest-20260901",
+        answers: {
+          outcome: {
+            choice: "H",
+            probabilities: { H: 0.6, D: 0.25, A: 0.15 },
+            confidence: 0.7
+          },
+          score: { choice: "not-a-scoreline", confidence: 0.2 }
+        },
+        usage: { input_tokens: 1300, output_tokens: 9 }
+      });
+    }
+
+    interface CapturedTypesafeRequest {
+      url: string;
+      headers: Record<string, string> | undefined;
+      body: { model: string; state: string; questions: Record<string, unknown> };
+    }
+
+    test("posts the stored context as state, with no chat envelope, and "
+      + "records the same telemetry an Entrant's call would", async () => {
+      await insertExhibition(client, {
+        id: "exhibition/jev",
+        baseModel: "jev-latest",
+        provider: "typesafe"
+      });
+      const requests: CapturedTypesafeRequest[] = [];
+
+      await replayMatchExhibition({
+        database: client,
+        competition: "PL",
+        season: "2026-27",
+        exhibitionModelId: "exhibition/jev",
+        concurrency: 1,
+        apiKey: "test-key",
+        typesafeApiKey: "typesafe-secret",
+        entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
+        now: () => RAN_AT,
+        http: async (url, options) => {
+          const body = JSON.parse(options?.body ?? "{}") as
+            CapturedTypesafeRequest["body"];
+          requests.push({ url, headers: options?.headers, body });
+          return { status: 200, body: jevReply(2, 1) };
+        }
+      });
+
+      expect(requests).toHaveLength(2);
+      expect(requests.map((request) => request.body.state).sort())
+        .toEqual([storedBody(1), storedBody(2)].sort());
+      for (const request of requests) {
+        expect(request.url).toBe("https://api.typesafe.ai/v1/systemone");
+        expect(request.headers?.Authorization).toBe("Bearer typesafe-secret");
+        expect(request.body.model).toBe("jev-latest");
+        expect(Object.keys(request.body.questions)).toHaveLength(2);
+      }
+
+      const attempts = await client.query(
+        `select fixture_id, attempt_no, ok, resolved_provider, resolved_model,
+                tokens_in, tokens_out, raw_response
+           from attempts
+          where model_id = 'exhibition/jev'
+          order by fixture_id`
+      );
+      // The reply body whole, byte for byte -- the same archival promise the
+      // OpenRouter path makes, on a body that never went near OpenRouter.
+      expect(attempts.rows).toEqual([1, 2].map((fixtureId) => ({
+        fixture_id: fixtureId,
+        attempt_no: 0,
+        ok: true,
+        resolved_provider: "typesafe",
+        resolved_model: "jev-latest-20260901",
+        raw_response: jevReply(2, 1),
+        tokens_in: 1300,
+        tokens_out: 9
+      })));
+
+      const predictions = await client.query(
+        `select fixture_id, pred_home, pred_away, rationale
+           from predictions
+          where model_id = 'exhibition/jev'
+          order by fixture_id`
+      );
+      expect(predictions.rows).toEqual([1, 2].map((fixtureId) => ({
+        fixture_id: fixtureId, pred_home: 2, pred_away: 1, rationale: ""
+      })));
+    });
+
+    // ADR-0059: 529 joins 429 as `rate_limit` on this wire alone; 401 and 422
+    // fall to `provider`, exactly as any other non-2xx does today.
+    test("classifies 529 as rate_limit and 401 as provider", async () => {
+      await insertExhibition(client, {
+        id: "exhibition/jev",
+        baseModel: "jev-latest",
+        provider: "typesafe"
+      });
+
+      await replayMatchExhibition({
+        database: client,
+        competition: "PL",
+        season: "2026-27",
+        exhibitionModelId: "exhibition/jev",
+        concurrency: 1,
+        apiKey: "test-key",
+        typesafeApiKey: "typesafe-secret",
+        entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
+        now: () => RAN_AT,
+        http: async (_url, options) => {
+          const body = JSON.parse(options?.body ?? "{}") as { state: string };
+          const fixtureId = Number(body.state.match(/Fixture ID: (\d+)/)?.[1]);
+          return fixtureId === 1
+            ? { status: 529, body: "overloaded" }
+            : { status: 401, body: "unauthorized" };
+        }
+      });
+
+      const attempts = await client.query(
+        `select fixture_id, ok, error_kind
+           from attempts
+          where model_id = 'exhibition/jev'
+          order by fixture_id`
+      );
+      expect(attempts.rows).toEqual([
+        { fixture_id: 1, ok: false, error_kind: "rate_limit" },
+        { fixture_id: 2, ok: false, error_kind: "provider" }
+      ]);
+    });
+
+    // ADR-0059's third decision: Repairs are zero for this row by
+    // construction, not by the reply's own merit. This is what makes that
+    // true rather than assumed -- a schema failure gets one attempt row and
+    // no second call, where an Entrant's Repair chain would send a second
+    // chat turn and try again.
+    test("never Repairs an invalid Jev reply: one attempt, one call, no "
+      + "second turn", async () => {
+      await insertExhibition(client, {
+        id: "exhibition/jev",
+        baseModel: "jev-latest",
+        provider: "typesafe"
+      });
+      let calls = 0;
+
+      await replayMatchExhibition({
+        database: client,
+        competition: "PL",
+        season: "2026-27",
+        exhibitionModelId: "exhibition/jev",
+        concurrency: 1,
+        apiKey: "test-key",
+        typesafeApiKey: "typesafe-secret",
+        entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
+        now: () => RAN_AT,
+        http: async () => {
+          calls += 1;
+          return { status: 200, body: malformedJevReply() };
+        }
+      });
+
+      // One call per Fixture and not two: a Repair chain would double
+      // Fixture 1's or 2's, whichever the loop reached first, rather than
+      // moving on to the other.
+      expect(calls).toBe(2);
+
+      const attempts = await client.query(
+        `select fixture_id, attempt_no, ok, error_kind
+           from attempts
+          where model_id = 'exhibition/jev'
+          order by fixture_id`
+      );
+      expect(attempts.rows).toEqual([
+        { fixture_id: 1, attempt_no: 0, ok: false, error_kind: "schema" },
+        { fixture_id: 2, attempt_no: 0, ok: false, error_kind: "schema" }
+      ]);
+    });
+
+    test("refuses to start without TYPESAFE_API_KEY", async () => {
+      await insertExhibition(client, {
+        id: "exhibition/jev",
+        baseModel: "jev-latest",
+        provider: "typesafe"
+      });
+      let calls = 0;
+
+      await expect(replayMatchExhibition({
+        database: client,
+        competition: "PL",
+        season: "2026-27",
+        exhibitionModelId: "exhibition/jev",
+        concurrency: 1,
+        apiKey: "test-key",
+        entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
+        now: () => RAN_AT,
+        http: async () => {
+          calls += 1;
+          return { status: 200, body: jevReply(2, 1) };
+        }
+      })).rejects.toThrow(
+        "TYPESAFE_API_KEY is required to call exhibition/jev"
+      );
+      expect(calls).toBe(0);
+    });
+  });
 });

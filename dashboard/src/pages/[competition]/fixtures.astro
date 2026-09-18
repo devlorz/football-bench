@@ -85,6 +85,9 @@ const { competition, competitionName, path, api } = Astro.props;
       here: the sentence is the API's, beside the row that needs it. */}
   <div class="qualifications">
     <p id="qual-exhibition"></p>
+    {/* ADR-0059: additional to qual-exhibition above, and empty unless a
+        shown slot's provider is typesafe. */}
+    <p id="qual-typesafe"></p>
   </div>
 
   {/* `define:vars` carries this Competition's endpoint, decided at build time,
@@ -400,6 +403,7 @@ const { competition, competitionName, path, api } = Astro.props;
       $("empty").hidden = count > 0;
       $("fixtures").replaceChildren(...body.fixtures.map(fixtureBlock));
       $("qual-exhibition").textContent = body.exhibitionCaveat ?? "";
+      $("qual-typesafe").textContent = body.typesafeCaveat ?? "";
     }
 
     // A relative path: the Worker route claims `/api/*` on this hostname, so

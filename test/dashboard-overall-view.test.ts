@@ -7,7 +7,9 @@ import {
 import {
   overallRanking, type CompetitionLeaderboard
 } from "../dashboard/src/overall-view.js";
-import { EXHIBITION_CAVEAT } from "../src/exhibition/recall-caveat.js";
+import {
+  EXHIBITION_CAVEAT, TYPESAFE_CAVEAT
+} from "../src/exhibition/recall-caveat.js";
 
 /**
  * The combined ranking's arithmetic, with no DOM, no database and no fetch:
@@ -221,6 +223,34 @@ describe("an Exhibition Run", () => {
       .toEqual([["claude-opus-5", false], ["ox-alpha", true]]);
     expect(result.qualification).toBe(COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION);
     expect(result.exhibitionCaveat).toBe(EXHIBITION_CAVEAT);
+  });
+
+  // ADR-0059: read the same way as exhibitionCaveat, from whichever covered
+  // body carries one.
+  test("carries the typed-endpoint caveat when a covered body names one, and "
+    + "stays null otherwise", () => {
+    const withTypesafe: CompetitionLeaderboard[] = [{
+      competition: "PL",
+      body: body({
+        exhibitionCaveat: EXHIBITION_CAVEAT,
+        typesafeCaveat: TYPESAFE_CAVEAT,
+        entrants: [
+          entrant({
+            id: "exhibition/jev", name: "Jev", matchPoints: 9, betPoints: 1,
+            exhibition: { ranAfterGw: 3 }
+          })
+        ]
+      })
+    }];
+    const result = overallRanking(withTypesafe);
+    if (result.kind !== "ranking") throw new Error("expected a ranking");
+    expect(result.typesafeCaveat).toBe(TYPESAFE_CAVEAT);
+
+    const withoutTypesafe = overallRanking([
+      { competition: "PL", body: body() }
+    ]);
+    if (withoutTypesafe.kind !== "ranking") throw new Error("expected a ranking");
+    expect(withoutTypesafe.typesafeCaveat).toBeNull();
   });
 
   test("preserves every roster row's total and position among Entrants with Exhibition rows present or absent", () => {

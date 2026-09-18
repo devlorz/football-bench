@@ -76,6 +76,13 @@ export type OverallRanking =
        * Read from the covered leaderboard bodies rather than imported.
        */
       exhibitionCaveat: string | null;
+      /**
+       * The typed-endpoint sentence (ADR-0059), present exactly when a
+       * `typesafe` row is in the combined ranking — beside `exhibitionCaveat`
+       * and never instead of it. Read from the covered leaderboard bodies the
+       * same way.
+       */
+      typesafeCaveat: string | null;
     };
 
 /**
@@ -164,6 +171,9 @@ export const overallRanking = (
   }));
   const exhibitionCaveat =
     covered.find(({ body }) => body.exhibitionCaveat !== null)?.body.exhibitionCaveat ?? null;
+  const typesafeCaveat =
+    covered.find(({ body }) => body.typesafeCaveat !== undefined)
+      ?.body.typesafeCaveat ?? null;
   const qualification = exhibitionCaveat !== null
     ? COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION
     : COMBINED_RANKING_QUALIFICATION;
@@ -176,6 +186,7 @@ export const overallRanking = (
     fixtures,
     totalFixtures: fixtures.reduce((sum, { settledFixtures }) => sum + settledFixtures, 0),
     qualification,
-    exhibitionCaveat
+    exhibitionCaveat,
+    typesafeCaveat
   };
 };

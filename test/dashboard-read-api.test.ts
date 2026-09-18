@@ -10,7 +10,9 @@ import { FPL_PROMPT_VERSION } from "../src/context/build-fpl-track-context.js";
 import {
   MATCH_PROMPT_COMPETITIONS, MATCH_PROMPT_VERSION, matchPromptOf
 } from "../src/predictions/openrouter-entrant.js";
-import { EXHIBITION_CAVEAT } from "../src/exhibition/recall-caveat.js";
+import {
+  EXHIBITION_CAVEAT, TYPESAFE_CAVEAT
+} from "../src/exhibition/recall-caveat.js";
 import {
   BET_POINTS_QUALIFICATION, BET_POINTS_SEASON_TO_DATE_METRIC,
   MATCH_POINTS_QUALIFICATION, MATCH_POINTS_SEASON_TO_DATE_METRIC, RPS_METRIC,
@@ -966,10 +968,14 @@ describe("the dashboard read API with an Exhibition Run on the Season", () => {
     withoutExhibition = await leaderboard();
     scoresWithout = await rosterScores();
 
+    // `provider = 'typesafe'` (ADR-0059) rather than a generic late arrival:
+    // this fixture doubles as the `typesafeCaveat` coverage below, since
+    // nothing here calls the wire and the row's provider is purely a label to
+    // the read API.
     await writer.query(
       `insert into models (
          id, name, base_model, provider, prompt_version, role
-       ) values ($1, 'Late Arrival', 'late/base-model', 'late', $2,
+       ) values ($1, 'Late Arrival', 'jev-latest', 'typesafe', $2,
                  'exhibition')`,
       [EXHIBITION, MATCH_PROMPT_VERSION]
     );
@@ -1096,6 +1102,16 @@ describe("the dashboard read API with an Exhibition Run on the Season", () => {
     expect(withoutExhibition.exhibitionCaveat).toBeNull();
   });
 
+  // ADR-0059: additional to the recall caveat above, and owed by the same
+  // rule -- `EXHIBITION`'s row is seated with `provider = 'typesafe'`.
+  test("carries the typed-endpoint caveat beside the recall caveat, for the "
+    + "typesafe row alone", async () => {
+    const body = await leaderboard();
+
+    expect(body.typesafeCaveat).toBe(TYPESAFE_CAVEAT);
+    expect(withoutExhibition.typesafeCaveat).toBeUndefined();
+  });
+
   test("moves no figure the roster is read on", async () => {
     const body = await leaderboard();
 
@@ -1105,13 +1121,20 @@ describe("the dashboard read API with an Exhibition Run on the Season", () => {
     // identically with it present and absent. Compared as text, so a `numeric`
     // arriving as a string on one pass and a number on the other is a failure
     // rather than a deep-equality that looks past it.
-    const roster = (published: LeaderboardBody): string =>
-      JSON.stringify({
-        ...published,
-        exhibitionCaveat: null,
+    //
+    // Both caveats are dropped rather than nulled: `typesafeCaveat` is
+    // present only on the run with a typesafe row, and overriding an absent
+    // key to `null` appends it at the object's end while an already-present
+    // key keeps its place — two different key orders that a byte-for-byte
+    // string comparison would tell apart for no reason this test is about.
+    const roster = (published: LeaderboardBody): string => {
+      const { exhibitionCaveat: _e, typesafeCaveat: _t, ...rest } = published;
+      return JSON.stringify({
+        ...rest,
         entrants:
           published.entrants.filter(({ id }) => !EXHIBITIONS.includes(id))
       });
+    };
 
     expect(roster(body)).toBe(roster(withoutExhibition));
 
