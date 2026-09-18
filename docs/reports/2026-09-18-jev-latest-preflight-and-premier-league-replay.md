@@ -1,5 +1,21 @@
 # Jev's first Fixture, and then the Premier League — 2026-09-18
 
+> **Amended 2026-09-18.** This report described one replay, the Premier League's. The
+> record holds five. Four more rows — `exhibition-pd/jev-latest`,
+> `exhibition-sa/jev-latest`, `exhibition-fl1/jev-latest`, `exhibition-bl1/jev-latest` —
+> were created together at 14:11:37.798343Z, after this report's Premier League run, and
+> answered between 14:14:27Z and 14:21:00Z. Each was stated and approved separately, as
+> ticket 0080's "Past the Premier League" section records; what was missing was this
+> report, which is where the operator's own runbook puts the figures. The sections from
+> **The four further replays** down are that record, written from the database on
+> 2026-09-18. The filename still says "premier-league-replay" because links to it already
+> exist; the report no longer does.
+>
+> The same reading found a Gap this file's Premier League section could not have known
+> about, and it refutes a sentence of ADR-0059 — see **The Serie A Gap** below and the
+> amendment that Gap put at the head of
+> [ADR-0059](../adr/0059-an-exhibition-run-may-answer-through-a-typed-endpoint-instead-of-a-chat-one.md).
+
 Ticket: [0080-jev-answers-its-first-fixture-and-then-a-competition.md](../tickets/0080-jev-answers-its-first-fixture-and-then-a-competition.md).
 Decisions: [ADR-0059](../adr/0059-an-exhibition-run-may-answer-through-a-typed-endpoint-instead-of-a-chat-one.md).
 Steps: [docs/runbooks/a-new-base-model-arrives.md](../runbooks/a-new-base-model-arrives.md) sections 3 and 6.
@@ -143,3 +159,175 @@ production database (the same function `src/dashboard/worker.ts` serves in produ
 - **Does the stored context fit `state`:** yes — the Premier League's `match/2026-27-v2`
   context (the same one every other seat reads) sent whole, no truncation, no 422 on
   size at any of the 41 calls made (1 pre-flight + 40 replay).
+
+---
+
+## The four further replays
+
+Written from the database on 2026-09-18, after the fact. No contemporaneous note of these
+runs exists.
+
+| Row | Prompt Version | Created | First answer | Last answer |
+|---|---|---|---|---|
+| `exhibition/jev-latest` (PL) | `match/2026-27-v2` | 13:49:14.827958Z | 13:56:43.755Z | 13:56:54.023Z |
+| `exhibition-pd/jev-latest` | `match-pd/2026-27-v2` | 14:11:37.798343Z | 14:14:27.466Z | 14:14:43.412Z |
+| `exhibition-sa/jev-latest` | `match-sa/2026-27-v1` | 14:11:37.798343Z | 14:20:17.540Z | 14:20:31.059Z |
+| `exhibition-fl1/jev-latest` | `match-fl1/2026-27-v1` | 14:11:37.798343Z | 14:20:36.311Z | 14:20:47.715Z |
+| `exhibition-bl1/jev-latest` | `match-bl1/2026-27-v1` | 14:11:37.798343Z | 14:20:52.353Z | 14:21:00.220Z |
+
+The four later rows share one `created_at` to the microsecond, so they were inserted by a
+single statement. Each names its own Competition's frozen Prompt Version, which is what
+ADR-0038 requires and what would have refused a row seated under the wrong one. Ticket
+0080's "Past the Premier League" section records that each of the four was stated and
+approved separately, and carries two findings from running them that belong there rather
+than here: the id prefix a combined-ranking row needs, and the retired La Liga Gameweek
+the replay never reached.
+
+**What they cost.** Output is a constant 379 tokens per call in every Competition, the
+two Choice questions having 3 and 36 options and no prose to write; input varies with the
+Competition's context length.
+
+| Competition | Calls | Input tokens | Output tokens | Cost at $0.042/MTok |
+|---|---|---|---|---|
+| PL | 40 | 185,812 | 15,160 | $0.0078 |
+| PD | 53 | 170,861 | 20,087 | $0.0072 |
+| SA | 40 | 140,857 | 15,160 | $0.0059 |
+| FL1 | 36 | 117,118 | 13,644 | $0.0049 |
+| BL1 | 27 | 90,935 | 10,233 | $0.0038 |
+| **Total** | **196** | **705,583** | **74,284** | **$0.0296** |
+
+The pre-flight's three unknowns are answered the same way at five Competitions as at one:
+no 422 on `state` size at any of the 197 calls made, no rate limit reached at 53
+sequential calls, and a total spend of three cents.
+
+## The five-Competition record
+
+Read from `scores` at each Competition's latest scored Gameweek.
+
+| Competition | Through GW | n | Match Points | Bet Points | Bet hit % | RPS | Coherence |
+|---|---|---|---|---|---|---|---|
+| PL | 5 | 40 | 52 | 157 | 0.5607 | 0.2336 | 0.8250 |
+| PD | 7 | 53 | 61 | 201 | 0.5418 | 0.2798 | 0.8868 |
+| SA | 5 | 39 | 74 | 165 | 0.6044 | 0.2047 | 0.9487 |
+| FL1 | 5 | 36 | 53 | 137 | 0.5437 | 0.2482 | 0.8889 |
+| BL1 | 4 | 27 | 32 | 107 | 0.5661 | 0.2704 | 1.0000 |
+| **Total** | | **195** | **272** | **767** | **0.5619** | | |
+
+195 Predictions from 196 calls: the missing one is the Serie A Gap below.
+
+**Coherence is the figure worth stopping on.** It is the share of Fixtures where the
+likeliest outcome by `probs` agrees with the outcome the Predicted Score implies, and
+every chat seat writes both out of one JSON answer. This wire asks two independent Choice
+questions (ADR-0059's mapping), so nothing makes them agree, and they disagree in seven of
+forty Premier League Fixtures. That is a property of the mapping, not of the Base Model,
+and it is the second thing after the Repair count that a reader must not compare across
+wires.
+
+## The Serie A Gap
+
+**Fixture 558617, Udinese Calcio v SS Lazio, Gameweek 3, kick-off 2026-09-07T18:45:00Z.**
+One attempt, `attempt_no` 0, `ok = false`:
+
+| Field | Value |
+|---|---|
+| `error_kind` | `probs_sum` |
+| `error_detail` | Probabilities H, D and A must sum to 1 within ±0.001. |
+| `resolved_provider` | `typesafe` |
+| `latency_ms` | 388 |
+| `tokens_in` / `tokens_out` | 3,745 / 379 |
+| `attempted_at` | 2026-09-18T14:20:25.569Z |
+
+The stored context was shown: `contexts` row 265, 5,968 bytes, the bytes every Serie A
+seat read. So Jev was asked the Fixture and its own `probabilities` map came back
+unsummable. It is not a transport fault, not a 422 on size, and not a Fixture the replay
+passed over.
+
+**Why it became permanent.** `probs_sum` is one of the two `REPAIRABLE_KINDS`: a chat
+seat answering this way is Repaired up to three times. The typed wire skips Repairs, and
+ADR-0059's decision 3 justified that skip with the claim that a typed reply "cannot be
+malformed JSON or fail to sum to 1". This call is that claim's counterexample, so the one
+bad distribution ended the Fixture on the first attempt. An Exhibition Gap alerts nobody
+by construction (ADR-0032), which is why nothing surfaced it until the record was read by
+hand four hours later. ADR-0059 now carries the amendment; whether this wire should get a
+Repair of its own is left open there.
+
+## What the probability layer says
+
+ADR-0012 holds that a claim about one Base Model forecasting better than another rests on
+the probability layer alone. Jev's Premier League RPS, against the whole board at
+Gameweek 5:
+
+| Seat | RPS | n |
+|---|---|---|
+| `moonshotai/kimi-k3` (best Entrant) | 0.1918 | 40 |
+| `anthropic/claude-opus-5` (worst Entrant) | 0.1981 | 40 |
+| `reference-elo` | 0.2153 | 40 |
+| `reference-uniform` | 0.2194 | 40 |
+| `reference-home` | 0.2270 | 40 |
+| **`jev-latest`** | **0.2336** | **40** |
+
+**Last of seventeen rows, behind every Entrant, every Exhibition Run and all three
+Reference Lines — including the uniform one.** A seat that answered 1/3, 1/3, 1/3 to every
+Fixture would have scored better. The pre-flight's answer shows why: Jev returned
+`{"H": 1.0, "D": 0.0, "A": 0.0}` with confidence 1.0, and RPS punishes a confident wrong
+call far harder than a hedged one. Its scoreline implied the right outcome in 19 of 40
+Premier League Fixtures.
+
+This is the figure that belongs beside the Bet Points ranking, where the same Predictions
+place `jev-latest` second on the combined board. Bet Points count seven flat, oddsless
+markets read off one named scoreline and never read `probs` at all (ADR-0023), so the two
+rankings are reading different properties of the same answer, and only one of them is
+evidence.
+
+## The combined ranking
+
+On `/overall` at 196 Fixtures, `jev-latest` stands second on Bet Points with 767 against
+Claude Opus 5's 783, and holds 272 Match Points against that seat's 332.
+
+Three readings keep the second place in proportion, all taken 2026-09-18:
+
+- **It is not a coverage artifact.** Jev settled 195 Fixtures; the Entrants settled 196
+  to 202. It covers fewer, not more, so the count is not flattered by never having
+  Gapped — the one Gap it has is above.
+- **Its rate is second too, and inside the noise.** Bet hit 0.5619 against Opus 5's
+  0.5743. The spread across all fifteen seats runs 0.5174 to 0.5743, and with seven legs
+  read off one scoreline the independent unit is the Fixture, not the leg: at n = 195 one
+  standard deviation is about 3.5 points of percentage, so the whole field sits within
+  roughly one of another.
+- **The lead is in the goal-total family, and it is calibration rather than
+  discrimination.** Per-market rates over the same population, computed from the
+  Predictions by `betSlip`'s own rules:
+
+  | Market | Jev | Best Entrant | Jev's rank of 11 |
+  |---|---|---|---|
+  | result | 0.492 | 0.531 (Opus 5) | 5 |
+  | over/under 1.5 | **0.759** | 0.750 (Muse Spark) | **1** |
+  | over/under 2.5 | 0.554 | 0.612 (Opus 5) | 3 |
+  | over/under 3.5 | **0.621** | 0.612 (Opus 5) | **1** |
+  | over/under 4.5 | **0.764** | 0.760 | **1** |
+  | both teams to score | **0.615** | 0.607 (Opus 5) | **1** |
+  | handicap 1.5 | 0.128 | 0.149 (Gemini 3.1 Pro) | 3 |
+
+  An earlier draft of this section said the lead was one market, both teams to score.
+  That was read off the Premier League alone and does not survive the other four: Jev
+  tops four of the seven. What the four have in common is that they are decided by how
+  many goals a seat expects, not by which match it is.
+
+- **Why those four.** The Fixtures averaged 3.07 goals. Jev's Predicted Scores average
+  2.75, the closest of any seat; every Entrant sits between 1.99 and 2.46, and Jev names
+  a total of 0 or 1 in 2.1% of Fixtures where the Entrants do in 7.1% to 21.9%. The 1.5,
+  3.5 and 4.5 lines are decided by the extremes, so a seat that rarely names a very low
+  total wins them almost automatically. The two markets that need one match told from
+  another — the result leg and the 2.5 line, which sits nearest the median total — are
+  the two where Jev is behind Opus 5, by 3.9 and 5.8 points of percentage. Its lead on
+  both teams to score is 0.8 points, about one and a half Fixtures in 195.
+
+  This is the frozen Bet Points qualification's own warning, measured: the cheap
+  goal-total lines are weighed against markets that are not, and a less biased goal
+  expectation is enough to carry four of seven.
+
+So the same Predictions that rank second on a board the project's own frozen
+qualification calls "not evidence" rank last on the board that is. Nothing here
+distinguishes recall from skill either — Match Points of 272 over 195 Fixtures rule out a
+Base Model reading its own memory of the scorelines, which is the one thing a low number
+here can honestly be said to show.

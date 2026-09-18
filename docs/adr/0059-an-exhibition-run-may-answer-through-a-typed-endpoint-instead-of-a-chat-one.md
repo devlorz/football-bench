@@ -3,10 +3,36 @@
 > Status: accepted. Ticket 0079 (2026-09-18) landed the code this ADR describes — the
 > typed request and response, the attempt engine's branch on `provider`, the roster's
 > refusal of the provider by name, and the dashboard's caveat. Ticket 0080 (2026-09-18)
-> inserted `exhibition/jev-latest`, pre-flighted it against one Premier League Fixture,
-> and replayed it over all 40 played Fixtures of the 2026-27 Premier League — see
+> inserted five rows, one per open Competition, pre-flighted the Premier League's against
+> one Fixture, and replayed all five: 196 calls, 195 Predictions, $0.030 — see
 > [the report](../reports/2026-09-18-jev-latest-preflight-and-premier-league-replay.md).
-> The row stands on the Premier League's readable rankings.
+> The rows stand on all five readable rankings and on the combined one.
+>
+> **Amended 2026-09-18 by ticket 0080's replays. Decision 3 below states that "a typed
+> reply cannot be malformed JSON or fail to sum to 1". The second half is false, and the
+> record now holds the counterexample.**
+>
+> Serie A Fixture 558617 (Udinese Calcio v SS Lazio, Gameweek 3) was called at
+> 2026-09-18T14:20:25.569Z and answered in 388ms with an outcome distribution the
+> validator refused: `error_kind` `probs_sum`, "Probabilities H, D and A must sum to 1
+> within ±0.001". The stored context was shown — `contexts` row 265, 5,968 bytes, the same
+> bytes every Serie A seat read — so this is TypeSafe's own `probabilities` map failing to
+> sum, not a transport fault and not a Fixture the replay passed over.
+>
+> What it cost: `probs_sum` is one of the two `REPAIRABLE_KINDS`, so a chat seat returning
+> the same answer would have been Repaired up to three times. This wire skips Repairs, and
+> the skip was justified in decision 3 by the very claim the call refuted. One unsummable
+> distribution therefore became a permanent Gap on the first attempt: Jev holds 39 Serie A
+> Predictions where every Entrant holds 40, and an Exhibition Gap alerts nobody (ADR-0032),
+> so nothing said so until the record was read by hand.
+>
+> **The decision stands and the reason changes.** Repairs are still skipped on this wire,
+> but because the wire has no second turn to send a Repair message down, not because a
+> typed reply cannot fail. Whether to give it a Repair of its own — re-asking the same two
+> Choices is a second call, not a chat turn — is open, and belongs to a ticket rather than
+> to this box. What must not survive is the sentence that a typed reply cannot fail. The
+> frozen caveat's "its Repair count means nothing here" now reads truer than when it was
+> written: the count is zero because no Repair is attempted, not because none is needed.
 
 **TypeSafe's Jev (`jev-latest`) may enter the Match track as an Exhibition Run, called
 at `https://api.typesafe.ai/v1/systemone` rather than through OpenRouter, shown the
