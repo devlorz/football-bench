@@ -420,8 +420,36 @@ interval, and this one is computed the same way for a reader, not published.
 Positive is Jev worse; neither interval reaches zero. The gap on the probability
 layer is not noise at this sample, under either reading of Jev's answer.
 
+**5. The per-market rates, re-read at 244.** The seven legs of `betSlip`, hit rate per
+market over each seat's settled Predictions, for the eleven seats with full coverage
+(244 to 250 Fixtures). The Fixtures averaged 3.04 goals.
+
+| Market | Jev | Jev's rank of 11 | Best |
+|---|---:|---:|---|
+| result | 0.480 | 5 | Opus 5, 0.528 |
+| over/under 1.5 | **0.762** | **1** | Jev |
+| over/under 2.5 | 0.549 | 3 | Opus 5, 0.580 |
+| over/under 3.5 | **0.639** | **1** | Jev |
+| over/under 4.5 | 0.779 | 8 | Opus 5, 0.780 |
+| both teams to score | 0.611 | 2 | Opus 5, 0.616 |
+| handicap 1.5 | 0.123 | 4 | Gemini 3.1 Pro, 0.145 |
+| **all seven** | **0.5632** | **2** | Opus 5, 0.5743 |
+
+Three things moved since the reading at 195 under "The combined ranking". Jev now
+leads two markets rather than four: both teams to score is second by one Fixture in
+244, and the 4.5 line has fallen to eighth. The 4.5 line measures nothing about a
+seat — every one of the eleven sits between 0.775 and 0.780, because every seat backs
+under 4.5 in nearly every Fixture, so the figure is the share of Fixtures with four
+goals or fewer and would be the same for a seat that named `1-1` every time. What
+has not moved is the bias underneath the two leads: Jev's Predicted Scores average
+2.72 goals against the Entrants' 1.97 to 2.46, and Jev names a total of 0 or 1 in 2.5%
+of Fixtures where the Entrants do in 7.6% to 22.8%. The three markets that need one
+Fixture told from another — the result leg, the 2.5 line and the Handicap — still
+place Jev in the middle of the table.
+
 **What this adds to the reading above.** The second place on Bet Points stands as
-explained: a less biased goal expectation carrying four goal-total markets. On the
+explained, and narrower: a less biased goal expectation carrying the two goal-total
+lines furthest from the median, with every other market inside the noise or behind. On the
 layer ADR-0012 says evidence rests on, the same Predictions are last of fifteen, behind
 uniform, and behind the best Entrant by an interval that excludes zero. The cause is
 over-confidence in the 0.80 to 0.99 band, not the confidence-1.0 answers and not the
