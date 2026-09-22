@@ -45,15 +45,19 @@ that Prompt Version, since a seat is entered for a track and a Competition while
 holds the same role.
 A track's roster is its own: the two tracks seated the same Base Models on the 2026-27
 Season's first day and no longer do (ADR-0047), so a count read off one track says nothing
-about the other. What multiplies within a track is seats, not Entrants, and every
-Competition seats the roster that stood at the first Lock of the Season's standing Prompt
-Versions, however late it opens (ADR-0034, ADR-0038; a restart that retires a version
-reopens the window until the restarted versions' first Lock, ADR-0042). No exclusion
-within a track is representable: a seat plays every Gameweek of its track's Season or is
-not on that track's roster at all.
+about the other. What multiplies within a track is seats, not Entrants, and a
+Competition seats, for each of its Editions, the roster the decision opening that Edition
+named, standing at the Edition's first Lock, however late it opens (ADR-0034, ADR-0038,
+ADR-0061; a restart that retires a version reopens the window until the restarted
+versions' first Lock, ADR-0042). The five leagues' opening decisions named all ten; the
+Nations League's names seven (ADR-0060), so from 2026-27 the match track's rosters differ
+between Competitions and a count read off one Competition says nothing about another. No
+exclusion within an Edition is representable: a seat plays every Gameweek of that Edition
+or is not on that Edition's roster at all.
 Removing an Entrant requires a new recorded decision, an ADR and a storage representation —
 `models.withdrawn_at`, which dates the departure and leaves the row, its attempts and its
-contexts where they are (ADR-0047).
+contexts where they are (ADR-0047). An Entrant leaves the match track only at an Edition
+boundary (ADR-0061).
 
 **Exhibition Run**:
 A retrospective run of a Base Model that arrived after the Season began: it is shown the
@@ -93,6 +97,21 @@ scored yet, which will fill. Whether a Competition becomes Active is a decision,
 schedule: opening one is an act and closing one is an act, and nothing records an intention
 to open.
 _Avoid_: enabled, live
+
+**Edition**:
+An unbroken run of one Competition's Gameweeks within a Season, played by the roster the
+decision opening that Edition named (ADR-0061). A Competition's first Edition begins at its
+first Gameweek; a later Edition begins at a Gameweek named in advance, whose Lock is that
+Edition's first Lock, and the Edition before it ends at the Gameweek before. Editions belong
+to a Competition, not to the Season: the five leagues may be in their second while the
+Nations League is in its first, and an Edition number says nothing across Competitions.
+Every figure a leaderboard shows — Season-to-date points, the Comparison Anchor, a Paired
+Difference, the settled-Fixture count — is read within one Edition and never across two. An
+Edition's roster is fixed from its first Lock; changing it is opening another Edition. The
+FPL track has no Editions.
+_Avoid_: Season 1 / Season 2 (a Season is the campaign, `2026-27`, and an Edition is a
+stretch of one Competition's campaign), restart (ADR-0042's restart changed the Prompt
+Version; an Edition changes the roster and keeps the Prompt Version), phase, era, series
 
 **Leaderboard**:
 One Competition's ranking: Match Points and Bet Points over its own Season Roster, read from
@@ -139,7 +158,8 @@ and the Gameweek it is predicted in is its *attachment* (`locked_in_gw`), and si
 **Season**:
 One campaign, e.g. `2026-27`, run to the same label by every Competition. With the
 Competition, the outer scope of every identifier — Fixture and player IDs are only unique
-within one.
+within one. A Season is not renumbered when a roster changes; that is an Edition.
+_Avoid_: Season 1 / Season 2 (see Edition)
 
 **Prediction**:
 What one Entrant submits for one Fixture: a probability distribution over Home / Draw / Away
