@@ -18,12 +18,13 @@ target Gameweek; no hand-set Lock),
 through it, every earlier ticket. That blocker is gone: `match-unl/2026-27-v1` is frozen
 at `90d0c3f0…` as of `694f4ed`.
 
-**Status:** ready-for-operator, and everything before the insert is done. As of
-2026-09-22 the maps are reviewed, production is at `0045`, and the seven seats are
-pre-flighted green. **One step is left and it is the operator's: the `competitions`
-insert**, then `roster:enter`, the hand-run fetch, and the dry run that box 2 waits on.
-Gameweek 1 Locks 2026-09-24T14:30Z; a Gameweek the insert misses arrives as Locked
-history and is not predicted.
+**Status:** open, and blocked on one production repair. The insert ran on 2026-09-22:
+`UNL` is listed, seven seats are entered, 156 Fixtures across six Gameweeks are stored,
+and the dry run is green. **The daily fetch then failed on a column production is
+missing, and the cup's packet has no internationals until it is applied** — migration
+`0046`, rehearsed green, waiting on the operator. Gameweek 1 Locks 2026-09-24T14:30Z;
+a Lock taken before the repair is answered over a packet with empty form lines for all
+fifty-four sides. See *What the first fetch found*.
 
 ---
 
@@ -115,9 +116,14 @@ there are bytes; it was never a gate the insert could wait behind. The pre-cron 
       reaches no Base Model. **`GAMEWEEK` is not optional**: `readFetchJobConfig` requires
       it and `.env` does not set it, so the box's original wording — the command without
       it — dies on `GAMEWEEK is required` before the archive is read. The handover's step
-      4 is the runnable form and this box now quotes the same line. **Red, and correctly so** — the archive holds no `UNL` bytes until the
-      insert and the hand-run fetch. See *Two corrections* above. Re-run at step 4 of the
-      handover.
+      4 is the runnable form and this box now quotes the same line. **Green 2026-09-22**,
+      after the insert and the hand-run fetch put `UNL` bytes in the archive: 26 contexts
+      built, the Lock read as `2026-09-24T14:30:00.000Z`, "Dry run matched the archive's
+      expected outcome", and no Base Model reached. **What green means here and does not
+      mean:** the run expected 0 Predictions and 182 Gaps and got exactly those, because
+      a dry run replays archived *answers* and no seat has ever answered this
+      Competition. It proves the packet builds and the clock is right. It proves nothing
+      about a seat answering, which is what the pre-flight was for.
 - [x] The pre-cron checklist's advance check names the four `UNL` sources. Done, and the
       box's premise corrected in doing it: the existing advance check is
       football-data.co.uk's ten-file loop and `UNL` adds **no** file to it, so ten stays
@@ -147,7 +153,16 @@ there are bytes; it was never a gate the insert could wait behind. The pre-cron 
       amendment seated two Base Models nothing had observed.
 - [ ] The operator has the insert and `roster:enter` commands; once run, this ticket
       records the date, the Gameweek `UNL` opened at, and which Gameweeks were adopted
-      as history. **Commands below.** The recording waits on the run.
+      as history. **Run 2026-09-22, and all but one step landed:**
+      the `competitions` insert wrote its row; `roster:enter` wrote **57** seats over
+      the six listed Competitions — the five leagues' ten apiece, rewritten identically
+      by the upsert, and the cup's seven with `match-unl/gpt-6-astra` and
+      `match-unl/grok-4.7` among them; `npm run fetch` landed the schedule, **156
+      Fixtures across six Gameweeks**, Gameweek 1 Locking `2026-09-24T14:30:00.000Z`.
+      No Gameweek was adopted as history — the cup has played none.
+      **Then the fetch failed, and the cup's packet is degraded until it is fixed.**
+      See *What the first fetch found* below. This box stays open until a fetch
+      completes.
 - [x] Nothing in this ticket inserts the `competitions` row. Held. **The second half of
       this box — "or reaches a Base Model" — no longer holds, and is struck rather than
       quietly dropped:** the nine pre-flight calls above reached seven Base Models on
@@ -155,6 +170,52 @@ there are bytes; it was never a gate the insert could wait behind. The pre-cron 
       throwaway database and never the record, and they were approved one run at a time.
       What the box was written to protect is the insert, and the insert is still
       untouched.
+
+## What the first fetch found
+
+**The insert's first daily fetch failed, and it failed on a table that a migration
+marked applied had promised to create whole.**
+
+```
+error: column "read_at" of relation "international_results_source" does not exist
+  at fetchInternationalResults (src/international-results/fetch-results.ts:416)
+  at runDailyFetch (src/fetch/daily-fetch.ts:454)
+```
+
+`international_results_source` is created by exactly one migration, `0043`, whose
+`create table` names three columns including `read_at`. That file has one commit and has
+never been edited. Production holds the table with two of the three, while
+`schema_migrations` records the file as applied — which it can, because that table
+records a filename and not the bytes behind it, so a migration applied from a working
+tree mid-edit is indistinguishable afterwards from the committed one.
+
+**Why it surfaced today and not in September.** The dataset is dispatched by the
+registry: `fetchInternationalResults` runs only for a Competition whose `history` entry
+names it, and until this insert listed `UNL`, no Competition did. The table had been
+wrong since 0043 landed and nothing had asked it a question. The rehearsal could not
+have caught it either — it applies the *pending* files to a copy, and this column is
+missing from a file that is not pending.
+
+**What it cost, and what it did not.**
+
+- The schedule landed. The UEFA fetch runs before this one and committed: production
+  holds 156 Fixtures across six Gameweeks, and `npm run context:show` renders Gameweek 1.
+  The rehearsal's copy confirms it from the other side — `gameweeks` 182 → 188,
+  `fixtures` 1752 → 1908.
+- **The dataset did not.** `context:show` against production reports `0 historical
+  matches behind the form lines`, so every one of the fifty-four sides would go to the
+  Lock with no recent internationals — which is the section ADR-0057 opened this
+  Competition to show. A Lock taken in this state would be answered over a packet
+  missing its only history.
+- **The five leagues are unharmed.** The failing call sits inside the per-Competition
+  try/catch, so every other source wrote its rows and the run failed at the end rather
+  than part-way. What the leagues lose is a clean exit code, daily, until this is fixed.
+
+**The repair** is `migrations/0046_the_dataset_source_row_carries_the_instant_it_was_read.sql`,
+which adds the column if it is missing and is a no-op on every database built from these
+files in order. Rehearsed green over a copy of the record. It repairs the one column
+production named and guesses at nothing else: any other difference between these files
+and that database will be found the same way, by a reader asking it a question.
 
 ## What box 5 turned out to be
 
