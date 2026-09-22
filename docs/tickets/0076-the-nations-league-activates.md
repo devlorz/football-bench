@@ -18,8 +18,12 @@ target Gameweek; no hand-set Lock),
 through it, every earlier ticket. That blocker is gone: `match-unl/2026-27-v1` is frozen
 at `90d0c3f0…` as of `694f4ed`.
 
-**Status:** ready-for-operator. Every box this ticket could take without spending is
-built; boxes 1 (the person's half), 2 and 6 wait on the operator, in that order.
+**Status:** ready-for-operator, and everything before the insert is done. As of
+2026-09-22 the maps are reviewed, production is at `0045`, and the seven seats are
+pre-flighted green. **One step is left and it is the operator's: the `competitions`
+insert**, then `roster:enter`, the hand-run fetch, and the dry run that box 2 waits on.
+Gameweek 1 Locks 2026-09-24T14:30Z; a Gameweek the insert misses arrives as Locked
+history and is not predicted.
 
 ---
 
@@ -133,12 +137,24 @@ there are bytes; it was never a gate the insert could wait behind. The pre-cron 
       read off that test rather than inferred.
 - [x] ADR-0051's prose and the "four/five leagues" code comments say Competition where
       they meant it. Done, and **widened** — see *What this box turned out to be* below.
+- [x] The seven seats are pre-flighted before the insert — each substitute alone as a
+      temporary `exhibition` row, then the roster's own. **Done 2026-09-22**, on the
+      throwaway database the runbook's §3 describes: three runs, nine calls, every result
+      `parseable`, and all seven resolved to the dated id their `canonicalSlug` pins, so
+      no constant and no ADR moved. Report:
+      [the Nations League's seven-seat pre-flight](../reports/2026-09-22-the-nations-leagues-seven-seat-preflight.md).
+      This box did not exist when the ticket was drafted; it exists because ADR-0060's
+      amendment seated two Base Models nothing had observed.
 - [ ] The operator has the insert and `roster:enter` commands; once run, this ticket
       records the date, the Gameweek `UNL` opened at, and which Gameweeks were adopted
       as history. **Commands below.** The recording waits on the run.
-- [x] Nothing in this ticket inserts the `competitions` row or reaches a Base Model. Held:
-      the only commands run were three test files, one `tsc`, and one dry run that failed
-      on a missing snapshot before reaching any Entrant.
+- [x] Nothing in this ticket inserts the `competitions` row. Held. **The second half of
+      this box — "or reaches a Base Model" — no longer holds, and is struck rather than
+      quietly dropped:** the nine pre-flight calls above reached seven Base Models on
+      2026-09-22. They were owed by ADR-0034 before the insert, they ran against a
+      throwaway database and never the record, and they were approved one run at a time.
+      What the box was written to protect is the insert, and the insert is still
+      untouched.
 
 ## What box 5 turned out to be
 
@@ -254,13 +270,15 @@ set -a; . ./.env; set +a
 npm run --silent db:rehearse
 npm run --silent db:migrate
 
-# 0b. The two substitutes ADR-0060 added have been observed by nothing, so
-#     both must be pre-flighted before the insert -- GPT-6 Astra alone, then
-#     Grok 4.7 alone, then the seven together with EXPECTED_ENTRANT_COUNT=7.
-#     Three runs, EVERY ONE OF THEM PAID. None can run on production, because
-#     they need a Fixture and seven seats this insert has not created yet:
-#     the throwaway-database sequence is in
-#     docs/runbooks/opening-a-competition.md section 3.
+# 0b. DONE 2026-09-22, all three runs green -- GPT-6 Astra alone, Grok 4.7
+#     alone, then the seven with EXPECTED_ENTRANT_COUNT=7. Nine calls, every
+#     result `parseable`, every seat resolving to the dated id it pins, so no
+#     constant and no ADR moved. Run on the throwaway database of
+#     docs/runbooks/opening-a-competition.md section 3, never on production,
+#     because the pre-flight needs a Fixture and seven seats that the insert
+#     below has not created yet. Report:
+#     docs/reports/2026-09-22-the-nations-leagues-seven-seat-preflight.md
+#     Gameweek 1's deadline read off the copy: 2026-09-24T14:30:00Z.
 
 # 1. The insert. THE FIRST STEP THAT SPENDS.
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \

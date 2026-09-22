@@ -295,9 +295,22 @@ values ('candidate/gpt-6-astra', 'GPT-6 Astra', 'openai/gpt-6-astra', 'openai', 
 ```
 
 ```bash
+# `.env` sets EXPECTED_ENTRANT_COUNT, and the two cannot both be set, so a run
+# that sourced .env refuses before it reaches a Base Model:
+#   Error: EXHIBITION_MODEL_ID and EXPECTED_ENTRANT_COUNT cannot both be set
+# It costs nothing -- the refusal is in readPreflightJobConfig, not on the wire
+# -- but it is not a failed pre-flight, and an operator who reads it as one
+# draws the wrong conclusion. Unset it for the single-candidate runs only.
+unset EXPECTED_ENTRANT_COUNT
+
 COMPETITION=UNL FIXTURE_ID=<from above> EXHIBITION_MODEL_ID=candidate/gpt-6-astra \
   npm run preflight          # PAID. Then the same for candidate/grok-4.7.
 ```
+
+**The pre-flight writes no `attempts` row.** It is a check and not a run, so there is no
+stored latency, token count or cost to read afterwards — those live on OpenRouter's side
+only. What the record keeps of a pre-flight is the report in `docs/reports`, which is why
+ADR-0034 asks for one.
 
 Read the resolved dated model off each report: that is the `canonicalSlug` the seat
 carries, and the catalog's word in `MATCH_SUBSTITUTIONS` is only the expectation until it
