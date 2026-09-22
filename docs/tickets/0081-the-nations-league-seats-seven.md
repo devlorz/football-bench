@@ -29,7 +29,8 @@ cup is its own Edition 1; its cutoff is ADR-0060's date, rule 4 as amended).
 **Blocked by:** None — can start immediately. It spends nothing.
 
 **Status:** drafted 2026-09-22; redrafted the same day when ADR-0060 gained the two
-substitutions. **Before starting, read the note on the test file below.**
+substitutions; built 2026-09-22. **Before starting, read the note on the test file
+below.**
 
 ---
 
@@ -94,27 +95,78 @@ seats.
 
 ## Acceptance
 
-- [ ] `enterSeasonRoster(db, "UNL", "2026-27")` writes exactly seven rows under
+- [x] `enterSeasonRoster(db, "UNL", "2026-27")` writes exactly seven rows under
       `match-unl/2026-27-v1`, whose slugs are `claude-opus-5`, `gemini-3.1-pro-preview`,
       `glm-5.3`, `gpt-6-astra`, `grok-4.7`, `kimi-k3`, `muse-spark-1.2`; the two new rows
       carry the catalog facts above in `config` as every seat does. The same call for each
       of the five leagues still writes ten with no substitute among them.
-- [ ] The roster of record for `UNL` is derived: exclusions of three by id with ADR-0060's
+- [x] The roster of record for `UNL` is derived: exclusions of three by id with ADR-0060's
       ground, substitutions of two by Season Roster id with a whole Entrant; the size is
       computed, and the Base Model Class mix is asserted three–two–two.
-- [ ] Refusals hold by name: an exclusion or a substitution naming a Season Roster id
+- [x] Refusals hold by name: an exclusion or a substitution naming a Season Roster id
       that does not exist; a league handed a substitute; a cup roster with a substitute
       whose identity differs from the record's on any field.
-- [ ] The uncommitted test block on disk is reconciled, not duplicated, and the whole
+- [x] The uncommitted test block on disk is reconciled, not duplicated, and the whole
       roster suite is green.
-- [ ] Entering the cup leaves the five leagues' and the FPL track's stored seats
+- [x] Entering the cup leaves the five leagues' and the FPL track's stored seats
       byte-for-byte unchanged; a test proves it.
-- [ ] `/api/unl/leaderboard` carries the frozen sentence and no league's does; `/unl`
+- [x] `/api/unl/leaderboard` carries the frozen sentence and no league's does; `/unl`
       renders it beside the two qualifications and its skeleton has seven rows; the
       dashboard suite pins the sentence's bytes.
-- [ ] The opening-a-Competition runbook's cup column says `EXPECTED_ENTRANT_COUNT=7` and
+- [x] The opening-a-Competition runbook's cup column says `EXPECTED_ENTRANT_COUNT=7` and
       names the two pre-flights (each substitute alone as a temporary `exhibition` row,
       then the seven) as the operator's steps before the insert, each marked as paid.
-- [ ] Ticket 0076's `roster:enter` step points here; its remaining boxes are untouched.
-- [ ] Nothing in this ticket inserts a `competitions` row, writes to production or reaches
-      a Base Model.
+- [x] Ticket 0076's `roster:enter` step points here; its remaining boxes are untouched.
+- [x] Nothing in this ticket inserts a `competitions` row, writes to production or reaches
+      a Base Model. Held: the only commands run were fourteen test files, one `tsc` and
+      one `astro check`, all against the suite's own throwaway Postgres.
+
+---
+
+## What it came to
+
+`src/season-roster.ts` gained `MATCH_EXCLUSIONS` and `MATCH_SUBSTITUTIONS`, both keyed by
+Competition, and `matchRosterOf` / `matchRosterSizeOf` deriving a Competition's roster of
+record from them — the Season Roster in its own order, less the excluded, with substitutes
+standing where the seats they replace stood. `enterSeasonRoster` defaults to that roster
+and checks the one it is handed against it field for field, so a league handed a substitute
+is refused as the transplant it is and a cup substitute whose identity drifted is refused
+by field. **The stored-record guard did not run unchanged, contrary to this ticket's
+*What is already known*.** It could not: it reads every match Prompt Version's stored
+seats at once and checked them against the single roster being entered, so the cup's door
+met the leagues' five absent seats and refused them by name. It now takes a map of Prompt
+Version → that Competition's roster of record and checks each stored seat against **its
+own** version's roster. Pooling them into one slug map — the first shape this took, and
+the one review caught — would have let `match-unl/deepseek-v4-pro` and
+`match/gpt-6-astra` through, each finding its slug in some other Competition's roster:
+precisely the two rows that must never exist, and a weakening of ADR-0047. Two tests hold
+both.
+
+`ROSTER_CAVEATS` holds ADR-0060's frozen sentence keyed by Competition; the leaderboard
+body spreads it as `rosterCaveat` exactly where one exists, so every league's body is the
+bytes it was. `/[competition]` renders it in the qualifications block and draws its
+skeleton from `matchRosterSizeOf(competition)`.
+
+Two gaps found in review and closed:
+
+- **The sentence was hidden in the state that most needs it.** It was written only in
+  `renderRanking`, whose section is hidden while `throughGw` is null — which is exactly
+  where the cup sits the day `roster:enter` runs, listing seven names with nothing saying
+  whose field they are. The pre-season state now carries its own `pre-qual-roster` beside
+  the entered seats, and a test holds each element inside the section its render shows.
+- **The identity check's refusals named the wrong roster.** They said "disagrees with
+  the Season Roster as it stood at the Season's first Lock", which is false for a cup
+  whose roster is not the Season Roster and whose first Lock has not happened. They now
+  name the Competition's own roster of record, and the four tests pinning the old
+  wording moved with them.
+- **The documented pre-flight sequence could not run.** The pre-flight reads a real
+  `fixtures` row and counts seats at the Competition's Prompt Version, and both arrive
+  only after the `competitions` insert the pre-flight is meant to gate. The runbook's §3
+  now documents building the whole Competition in a throwaway database — migrate, insert,
+  `roster:enter`, `fetch` — and running all three pre-flights there before production is
+  touched.
+
+Out of scope, noted rather than done: the runbook's §1 table is still "the thirteen
+edits", and a Competition opening with a cut roster now has a fourteenth (its two lists
+and its sentence). §3 says so in prose instead; widening the table is a bigger edit than
+this ticket asked for.

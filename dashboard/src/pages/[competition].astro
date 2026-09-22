@@ -1,6 +1,6 @@
 ---
 import Page from "../layouts/Page.astro";
-import { SEASON_ROSTER_SIZE } from "../../../src/season-roster.js";
+import { matchRosterSizeOf } from "../../../src/season-roster.js";
 import { competitionRoutes } from "../competition-view.js";
 import { EXHIBITION_LABEL_PREFIX } from "../exhibition-view.js";
 
@@ -20,6 +20,13 @@ export const getStaticPaths = competitionRoutes;
 // restarted and null on the ones that never did (ADR-0042), so it is what
 // decides whether this page carries a block at all.
 const { competition, competitionName, path, api, retiredLabel } = Astro.props;
+
+// Ten for a league and seven for the Nations League (ADR-0060), derived from
+// the Competition's own roster of record rather than from the Season Roster's
+// size: the skeleton's job is to be the height the table lands at, and on a
+// Competition seating seven a ten-row block moves the page when the data
+// arrives.
+const rosterSize = matchRosterSizeOf(competition);
 ---
 <Page
   title={`${competitionName} leaderboard — Football Bench, match track`}
@@ -69,6 +76,12 @@ const { competition, competitionName, path, api, retiredLabel } = Astro.props;
     <div class="soft entered">
       <div class="entered-title" id="entered-title">Entered</div>
       <div id="entered-rows"></div>
+      {/* ADR-0060, beside the seats rather than under the table: this state is
+          where a reader first sees who is entered, and the sentence saying
+          whose field it is is owed there and not only once a figure exists to
+          qualify. Empty on every Competition seating the Season Roster, and
+          never written from here -- the sentence is the API's. */}
+      <p class="entered-note" id="pre-qual-roster"></p>
       <div class="entered-note">
         One Prompt Version, one context arm. Three Reference Lines run alongside
         and are never ranked.
@@ -109,13 +122,14 @@ const { competition, competitionName, path, api, retiredLabel } = Astro.props;
         <div class="cell" role="columnheader">Bet points</div>
       </div>
       <div id="rows" role="rowgroup">
-        {/* Still blocks over the same grid the real rows use. As many as the
-            roster holds, read at build time from the one number that declares
-            it: a loading state that guesses a different height moves the page
-            when the data lands, and a height copied by hand goes stale the
-            next time the roster moves. Fixed, not guessed -- the count is in
-            the built HTML, not waiting on the fetch it is covering for. */}
-        {Array.from({ length: SEASON_ROSTER_SIZE }).map(() => (
+        {/* Still blocks over the same grid the real rows use. As many as this
+            Competition's roster holds, read at build time from the one number
+            that declares it: a loading state that guesses a different height
+            moves the page when the data lands, and a height copied by hand
+            goes stale the next time the roster moves. Fixed, not guessed --
+            the count is in the built HTML, not waiting on the fetch it is
+            covering for. */}
+        {Array.from({ length: rosterSize }).map(() => (
           <div class="lbrow lbrow-skeleton" aria-hidden="true">
             <div class="skeleton"></div>
             <div class="skeleton"></div>
@@ -137,6 +151,11 @@ const { competition, competitionName, path, api, retiredLabel } = Astro.props;
       {/* ADR-0059: additional to qual-exhibition above, and empty unless a
           shown row's provider is typesafe. */}
       <p id="qual-typesafe"></p>
+      {/* ADR-0060: empty on every Competition seating the Season Roster, and
+          on the ones that do not it says whose field this is. A qualification
+          of the ranking like the two above, not of a row, and never written
+          from here -- the sentence is the API's. */}
+      <p id="qual-roster"></p>
     </div>
 
     <div class="footnotes">
@@ -344,6 +363,7 @@ const { competition, competitionName, path, api, retiredLabel } = Astro.props;
       text($("qual-bet"), body.betPointsQualification ?? "");
       text($("qual-exhibition"), body.exhibitionCaveat ?? "");
       text($("qual-typesafe"), body.typesafeCaveat ?? "");
+      text($("qual-roster"), body.rosterCaveat ?? "");
     }
 
     function renderPreSeason() {
@@ -361,6 +381,7 @@ const { competition, competitionName, path, api, retiredLabel } = Astro.props;
         rows.append(row);
       }
       $("entered-rows").replaceChildren(rows);
+      text($("pre-qual-roster"), body.rosterCaveat ?? "");
     }
 
     function render() {

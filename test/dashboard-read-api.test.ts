@@ -1154,3 +1154,71 @@ describe("the dashboard read API with an Exhibition Run on the Season", () => {
     expect([...after.keys()]).toEqual([...scoresWithout.keys()]);
   });
 });
+
+// ADR-0060: the Nations League's field was cut by the leagues' standings and
+// two of its seven are Base Models no league seats. A reader comparing its
+// table with a league's is owed both facts, and the sentence that owes them is
+// frozen — so this holds its bytes, not its shape.
+describe("the dashboard read API on a Competition with a cut roster", () => {
+  const writer = new Client({ connectionString: process.env.DATABASE_URL });
+  const reader = new Client({ connectionString: process.env.DATABASE_URL });
+
+  const query: Query = async (sql, parameters = []) =>
+    (await reader.query(sql, [...parameters])).rows;
+
+  const leaderboard = async (code: string): Promise<LeaderboardBody> => {
+    const response = await handleDashboardRequest(
+      new Request(`https://benchmark.example/api/${code}/leaderboard`),
+      query, SEASON, NOW
+    );
+    expect(response.status).toBe(200);
+    return await response.json() as LeaderboardBody;
+  };
+
+  beforeAll(async () => {
+    await writer.connect();
+    await reader.connect();
+    await writer.query(
+      `truncate scores, contexts, predictions, fixtures, models, gameweeks,
+       historical_matches, competitions restart identity cascade`
+    );
+    await seedSeason({ database: writer, season: SEASON, stopAt: "pre-season" });
+    // The cup, listed and with nothing entered or scored — which is where it
+    // stands the day the operator's insert lands, and the state the sentence
+    // has to survive: it qualifies the ranking's field, so it is owed before
+    // the first seat answers and not once a figure exists to qualify.
+    await writer.query(
+      `insert into competitions (competition, season) values ('UNL', $1)`,
+      [SEASON]
+    );
+    await reader.query("set role dashboard_read");
+
+    return async () => {
+      await writer.end();
+      await reader.end();
+    };
+  });
+
+  test("carries ADR-0060's sentence, to the byte", async () => {
+    const body = await leaderboard("unl");
+
+    expect(body.rosterCaveat).toBe(
+      "The Nations League seats seven Base Models where each league seats "
+      + "ten. Its field was cut by the leagues' standings before its first "
+      + "Lock — the three lowest on Season-to-date points across the five "
+      + "leagues were never entered here — and two of its seven are Base "
+      + "Models no league seats, entered for this Competition alone and with "
+      + "no league record to be read against. Nothing ranked here is the "
+      + "field a league's table ranks (ADR-0060)."
+    );
+  });
+
+  // Omitted and not null on a league, so every league's body is the bytes it
+  // was before this field existed.
+  test("says nothing of the kind on a league", async () => {
+    const body = await leaderboard("pl");
+
+    expect(body.rosterCaveat).toBeUndefined();
+    expect(Object.keys(body)).not.toContain("rosterCaveat");
+  });
+});

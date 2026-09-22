@@ -7,7 +7,8 @@ import {
 } from "../src/predictions/openrouter-entrant.js";
 import {
   enterActiveCompetitionRosters, enterFplRoster, enterSeasonRoster,
-  FPL_ROSTER_SIZE, FPL_WITHDRAWALS,
+  FPL_ROSTER_SIZE, FPL_WITHDRAWALS, MATCH_EXCLUSIONS, MATCH_SUBSTITUTIONS,
+  matchRosterOf, matchRosterSizeOf,
   SEASON_ROSTER, SEASON_ROSTER_SIZE, seatPrefixOf, seatSlug
 } from "../src/season-roster.js";
 import {
@@ -183,8 +184,8 @@ describe("entering the Season Roster", () => {
     ];
     await expect(enterSeasonRoster(client, "PD", SEASON, swapped))
       .rejects.toThrow(
-        `PD seat 1 (${SEASON_ROSTER[0]!.id}) disagrees with the Season Roster `
-        + "as it stood at the Season's first Lock on id"
+        `PD seat 1 (${SEASON_ROSTER[0]!.id}) disagrees with its roster of `
+        + "record on id"
       );
 
     // And a transplant, which keeps the count *and* the ids: the seat reads
@@ -202,8 +203,7 @@ describe("entering the Season Roster", () => {
     await expect(enterSeasonRoster(client, "PD", SEASON, transplanted))
       .rejects.toThrow(
         `PD seat ${SEASON_ROSTER_SIZE} (${SEASON_ROSTER[9]!.id}) disagrees `
-        + "with the Season Roster as it stood at the Season's first Lock on "
-        + "baseModel, canonicalSlug"
+        + "with its roster of record on baseModel, canonicalSlug"
       );
 
     // And it refuses before writing anything, not part way through.
@@ -225,6 +225,234 @@ describe("entering the Season Roster", () => {
         + "Entrant's wire"
       );
     expect(await entrants()).toHaveLength(0);
+  });
+
+  // ADR-0060, as amended 2026-09-22: the Nations League's roster of record is
+  // the Season Roster less three it excludes, with two more replaced in place
+  // by their houses' successors. None of the five absent seats is ever entered
+  // for the cup -- no row, no `withdrawn_at`, nothing to filter -- and no
+  // league and no FPL seat moves, which is what makes this a fact about one
+  // Competition's rows (ADR-0047).
+  describe("a Competition with a roster of record of its own", () => {
+    const UNL_SEVEN = [
+      "claude-opus-5", "gemini-3.1-pro-preview", "glm-5.3", "gpt-6-astra",
+      "grok-4.7", "kimi-k3", "muse-spark-1.2"
+    ];
+
+    test("seats the Nations League's seven and nobody else", async () => {
+      await enterSeasonRoster(client, "UNL", SEASON);
+
+      const rows = await entrants();
+      expect(rows).toHaveLength(7);
+      expect(rows.map(({ id }) => seatSlug(id))).toEqual(UNL_SEVEN);
+      expect(rows.map(({ prompt_version }) => prompt_version))
+        .toEqual(Array<string>(7).fill(matchPromptOf("UNL").version));
+      expect(rows.map(({ id }) => id))
+        .toEqual(UNL_SEVEN.map((slug) => `match-unl/${slug}`));
+    });
+
+    // Entered on the catalog's word, to be confirmed or refused by the
+    // pre-flight the operator runs before the insert -- which is only possible
+    // if the word it was entered on is in the row.
+    test("carries each substitute's catalog facts as every seat does",
+      async () => {
+        await enterSeasonRoster(client, "UNL", SEASON);
+
+        const rows = await entrants();
+        const astra = rows.find(({ id }) => id === "match-unl/gpt-6-astra");
+        expect(astra?.name).toBe("GPT-6 Astra");
+        expect(astra?.base_model).toBe("openai/gpt-6-astra");
+        expect(astra?.provider).toBe("openai");
+        expect(astra?.quantization).toBeNull();
+        expect(astra?.config.canonical_slug)
+          .toBe("openai/gpt-6-astra-20260903");
+        expect(astra?.config.catalog_checked_at).toBe("2026-09-22");
+
+        const grok = rows.find(({ id }) => id === "match-unl/grok-4.7");
+        expect(grok?.name).toBe("Grok 4.7");
+        expect(grok?.base_model).toBe("x-ai/grok-4.7");
+        expect(grok?.provider).toBe("xai");
+        expect(grok?.config.canonical_slug).toBe("x-ai/grok-4.7-20260916");
+        expect(grok?.config.catalog_checked_at).toBe("2026-09-22");
+      });
+
+    // ADR-0060 keeps the first draft's class mix: each successor is its
+    // predecessor's class, so the cup is three Frontier, two first-party and
+    // two open-weight -- read off the stored rows, because the mix is what the
+    // roster of record produced and not a number written beside it.
+    test("stores the three-two-two the cup's class mix comes to", async () => {
+      await enterSeasonRoster(client, "UNL", SEASON);
+
+      const classes = (await entrants()).reduce<Record<string, number>>(
+        (counts, row) => {
+          const name = String(row.config.baseModelClass);
+          return { ...counts, [name]: (counts[name] ?? 0) + 1 };
+        },
+        {}
+      );
+      expect(classes).toEqual({
+        Frontier: 3, "First-party": 2, "Open-weight": 2
+      });
+    });
+
+    test("leaves every league at ten, with no substitute among them",
+      async () => {
+        for (const competition of ["PL", "PD", "SA", "FL1", "BL1"]) {
+          await client.query("truncate models cascade");
+          await enterSeasonRoster(client, competition, SEASON);
+
+          const rows = await entrants();
+          expect(rows).toHaveLength(SEASON_ROSTER_SIZE);
+          expect(rows.map(({ id }) => seatSlug(id)).sort())
+            .toEqual(SEASON_ROSTER.map(({ id }) => seatSlug(id)).sort());
+        }
+      });
+
+    // The cup is entered last on purpose: the leagues and the FPL track are
+    // already stored when it runs, so anything its door touched beyond its own
+    // seven shows up as a row that moved.
+    test("leaves every league's and the FPL track's stored seats untouched",
+      async () => {
+        for (const competition of ["PL", "PD", "SA", "FL1", "BL1"]) {
+          await enterSeasonRoster(client, competition, SEASON);
+        }
+        await enterFplRoster(client, SEASON);
+        const before = (await entrants())
+          .filter(({ prompt_version }) => prompt_version
+            !== matchPromptOf("UNL").version);
+
+        await enterSeasonRoster(client, "UNL", SEASON);
+
+        const after = (await entrants())
+          .filter(({ prompt_version }) => prompt_version
+            !== matchPromptOf("UNL").version);
+        expect(after).toEqual(before);
+        // And the two new ids exist on the match track alone: no `fpl/` row
+        // was written for either, and neither displaced an FPL seat.
+        expect(after.map(({ id }) => id))
+          .not.toContain("fpl/gpt-6-astra");
+        expect(after.map(({ id }) => id)).not.toContain("fpl/grok-4.7");
+      });
+
+    test("derives the cup's size rather than writing it", () => {
+      expect(matchRosterSizeOf("UNL")).toBe(
+        SEASON_ROSTER.length - MATCH_EXCLUSIONS.UNL!.length
+      );
+      expect(MATCH_SUBSTITUTIONS.UNL).toHaveLength(2);
+      expect(matchRosterSizeOf("PL")).toBe(SEASON_ROSTER_SIZE);
+    });
+
+    // ADR-0060 states the exclusions' ground as standing and refuses to dress
+    // it as cost or reliability; the substitutions' is a different ground
+    // again, and the two lists are what keeps them from being read as one.
+    test("carries the ground ADR-0060 states, per seat", () => {
+      expect(MATCH_EXCLUSIONS.UNL!.map(({ id }) => id)).toEqual([
+        "match/deepseek-v4-pro", "match/minimax-m3", "match/qwen3.8-max"
+      ]);
+      for (const { ground } of MATCH_EXCLUSIONS.UNL!) {
+        expect(ground).toMatch(/Season-to-date Match \+ Bet Points/);
+      }
+      expect(MATCH_SUBSTITUTIONS.UNL!.map(({ replaces }) => replaces))
+        .toEqual(["match/gpt-5.6-sol-pro", "match/grok-4.6"]);
+      for (const { ground } of MATCH_SUBSTITUTIONS.UNL!) {
+        expect(ground).toMatch(/shipped a successor/);
+      }
+    });
+
+    // Refused by name rather than as a roster that came out a seat short: both
+    // lists make a claim about a Season Roster seat, and a claim about a seat
+    // that does not exist is a typo and not a smaller roster.
+    test("refuses an exclusion the Season Roster does not name", () => {
+      expect(() => matchRosterOf(
+        "UNL", [{ id: "match/nobody", ground: "typed wrong" }]
+      )).toThrow(
+        "UNL excludes match/nobody, which the Season Roster does not seat"
+      );
+    });
+
+    test("refuses a substitution for a seat the Season Roster does not name",
+      () => {
+        const [substitution] = MATCH_SUBSTITUTIONS.UNL!;
+        expect(() => matchRosterOf("UNL", [], [
+          { ...substitution!, replaces: "match/nobody" }
+        ])).toThrow(
+          "UNL substitutes for match/nobody, which the Season Roster does not "
+          + "seat"
+        );
+      });
+
+    // A league's roster of record is the Season Roster, so the cup's
+    // substitute reaches it as the transplant ADR-0034's check was built to
+    // refuse -- by the fields that differ, not by the id, which is the whole
+    // point of comparing identities.
+    test("refuses a league handed one of the cup's substitutes", async () => {
+      const withAstra = SEASON_ROSTER.map((entrant) =>
+        entrant.id === "match/gpt-5.6-sol-pro"
+          ? MATCH_SUBSTITUTIONS.UNL![0]!.entrant
+          : entrant);
+
+      await expect(enterSeasonRoster(client, "PL", SEASON, withAstra))
+        .rejects.toThrow(
+          "PL seat 2 (match/gpt-5.6-sol-pro) disagrees with its roster of "
+          + "record on id, name, baseModel, canonicalSlug, catalogCheckedAt"
+        );
+      expect(await entrants()).toHaveLength(0);
+    });
+
+    // The guard over the stored record reads every match Prompt Version at
+    // once, and it must not pool them: a roster is a fact about one
+    // Competition's rows (ADR-0047). Pooled, each of these two rows would find
+    // its slug in some other Competition's roster and pass -- and they are
+    // precisely the two rows that must never exist.
+    test("refuses an excluded Base Model stored under the cup's own version",
+      async () => {
+        await client.query(
+          `insert into models (
+             id, name, base_model, provider, prompt_version, role, config
+           ) values ('match-unl/deepseek-v4-pro', 'DeepSeek V4 Pro',
+                     'deepseek/deepseek-v4-pro', 'deepseek', $1, 'entrant',
+                     '{}')`,
+          [matchPromptOf("UNL").version]
+        );
+
+        await expect(enterSeasonRoster(client, "PL", SEASON)).rejects.toThrow(
+          "Seat match-unl/deepseek-v4-pro is stored at Prompt Version "
+          + "match-unl/2026-27-v1 and is not in that Prompt Version's roster "
+          + "of record"
+        );
+      });
+
+    test("refuses a cup substitute stored under a league's version",
+      async () => {
+        await client.query(
+          `insert into models (
+             id, name, base_model, provider, prompt_version, role, config
+           ) values ('match/gpt-6-astra', 'GPT-6 Astra',
+                     'openai/gpt-6-astra', 'openai', $1, 'entrant', '{}')`,
+          [MATCH_PROMPT_VERSION]
+        );
+
+        await expect(enterSeasonRoster(client, "UNL", SEASON)).rejects.toThrow(
+          "Seat match/gpt-6-astra is stored at Prompt Version "
+          + "match/2026-27-v2 and is not in that Prompt Version's roster of "
+          + "record"
+        );
+      });
+
+    test("refuses a cup substitute whose identity is not the record's",
+      async () => {
+        const drifted = matchRosterOf("UNL").map((entrant) =>
+          entrant.id === "match/grok-4.7"
+            ? { ...entrant, canonicalSlug: "x-ai/grok-4.7-20261001" }
+            : entrant);
+
+        await expect(enterSeasonRoster(client, "UNL", SEASON, drifted))
+          .rejects.toThrow(
+            "UNL seat 4 (match/grok-4.7) disagrees with its roster of record "
+            + "on canonicalSlug"
+          );
+        expect(await entrants()).toHaveLength(0);
+      });
   });
 
   // The guard above compares an argument against the constant, which across a
@@ -275,7 +503,8 @@ describe("entering the Season Roster", () => {
 
       await expect(enterSeasonRoster(client, "PD", SEASON)).rejects.toThrow(
         "Seat match/late-arrival is stored at Prompt Version "
-        + "match/2026-27-v2 and is not in the roster being entered"
+        + "match/2026-27-v2 and is not in that Prompt Version's roster of "
+        + "record"
       );
     });
 

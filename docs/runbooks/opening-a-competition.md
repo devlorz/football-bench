@@ -220,9 +220,103 @@ HISTORICAL_COMPETITION=XX HISTORICAL_SEASON=<prior season> npm run --silent fetc
 refuses a Competition left *unset*, and nothing anywhere refuses one that is *stated and
 wrong*.
 
-Then the `competitions` insert, then `npm run roster:enter` — which seats ten Entrants per
-listed Competition and must run after the insert, not before
+Then the `competitions` insert, then `npm run roster:enter` — which seats each listed
+Competition's **roster of record** and must run after the insert, not before
 ([pre-cron checklist](pre-cron-checklist.md) §1).
+
+**A Competition's roster is its own, and is not always the Season Roster's ten.** The
+five leagues seat all ten. The Nations League seats seven: the Season Roster less the
+three ADR-0060 excludes, with GPT-6 Astra and Grok 4.7 standing in for GPT-5.6 Sol Pro
+and Grok 4.6. Both lists live in `src/season-roster.ts` (`MATCH_EXCLUSIONS`,
+`MATCH_SUBSTITUTIONS`) and the size is derived from them, never written (ticket 0081).
+
+| | A league | The cup (`UNL`) |
+| --- | --- | --- |
+| Seats `roster:enter` writes | 10 | 7 |
+| Pre-flight's `EXPECTED_ENTRANT_COUNT` | `10` | `7` |
+| Pre-flights owed before the insert | one, the ten | **two new seats to prove, so three runs — all paid** — each substitute alone, then the seven |
+
+A Competition seating a Base Model no other Competition seats owes a pre-flight *per new
+seat before the roster's*, because a seat entered on the catalog's word has been observed
+by nothing: it is entered to be confirmed or refused, and the refusal must land before the
+`competitions` insert rather than at the first Lock. **Each of those runs reaches a Base
+Model and spends money; ask before running any of them.** A substitute alone is run as a
+temporary `exhibition` row and removed afterwards — `EXHIBITION_MODEL_ID` and
+`EXPECTED_ENTRANT_COUNT` cannot both be set ([a new Base Model arrives](a-new-base-model-arrives.md)).
+
+### Pre-flighting a Competition that is not listed yet
+
+**The pre-flight cannot run on production before the insert, and the insert is the step
+that must not happen until the pre-flight has passed.** It reads a real `fixtures` row
+for the Competition and Season (`Fixture N does not exist in XX Season …`) and counts the
+`models` rows at that Competition's Prompt Version (`Pre-flight requires exactly N
+Entrants at …`); `roster:enter` writes those rows only for Competitions the
+`competitions` table lists, and the fetch writes those Fixtures only for the same. So the
+prerequisites and the thing they gate are the same insert, and the way out is a second
+database rather than a relaxed count.
+
+Build the whole Competition somewhere throwaway, using the same commands section 3 runs
+and one different `DATABASE_URL`. Nothing here but the last step reaches a Base Model.
+
+```bash
+set -a; . ./.env; set +a
+createdb unl_preflight
+export DATABASE_URL="postgres://localhost:5432/unl_preflight"   # after .env, never before
+npm run --silent db:migrate
+
+# The insert that is free, because this database is not the record.
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -c "insert into competitions (competition, season) values ('UNL', '$SEASON')"
+
+# Seven seats -- the Competition's roster of record, not ten.
+npm run --silent roster:enter
+
+# Fixtures and the four sources the packet reads. Reaches no Base Model.
+npm run --silent fetch
+
+# The Fixture the pre-flights aim at, and the seat count to expect.
+psql "$DATABASE_URL" -c "select fixture_id, gw, home_team, away_team, kickoff_at
+                           from fixtures where competition = 'UNL'
+                          order by kickoff_at limit 3"
+psql "$DATABASE_URL" -c "select id from models
+                          where prompt_version = 'match-unl/2026-27-v1' order by id"
+```
+
+Then the pre-flights — two new seats to prove, which is three runs, **each of which
+spends**; ask first, and state the call count before you do. (ADR-0060 counts them as
+"two pre-flights, each alone and then the seven", which is the same three runs.) Each substitute alone first, as a temporary `exhibition` row against
+the cup's own Prompt Version ([a new Base Model arrives](a-new-base-model-arrives.md) §3),
+because an unproven Base Model must never answer for the first time from an Entrant row:
+
+```sql
+insert into models (id, name, base_model, provider, quantization, prompt_version, role, config)
+values ('candidate/gpt-6-astra', 'GPT-6 Astra', 'openai/gpt-6-astra', 'openai', null,
+        'match-unl/2026-27-v1', 'exhibition', '{}');
+```
+
+```bash
+COMPETITION=UNL FIXTURE_ID=<from above> EXHIBITION_MODEL_ID=candidate/gpt-6-astra \
+  npm run preflight          # PAID. Then the same for candidate/grok-4.7.
+```
+
+Read the resolved dated model off each report: that is the `canonicalSlug` the seat
+carries, and the catalog's word in `MATCH_SUBSTITUTIONS` is only the expectation until it
+says so. **If either differs, the constant is amended and ADR-0060 with it, before the
+seven-seat run.** Then delete the two `candidate/…` rows — a temporary row left standing
+makes the count below refuse — and run the roster's own:
+
+```bash
+COMPETITION=UNL FIXTURE_ID=<the same one> EXPECTED_ENTRANT_COUNT=7 \
+  npm run preflight          # PAID. Seven seats, one Fixture: seven calls.
+```
+
+Only once that report is green does the production insert of section 3 happen. Drop the
+throwaway database afterwards; nothing in it is a record of anything, which is the whole
+reason it could be written to freely.
+
+The frozen sentence a cut roster owes a reader is served with the Competition's
+leaderboard (`ROSTER_CAVEATS`), so a Competition whose opening decision cuts its field
+writes that decision's sentence there as well.
 
 ## 4. What the source may not have yet
 

@@ -4,7 +4,9 @@ import {
   competitionRoutes, pageHref
 } from "../dashboard/src/competition-view.js";
 import { entrantOf, entrantSlug } from "../dashboard/src/entrant-link.js";
-import { SEASON_ROSTER, seatSlug } from "../src/season-roster.js";
+import {
+  matchRosterSizeOf, SEASON_ROSTER, seatSlug
+} from "../src/season-roster.js";
 
 /**
  * The Match track's pages, one per Competition, with no DOM and no database.
@@ -388,6 +390,67 @@ describe("the Entrant a link names", () => {
       "../../entrant-link.js",
       "../../exhibition-view.js"
     ]);
+  });
+
+  // ADR-0060: the cup's table lands at seven rows, so the block covering for
+  // it has to be seven rows. Over the source, like the import test above --
+  // the skeleton is built at build time from one expression, and a test that
+  // needed a rendered page to notice would notice a deploy too late.
+  test("draws a loading skeleton the height its Competition's table lands at",
+    () => {
+      const page = readFileSync(
+        new URL("../dashboard/src/pages/[competition].astro", import.meta.url),
+        "utf8"
+      );
+
+      expect(page).toMatch(/Array\.from\(\{ length: rosterSize \}\)/);
+      expect(page).toMatch(/const rosterSize = matchRosterSizeOf\(competition\)/);
+      // Which is seven for the cup and ten for every league, so the one
+      // expression above is the whole of the difference.
+      expect(matchRosterSizeOf("UNL")).toBe(7);
+      for (const competition of ["PL", "PD", "SA", "FL1", "BL1"]) {
+        expect(matchRosterSizeOf(competition)).toBe(SEASON_ROSTER.length);
+      }
+    });
+
+  // The state the cup is in the day `roster:enter` runs: seven seats entered,
+  // no Gameweek scored. The ranking section is hidden there, so a caveat that
+  // lived only in `renderRanking` would show a reader the seven names with
+  // nothing saying whose field they are -- which is the one moment the
+  // sentence is most owed. Held over the source, like the tests above: the
+  // failure is an element in the wrong section, which no rendered page of a
+  // scored Season would ever show.
+  test("says whose field it is in the state that first lists the seats", () => {
+    const page = readFileSync(
+      new URL("../dashboard/src/pages/[competition].astro", import.meta.url),
+      "utf8"
+    );
+    const sectionOf = (id: string): string => {
+      const opened = page.slice(page.indexOf(`id="${id}"`));
+      return opened.slice(0, opened.indexOf("</section>"));
+    };
+    const functionOf = (name: string): string => {
+      const opened = page.slice(page.indexOf(`function ${name}()`));
+      return opened.slice(0, opened.indexOf("\n    function "));
+    };
+
+    // Each state's own element, inside the section that state shows: one
+    // element shared between the two would be written by whichever render ran
+    // and hidden with the section it sits in.
+    expect(sectionOf("preseason")).toContain('id="pre-qual-roster"');
+    expect(sectionOf("ranking")).toContain('id="qual-roster"');
+    expect(sectionOf("preseason")).not.toContain('id="qual-roster"');
+
+    // And each written by the render that shows that section.
+    expect(functionOf("renderPreSeason")).toContain("pre-qual-roster");
+    expect(functionOf("renderRanking")).toContain('$("qual-roster")');
+
+    // Both off `rosterCaveat` and neither off a Competition name: the sentence
+    // is the API's, and a page that knew which Competition owed one would be a
+    // second copy of ADR-0060's decision.
+    expect(functionOf("renderPreSeason"))
+      .toContain('body.rosterCaveat ?? ""');
+    expect(functionOf("renderRanking")).toContain('body.rosterCaveat ?? ""');
   });
 
   test("tells the Season Roster's seats apart by slug alone", () => {

@@ -248,13 +248,24 @@ set -a; . ./.env; set +a
 npm run --silent db:rehearse
 npm run --silent db:migrate
 
+# 0b. The two substitutes ADR-0060 added have been observed by nothing, so
+#     both must be pre-flighted before the insert -- GPT-6 Astra alone, then
+#     Grok 4.7 alone, then the seven together with EXPECTED_ENTRANT_COUNT=7.
+#     Three runs, EVERY ONE OF THEM PAID. None can run on production, because
+#     they need a Fixture and seven seats this insert has not created yet:
+#     the throwaway-database sequence is in
+#     docs/runbooks/opening-a-competition.md section 3.
+
 # 1. The insert. THE FIRST STEP THAT SPENDS.
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -c "insert into competitions (competition, season)
       values ('UNL', '$SEASON') on conflict do nothing"
 psql "$DATABASE_URL" -c "select competition, season from competitions order by competition"
 
-# 2. Ten seats under match-unl/2026-27-v1. After the insert, never before.
+# 2. SEVEN seats under match-unl/2026-27-v1, not ten: the cup's roster of
+#     record is the Season Roster less ADR-0060's three exclusions with its two
+#     substitutions in place, which ticket 0081 built into `roster:enter`.
+#     After the insert, never before.
 npm run --silent roster:enter
 
 # 3. Populate the archive and confirm the four sources answer. Reaches no
@@ -272,10 +283,12 @@ ticket's last box needs:
 -- Six Competitions listed. Expect BL1, FL1, PD, PL, SA, UNL.
 select competition from competitions where season = '2026-27' order by competition;
 
--- Ten seats under the frozen cup version, and no other. Expect one row: 10.
+-- Seven seats under the frozen cup version, and no other (ADR-0060, ticket
+-- 0081). Expect one row: 7, and the two substitutes among the ids.
 select prompt_version, count(*)::int as seats
   from models where prompt_version = 'match-unl/2026-27-v1'
  group by prompt_version;
+select id from models where prompt_version = 'match-unl/2026-27-v1' order by id;
 
 -- Which Gameweek UNL opened at, and which were adopted as history.
 select gw, deadline_at from gameweeks

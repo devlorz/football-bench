@@ -1,5 +1,6 @@
 import { FPL_PROMPT_VERSION } from "../context/build-fpl-track-context.js";
 import { EXHIBITION_CAVEAT, TYPESAFE_CAVEAT } from "../exhibition/recall-caveat.js";
+import { ROSTER_CAVEATS } from "../season-roster.js";
 import {
   argmaxOutcome, outcomeOf, type FixtureResult, type Outcome, type Probs
 } from "../fixture-result.js";
@@ -186,6 +187,15 @@ export interface LeaderboardBody {
    * already keeps. Beside `exhibitionCaveat` and never instead of it.
    */
   typesafeCaveat?: string;
+  /**
+   * Present exactly on a Competition whose roster of record is not the Season
+   * Roster and which ADR-0060 wrote a sentence for, and omitted otherwise so
+   * every league's body is byte-identical to what it was before this field
+   * existed — the same contract `typesafeCaveat` keeps. It qualifies the
+   * ranking rather than a row, so it sits beside the two stored
+   * qualifications and carries no row label.
+   */
+  rosterCaveat?: string;
   entrants: LeaderboardEntrant[];
 }
 
@@ -322,6 +332,24 @@ function typesafeCaveatField(
   hasTypesafeRow: boolean
 ): { typesafeCaveat: string } | Record<string, never> {
   return hasTypesafeRow ? { typesafeCaveat: TYPESAFE_CAVEAT } : {};
+}
+
+/**
+ * ADR-0060's sentence, spread onto a body exactly on a Competition whose
+ * opening decision wrote one, and omitted otherwise so every league's body
+ * stays byte-identical to what it was before this field existed — the same
+ * contract above, spelled beside it rather than inline at the one call site,
+ * so the two omit-when-absent fields read as the one rule they are.
+ *
+ * Keyed off the Competition and not off the rows: what cut this field is true
+ * of the ranking whether or not anybody has scored, so it is owed from the day
+ * the seats are entered.
+ */
+function rosterCaveatField(
+  competition: string
+): { rosterCaveat: string } | Record<string, never> {
+  const caveat = ROSTER_CAVEATS[competition];
+  return caveat === undefined ? {} : { rosterCaveat: caveat };
 }
 
 const SEATS_CTE = `
@@ -606,6 +634,7 @@ async function leaderboard(
     // ADR-0059: additional to the recall caveat above, and owed by the same
     // rule — read off the rows shown, never merely off a row entered.
     ...typesafeCaveatField(rows.some(isTypesafeExhibitionRow)),
+    ...rosterCaveatField(competition),
     entrants
   };
 
