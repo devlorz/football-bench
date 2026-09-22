@@ -18,13 +18,13 @@ target Gameweek; no hand-set Lock),
 through it, every earlier ticket. That blocker is gone: `match-unl/2026-27-v1` is frozen
 at `90d0c3f0…` as of `694f4ed`.
 
-**Status:** open, and blocked on one production repair. The insert ran on 2026-09-22:
-`UNL` is listed, seven seats are entered, 156 Fixtures across six Gameweeks are stored,
-and the dry run is green. **The daily fetch then failed on a column production is
-missing, and the cup's packet has no internationals until it is applied** — migration
-`0046`, rehearsed green, waiting on the operator. Gameweek 1 Locks 2026-09-24T14:30Z;
-a Lock taken before the repair is answered over a packet with empty form lines for all
-fifty-four sides. See *What the first fetch found*.
+**Status:** done, 2026-09-22. Every box is ticked. `UNL` was listed on 2026-09-22, seven
+seats entered, 156 Fixtures across six Gameweeks stored, dry run green. The first daily
+fetch failed on a column production was missing; migration `0046` repaired it the same
+day, and the fetch that followed completed with the packet whole — 52 of 52 form
+sections populated and the dataset's freshness line present. Gameweek 1 Locks
+2026-09-24T14:30Z and nothing stands in its way. See *What the first fetch found*, whose
+first reading of the damage was wrong and carries its own correction.
 
 ---
 
@@ -112,7 +112,7 @@ there are bytes; it was never a gate the insert could wait behind. The pre-cron 
       pairs, the two dataset pairs, the eight trigram pairs that are not the trigram
       spelled out, and `RUS` as a refusal — with the same three suites re-run that day
       (53 passing) to show the tables still describe the maps as committed.
-- [ ] `COMPETITION=UNL GAMEWEEK=1 npm run dry-run` is green over the recorded feeds and
+- [x] `COMPETITION=UNL GAMEWEEK=1 npm run dry-run` is green over the recorded feeds and
       reaches no Base Model. **`GAMEWEEK` is not optional**: `readFetchJobConfig` requires
       it and `.env` does not set it, so the box's original wording — the command without
       it — dies on `GAMEWEEK is required` before the archive is read. The handover's step
@@ -151,7 +151,7 @@ there are bytes; it was never a gate the insert could wait behind. The pre-cron 
       [the Nations League's seven-seat pre-flight](../reports/2026-09-22-the-nations-leagues-seven-seat-preflight.md).
       This box did not exist when the ticket was drafted; it exists because ADR-0060's
       amendment seated two Base Models nothing had observed.
-- [ ] The operator has the insert and `roster:enter` commands; once run, this ticket
+- [x] The operator has the insert and `roster:enter` commands; once run, this ticket
       records the date, the Gameweek `UNL` opened at, and which Gameweeks were adopted
       as history. **Run 2026-09-22, and all but one step landed:**
       the `competitions` insert wrote its row; `roster:enter` wrote **57** seats over
@@ -160,9 +160,11 @@ there are bytes; it was never a gate the insert could wait behind. The pre-cron 
       `match-unl/grok-4.7` among them; `npm run fetch` landed the schedule, **156
       Fixtures across six Gameweeks**, Gameweek 1 Locking `2026-09-24T14:30:00.000Z`.
       No Gameweek was adopted as history — the cup has played none.
-      **Then the fetch failed, and the cup's packet is degraded until it is fixed.**
-      See *What the first fetch found* below. This box stays open until a fetch
-      completes.
+      That first fetch then failed on a missing column; migration `0046` repaired it the
+      same day and **the fetch that followed completed**, leaving the packet whole: 52 of
+      52 form sections populated, the dataset's freshness line reading
+      `Dataset last updated 2026-08-26`. See *What the first fetch found*.
+      **The cup opened at Gameweek 1**, Locking 2026-09-24T14:30:00Z.
 - [x] Nothing in this ticket inserts the `competitions` row. Held. **The second half of
       this box — "or reaches a Base Model" — no longer holds, and is struck rather than
       quietly dropped:** the nine pre-flight calls above reached seven Base Models on
@@ -202,11 +204,26 @@ missing from a file that is not pending.
   holds 156 Fixtures across six Gameweeks, and `npm run context:show` renders Gameweek 1.
   The rehearsal's copy confirms it from the other side — `gameweeks` 182 → 188,
   `fixtures` 1752 → 1908.
-- **The dataset did not.** `context:show` against production reports `0 historical
-  matches behind the form lines`, so every one of the fifty-four sides would go to the
-  Lock with no recent internationals — which is the section ADR-0057 opened this
-  Competition to show. A Lock taken in this state would be answered over a packet
-  missing its only history.
+- **The dataset's rows did land; its source row did not.** The rows are written first
+  and the source row last, in no transaction, so the failure left the form lines whole
+  and only the row that describes them missing. What that row feeds is two things: the
+  packet's `Dataset last updated` line, which was therefore absent, and the
+  after-first-deadline guard, which asks for a row `read_at >= deadline` and throws
+  `StaleInternationalResultsError` when it finds none — so from Gameweek 1's Lock
+  onward, every daily fetch would have failed for `UNL` by name, every day, until the
+  column existed.
+
+  > **Correction, same day.** This bullet first read that production reported
+  > `0 historical matches behind the form lines` and concluded that all fifty-four sides
+  > would reach the Lock with no recent internationals. **That inference was wrong and
+  > the conclusion was false.** `historical_matches` is the leagues' table, keyed by a
+  > Division a national side does not have; a cup's history lives in
+  > `international_results` and its count is `0` here by design, before and after the
+  > repair. The packet was checked properly afterwards: 52 of 52 form sections populated,
+  > none reading "no recent internationals". The damage was the source row, the freshness
+  > line and the guard — narrower than claimed, and still worth the repair. The wrong
+  > reading is kept rather than deleted because it is the kind of mistake a summary line
+  > invites: it counted a table the Competition does not use.
 - **The five leagues are unharmed.** The failing call sits inside the per-Competition
   try/catch, so every other source wrote its rows and the run failed at the end rather
   than part-way. What the leagues lose is a clean exit code, daily, until this is fixed.
