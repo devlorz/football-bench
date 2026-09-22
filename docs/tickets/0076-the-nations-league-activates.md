@@ -1,7 +1,10 @@
 # Ticket: The Nations League activates
 
-**What to build:** the operator inserts the `UNL` row for `2026-27`, ten seats are
-entered under `match-unl/2026-27-v1`, and the next daily fetch lands the schedule, Locks
+**What to build:** the operator inserts the `UNL` row for `2026-27`, seven seats are
+entered under `match-unl/2026-27-v1` (ADR-0060 as amended 2026-09-22: the ten less
+three, with GPT-6 Astra and Grok 4.7 in place of GPT-5.6 Sol Pro and Grok 4.6 — ticket
+0081 makes the door seat them, and each substitute is pre-flighted alone and then the
+seven together before the insert, both paid), and the next daily fetch lands the schedule, Locks
 the first Gameweek whose derived deadline has not passed, and adopts any Gameweek it
 missed as Locked history. Before that: the three name maps reviewed by a person, the
 runbook grown a cup column, ADR-0051's "league" corrected, and the pre-cron checklist

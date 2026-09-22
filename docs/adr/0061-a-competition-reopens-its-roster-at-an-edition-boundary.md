@@ -4,6 +4,17 @@ status: proposed
 
 # A Competition reopens its roster at an Edition boundary
 
+> **Amended 2026-09-22, the day it was drafted.** Rule 4 below first said that Edition 1
+> of every Competition is bound by ADR-0034's 2026-08-19 arrival cutoff, and *Consequences*
+> repeated it. ADR-0060's amendment of the same day seats two Base Models released after
+> that date — GPT-6 Astra and Grok 4.7 — in the Nations League's Edition 1, which opens
+> at its own first Lock on 2026-09-24. Rule 4 now reads: **a Competition whose first Lock
+> has not yet passed takes the date of the decision opening it as its Edition 1 cutoff;**
+> the 2026-08-19 date binds only the Editions that were already playing when ADR-0034
+> was written, which is the five leagues' Edition 1. What this gives up is stated in
+> ADR-0060, not here: this box records that the rule moved and why, and the rule's
+> original wording is kept in *Considered options* so the narrower version is not lost.
+
 **A Competition may, once in a Season and by a recorded decision, end the roster it is
 playing with at a named Gameweek and open a new one at the next — an Edition. The
 Gameweeks already played stay on the record whole, ranked by the roster that played them,
@@ -76,7 +87,10 @@ the definition and are the whole of what the mechanism has to hold:
    temporary `role = 'exhibition'` row, then the full roster — both before the Edition's
    first Lock. The ADR's date is the cutoff so that the cutoff is read off a decision and not
    computed, and so that a Base Model released the day after the decision cannot be argued
-   into an Edition already announced.
+   into an Edition already announced. This holds for a Competition's Edition 1 as well,
+   when that Competition's first Lock has not yet passed: its opening ADR's date is its
+   cutoff (amended 2026-09-22; ADR-0060 is the first use). ADR-0034's 2026-08-19 binds
+   the five leagues' Edition 1 and nothing later.
 5. **The roster size stays what ADR-0034 made load-bearing** unless the opening ADR says
    otherwise and re-derives what depends on it: the complete-case intersection, ADR-0016's
    N−1 comparisons, the concurrency the predict job is sized to.
@@ -207,6 +221,12 @@ the definition and are the whole of what the mechanism has to hold:
 - **Open Editions only at international breaks.** Rejected: the break gives time and is not
   a reason, and a rule tied to the calendar would be argued around the first time the
   calendar did not cooperate.
+- **Bind every Competition's Edition 1 to 2026-08-19**, as this ADR first did. It was the
+  narrower rule: a late-opening Competition seated exactly what stood at the Season's
+  first Lock, which is ADR-0034 and ADR-0038's line, and no Base Model entered a Season
+  through a Competition that happened to open late. Given up on 2026-09-22 for ADR-0060's
+  two substitutions; it is the rule to return to if a reader finds the crossing was a
+  mistake, and returning to it costs nothing but the cup's two seats.
 - **Withdraw the three from the leagues mid-Season without an Edition**, as ADR-0060
   considered and refused. Still refused, for ADR-0060's reasons: frozen totals beside moving
   ones, holes in every Paired Difference, half-Season rows in the sum. The Edition is what
@@ -217,8 +237,9 @@ the definition and are the whole of what the mechanism has to hold:
 - CONTEXT.md gains **Edition**, its Season Roster entry seats "for each of its Editions",
   and Season and Edition each refuse "Season 1 / Season 2".
 - ADR-0034 is amended by this ADR: "irreversible from the first Lock" is per Edition;
-  the 2026-08-19 arrival cutoff binds Edition 1 and each later Edition has its opening
-  ADR's date as its own.
+  the 2026-08-19 arrival cutoff binds the five leagues' Edition 1, and every other
+  Edition — a later one, or the first of a Competition that opens after that date — has
+  its opening ADR's date as its own.
 - ADR-0051 is amended: the Combined Ranking sums an Edition set.
 - ADR-0060's *What it takes* — "a per-Competition exclusion in the roster module, the
   predict path reading `withdrawn_at`" — is satisfied by the tickets under this ADR; ADR-0060
