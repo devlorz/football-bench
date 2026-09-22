@@ -239,12 +239,18 @@ be `2026-27`.
 ```bash
 set -a; . ./.env; set +a
 
-# 0. The four pending migrations. Rehearse first; the runbook is
+# 0. DONE 2026-09-22. Only 0045 was still pending -- 0042, 0043 and 0044
+#    had been applied since this step was written, which is why the
+#    rehearsal is the step and the list never is. It created
+#    `national_team_head_coaches` and nothing else; the rehearsal ran green
+#    over a copy of the record (26,459 rows across ten watched tables, every
+#    one back whole) before and reported nothing left after.
+#      0042 the Nations League joins the domain with its two tables  (already applied)
+#      0043 the dataset says when it was last updated                (already applied)
+#      0044 La Liga Gameweek 6 holds its Lock open to the last kickoff (already applied)
+#      0045 who picks each national side and since when              (applied 2026-09-22)
+#    Rehearse first; the runbook is
 #    docs/runbooks/the-competition-migration.md §2.
-#      0042 the Nations League joins the domain with its two tables
-#      0043 the dataset says when it was last updated
-#      0044 La Liga Gameweek 6 holds its Lock open to the last kickoff
-#      0045 who picks each national side and since when
 npm run --silent db:rehearse
 npm run --silent db:migrate
 
