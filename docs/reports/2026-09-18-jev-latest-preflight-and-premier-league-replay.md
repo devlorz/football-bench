@@ -331,3 +331,99 @@ qualification calls "not evidence" rank last on the board that is. Nothing here
 distinguishes recall from skill either — Match Points of 272 over 195 Fixtures rule out a
 Base Model reading its own memory of the scorelines, which is the one thing a low number
 here can honestly be said to show.
+
+## Addendum, 2026-09-22: four more readings of the same Predictions
+
+Read from production on 2026-09-22, over every Fixture Jev has answered that has a result
+and sits in a locked Gameweek: 244 across the five Competitions, up from 195 above. No
+Base Model was called; everything below is a local computation over `predictions`,
+`fixtures.result` and the archived `attempts.raw_response`. The script is a scratch file
+and is not in the repository; the queries and the arithmetic are described beside each
+table so the numbers can be re-derived.
+
+**1. The mapping is not the cause.** ADR-0059's wire asks two Choice questions, and the
+stored `probs` come from the outcome one. Jev's archived reply also carries a
+probability per scoreline for the second question, so an outcome distribution can be
+derived from it by summing the mass of every `H`, `D` and `A` scoreline. RPS of the
+same 244 Fixtures under each:
+
+| Competition | n | RPS, stored `probs` | RPS, derived from scorelines | RPS, uniform |
+|---|---:|---:|---:|---:|
+| PL | 50 | 0.2727 | 0.2536 | 0.2244 |
+| PD | 63 | 0.2804 | 0.2738 | 0.2381 |
+| SA | 50 | 0.2181 | 0.2148 | 0.2478 |
+| FL1 | 45 | 0.2617 | 0.2609 | 0.2296 |
+| BL1 | 36 | 0.2758 | 0.2724 | 0.2454 |
+| **All** | **244** | **0.2619** | **0.2550** | **0.2368** |
+
+The derived distribution is a little better and still behind uniform in four
+Competitions of five. The two questions also agree with each other: the argmax
+outcome matches in 214 of 244, and the scoreline Choice is the top of the scoreline
+distribution in 241 of 244. So the loss on this layer is the Base Model's own reading
+of the Fixture, not a property of asking it twice.
+
+**2. Calibration.** Fixtures bucketed by the largest stored probability, with the hit
+rate of that argmax beside the pooled figure for the eleven Entrants over their 2,625
+settled Predictions:
+
+| Largest probability | Jev n | Jev mean confidence | Jev hit rate | Entrants pooled hit rate |
+|---|---:|---:|---:|---:|
+| below 0.45 | 13 | 0.407 | 0.462 | 0.375 |
+| 0.45 to 0.59 | 52 | 0.528 | 0.385 | 0.491 |
+| 0.60 to 0.79 | 56 | 0.691 | 0.357 | 0.782 |
+| 0.80 to 0.99 | 89 | 0.917 | 0.472 | 0.927 |
+| exactly 1.00 | 34 | 1.000 | 0.882 | no Entrant answers 1.00 |
+
+This corrects the guess made above under "What the probability layer says". The
+confidence-1.0 answers are not where the score is lost: 34 of them land at 88%. The loss
+is the 89 Fixtures answered at 0.80 to 0.99, where Jev is right in fewer than half, on a
+band where the Entrants are right in more than nine of ten. Every band from 0.45 upward
+is over-confident by a wide margin, and the ordering is barely monotone.
+
+**3. The current RPS board, all five Competitions.** Mean RPS over each seat's settled
+Predictions, best first. Exhibition rows are marked; three of them cover a handful of
+Fixtures and are listed for completeness only.
+
+| Seat | n | RPS |
+|---|---:|---:|
+| `glm-5.2` (entrant, La Liga only) | 6 | 0.1669 |
+| `claude-fable-5.1` (exhibition) | 30 | 0.1880 |
+| `gpt-6-astra` (exhibition) | 65 | 0.1961 |
+| `ox-alpha` (exhibition) | 35 | 0.1972 |
+| `claude-opus-5` | 250 | 0.2015 |
+| `kimi-k3` | 248 | 0.2024 |
+| `gemini-3.1-pro-preview` | 248 | 0.2025 |
+| `minimax-m3` | 250 | 0.2028 |
+| `muse-spark-1.2` | 250 | 0.2032 |
+| `grok-4.6` | 250 | 0.2039 |
+| `deepseek-v4-pro` | 250 | 0.2039 |
+| `gpt-5.6-sol-pro` | 250 | 0.2040 |
+| `qwen3.8-max` | 249 | 0.2046 |
+| `glm-5.3` | 244 | 0.2046 |
+| **`jev-latest`** (exhibition) | **244** | **0.2619** |
+
+Last in every Competition and last overall. The eleven full-coverage Entrants span
+0.2015 to 0.2046, a spread of 0.003; Jev sits 0.06 behind the group. The Serie A
+figure, 0.2181, is its only one better than uniform.
+
+**4. A paired interval against the best full-coverage Entrant.** Per-Fixture RPS
+differences, Jev minus `claude-opus-5`, over the 244 Fixtures both settled, through the
+project's own `bootstrapInterval` (10,000 percentile resamples, 95%, seeded from the
+differences). Exploratory: the `role` filter keeps Exhibition rows out of every declared
+interval, and this one is computed the same way for a reader, not published.
+
+| Difference | n | Mean | 95% interval |
+|---|---:|---:|---|
+| Jev stored `probs` minus Opus 5 | 244 | +0.0593 | [0.0334, 0.0849] |
+| Jev derived minus Opus 5 | 244 | +0.0523 | [0.0271, 0.0791] |
+
+Positive is Jev worse; neither interval reaches zero. The gap on the probability
+layer is not noise at this sample, under either reading of Jev's answer.
+
+**What this adds to the reading above.** The second place on Bet Points stands as
+explained: a less biased goal expectation carrying four goal-total markets. On the
+layer ADR-0012 says evidence rests on, the same Predictions are last of fifteen, behind
+uniform, and behind the best Entrant by an interval that excludes zero. The cause is
+over-confidence in the 0.80 to 0.99 band, not the confidence-1.0 answers and not the
+two-question mapping, which is a reason to leave ADR-0059's open Repair question where
+it is: a Repair would recover the one Serie A Gap and change nothing here.
