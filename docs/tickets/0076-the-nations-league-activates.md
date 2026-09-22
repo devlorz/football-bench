@@ -92,14 +92,18 @@ there are bytes; it was never a gate the insert could wait behind. The pre-cron 
 
 ## Acceptance
 
-- [ ] The three name maps (365Scores, dataset, trigrams) are derived from the recorded
+- [x] The three name maps (365Scores, dataset, trigrams) are derived from the recorded
       sources by tests and reviewed by a person; the review is recorded in this ticket.
       **The tests' half is green**, 2026-09-17: `test/fetch-365scores-stats.test.ts`,
       `test/fetch-international-results.test.ts` and
       `test/fetch-national-team-head-coaches.test.ts` — 53 tests, all passing. Each
       derives its map from archived bytes rather than asserting a transcription, and each
       asks the direction its source allows (the runbook's edits 10, 11 and 12). The
-      material a person reads is below. **Open until that person has read it.**
+      material a person reads is below. **Reviewed and passed by Lee Lorz, 2026-09-22**,
+      against the three tables in *The review material for box 1* — the three 365Scores
+      pairs, the two dataset pairs, the eight trigram pairs that are not the trigram
+      spelled out, and `RUS` as a refusal — with the same three suites re-run that day
+      (53 passing) to show the tables still describe the maps as committed.
 - [ ] `COMPETITION=UNL GAMEWEEK=1 npm run dry-run` is green over the recorded feeds and
       reaches no Base Model. **`GAMEWEEK` is not optional**: `readFetchJobConfig` requires
       it and `.env` does not set it, so the box's original wording — the command without
