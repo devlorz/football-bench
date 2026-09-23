@@ -1,5 +1,30 @@
 # The Nations League's shots and xG come from 365Scores
 
+> Amended 2026-09-23, before the cup's first Lock. **The sheets are read for the
+> internationals the dataset holds, not only for this Season's Fixtures.** The decision
+> below asks 365Scores for "one sheet per settled Fixture, 156 a Season". A real packet
+> read on 2026-09-22 showed why that is not enough: a side's five most recent
+> internationals are World Cup, qualifying and friendly matches the record holds only as
+> dataset rows, and those lines carried a score and nothing else while the Season's own
+> Fixtures carried shots and xG. So a one-off, by hand (`npm run stats:backfill`), read
+> the sheets for every international in `international_results` from 2024-11-01 to the
+> day it ran — 445 sheets, each archived, mapped to 365Scores by the dataset's tournament
+> name (its competition ids for the World Cup, UEFA qualifying, FIFA Series and the
+> Baltic Cup; friendlies off the day's whole listing, because 365Scores files them by
+> region), the day after also listed for kickoffs that cross UTC midnight — and the
+> packet's dataset lines carry the figures where a sheet was read and say nothing where
+> none was. Holes stand as the rule below says; friendlies are holes far more often than
+> the four per cent measured for the Nations League (55 of 123). The rows are filed under
+> the Competition whose packet reads them, `UNL`, keyed as before by source and game id.
+>
+> Two costs this adds. The listing is asked for days the daily fetch never asks about, so
+> the request budget below is the daily fetch's alone and the backfill's is its own; and
+> the dry run cannot replay these rows — it rebuilds the record from the daily fetch's
+> own reads, which never ask for a dataset international's sheet — so a rehearsal of a
+> `UNL` Gameweek shows the dataset lines bare while production does not. Closing that
+> means the daily fetch itself asking for outstanding dataset sheets, which is a further
+> amendment and a ticket, not this one.
+
 > Amended 2026-09-15 by ticket 0072, the ticket that built this fetch: **a hole is a
 > sheet with no xG and both sides' shots still on it** — the recorded Spain–Switzerland
 > sheet carries 21 and 11 — so "the packet renders 'no shots or xG stored for this
