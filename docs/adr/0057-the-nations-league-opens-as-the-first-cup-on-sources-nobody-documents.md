@@ -1,5 +1,19 @@
 # The Nations League opens as the first cup, on sources nobody documents
 
+> Amended 2026-09-23 by ticket 0087, the day before the cup's first Lock. **The group's
+> table is no longer deferred.** The packet section below lists "a league table" among the
+> stated absences, on the reasoning that six results read better than a table and that a
+> table would need the group stored on every Fixture. Both halves were revisited once a
+> real packet was read: a national side's five form lines say nothing about where it
+> stands in its group or what its next result decides, which is the one thing a league's
+> packet tells an Entrant that a cup's did not; and the group was in every archived UEFA
+> match all along (`group.metaData.groupName`), so storing it is one nullable column
+> (migration `0047`). `UNL` packets now open with the group's table -- every side of the
+> group from the first day, at nought, ordered by points, goal difference and goals
+> scored, with a line saying UEFA's own head-to-head tie-breaks are not applied -- and
+> state one absence in words, Squad Changes, not two. The render moved before any
+> Prediction stood under it (ADR-0026).
+
 **The UEFA Nations League (`UNL`) opens for 2026-27, all four Leagues, league phase only.**
 Fifty-four national teams in fourteen groups, 156 Fixtures over six Gameweeks, each
 Gameweek one UEFA matchday: `MD1` 24–26 September, `MD2` 27–29 September, `MD3` 1–3

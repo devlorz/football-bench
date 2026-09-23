@@ -2,6 +2,8 @@ import { describe, expect, test } from "vitest";
 import {
   buildInternationalsContext,
   type InternationalMatch,
+  type GroupFixture,
+  type InternationalStats,
   type PlayedFixture
 } from "../src/context/build-internationals-context.js";
 
@@ -40,6 +42,8 @@ const build = (
   options: {
     internationals?: InternationalMatch[];
     playedFixtures?: PlayedFixture[];
+    internationalStats?: InternationalStats[];
+    groupFixtures?: GroupFixture[];
     datasetUpdatedOn?: string | null;
     homeTeam?: string;
     awayTeam?: string;
@@ -51,6 +55,8 @@ const build = (
   awayTeam: options.awayTeam ?? "Republic of Ireland",
   internationals: options.internationals ?? [],
   playedFixtures: options.playedFixtures ?? [],
+  internationalStats: options.internationalStats ?? [],
+  groupFixtures: options.groupFixtures ?? [],
   datasetUpdatedOn: "datasetUpdatedOn" in options
     ? options.datasetUpdatedOn ?? null
     : "2026-08-26"
@@ -183,6 +189,77 @@ describe("what each side of a cup's Fixture did last", () => {
 });
 
 describe("this Season's own Fixtures merged into the same list", () => {
+  test("a dataset line carries a backfilled sheet, and says nothing without one",
+    () => {
+      const packet = build({
+        internationals: [
+          international({ played_on: "2024-11-15", away_team: "Romania" }),
+          international({ played_on: "2024-11-19", away_team: "Sweden" })
+        ],
+        internationalStats: [{
+          played_on: "2024-11-15",
+          home_team: "Kosovo",
+          away_team: "Romania",
+          home_shots: 9,
+          away_shots: 12,
+          home_shots_on_target: 3,
+          away_shots_on_target: 5,
+          home_xg: 0.7,
+          away_xg: 1.4
+        }]
+      });
+      const kosovo = packet.split("Republic of Ireland")[0]!;
+      // The sheet's figures on the line it belongs to, in the league's own
+      // format; the other line is bare, and never the settled Fixture's
+      // absence sentence, because no sheet was ever asked for it.
+      expect(kosovo).toMatch(/2024-11-15 \| Kosovo 1-0 Romania \| W \| .*shots.*xG/);
+      expect(kosovo).toMatch(/2024-11-19 \| Kosovo 1-0 Sweden \| W\n/);
+      expect(kosovo).not.toContain("no shots or xG stored");
+    });
+
+  test("the group's table stands where the league table would, four sides from day one", () => {
+    const groupFixture = (
+      row: Partial<GroupFixture> & { home_team: string; away_team: string }
+    ): GroupFixture => ({
+      group_name: "Group A2", kickoff_at: new Date("2026-09-24T18:45:00Z"),
+      home_goals: null, away_goals: null, ...row
+    });
+    const fixtures = [
+      groupFixture({ home_team: "Kosovo", away_team: "Republic of Ireland", home_goals: 2, away_goals: 0, kickoff_at: new Date("2026-09-20T18:45:00Z") }),
+      groupFixture({ home_team: "Sweden", away_team: "Romania", home_goals: 1, away_goals: 1, kickoff_at: new Date("2026-09-20T18:45:00Z") }),
+      // After the Lock: settled, and not counted.
+      groupFixture({ home_team: "Romania", away_team: "Kosovo", home_goals: 3, away_goals: 0, kickoff_at: new Date("2026-09-27T18:45:00Z") }),
+      // Another group entirely, and not in this table.
+      groupFixture({ group_name: "Group B1", home_team: "Wales", away_team: "Iceland", home_goals: 4, away_goals: 0, kickoff_at: new Date("2026-09-20T18:45:00Z") })
+    ];
+    const packet = build({ groupFixtures: fixtures });
+    expect(packet).toContain("Group A2 table (results through 2026-09-20):");
+    expect(packet).toContain("1. Kosovo | P 1 W 1 D 0 L 0 | GF 2 GA 0 GD +2 | Pts 3");
+    expect(packet).toContain("2. Romania | P 1 W 0 D 1 L 0 | GF 1 GA 1 GD 0 | Pts 1");
+    expect(packet).toContain("4. Republic of Ireland | P 1 W 0 D 0 L 1 | GF 0 GA 2 GD -2 | Pts 0");
+    expect(packet).not.toContain("Wales");
+    expect(packet).not.toContain("no league table");
+    // Before anything is played the four still stand, at nought.
+    const fresh = build({ groupFixtures: fixtures.map((f) => ({ ...f, home_goals: null, away_goals: null })) });
+    expect(fresh).toContain("Group A2 table:\n1. Kosovo | P 0 W 0 D 0 L 0 | GF 0 GA 0 GD 0 | Pts 0");
+    // A Competition whose schedule names no group keeps the stated absence.
+    expect(build()).toContain("no league table for this Competition");
+  });
+
+  test("a sheet dated the next UTC day still finds its dataset line", () => {
+    const packet = build({
+      internationals: [international({ played_on: "2026-06-11", away_team: "Czechia", country: "Mexico", neutral: true })],
+      internationalStats: [{
+        played_on: "2026-06-12",
+        home_team: "Kosovo",
+        away_team: "Czechia",
+        home_shots: 6, away_shots: 15, home_shots_on_target: 2,
+        away_shots_on_target: 6, home_xg: 0.4, away_xg: 1.9
+      }]
+    });
+    expect(packet).toMatch(/2026-06-11 \| Kosovo 1-0 Czechia \| W \| neutral venue in Mexico \| .*xG/);
+  });
+
   test("carries the shots and xG the dataset has no column for", () => {
     const section = build({
       playedFixtures: [

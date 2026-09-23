@@ -42,6 +42,8 @@ import {
 import {
   buildInternationalsContext,
   type InternationalMatch,
+  type GroupFixture,
+  type InternationalStats,
   type PlayedFixture
 } from "../context/build-internationals-context.js";
 
@@ -100,6 +102,10 @@ export interface MatchContextData {
   deadline: Date;
   historicalMatches: HistoricalMatch[];
   playedFixtures: PlayedFixture[];
+  /** Sheets stored for internationals outside this Season's Fixtures (ADR-0058). */
+  internationalStats: InternationalStats[];
+  /** Every Fixture of the cup's league-phase groups, played or not (ticket 0087). */
+  groupFixtures: GroupFixture[];
   /**
    * The registry entry the reads above were dispatched by, carried rather than
    * resolved twice: which sections this packet has is the same question as
@@ -166,6 +172,23 @@ export async function loadMatchContextData(
   // else, least of all a match id.
   const sources = sourcesOf(competition);
   const statsSource = sources?.stats;
+  // A cup's league-phase groups, every Fixture of every group with its
+  // result where it has one, so the packet can put this Fixture's group table
+  // in front of an Entrant (migration 0047, ticket 0087). Read whole and not
+  // bounded by the Lock: which sides are in a group is a fact about the draw,
+  // and the builder counts only what was settled before the Lock. A
+  // Competition whose Fixtures name no group reads an empty list.
+  const groupFixtures = statsSource === SCORES_365_SOURCE
+    ? await database.query<GroupFixture>(
+      `select group_name, home_team, away_team, kickoff_at,
+              (result->>'home_goals')::int as home_goals,
+              (result->>'away_goals')::int as away_goals
+         from fixtures
+        where competition = $1 and season = $2 and group_name is not null
+        order by kickoff_at`,
+      [competition, season]
+    )
+    : undefined;
   const playedFixtures = statsSource === SCORES_365_SOURCE
     ? await database.query<PlayedFixture>(
       `select
@@ -193,6 +216,23 @@ export async function loadMatchContextData(
           and f.result is not null and f.kickoff_at < $3
         order by f.kickoff_at`,
       [competition, season, deadline, statsSource]
+    )
+    : undefined;
+  // The same table once more, for the internationals the dataset holds and
+  // this Season's Fixtures do not: sheets backfilled by hand for earlier
+  // editions land under the same source and Competition, and are read here by
+  // the day and the two sides so a dataset line can carry them. Bounded by
+  // the Lock like everything else this loader reads.
+  const internationalStats = statsSource === SCORES_365_SOURCE
+    ? await database.query<InternationalStats>(
+      `select
+         (kicked_off_at at time zone 'utc')::date::text as played_on,
+         home_team, away_team,
+         home_shots, away_shots, home_shots_on_target, away_shots_on_target,
+         home_xg::float8 as home_xg, away_xg::float8 as away_xg
+         from team_match_stats
+        where competition = $1 and source = $2 and kicked_off_at < $3`,
+      [competition, statsSource, deadline]
     )
     : undefined;
   // The registry again, and the same rule the shots and xG above are read by:
@@ -317,6 +357,8 @@ export async function loadMatchContextData(
       competition, historicalMatches.rows, storedXg.rows
     ),
     playedFixtures: playedFixtures?.rows ?? [],
+    internationalStats: internationalStats?.rows ?? [],
+    groupFixtures: groupFixtures?.rows ?? [],
     sources,
     internationals: internationals?.rows ?? [],
     datasetUpdatedOn: datasetRead?.rows[0]?.latest_row_on ?? null,
@@ -354,6 +396,8 @@ export function buildMatchContext(
           awayTeam: fixture.away_team,
           internationals: data.internationals,
           playedFixtures: data.playedFixtures,
+          internationalStats: data.internationalStats,
+          groupFixtures: data.groupFixtures,
           datasetUpdatedOn: data.datasetUpdatedOn
         })
         : buildHistoricalContext({

@@ -70,7 +70,8 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0043_the_dataset_says_when_it_was_last_updated.sql",
       "0044_la_liga_gameweek_6_holds_its_lock_open_to_the_last_kickoff.sql",
       "0045_who_picks_each_national_side_and_since_when.sql",
-      "0046_the_dataset_source_row_carries_the_instant_it_was_read.sql"
+      "0046_the_dataset_source_row_carries_the_instant_it_was_read.sql",
+      "0047_a_cup_fixture_names_its_group.sql"
     ]);
     // The record the copy carried, not a shape asserted about the schema: an
     // operator reading a rehearsal needs to see that it ran over rows.
@@ -152,7 +153,8 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0043_the_dataset_says_when_it_was_last_updated.sql",
       "0044_la_liga_gameweek_6_holds_its_lock_open_to_the_last_kickoff.sql",
       "0045_who_picks_each_national_side_and_since_when.sql",
-      "0046_the_dataset_source_row_carries_the_instant_it_was_read.sql"
+      "0046_the_dataset_source_row_carries_the_instant_it_was_read.sql",
+      "0047_a_cup_fixture_names_its_group.sql"
     ]);
     expect(rehearsal.rows).toMatchObject({ gameweeks: 1, squad_changes: 1 });
   });
@@ -195,7 +197,8 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0043_the_dataset_says_when_it_was_last_updated.sql",
       "0044_la_liga_gameweek_6_holds_its_lock_open_to_the_last_kickoff.sql",
       "0045_who_picks_each_national_side_and_since_when.sql",
-      "0046_the_dataset_source_row_carries_the_instant_it_was_read.sql"
+      "0046_the_dataset_source_row_carries_the_instant_it_was_read.sql",
+      "0047_a_cup_fixture_names_its_group.sql"
     ]);
     // Compared rather than skipped, and back whole: `verifyRelabelledAsPl`
     // raises, so this row reaching the count is the comparison having run over

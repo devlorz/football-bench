@@ -200,9 +200,13 @@ Fixture, including the roughly four per cent of Fixtures 365Scores holds no xG f
 38. As an Entrant, I want the `UNL` packet to hold the Fixture line, this Season's
     played Fixtures with shots and xG, each side's five recent internationals, and who
     picks each team, so that everything with a source is in front of me.
-39. As an Entrant, I want no league table, no Squad Changes and no availability
-    section, each a stated absence and none of them a Gap, so that the packet says what
-    a cup does not have rather than apologising for it.
+39. As an Entrant, I want the group's table where a league's table would stand, no
+    Squad Changes stated in words, and no availability section, none of them a Gap, so
+    that the packet says what a cup has and does not have rather than apologising for
+    it. *(Amended 2026-09-23 by ticket 0087: as drafted this story asked for "no league
+    table" as a stated absence; ADR-0057's amendment of the same day puts the group's
+    table there instead, and ADR-0057's earlier amendment records availability as
+    silent rather than stated.)*
 40. As an Entrant, I want Gameweek 1's packet to read "no result has been played yet
     this Season" for the Season section, so that the first Gameweek reads as every
     league's first Gameweek reads.

@@ -74,6 +74,10 @@ const matchSchema = z.looseObject({
   matchday: z.looseObject({ name: z.string().min(1) }),
   homeTeam: teamSchema,
   awayTeam: teamSchema,
+  /** "Group A2": the league-phase group, absent on a knockout match. */
+  group: z.looseObject({
+    metaData: z.looseObject({ groupName: z.string().min(1) })
+  }).optional(),
   /**
    * Absent until a match is played, and three readings once it is: `regular`
    * at ninety minutes, `total` with extra time, `penalty` for the shoot-out.
@@ -325,6 +329,8 @@ function storedTeamName(internationalName: string): string {
 export interface NormalisedUefaMatches {
   scheduled: ScheduledMatch[];
   withdrawnIds: number[];
+  /** The league-phase group of each scheduled Fixture, by UEFA match id. */
+  groups: Map<number, string>;
 }
 
 /**
@@ -343,6 +349,7 @@ export function normaliseUefaMatches(
 ): NormalisedUefaMatches {
   const scheduled: ScheduledMatch[] = [];
   const withdrawnIds: number[] = [];
+  const groups = new Map<number, string>();
   for (const match of matches) {
     // Asked of every match and not only of the ones still on, so that a
     // knockout Fixture is a refusal whatever its status says.
@@ -358,6 +365,9 @@ export function normaliseUefaMatches(
       withdrawnIds.push(Number(match.id));
       continue;
     }
+    if (match.group !== undefined) {
+      groups.set(Number(match.id), match.group.metaData.groupName);
+    }
     scheduled.push({
       fixtureId: Number(match.id),
       matchday: gameweek,
@@ -368,7 +378,7 @@ export function normaliseUefaMatches(
       result: settledResultOf(match)
     });
   }
-  return { scheduled, withdrawnIds };
+  return { scheduled, withdrawnIds, groups };
 }
 
 /**
@@ -470,11 +480,11 @@ export async function fetchUefaCompetition({
     );
   }
 
-  const { scheduled, withdrawnIds } = normaliseUefaMatches(
+  const { scheduled, withdrawnIds, groups } = normaliseUefaMatches(
     competition,
     matches
   );
-  return writeCompetitionSchedule({
+  const written = await writeCompetitionSchedule({
     database,
     competition,
     season,
@@ -485,4 +495,16 @@ export async function fetchUefaCompetition({
       ...await fixturesGoneFromTheFeed(database, competition, season, matches)
     ]
   });
+  // The group beside the engine's own write and not through it: the shared
+  // writer carries what every schedule source has, and a group is what this
+  // one has (migration 0047). Idempotent, and a Fixture the engine did not
+  // keep -- withdrawn, or refused an attachment -- matches no row.
+  for (const [fixtureId, group] of groups) {
+    await database.query(
+      `update fixtures set group_name = $4
+        where competition = $1 and season = $2 and fixture_id = $3`,
+      [competition, season, fixtureId, group]
+    );
+  }
+  return written;
 }

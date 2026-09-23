@@ -137,6 +137,29 @@ const contextData = (competition: string): MatchContextData => ({
       neutral: false
     }
   ],
+  // A sheet backfilled by hand for the dataset's own meeting above, so the
+  // figures a dataset line can carry are under the pin; the neutral-venue
+  // match has none, which is the ordinary silence and is under it too.
+  internationalStats: [
+    {
+      played_on: "2026-06-10",
+      home_team: "Arsenal",
+      away_team: "Coventry City",
+      home_shots: 11,
+      away_shots: 7,
+      home_shots_on_target: 4,
+      away_shots_on_target: 2,
+      home_xg: 1.42,
+      away_xg: 0.63
+    }
+  ],
+  // The cup's group, so the table is under the pin: one result settled before
+  // the Lock, one after it, and the fourth side yet to play.
+  groupFixtures: [
+    { group_name: "Group A2", home_team: "Arsenal", away_team: "Coventry City", kickoff_at: new Date("2026-08-18T19:00:00Z"), home_goals: 2, away_goals: 1 },
+    { group_name: "Group A2", home_team: "Spain", away_team: "Norway", kickoff_at: new Date("2026-08-18T19:00:00Z"), home_goals: 0, away_goals: 0 },
+    { group_name: "Group A2", home_team: "Norway", away_team: "Arsenal", kickoff_at: new Date("2026-09-30T19:00:00Z"), home_goals: null, away_goals: null }
+  ],
   datasetUpdatedOn: "2026-08-14",
   nationalTeamHeadCoaches: [
     {
@@ -432,14 +455,15 @@ describe("the Match Prompt Version", () => {
     }
 
     for (const heading of [
-      // The cup's two sections, and the two absences it states in words.
+      // The cup's two sections, its group table where the league's table
+      // stands (ticket 0087), and the one absence it states in words.
       // Two and not the three spec 0027's story 39 asks for: availability is
       // absent and silent, as it is in four leagues' packets (ADR-0037), and
       // ADR-0057's amendment records why the third is right to be wordless.
       // It is the "FPL-derived player context" `false` above that asserts it.
       "Recent internationals as of",
       "Head Coach and changes:\n",
-      "League table: no league table for this Competition;",
+      "Group A2 table",
       "Squad changes: none for this Competition;"
     ]) {
       expect([heading, cup.includes(heading), league.includes(heading)])

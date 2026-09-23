@@ -212,10 +212,17 @@ const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
   // step that spends money -- so the reading that stands behind this pin is
   // the suite's own render, printed whole and read line by line, with the
   // ticket recording what it says.
+  //
+  // Moved twice before its first Lock, both for reasons ADR-0026 allows and
+  // both with no Prediction yet stored under it: on 2026-09-22 a dataset line
+  // learned to carry the shots and xG a backfilled 365Scores sheet stored for
+  // it (`stats:backfill`), and on 2026-09-23 the group's table took the place
+  // of the "no league table" absence (ticket 0087). `90d0c3f0…c616` was the
+  // reading of 2026-09-16 and `39b69e95…7220` the 22nd's.
   UNL: {
     version: "match-unl/2026-27-v1",
     sha256:
-      "90d0c3f01c459670b9f47143a61c9c4d65214ccdc47fe755787b06ca3bffc616",
+      "0c463838f53dec0bd153805f1462525d9433ef797ec5cae0e79fceeaab8dfc71",
     competitionName: "UEFA Nations League"
   }
 };

@@ -291,6 +291,15 @@ describe("the Nations League read from UEFA", () => {
       [COMPETITION, SEASON]
     );
     expect(Number(rows[0]!.count)).toBe(156);
+    // Every league-phase Fixture names its group, as the feed does: fourteen
+    // groups over the fifty-four sides, none missing (migration 0047).
+    const { rows: groups } = await client.query<{ n: string; missing: string }>(
+      `select count(distinct group_name)::text as n,
+              count(*) filter (where group_name is null)::text as missing
+         from fixtures where competition = $1 and season = $2`,
+      [COMPETITION, SEASON]
+    );
+    expect(groups[0]).toEqual({ n: "14", missing: "0" });
   });
 
   test("an empty page ends the paging, and a Season short of a matchday is refused",

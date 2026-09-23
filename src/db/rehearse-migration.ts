@@ -93,6 +93,7 @@ declare
   missing     bigint;
   extra       bigint;
   mislabelled bigint;
+  added       text[];
 begin
   foreach target in array array[${quoted(COMPARED_TABLES)}] loop
     -- This runs after the pass, so every name on the list must exist by now.
@@ -119,7 +120,20 @@ begin
          and column_name = 'fpl_id')
       into renamed;
 
-    projection := 'to_jsonb(a)';
+    -- A column the migration added is not a row lost: strip every column
+    -- the copy never had before comparing, so a nullable column arriving on
+    -- a compared table (0047's fixtures.group_name) reads as the rows it
+    -- left alone rather than as every row changed. A column the migration
+    -- *dropped* still fails, because the before-side keeps it.
+    select coalesce(array_agg(c.column_name::text), '{}'::text[])
+      into added
+      from information_schema.columns c
+     where c.table_schema = 'public' and c.table_name = target
+       and not exists (
+         select 1 from information_schema.columns b
+          where b.table_schema = 'before' and b.table_name = target
+            and b.column_name = c.column_name);
+    projection := format('(to_jsonb(a) - %L::text[])', added);
     if relabelled then
       projection := projection || ' - ''competition''';
     end if;

@@ -3,6 +3,7 @@ import {
   matchCount,
   NO_PRIOR_MEETING,
   NO_RESULT_YET,
+  type MatchPerformance,
   performanceSegments,
   xgRatePerGame,
   type SideMatch
@@ -66,8 +67,40 @@ export interface BuildInternationalsContextOptions {
   awayTeam: string;
   internationals: InternationalMatch[];
   playedFixtures: PlayedFixture[];
+  /**
+   * Shots and xG a Fixture-keyed stats source stored for internationals that
+   * are the dataset's rows and not this Season's Fixtures -- earlier editions,
+   * backfilled by hand (`stats:backfill`). Joined to a dataset line by the day
+   * and the two sides, the key the merge below already uses. A dataset match
+   * with no row here says nothing about its shots: a sheet was never asked
+   * for, which is the ordinary case for a friendly and not a hole.
+   */
+  internationalStats?: InternationalStats[];
+  /** The cup's groups; empty where the schedule names none. */
+  groupFixtures?: GroupFixture[];
   /** The date of the dataset's latest row, or null if it was never read. */
   datasetUpdatedOn: string | null;
+}
+
+/**
+ * One Fixture of a cup's league-phase group, played or not: the group is the
+ * draw's, and a table that listed only the sides that had played would leave
+ * a group of four reading as a group of two after one matchday.
+ */
+export interface GroupFixture {
+  group_name: string;
+  home_team: string;
+  away_team: string;
+  kickoff_at: Date;
+  home_goals: number | null;
+  away_goals: number | null;
+}
+
+/** One `team_match_stats` row as the packet reads it, keyed the dataset's way. */
+export interface InternationalStats extends MatchPerformance {
+  played_on: string;
+  home_team: string;
+  away_team: string;
 }
 
 /** How many of a side's internationals the section shows (ADR-0057). */
@@ -100,6 +133,72 @@ const NO_INTERNATIONAL = "no international stored for this side.";
 const NO_LEAGUE_TABLE = "League table: no league table for this Competition; "
   + "a national side plays no league.";
 
+/**
+ * The group's table where this Fixture's sides are in one (ticket 0087): the
+ * league phase is four sides playing each other home and away, so the table
+ * is what the league's is to a league -- what has been settled so far, and
+ * where each side stands before this Fixture. Points, goal difference, goals
+ * scored, then name, which is the ordering the league table uses; UEFA's own
+ * tie-breaks (head-to-head first) are not applied, and the line says so.
+ *
+ * Every side of the group is a row from the first day, at nought, so a group
+ * reads as four before any of them has played. Only results settled before
+ * the Lock count.
+ */
+function groupTable(
+  fixtures: GroupFixture[],
+  homeTeam: string,
+  asOf: Date
+): string[] {
+  const group = fixtures.find((fixture) =>
+    fixture.home_team === homeTeam || fixture.away_team === homeTeam)?.group_name;
+  if (group === undefined) {
+    return [NO_LEAGUE_TABLE];
+  }
+  const members = fixtures.filter((fixture) => fixture.group_name === group);
+  const sides = [...new Set(members.flatMap((fixture) =>
+    [fixture.home_team, fixture.away_team]))];
+  const settled = members.filter((fixture) =>
+    fixture.home_goals !== null && fixture.away_goals !== null
+    && fixture.kickoff_at.getTime() < asOf.getTime());
+  const rows = sides.map((side) => {
+    let played = 0; let won = 0; let drawn = 0; let lost = 0;
+    let scored = 0; let conceded = 0;
+    for (const fixture of settled) {
+      const home = fixture.home_team === side;
+      if (!home && fixture.away_team !== side) {
+        continue;
+      }
+      const goalsFor = home ? fixture.home_goals! : fixture.away_goals!;
+      const goalsAgainst = home ? fixture.away_goals! : fixture.home_goals!;
+      played += 1; scored += goalsFor; conceded += goalsAgainst;
+      if (goalsFor > goalsAgainst) { won += 1; }
+      else if (goalsFor === goalsAgainst) { drawn += 1; }
+      else { lost += 1; }
+    }
+    return {
+      side, played, won, drawn, lost, scored, conceded,
+      difference: scored - conceded, points: won * 3 + drawn
+    };
+  }).sort((left, right) =>
+    right.points - left.points
+    || right.difference - left.difference
+    || right.scored - left.scored
+    || left.side.localeCompare(right.side));
+  const through = settled.length === 0
+    ? null
+    : utcDate(new Date(Math.max(...settled.map((f) => f.kickoff_at.getTime()))));
+  return [
+    `${group} table${through === null ? "" : ` (results through ${through})`}:`,
+    ...rows.map((row, index) =>
+      `${index + 1}. ${row.side} | P ${row.played} W ${row.won} D ${row.drawn} `
+      + `L ${row.lost} | GF ${row.scored} GA ${row.conceded} `
+      + `GD ${row.difference > 0 ? "+" : ""}${row.difference} | Pts ${row.points}`),
+    "Ordered by points, goal difference and goals scored; UEFA's own "
+      + "head-to-head tie-breaks are not applied here."
+  ];
+}
+
 const NO_DATASET_READ = "Dataset last updated: no read of the dataset is "
   + "stored.";
 
@@ -130,11 +229,21 @@ function utcDate(instant: Date): string {
  * month, so the same match arrives from the record first and from the file
  * weeks later.
  */
+/** `YYYY-MM-DD` moved by whole UTC days. */
+function shiftDay(date: string, days: number): string {
+  const moved = new Date(`${date}T00:00:00Z`);
+  moved.setUTCDate(moved.getUTCDate() + days);
+  return moved.toISOString().slice(0, 10);
+}
+
 function matchKey(playedOn: string, home: string, away: string): string {
   return `${playedOn}|${home}|${away}`;
 }
 
-function fromDataset(match: InternationalMatch): RecentMatch {
+function fromDataset(
+  match: InternationalMatch,
+  stats: MatchPerformance | undefined
+): RecentMatch {
   return {
     playedOn: match.played_on,
     homeTeam: match.home_team,
@@ -145,7 +254,12 @@ function fromDataset(match: InternationalMatch): RecentMatch {
     // Marked only where it is true, and the only thing the line says about the
     // venue: home-team-first ordering already says who was at home, and a
     // neutral ground is the one case where that ordering means nothing.
-    tail: match.neutral ? [`neutral venue in ${match.country}`] : []
+    tail: [
+      ...(match.neutral ? [`neutral venue in ${match.country}`] : []),
+      // The figures where a sheet was read for this match; silence where none
+      // was, which is not the stated absence a settled Fixture gets.
+      ...(stats === undefined ? [] : [performanceSegments(stats).join(", ")])
+    ]
   };
 }
 
@@ -367,11 +481,21 @@ export function buildInternationalsContext(
   const lockDay = utcDate(options.asOf);
   const internationals = options.internationals
     .filter((match) => match.played_on < lockDay);
+  const statsByMatch = new Map((options.internationalStats ?? [])
+    .map((row) => [matchKey(row.played_on, row.home_team, row.away_team), row]));
   const merged = new Map(internationals
-    .map((match) => [
-      matchKey(match.played_on, match.home_team, match.away_team),
-      fromDataset(match)
-    ]));
+    .map((match) => {
+      const key = matchKey(match.played_on, match.home_team, match.away_team);
+      // The dataset dates a match by where it was played and the sheet by
+      // UTC, so a late kickoff in the Americas sits one day apart in the two;
+      // the same pair a day either side is the same match.
+      // ponytail: two sides never meet on consecutive days, so ±1 is safe;
+      // widen only if a source ever dates by more than a timezone.
+      const stats = statsByMatch.get(key)
+        ?? statsByMatch.get(matchKey(shiftDay(match.played_on, 1), match.home_team, match.away_team))
+        ?? statsByMatch.get(matchKey(shiftDay(match.played_on, -1), match.home_team, match.away_team));
+      return [key, fromDataset(match, stats)];
+    }));
   const played = options.playedFixtures.filter((fixture) =>
     fixture.kicked_off_at.getTime() < options.asOf.getTime());
   for (const fixture of played) {
@@ -403,7 +527,7 @@ export function buildInternationalsContext(
     // played. Here rather than anywhere else because here is where the league
     // puts its table and that table's coverage statement -- ahead of the base
     // rates and the two sides.
-    NO_LEAGUE_TABLE,
+    ...groupTable(options.groupFixtures ?? [], options.homeTeam, options.asOf),
     seasonResultsLine(played),
     "",
     baseRatesLine(internationals),
