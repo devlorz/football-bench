@@ -50,6 +50,13 @@ export interface CompetitionRoute {
      * every page's comment says has one.
      */
     competitionName: string;
+    /**
+     * What the header's switcher calls this Competition: the packet's name,
+     * except where that name is too long for one segment of a six-way
+     * switcher and the code is what a reader knows it by. Only the switcher
+     * reads this; every title and heading keeps `competitionName`.
+     */
+    switcherLabel: string;
     /** The page's own path, which is what a link to itself points at. */
     path: string;
     /** The read API's prefix for this Competition; an endpoint hangs off it. */
@@ -102,6 +109,13 @@ export interface CompetitionRoute {
  * with no empty segment left the routes are plain `[competition]` segments
  * rather than rest parameters.
  */
+/**
+ * The switcher's abbreviations, by code -- data, so that nothing in the
+ * chrome tests a Competition's code. A Competition absent here is labelled
+ * by the packet's own name.
+ */
+const SWITCHER_LABELS: Readonly<Record<string, string>> = { UNL: "UNL" };
+
 export const competitionRoutes = (): CompetitionRoute[] =>
   MATCH_PROMPT_COMPETITIONS.map((competition) => {
     const segment = competition.toLowerCase();
@@ -111,6 +125,8 @@ export const competitionRoutes = (): CompetitionRoute[] =>
       props: {
         competition,
         competitionName: matchPromptOf(competition).competitionName,
+        switcherLabel: SWITCHER_LABELS[competition]
+          ?? matchPromptOf(competition).competitionName,
         path: `/${segment}`,
         api: `/api/${segment}`,
         retiredLabel: retired === null ? null : retiredGameweekLabel(retired)

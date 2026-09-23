@@ -119,7 +119,7 @@ const LINKS = [
           current page must point at the current page — the rule stated on
           `competitionPath` above — and it now holds by construction. */}
       <nav class="seg" aria-label="Competition">
-        {SWITCHER.map(({ competition: code, path, competitionName }) => (
+        {SWITCHER.map(({ competition: code, path, switcherLabel }) => (
           <a
             class="seg-opt"
             href={pageHref(
@@ -133,7 +133,7 @@ const LINKS = [
             )}
             aria-current={code === competition ? "page" : undefined}
           >
-            {competitionName}
+            {switcherLabel}
           </a>
         ))}
       </nav>

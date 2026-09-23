@@ -31,6 +31,7 @@ describe("the Match track's Competition routes", () => {
         params: { competition: "pl" },
         props: {
           competition: "PL", competitionName: "Premier League",
+          switcherLabel: "Premier League",
           path: "/pl", api: "/api/pl",
           // Null, and a test rather than an assumption: the Premier League
           // never used a version it has retired, so its page carries no frozen
@@ -43,6 +44,7 @@ describe("the Match track's Competition routes", () => {
         params: { competition: "pd" },
         props: {
           competition: "PD", competitionName: "La Liga",
+          switcherLabel: "La Liga",
           path: "/pd", api: "/api/pd",
           // The heading ADR-0042 froze, byte for byte. It names the retired
           // version, which is what the block's read filters by, and the two
@@ -56,6 +58,7 @@ describe("the Match track's Competition routes", () => {
         params: { competition: "sa" },
         props: {
           competition: "SA", competitionName: "Serie A",
+          switcherLabel: "Serie A",
           path: "/sa", api: "/api/sa",
           retiredLabel: null
         }
@@ -64,6 +67,7 @@ describe("the Match track's Competition routes", () => {
         params: { competition: "fl1" },
         props: {
           competition: "FL1", competitionName: "Ligue 1",
+          switcherLabel: "Ligue 1",
           path: "/fl1", api: "/api/fl1",
           retiredLabel: null
         }
@@ -72,6 +76,7 @@ describe("the Match track's Competition routes", () => {
         params: { competition: "bl1" },
         props: {
           competition: "BL1", competitionName: "Bundesliga",
+          switcherLabel: "Bundesliga",
           path: "/bl1", api: "/api/bl1",
           retiredLabel: null
         }
@@ -80,6 +85,9 @@ describe("the Match track's Competition routes", () => {
         params: { competition: "unl" },
         props: {
           competition: "UNL", competitionName: "UEFA Nations League",
+          // The one abbreviation: the packet's name is the longest of the six and
+          // the code is what the header has room for.
+          switcherLabel: "UNL",
           path: "/unl", api: "/api/unl",
           retiredLabel: null
         }
