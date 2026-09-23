@@ -158,6 +158,38 @@ html {
   font-weight: 600;
 }
 .navtools { display: flex; align-items: center; gap: 14px; margin-left: auto; }
+
+/* The Competition switcher has a row of its own under the brand, the nav and
+   the tools, at every width. Six leagues beside everything else is ~1500px
+   of header and the page stops at 1440, so squeezed into one line the control
+   broke each name across two lines inside its own segment -- "La / Liga",
+   "Ligue / 1" -- and took the brand and the nav with it.
+
+   A league's name is one line, and the row, not the document, gives ground:
+   the segments keep their width and the row scrolls when a phone is narrower
+   than six of them. The padding is the focus ring's room -- the scrollport
+   clips at its padding box and the ring stands 4px out, its 2px offset plus
+   its 2px thickness -- and the negative margin returns it, so spec 0011's
+   story 48 holds on every segment. */
+.nav { flex-wrap: wrap; row-gap: 12px; }
+.switcher {
+  order: 1;
+  flex-basis: 100%;
+  display: flex;
+  overflow-x: auto;
+  padding: 4px;
+  margin: -4px;
+  /* The bar drew over the segments' bottom rule; a league cut off at the
+     row's edge already says there is more to scroll to. */
+  scrollbar-width: none;
+}
+.switcher .seg { flex: none; }
+.nav .seg-opt { white-space: nowrap; }
+/* Each nav link is one line too: "Entrant record" broken in two sat taller
+   than the brand it shares a row with. The brand is what wraps instead, its
+   Competition dropping under the name when the row runs tight. */
+.navlinks a { white-space: nowrap; }
+.nav-brand { flex-wrap: wrap; row-gap: 2px; }
 .navtools .btn { padding: 6px; }
 .burger { display: none; }
 
@@ -711,38 +743,8 @@ html {
      width before it shrinks anything, so a brand basing itself on its own two
      names fills the row and pushes the tools off it whatever `min-width` says.
      At 0 the brand claims nothing and then grows into what the tools leave. */
-  .nav-brand { flex: 1 1 0; min-width: 0; flex-wrap: wrap; row-gap: 2px; }
+  .nav-brand { flex: 1 1 0; min-width: 0; }
   .navtools { align-self: center; }
-
-  /* The switcher on a phone (ticket: The Competition switcher on a phone,
-     which with the chosen-segment rule above is this control's whole design).
-     A league's name is one line, and the control, not the document, gives
-     ground: `.seg-opt` is free to wrap its text in Modernist and at this
-     width that is what breaks "Premier League" across two lines inside its
-     own segment, so `nowrap` keeps each name whole and `overflow-x: auto`
-     makes the control the thing that scrolls -- the automatic minimum a
-     scroll container zeroes is what lets the row give it ground, and the
-     control's own row, which the wrap above gives it, is where the width
-     comes from. The padding is the focus ring's room: the scrollport clips
-     at its padding box and the ring stands 4px out -- its 2px offset gap
-     plus the 2px it is thick -- so 4px of padding with the negative block
-     margin returning the height keeps spec 0011's story 48 whole, 2px accent
-     at 2px offset on every segment.
-
-     Scoped to this breakpoint because above it the header is one flex line:
-     squeezed into it, the control hid a league with no scrollbar to say so
-     -- at 1024px, measured, "Serie A" was an S and "Ligue 1" was gone. Up
-     there the line is what it always was, wrapping a label where it runs
-     tight -- that band's own defect, and its own ticket. */
-  .nav .seg {
-    overflow-x: auto;
-    padding: 4px;
-    margin-block: -4px;
-    /* Its own row, under the brand and the tools. */
-    order: 1;
-    flex-basis: 100%;
-  }
-  .nav .seg-opt { white-space: nowrap; }
 
   /* Clipped and not `display: none`: the design takes the column headers off a
      phone, and `display: none` would take them off the accessibility tree with

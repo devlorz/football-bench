@@ -118,24 +118,26 @@ const LINKS = [
           stood here has nothing left to substitute. A link marked as the
           current page must point at the current page — the rule stated on
           `competitionPath` above — and it now holds by construction. */}
-      <nav class="seg" aria-label="Competition">
-        {SWITCHER.map(({ competition: code, path, switcherLabel }) => (
-          <a
-            class="seg-opt"
-            href={pageHref(
-              path,
-              // Overall has no per-league copy for `pageHref` to hang the
-              // crossing off (it ignores `path` entirely, spec 0025), so a
-              // league picked from here falls back to that league's own
-              // leaderboard rather than every entry linking to `/overall`
-              // itself.
-              current === "overall" ? "leaderboard" : current
-            )}
-            aria-current={code === competition ? "page" : undefined}
-          >
-            {switcherLabel}
-          </a>
-        ))}
+      <nav class="switcher" aria-label="Competition">
+        <div class="seg">
+          {SWITCHER.map(({ competition: code, path, switcherLabel }) => (
+            <a
+              class="seg-opt"
+              href={pageHref(
+                path,
+                // Overall has no per-league copy for `pageHref` to hang the
+                // crossing off (it ignores `path` entirely, spec 0025), so a
+                // league picked from here falls back to that league's own
+                // leaderboard rather than every entry linking to `/overall`
+                // itself.
+                current === "overall" ? "leaderboard" : current
+              )}
+              aria-current={code === competition ? "page" : undefined}
+            >
+              {switcherLabel}
+            </a>
+          ))}
+        </div>
       </nav>
       <div class="navtools">
         <button
@@ -207,6 +209,12 @@ const LINKS = [
         for (const link of document.querySelectorAll("#navlinks a")) {
           link.addEventListener("click", () => setMenu(false));
         }
+
+        // The switcher scrolls on a phone, and the league being read may sit
+        // past its edge: bring it into view so the page never opens on a
+        // switcher that hides its own answer.
+        document.querySelector(".switcher [aria-current]")
+          ?.scrollIntoView({ block: "nearest", inline: "nearest" });
       })();
     </script>
   </body>
