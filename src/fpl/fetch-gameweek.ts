@@ -434,59 +434,66 @@ async function fetchFpl({
 
   await database.query("begin");
   try {
-    for (const event of eventsToStore) {
-      if (!lockedGameweeks.has(event.id)) {
-        await database.query(
-          // Said and not left to the column default: migration 0024 dropped
-          // the defaults it could because the unsaid Competition is the one
-          // mistake nothing downstream can catch. This fetch is the Premier
-          // League's by nature.
-          `insert into gameweeks (competition, season, gw, deadline_at)
-           values ('PL', $1, $2, $3)
-           on conflict (competition, season, gw)
-           do update set deadline_at = excluded.deadline_at`,
-          [season, event.id, event.deadline_time]
-        );
-      }
-    }
+    // Keyed the way the table is, because a batch upsert cannot touch one
+    // row twice: the last copy of an id FPL sends is the one stored, as it
+    // was when each row was its own statement.
+    const openEvents = [...new Map(eventsToStore
+      .filter(({ id }) => !lockedGameweeks.has(id))
+      .map((event) => [event.id, event])).values()];
+    await database.query(
+      // Said and not left to the column default: migration 0024 dropped
+      // the defaults it could because the unsaid Competition is the one
+      // mistake nothing downstream can catch. This fetch is the Premier
+      // League's by nature.
+      `insert into gameweeks (competition, season, gw, deadline_at)
+       select 'PL', $1, * from unnest($2::integer[], $3::timestamptz[])
+       on conflict (competition, season, gw)
+       do update set deadline_at = excluded.deadline_at`,
+      [
+        season,
+        openEvents.map(({ id }) => id),
+        openEvents.map(({ deadline_time: deadline }) => deadline)
+      ]
+    );
 
     if (playerSnapshotStored && gameweek !== undefined) {
       await database.query(
         "delete from fpl_players where season = $1 and gw = $2",
         [season, gameweek]
       );
-      for (const player of players) {
-        await database.query(
-          `insert into fpl_players (
-             season, gw, fpl_id, team_name, short_name, web_name, position,
-             price_tenths, status, chance_of_playing_next_round, news,
-             news_added, observed_at, penalties_order, direct_freekicks_order,
-             corners_and_indirect_freekicks_order
-           )
-           values (
-             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-             $15, $16
-           )`,
-          [
-            season,
-            gameweek,
-            player.id,
-            player.teamName,
-            player.teamCode,
-            player.web_name,
-            player.position,
-            player.now_cost,
-            player.status,
-            player.chance_of_playing_next_round,
-            player.news,
-            player.news_added,
-            observedAt,
-            player.penalties_order,
-            player.direct_freekicks_order,
-            player.corners_and_indirect_freekicks_order
-          ]
-        );
-      }
+      await database.query(
+        `insert into fpl_players (
+           season, gw, observed_at, fpl_id, team_name, short_name, web_name,
+           position, price_tenths, status, chance_of_playing_next_round, news,
+           news_added, penalties_order, direct_freekicks_order,
+           corners_and_indirect_freekicks_order
+         )
+         select $1, $2, $3, * from unnest(
+           $4::integer[], $5::text[], $6::text[], $7::text[], $8::text[],
+           $9::integer[], $10::text[], $11::integer[], $12::text[],
+           $13::timestamptz[], $14::integer[], $15::integer[], $16::integer[]
+         )`,
+        [
+          season,
+          gameweek,
+          observedAt,
+          players.map(({ id }) => id),
+          players.map(({ teamName }) => teamName),
+          players.map(({ teamCode }) => teamCode),
+          players.map(({ web_name: webName }) => webName),
+          players.map(({ position }) => position),
+          players.map(({ now_cost: price }) => price),
+          players.map(({ status }) => status),
+          players.map(({ chance_of_playing_next_round: chance }) => chance),
+          players.map(({ news }) => news),
+          players.map(({ news_added: newsAdded }) => newsAdded),
+          players.map(({ penalties_order: order }) => order),
+          players.map(({ direct_freekicks_order: order }) => order),
+          players.map(({
+            corners_and_indirect_freekicks_order: order
+          }) => order)
+        ]
+      );
     }
 
     if (unscheduledFixtureIds.length > 0) {
@@ -533,55 +540,65 @@ async function fetchFpl({
       );
     }
 
-    for (const fixture of fixturesToStore) {
+    // Keyed the way the table is, because a batch upsert cannot touch one
+    // row twice: the last copy of an id FPL sends is the one stored, as it
+    // was when each row was its own statement.
+    const fixtureRows = [
+      ...new Map(fixturesToStore.map((fixture) => [fixture.id, fixture]))
+        .values()
+    ];
+    const fixtureLockedInGw = fixtureRows.map((fixture) => {
       const scheduledEvent = bootstrap.events.find(
         ({ id }) => id === fixture.event
       );
-      const lockedInGameweek = scheduledEvent !== undefined
+      return scheduledEvent !== undefined
         && observedAt.getTime() >= effectiveDeadline(scheduledEvent).getTime()
         ? nextOpenGameweek ?? null
         : null;
-      await database.query(
-        // Said, not defaulted, for the reason the Gameweek insert above says.
-        `insert into fixtures (
-           competition, season, fixture_id, gw, locked_in_gw, home_team,
-           away_team, kickoff_at, result
-         )
-         values ('PL', $1, $2, $3, $4, $5, $6, $7, $9)
-         on conflict (competition, season, fixture_id)
-         do update set
-           gw = excluded.gw,
-           result = coalesce(excluded.result, fixtures.result),
-           home_team = excluded.home_team,
-           away_team = excluded.away_team,
-           kickoff_at = excluded.kickoff_at,
-           unscheduled = false,
-           deferred = fixtures.deferred or (
-             fixtures.locked_in_gw is not null
-             and fixtures.locked_in_gw <> excluded.gw
-             and exists (
-               select 1
-                 from gameweeks locked_gameweek
-                where locked_gameweek.competition = 'PL'
-                  and locked_gameweek.season = fixtures.season
-                  and locked_gameweek.gw = fixtures.locked_in_gw
-                  and locked_gameweek.deadline_at <= $8
-             )
-           ),
-           updated_at = now()`,
-        [
-          season,
-          fixture.id,
-          fixture.event,
-          lockedInGameweek,
-          fixture.homeTeam,
-          fixture.awayTeam,
-          fixture.kickoff_time,
-          observedAt,
-          resultIfOver(fixture)
-        ]
-      );
-    }
+    });
+    await database.query(
+      // Said, not defaulted, for the reason the Gameweek insert above says.
+      `insert into fixtures (
+         competition, season, fixture_id, gw, locked_in_gw, home_team,
+         away_team, kickoff_at, result
+       )
+       select 'PL', $1, * from unnest(
+         $2::integer[], $3::integer[], $4::integer[], $5::text[],
+         $6::text[], $7::timestamptz[], $9::jsonb[]
+       )
+       on conflict (competition, season, fixture_id)
+       do update set
+         gw = excluded.gw,
+         result = coalesce(excluded.result, fixtures.result),
+         home_team = excluded.home_team,
+         away_team = excluded.away_team,
+         kickoff_at = excluded.kickoff_at,
+         unscheduled = false,
+         deferred = fixtures.deferred or (
+           fixtures.locked_in_gw is not null
+           and fixtures.locked_in_gw <> excluded.gw
+           and exists (
+             select 1
+               from gameweeks locked_gameweek
+              where locked_gameweek.competition = 'PL'
+                and locked_gameweek.season = fixtures.season
+                and locked_gameweek.gw = fixtures.locked_in_gw
+                and locked_gameweek.deadline_at <= $8
+           )
+         ),
+         updated_at = now()`,
+      [
+        season,
+        fixtureRows.map(({ id }) => id),
+        fixtureRows.map(({ event }) => event),
+        fixtureLockedInGw,
+        fixtureRows.map(({ homeTeam }) => homeTeam),
+        fixtureRows.map(({ awayTeam }) => awayTeam),
+        fixtureRows.map(({ kickoff_time: kickoff }) => kickoff),
+        observedAt,
+        fixtureRows.map(resultIfOver)
+      ]
+    );
     await database.query("commit");
     return {
       gameweek: gameweek ?? null,

@@ -103,55 +103,59 @@ export async function fetchFplPlayerPoints({
 
   await database.query("begin");
   try {
-    for (const player of live.elements) {
-      await database.query(
-        `insert into fpl_player_points (
-           season, gw, fpl_id, minutes, total_points,
-           goals_scored, assists, clean_sheets, bonus,
-           yellow_cards, red_cards, saves,
-           expected_goals, expected_assists, expected_goals_conceded
-         )
-         values (
-           $1, $2, $3, $4, $5,
-           $6, $7, $8, $9,
-           $10, $11, $12,
-           $13, $14, $15
-         )
-         on conflict (season, gw, fpl_id)
-         do update set
-           minutes = excluded.minutes,
-           total_points = excluded.total_points,
-           goals_scored = excluded.goals_scored,
-           assists = excluded.assists,
-           clean_sheets = excluded.clean_sheets,
-           bonus = excluded.bonus,
-           yellow_cards = excluded.yellow_cards,
-           red_cards = excluded.red_cards,
-           saves = excluded.saves,
-           expected_goals = excluded.expected_goals,
-           expected_assists = excluded.expected_assists,
-           expected_goals_conceded = excluded.expected_goals_conceded`,
-        [
-          season,
-          gameweek,
-          player.id,
-          player.stats.minutes,
-          player.stats.total_points,
-          player.stats.goals_scored,
-          player.stats.assists,
-          player.stats.clean_sheets,
-          player.stats.bonus,
-          player.stats.yellow_cards,
-          player.stats.red_cards,
-          player.stats.saves,
-          // Passed through as the source's own strings: parsing to a float
-          // and back is a rounding step with nothing to gain.
-          player.stats.expected_goals,
-          player.stats.expected_assists,
-          player.stats.expected_goals_conceded
-        ]
-      );
-    }
+    // Keyed the way the table is, because a batch upsert cannot touch one
+    // row twice: the last copy of an id FPL sends is the one stored, as it
+    // was when each row was its own statement.
+    const players = [
+      ...new Map(live.elements.map((player) => [player.id, player])).values()
+    ];
+    await database.query(
+      `insert into fpl_player_points (
+         season, gw, fpl_id, minutes, total_points,
+         goals_scored, assists, clean_sheets, bonus,
+         yellow_cards, red_cards, saves,
+         expected_goals, expected_assists, expected_goals_conceded
+       )
+       select $1, $2, * from unnest(
+         $3::integer[], $4::integer[], $5::integer[],
+         $6::integer[], $7::integer[], $8::integer[], $9::integer[],
+         $10::integer[], $11::integer[], $12::integer[],
+         $13::numeric[], $14::numeric[], $15::numeric[]
+       )
+       on conflict (season, gw, fpl_id)
+       do update set
+         minutes = excluded.minutes,
+         total_points = excluded.total_points,
+         goals_scored = excluded.goals_scored,
+         assists = excluded.assists,
+         clean_sheets = excluded.clean_sheets,
+         bonus = excluded.bonus,
+         yellow_cards = excluded.yellow_cards,
+         red_cards = excluded.red_cards,
+         saves = excluded.saves,
+         expected_goals = excluded.expected_goals,
+         expected_assists = excluded.expected_assists,
+         expected_goals_conceded = excluded.expected_goals_conceded`,
+      [
+        season,
+        gameweek,
+        players.map(({ id }) => id),
+        players.map(({ stats }) => stats.minutes),
+        players.map(({ stats }) => stats.total_points),
+        players.map(({ stats }) => stats.goals_scored),
+        players.map(({ stats }) => stats.assists),
+        players.map(({ stats }) => stats.clean_sheets),
+        players.map(({ stats }) => stats.bonus),
+        players.map(({ stats }) => stats.yellow_cards),
+        players.map(({ stats }) => stats.red_cards),
+        players.map(({ stats }) => stats.saves),
+        // Passed through as the source's own strings: parsing to a float
+        // and back is a rounding step with nothing to gain.
+        players.map(({ stats }) => stats.expected_goals),
+        players.map(({ stats }) => stats.expected_assists),
+        players.map(({ stats }) => stats.expected_goals_conceded)
+      ]
+    );
     await database.query("commit");
   } catch (error) {
     await database.query("rollback");
