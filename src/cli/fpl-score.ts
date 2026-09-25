@@ -1,7 +1,7 @@
 import pg from "pg";
 import { fetchFplDaily } from "../fpl/fetch-gameweek.js";
 import { fetchFplPlayerPoints } from "../fpl/fetch-player-points.js";
-import { scoreFplGameweek } from "../fpl/score-fpl-gameweek.js";
+import { scoreFplGameweeks } from "../fpl/score-fpl-gameweek.js";
 import { nodeHttpFetcher } from "../http.js";
 import { readScoreJobConfig } from "./config.js";
 
@@ -49,8 +49,10 @@ try {
   for (const gameweek of settledGameweeks) {
     await fetchFplPlayerPoints({ database, season: config.season, gameweek, http: nodeHttpFetcher });
   }
+  await scoreFplGameweeks({
+    database, season: config.season, gameweeks: settledGameweeks
+  });
   for (const gameweek of settledGameweeks) {
-    await scoreFplGameweek({ database, season: config.season, gameweek });
     console.log(`Scored FPL ${config.season} Gameweek ${gameweek}`);
   }
 } finally {

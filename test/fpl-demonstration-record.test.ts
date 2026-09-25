@@ -1,5 +1,6 @@
 import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { archivedBody } from "./archived-fixture.js";
 import { resetSchema } from "./schema-fixture.js";
 import type { ManagerState } from "../src/fpl/apply-gameweek-action.js";
 import {
@@ -14,7 +15,10 @@ import {
   VIOLATION_PROFILE_SEASON_TO_DATE_METRIC
 } from "../src/fpl/demonstration-record.js";
 import { storeManagerState } from "../src/fpl/manager-state-store.js";
-import { scoreFplGameweek } from "../src/fpl/score-fpl-gameweek.js";
+import {
+  scoreFplGameweek,
+  scoreFplGameweeks
+} from "../src/fpl/score-fpl-gameweek.js";
 import type { PlayerGameweekPoints } from "../src/fpl/score-team-sheet.js";
 import { rolledOverState } from "../src/fpl/apply-gameweek-action.js";
 import {
@@ -178,8 +182,8 @@ describe("the FPL demonstration record", () => {
   /** Every stored row, whole, for the tests that must leave them untouched. */
   async function everyScoreRow(): Promise<unknown[]> {
     const rows = await client.query(
-      `select model_id, season, gw, track, metric, value::float8 as value, n,
-              detail
+      `select model_id, competition, season, gw, track, metric,
+              value::float8 as value, n, detail
          from scores
         order by model_id, gw, metric`
     );
@@ -606,6 +610,71 @@ describe("the FPL demonstration record", () => {
     );
     expect(again.rows).toEqual(first.rows);
     expect(again.rows).toHaveLength(16);
+  });
+
+  /**
+   * The rows the per-Gameweek scorer wrote over the same seed, one call per
+   * Gameweek in ascending order, captured by running these two tests at
+   * `ce7befe` (before ticket 0089) with the one pass replaced by those calls.
+   * A baseline from the new code would share any fault in the walk.
+   */
+  async function expectRowsBefore0089(
+    scenario: "fourSettled" | "lateAndNew"
+  ): Promise<void> {
+    const before = JSON.parse(
+      await archivedBody("fpl-demonstration-rows-before-0089.json.gz")
+    ) as Record<string, unknown[]>;
+    expect(await everyScoreRow()).toEqual(before[scenario]);
+  }
+
+  test("writes in one pass the rows the Gameweek-by-Gameweek calls wrote", async () => {
+    for (const entrantId of ["entrant/v1", "entrant/v2"]) {
+      await seed({ gameweek: 1, entrantId });
+      await seed({ gameweek: 2, entrantId, state: STOOD_PAT, repairs: 1 });
+      await seed({
+        gameweek: 3, entrantId, state: STOOD_PAT, repairs: 3, rolledOver: true
+      });
+      await seed({ gameweek: 4, entrantId, state: STOOD_PAT });
+    }
+    await attempt({ gameweek: 2, attemptNo: 0, kind: "budget" });
+    await attempt({ gameweek: 2, attemptNo: 1 });
+    await attempt({ gameweek: 3, entrantId: "entrant/v2", attemptNo: 0, kind: "formation" });
+    for (const gameweek of [1, 2, 3, 4]) {
+      await settle(gameweek);
+    }
+
+    await scoreFplGameweeks({
+      database: client, season: SEASON, gameweeks: [1, 2, 3, 4]
+    });
+
+    await expectRowsBefore0089("fourSettled");
+    // Two Entrants, four Gameweeks, eight metrics each.
+    expect(await everyScoreRow()).toHaveLength(64);
+  });
+
+  test("rewrites in one pass the published Gameweeks after the earliest asked for", async () => {
+    for (const gameweek of [1, 2, 3, 4, 5]) {
+      await seed({ gameweek, state: gameweek === 1 ? OPENED : STOOD_PAT });
+    }
+    for (const gameweek of [1, 3, 4]) {
+      await settle(gameweek);
+      await score(gameweek);
+    }
+
+    // Gameweek 2 settles late, under Gameweeks 3 and 4 already published with
+    // a hole in their Season totals, and Gameweek 5 settles for the first
+    // time. Neither 3 nor 4 is asked for, and 5 is not yet published: the
+    // targets are what was asked plus what was published after the earliest.
+    await settle(2);
+    await settle(5);
+    await scoreFplGameweeks({
+      database: client, season: SEASON, gameweeks: [2, 5]
+    });
+
+    await expectRowsBefore0089("lateAndNew");
+    expect(await stored([FPL_POINTS_SEASON_TO_DATE_METRIC])).toEqual(
+      [1, 2, 3, 4, 5].map((gw) => expect.objectContaining({ gw, n: gw }))
+    );
   });
 
   test("rewrites the Season totals already published when a Gameweek settles late", async () => {

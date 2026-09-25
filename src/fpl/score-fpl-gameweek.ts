@@ -386,24 +386,34 @@ async function writeRecord(
 }
 
 /**
- * Walks the Season from its starting Gameweek, folding each Entrant's path as
- * it goes, and writes the record at `gameweek` and at every Gameweek after it
- * whose record was already published.
+ * Walks the Season from its starting Gameweek once, folding each Entrant's
+ * path as it goes, and writes the record at every Gameweek in `gameweeks` and
+ * at every Gameweek after the earliest of them whose record was already
+ * published.
+ *
+ * One walk for the lot rather than one per Gameweek: each walk starts at the
+ * starting Gameweek, so a walk per settled Gameweek grows with the square of
+ * the Season (ticket 0089).
  */
 async function writeRecordThrough(
   database: Database,
   season: string,
-  gameweek: number
+  gameweeks: readonly number[]
 ): Promise<void> {
   const start = await loadStartingGameweek(database, season);
-  if (start === null || gameweek < start) {
+  if (start === null) {
     return;
   }
+  const asked = gameweeks.filter((gw) => gw >= start);
+  if (asked.length === 0) {
+    return;
+  }
+  const earliest = Math.min(...asked);
   const roster = await loadStartedRoster(database, season, start);
   const published = await publishedGameweeks(database, season);
   const targets = new Set([
-    gameweek,
-    ...[...published].filter((gw) => gw > gameweek)
+    ...asked,
+    ...[...published].filter((gw) => gw > earliest)
   ]);
   const through = Math.max(...targets);
 
@@ -440,13 +450,9 @@ async function writeRecordThrough(
           + "; nothing has been changed"
         );
       }
-      // Otherwise it is simply not part of the record: skipped, along with
-      // everything this call would have rewritten, because nothing downstream
-      // has changed. Nothing has been written yet either — no target is
-      // earlier than the Gameweek asked for.
-      if (gw === gameweek) {
-        return;
-      }
+      // Otherwise it is simply not part of the record: skipped, and the walk
+      // goes on to the Gameweeks after it, which fold the same path whether
+      // or not this one was asked for.
       continue;
     }
     for (const [entrantId, entry] of played) {
@@ -459,8 +465,33 @@ async function writeRecordThrough(
 }
 
 /**
- * Writes the FPL demonstration record for one Gameweek: what each Entrant
- * scored, and what the Season has come to through the same Gameweek.
+ * `scoreFplGameweeks` for one Gameweek.
+ *
+ * A Gameweek that cannot be scored and was never published is skipped, and
+ * the walk still rewrites the published Gameweeks after it — to the same
+ * values, since nothing they fold has changed — so it can meet one of their
+ * refusals. Before ticket 0089 such a call returned at the skipped Gameweek.
+ */
+export async function scoreFplGameweek({
+  database,
+  season,
+  gameweek
+}: ScoreFplGameweekOptions): Promise<void> {
+  await scoreFplGameweeks({ database, season, gameweeks: [gameweek] });
+}
+
+export interface ScoreFplGameweeksOptions {
+  database: Database;
+  season: string;
+  gameweeks: readonly number[];
+}
+
+/**
+ * Writes the FPL demonstration record for the Gameweeks given, and for every
+ * published Gameweek after the earliest of them: what each Entrant scored, and
+ * what the Season has come to through the same Gameweek. One walk of the
+ * Season writes them all, and the rows are the rows one call per Gameweek in
+ * ascending order would write.
  *
  * Reads stored Manager States, attempts and stored player points and nothing
  * else — no network call, no clock, and no re-derivation of a decision already
@@ -472,19 +503,19 @@ async function writeRecordThrough(
  * every published Gameweek after it. Between them, what the record says never
  * depends on the order its Gameweeks happened to be scored in.
  *
- * All of it commits together. A Gameweek's eight rows are the points and the
- * behaviour that produced them, and half of that pair is worse than none of it:
- * a reader cannot tell a Gameweek whose behaviour is still to be written from
- * one whose Entrant behaved impeccably.
+ * All of it commits together, and a refusal fails the lot. A Gameweek's eight
+ * rows are the points and the behaviour that produced them, and half of that
+ * pair is worse than none of it: a reader cannot tell a Gameweek whose
+ * behaviour is still to be written from one whose Entrant behaved impeccably.
  */
-export async function scoreFplGameweek({
+export async function scoreFplGameweeks({
   database,
   season,
-  gameweek
-}: ScoreFplGameweekOptions): Promise<void> {
+  gameweeks
+}: ScoreFplGameweeksOptions): Promise<void> {
   await database.query("begin");
   try {
-    await writeRecordThrough(database, season, gameweek);
+    await writeRecordThrough(database, season, gameweeks);
     await database.query("commit");
   } catch (error) {
     await database.query("rollback");

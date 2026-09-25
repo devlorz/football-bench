@@ -440,10 +440,10 @@ export async function seedSeason({
     database, competition: "PL", season, now: () => SEED_SCORED_AT
   });
 
-  // And the FPL track's, one Gameweek at a time, exactly as the scheduled run
-  // reaches them: the record at each Gameweek is what the rank movement
-  // between two of them is read from, and one call at the last Gameweek would
-  // write that Gameweek alone.
+  // And the FPL track's, one Gameweek at a time, as each morning after one
+  // settled would have scored it: the record at each Gameweek is what the rank
+  // movement between two of them is read from, and one call at the last
+  // Gameweek would write that Gameweek alone.
   for (let gameweek = 1; gameweek <= fplThrough; gameweek += 1) {
     await scoreFpl({ database, season, gameweek });
   }

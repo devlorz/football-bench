@@ -19,7 +19,7 @@ import {
   type FetchFplDailyResult
 } from "../fpl/fetch-gameweek.js";
 import { fetchFplPlayerPoints } from "../fpl/fetch-player-points.js";
-import { scoreFplGameweek } from "../fpl/score-fpl-gameweek.js";
+import { scoreFplGameweeks } from "../fpl/score-fpl-gameweek.js";
 import { fetchUnderstatSeasonXg } from "../understat/fetch-season-xg.js";
 import {
   fetchScores365Stats,
@@ -321,7 +321,7 @@ export async function runDailyFetch({
       }
     }
     // Every settled Gameweek's points are stored before any of them is
-    // scored, and deliberately in two passes rather than one. A Gameweek's
+    // scored, and deliberately in two loops rather than one. A Gameweek's
     // record is folded from the Season's whole path, so scoring Gameweek 3
     // while Gameweek 2's points were still to be written would find a hole
     // where Gameweek 2 should be and skip the lot.
@@ -333,12 +333,17 @@ export async function runDailyFetch({
     // unsettled Gameweek, or one an Entrant stored no Manager State for, is
     // skipped by the scorer rather than refused, and a Season whose FPL track
     // has not started scores nothing at all.
-    for (const gameweek of fpl.settledGameweeks) {
-      try {
-        await scoreFplGameweek({ database, season, gameweek });
-      } catch (error) {
-        errors.push(error);
-      }
+    //
+    // One call for every settled Gameweek rather than one each, because each
+    // call replays the Season from its start (ticket 0089). A refusal now fails
+    // the whole call and records nothing; the per-Gameweek calls it replaced
+    // all walked through the same refused Gameweek and failed with it.
+    try {
+      await scoreFplGameweeks({
+        database, season, gameweeks: fpl.settledGameweeks
+      });
+    } catch (error) {
+      errors.push(error);
     }
   }
   // Every source below walks the listed Competitions whose registry entry
