@@ -630,25 +630,51 @@ interface StoredMetric {
   scoredAt: Date;
 }
 
-async function storeMetric(
+/**
+ * One target Gameweek's rows. Nothing below `scoreMatchGameweek` touches the
+ * database until `writeScores` sends them, bar the comparisons' `delete`.
+ * Keyed as the table is, because one statement must never meet the same key
+ * twice; a Gameweek's rows never repeat a key, so nothing is dropped.
+ */
+type PendingScores = Map<string, StoredMetric>;
+
+function storeMetric(pending: PendingScores, row: StoredMetric): void {
+  pending.set(`${row.entrantId}\u0000${row.gameweek}\u0000${row.metric}`, row);
+}
+
+/**
+ * Every row held for one target Gameweek, in one statement rather than one
+ * round trip each (ticket 0090).
+ *
+ * A row the run did not change is not written at all, so `scored_at` keeps
+ * saying when the figure it stamps was arrived at: a re-run over unchanged
+ * inputs leaves the row byte for byte as it was, and a correction that moves
+ * the value moves the stamp with it rather than backdating the new figure to
+ * when the old one was computed.
+ *
+ * The stamp is the injected clock's, not the database's, so it is the one
+ * seam this scorer has and a test can state it rather than read it back.
+ */
+async function writeScores(
   database: Database,
-  {
-    entrantId, competition, season, gameweek, metric, value, n, detail, scoredAt
-  }: StoredMetric
+  pending: PendingScores
 ): Promise<void> {
-  // A row the run did not change is not written at all, so `scored_at` keeps
-  // saying when the figure it stamps was arrived at: a re-run over unchanged
-  // inputs leaves the row byte for byte as it was, and a correction that moves
-  // the value moves the stamp with it rather than backdating the new figure to
-  // when the old one was computed.
-  //
-  // The stamp is the injected clock's, not the database's, so it is the one
-  // seam this scorer has and a test can state it rather than read it back.
+  const rows = [...pending.values()];
+  const [first] = rows;
+  if (first === undefined) {
+    return;
+  }
   await database.query(
     `insert into scores (
        model_id, competition, season, gw, track, metric, value, n, detail,
        scored_at
-     ) values ($1, $2, $3, $4, 'match', $5, $6, $7, $8, $9)
+     )
+     select model_id, $1, $2, gw, 'match', metric, value, n, detail::jsonb,
+            scored_at
+       from unnest(
+         $3::text[], $4::integer[], $5::text[], $6::numeric[], $7::integer[],
+         $8::text[], $9::timestamptz[]
+       ) as row (model_id, gw, metric, value, n, detail, scored_at)
      on conflict (model_id, competition, season, gw, track, metric)
      do update set value = excluded.value, n = excluded.n,
                    detail = excluded.detail, scored_at = excluded.scored_at
@@ -656,8 +682,15 @@ async function storeMetric(
                  or scores.n is distinct from excluded.n
                  or scores.detail is distinct from excluded.detail`,
     [
-      entrantId, competition, season, gameweek, metric, value, n,
-      JSON.stringify(detail), scoredAt
+      first.competition,
+      first.season,
+      rows.map(({ entrantId }) => entrantId),
+      rows.map(({ gameweek }) => gameweek),
+      rows.map(({ metric }) => metric),
+      rows.map(({ value }) => value),
+      rows.map(({ n }) => n),
+      rows.map(({ detail }) => JSON.stringify(detail) ?? null),
+      rows.map(({ scoredAt }) => scoredAt)
     ]
   );
 }
@@ -668,7 +701,7 @@ type StoreRow = (
   value: number,
   n: number,
   detail: unknown
-) => Promise<void>;
+) => void;
 
 /**
  * `forecasterId` rather than an Entrant id: a Reference Line writes rows
@@ -676,7 +709,7 @@ type StoreRow = (
  * is `model_id`, which is what both are a row of.
  */
 const storeRow = (
-  database: Database,
+  pending: PendingScores,
   competition: string,
   season: string,
   gameweek: number,
@@ -684,7 +717,7 @@ const storeRow = (
   scoredAt: Date
 ): StoreRow =>
   (metric, value, n, detail) =>
-    storeMetric(database, {
+    storeMetric(pending, {
       entrantId: forecasterId,
       competition,
       season,
@@ -701,14 +734,14 @@ const storeRow = (
  * hits over the hits and misses together is the value, so the row is auditable
  * without the Gameweek's Fixture list to say what the denominator was.
  */
-async function writeShare<F extends { gw: number }>(
+function writeShare<F extends { gw: number }>(
   store: StoreRow,
   metric: string,
   fixtures: F[],
   hit: (fixture: F) => boolean,
   describe: (fixture: F) => unknown,
   cumulative: boolean
-): Promise<void> {
+): void {
   if (fixtures.length === 0) {
     return;
   }
@@ -716,7 +749,7 @@ async function writeShare<F extends { gw: number }>(
     hits: scoped.filter(hit).map(describe),
     misses: scoped.filter((fixture) => !hit(fixture)).map(describe)
   });
-  await store(
+  store(
     metric,
     split(fixtures).hits.length / fixtures.length,
     fixtures.length,
@@ -736,11 +769,11 @@ async function writeShare<F extends { gw: number }>(
  * called likeliest — because nothing else stored says why a Fixture fell on the
  * side it did.
  */
-async function writeProbabilityRows(
+function writeProbabilityRows(
   store: StoreRow,
   settled: SettledForecast[],
   cumulative: boolean
-): Promise<void> {
+): void {
   if (settled.length === 0) {
     return;
   }
@@ -757,7 +790,7 @@ async function writeProbabilityRows(
         [key]: fixture.settled[key]
       }))
     });
-    await store(
+    store(
       cumulative ? cumulativeMetric : metric,
       mean(settled),
       settled.length,
@@ -772,7 +805,7 @@ async function writeProbabilityRows(
     );
   }
 
-  await writeShare(
+  writeShare(
     store,
     cumulative ? ACCURACY_SEASON_TO_DATE_METRIC : ACCURACY_METRIC,
     settled,
@@ -794,8 +827,8 @@ async function writeProbabilityRows(
  * Prediction against itself and so reads them all, which is why it carries its
  * own `n`.
  */
-async function writeRows(
-  database: Database,
+function writeRows(
+  pending: PendingScores,
   competition: string,
   season: string,
   gameweek: number,
@@ -803,10 +836,10 @@ async function writeRows(
   predicted: PredictedFixture[],
   cumulative: boolean,
   scoredAt: Date
-): Promise<void> {
+): void {
   const settled = settledOf(predicted);
   const store = storeRow(
-    database, competition, season, gameweek, entrantId, scoredAt
+    pending, competition, season, gameweek, entrantId, scoredAt
   );
 
   if (settled.length > 0) {
@@ -819,7 +852,7 @@ async function writeRows(
         points: result.points
       }))
     });
-    await store(
+    store(
       cumulative ? MATCH_POINTS_SEASON_TO_DATE_METRIC : MATCH_POINTS_METRIC,
       totalPoints(settled),
       settled.length,
@@ -848,7 +881,7 @@ async function writeRows(
         slip: result.slip
       }))
     });
-    await store(
+    store(
       cumulative ? BET_POINTS_SEASON_TO_DATE_METRIC : BET_POINTS_METRIC,
       betSlips(settled).won,
       settled.length,
@@ -874,7 +907,7 @@ async function writeRows(
     // Per-market rates live here rather than as rows of their own. Metric names
     // are text, so promoting one later needs no migration (spec 0008).
     const whole = betSlips(settled);
-    await store(
+    store(
       cumulative ? BET_HIT_PCT_SEASON_TO_DATE_METRIC : BET_HIT_PCT_METRIC,
       whole.won / whole.bet,
       settled.length,
@@ -887,7 +920,7 @@ async function writeRows(
     );
   }
 
-  await writeProbabilityRows(store, settled, cumulative);
+  writeProbabilityRows(store, settled, cumulative);
 
   // The Match Points tiers nest, so both readable shares are read off the
   // points rather than recomputed: only an exact scoreline scores 5, and
@@ -920,7 +953,7 @@ async function writeRows(
     ]
   ];
   for (const [metric, cumulativeMetric, fixtures, hit, describe] of shares) {
-    await writeShare(
+    writeShare(
       store,
       cumulative ? cumulativeMetric : metric,
       fixtures,
@@ -1305,8 +1338,8 @@ async function attemptsByFixture(
  * all, since a share over no Fixture is not zero, and this is the row that says
  * it was absent rather than wrong.
  */
-async function writeGapRate(
-  database: Database,
+function writeGapRate(
+  pending: PendingScores,
   competition: string,
   season: string,
   gameweek: number,
@@ -1316,7 +1349,7 @@ async function writeGapRate(
   tried: Map<string, AttemptSummary>,
   cumulative: boolean,
   scoredAt: Date
-): Promise<void> {
+): void {
   const split = (scoped: LockedFixture[]) => {
     const causes = emptyGapProfile();
     const gaps = scoped
@@ -1334,7 +1367,7 @@ async function writeGapRate(
   // The Fixtures answered are not named here. The denominator is `n`, and the
   // `attempts_to_valid` row beside this one already names every Fixture that
   // did produce a Prediction and what it cost.
-  await storeMetric(database, {
+  storeMetric(pending, {
     entrantId,
     competition,
     season,
@@ -1356,8 +1389,8 @@ async function writeGapRate(
  * happened. The Gap rate beside it is the row that reports the absence, as it
  * is for every other measure taken over what an Entrant answered.
  */
-async function writeAttemptsToValid(
-  database: Database,
+function writeAttemptsToValid(
+  pending: PendingScores,
   competition: string,
   season: string,
   gameweek: number,
@@ -1367,7 +1400,7 @@ async function writeAttemptsToValid(
   tried: Map<string, AttemptSummary>,
   cumulative: boolean,
   scoredAt: Date
-): Promise<void> {
+): void {
   const valid = (scoped: LockedFixture[]) =>
     scoped.flatMap(({ fixtureId }) => {
       const repairs = repairsBy.get(fixtureId);
@@ -1400,7 +1433,7 @@ async function writeAttemptsToValid(
     return { distribution, fixtures: reached };
   };
 
-  await storeMetric(database, {
+  storeMetric(pending, {
     entrantId,
     competition,
     season,
@@ -1466,6 +1499,7 @@ export interface PairedDifferenceDetail {
  */
 async function writeComparisons(
   database: Database,
+  pending: PendingScores,
   competition: string,
   season: string,
   gameweek: number,
@@ -1544,7 +1578,7 @@ async function writeComparisons(
           ? { qualification: NO_POSITIVE_CONTROL_QUALIFICATION }
           : {}
       };
-      await storeMetric(database, {
+      storeMetric(pending, {
         entrantId,
         competition,
         season,
@@ -1719,18 +1753,19 @@ export async function scoreMatchGameweek({
         database, competition, season, gameweek
       )
     ) {
+      const pending: PendingScores = new Map();
       for (const [entrantId, predicted] of byEntrant) {
         const own = predicted.filter(({ gw }) => gw === target);
         if (own.length > 0) {
-          await writeRows(
-            database, competition, season, target, entrantId, own, false,
+          writeRows(
+            pending, competition, season, target, entrantId, own, false,
             scoredAt
           );
         }
         const through = predicted.filter(({ gw }) => gw <= target);
         if (through.length > 0) {
-          await writeRows(
-            database, competition, season, target, entrantId, through, true,
+          writeRows(
+            pending, competition, season, target, entrantId, through, true,
             scoredAt
           );
         }
@@ -1753,12 +1788,12 @@ export async function scoreMatchGameweek({
           if (fixtures.length === 0) {
             continue;
           }
-          await writeGapRate(
-            database, competition, season, target, entrantId, fixtures,
+          writeGapRate(
+            pending, competition, season, target, entrantId, fixtures,
             answered, tried, cumulative, scoredAt
           );
-          await writeAttemptsToValid(
-            database, competition, season, target, entrantId, fixtures,
+          writeAttemptsToValid(
+            pending, competition, season, target, entrantId, fixtures,
             repairsBy, tried, cumulative, scoredAt
           );
         }
@@ -1768,18 +1803,20 @@ export async function scoreMatchGameweek({
       // to Gap or Repair.
       for (const { id, forecast } of references) {
         const store = storeRow(
-          database, competition, season, target, id, scoredAt
+          pending, competition, season, target, id, scoredAt
         );
-        await writeProbabilityRows(
+        writeProbabilityRows(
           store, settledOf(forecast.filter(({ gw }) => gw === target)), false
         );
-        await writeProbabilityRows(
+        writeProbabilityRows(
           store, settledOf(forecast.filter(({ gw }) => gw <= target)), true
         );
       }
       await writeComparisons(
-        database, competition, season, target, roster, byEntrant, scoredAt
+        database, pending, competition, season, target, roster, byEntrant,
+        scoredAt
       );
+      await writeScores(database, pending);
     }
     await database.query("commit");
   } catch (error) {

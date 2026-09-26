@@ -63,23 +63,64 @@ update`.
 
 ## Acceptance
 
-- [ ] Each target Gameweek's Match track rows are written by one statement (or one per
+- [x] Each target Gameweek's Match track rows are written by one statement (or one per
       scorer call if that is simpler; either way not one per metric). Proven by a test that
       counts the statements, beside a test that asserts the stored rows equal those the
       current code stores. That expectation is captured from the current code before it
       changes and committed, so the equivalence is against bytes and not against a reading
       of the new code. The seeded Season has at least three Gameweeks, a Gap, a Repair, an
       unsettled Fixture and a comparison-anchor change between two snapshots.
-- [ ] A second pass over unchanged inputs changes no row, `scored_at` included. A pass
+- [x] A second pass over unchanged inputs changes no row, `scored_at` included. A pass
       after one result is corrected moves `scored_at` on exactly the rows whose figures
       moved, as the per-row code does. Both are compared against the captured bytes.
-- [ ] The existing suites are green unchanged: `score-match-gameweek`,
+- [x] The existing suites are green unchanged: `score-match-gameweek`,
       `score-match-season`, `rehearse-scoring`, `verify-scoring-rehearsal`. Any assertion
       that counted statements is updated and says why.
 - [ ] `npm run match:rehearse` still passes.
 - [ ] Measured on production after deploy: the next scheduled scoring run's duration,
       and that it scored every listed Competition. Record both in this ticket with the
       run's id.
+
+**How the ticked boxes are proven (2026-09-26).** `storeMetric` in
+`src/predictions/score-match-gameweek.ts` now holds each row in a map keyed as the table
+is. `writeScores` sends one target Gameweek's rows as one
+`insert … select … from unnest(…) on conflict … do update … where … is distinct from`.
+It writes one statement per target Gameweek, not one per scorer call. A call from the
+earliest Lock late in the Season would otherwise carry about 9,500 rows, each cumulative
+one holding every Fixture in its `detail`. The per-snapshot `delete` of comparisons
+outside the declared set is unchanged. It now runs before that Gameweek's upsert instead
+of after it. That order does not matter, because the delete never touches a declared row.
+
+Both tests are in `test/match-scoring-stores-the-rows-it-always-did.test.ts`. The seeded
+Season has three Gameweeks and three Entrants. Entrant b's Fixture 3 took two Repairs.
+Entrant c Gapped Fixture 3 on a failed attempt and was never asked about Fixture 5.
+Fixture 6 is unplayed. Before the correction, a anchors the Gameweek 1 and 2 snapshots and
+b anchors Gameweek 3. Correcting Fixture 1 hands all three to c, so the anchor changes
+both between snapshots and between passes.
+
+- "a first pass, a repeat pass and a pass after a correction store the rows they always
+  did" compares every `scores` row, `scored_at` included, after each of the three passes
+  against `test/fixtures/match-scores-stored-rows-before-0090.json.gz`. That fixture was
+  captured by running the same test at `8987b01` in a scratch worktree. Each pass has 250
+  rows. The repeat pass keeps every stamp. The corrected pass restamps 134 rows and keeps
+  116.
+- "each target Gameweek's rows are written by one statement" runs a pass with all three
+  Gameweeks published, which is one call sweeping three targets. It counts three
+  `insert into scores` statements. The old code sent 250.
+
+A mutant that drops the `where … is distinct from` clause fails the first test.
+
+`score-match-gameweek`, `score-match-season`, `rehearse-scoring` and
+`verify-scoring-rehearsal` pass unchanged. So do the other eight suites that reach the
+scorer: `competition-coexistence`, the four `dashboard-*` suites that read `scores`,
+`format-scoring-rehearsal`, `score-workflow` and `seed-season`. That is 212 tests across
+13 files. No assertion counted statements.
+
+**`npm run match:rehearse` is not ticked.** It fails at `8987b01` exactly as it fails with
+this change. The dry run creates "0 contexts, 0 Predictions" for Gameweeks 1, 4 and 5, so
+the scorer receives nothing and the command reports "Score rows: 0". The archive was
+observed at 2026-09-25T06:53:58Z. That failure is upstream of the scorer and was not
+investigated here.
 
 ## What this ticket does not do
 
