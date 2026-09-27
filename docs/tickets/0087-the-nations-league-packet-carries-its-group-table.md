@@ -14,8 +14,8 @@ real Gameweek 1 packet on 2026-09-23. Decisions:
 **Blocked by:** None -- 0076 is done and `UNL` is listed; this must land before
 2026-09-24T14:30Z or wait for a new Prompt Version.
 
-**Status:** built 2026-09-23, migration `0047` **pending on production** -- see the
-handover below. The pin moved to `0c463838…fc71`.
+**Status:** done, 2026-09-27. Migration `0047` was applied on 2026-09-23 and every `UNL`
+packet on production renders its group's table. The pin moved to `0c463838…fc71`.
 
 ---
 
@@ -48,11 +48,13 @@ handover below. The pin moved to `0c463838…fc71`.
       and the `UNL` pin is re-read; the five league pins are unchanged.
 - [x] The rehearsal verifier ignores columns a migration adds and still fails on a row
       lost or a column dropped; the migration filename lists carry `0047`.
-- [ ] Migration `0047` rehearsed and applied to production, then one hand-run
+- [x] Migration `0047` rehearsed and applied to production, then one hand-run
       `npm run fetch` so the 156 Fixtures carry their group before the Lock. **The
       operator's.**
-- [ ] `COMPETITION=UNL GAMEWEEK=1 npm run dry-run` shows the group table on every
-      packet. After the box above.
+- [x] `COMPETITION=UNL GAMEWEEK=1 npm run dry-run` shows the group table on every
+      packet. After the box above. Read on 2026-09-27 with `context:show` against
+      production for Gameweek 2: every packet opens with its group's table (D2, A4, B3,
+      D1, …) and none says "no league table".
 
 ## The handover
 

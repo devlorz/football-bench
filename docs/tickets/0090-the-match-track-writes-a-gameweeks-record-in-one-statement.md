@@ -9,7 +9,8 @@ runs cancelled at their thirty-minute limit on 2026-09-22 and 2026-09-24.
 **Blocked by:** None — can start immediately. Independent of tickets 0088 and 0089 (the
 FPL track's scorer is 0089's; this is the Match track's).
 
-**Status:** ready-for-agent
+**Status:** done, 2026-09-27, except `match:rehearse`, which
+fails for a reason older than this ticket and waits on ticket 0091.
 
 ---
 
@@ -77,9 +78,11 @@ update`.
       `score-match-season`, `rehearse-scoring`, `verify-scoring-rehearsal`. Any assertion
       that counted statements is updated and says why.
 - [ ] `npm run match:rehearse` still passes.
-- [ ] Measured on production after deploy: the next scheduled scoring run's duration,
+- [x] Measured on production after deploy: the next scheduled scoring run's duration,
       and that it scored every listed Competition. Record both in this ticket with the
-      run's id.
+      run's id. Run `36327721202` (2026-09-27, scheduled, at `069f925`): `match:score`
+      ran 14:56:40 to 14:57:24, 44 s against 28 min 52 s on 2026-09-23, and scored BL1
+      1–4, FL1 1–5, PD 1–7, PL 1–5, SA 1–5 and UNL 1–2.
 
 **How the ticked boxes are proven (2026-09-26).** `storeMetric` in
 `src/predictions/score-match-gameweek.ts` now holds each row in a map keyed as the table

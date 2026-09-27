@@ -8,7 +8,7 @@ been cancelled at its thirty-minute limit on 2026-09-23, 24 and 25.
 
 **Blocked by:** None — can start immediately. Independent of ticket 0089.
 
-**Status:** ready-for-agent
+**Status:** done, 2026-09-27. Every box is ticked.
 
 ---
 
@@ -56,10 +56,13 @@ on conflict … do update`, and it is the one step of the 06:52 minute that took
 - [x] The existing FPL suites are green unchanged: `fetch-fpl-gameweek`,
       `settled-player-points`, `score-fpl-gameweek`, `fpl-demonstration-record`,
       `daily-fetch`.
-- [ ] Measured on production after deploy: the next scheduled daily fetch's five
+- [x] Measured on production after deploy: the next scheduled daily fetch's five
       `fpl_live` snapshots are seconds apart, not minutes, and the gap from
       `fpl_bootstrap` to the first `fpl_live` is under a minute. Recorded in this ticket
-      with the run's id.
+      with the run's id. Run `36316228907` (2026-09-27, scheduled, at `069f925`):
+      `fpl_bootstrap` 11:35:53, `fpl_live` 1–5 at 11:35:58, :59, 11:36:00, :01, :03.
+      Five seconds to the first, five for all five, against 2 min 15 s each on
+      2026-09-25. The whole fetch took 11 min 34 s and finished.
 
 **How the ticked boxes are proven (2026-09-25, after review).** All of it is in
 `test/fpl-fetch-stores-the-rows-it-always-did.test.ts`. The tests compare against

@@ -8,7 +8,7 @@ Season, not with its square"); the FPL track never did.
 
 **Blocked by:** None — can start immediately. Independent of ticket 0088.
 
-**Status:** ready-for-agent
+**Status:** done, 2026-09-27. Every box is ticked.
 
 ---
 
@@ -58,9 +58,13 @@ from the starting Gameweek.
 - [x] `score-fpl-gameweek`, `fpl-demonstration-record`, `daily-fetch` and the other FPL
       suites are green; any assertion that counted calls is updated to count passes and
       says why.
-- [ ] Measured on production after deploy: the gap from the last `fpl_live` snapshot to
+- [x] Measured on production after deploy: the gap from the last `fpl_live` snapshot to
       the first `football_data_org` snapshot on the next scheduled daily fetch, recorded
-      in this ticket with the run's id.
+      in this ticket with the run's id. Run `36316228907` (2026-09-27, scheduled, at
+      `069f925`): last `fpl_live` 11:36:03, first `football_data_org` (BL1) 11:37:04,
+      61 s, against 06:37:54 to 06:43:48 for the five calls on 2026-09-25. The 61 s
+      includes the football-data.org fetch's own pacing, which spaces its later
+      snapshots about 68 s apart.
 
 **How the ticked boxes are proven (2026-09-25, after review).** `scoreFplGameweeks` in
 `src/fpl/score-fpl-gameweek.ts` walks the Season once. `scoreFplGameweek` now calls it
