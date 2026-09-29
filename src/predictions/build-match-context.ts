@@ -1,8 +1,14 @@
 import type { Client } from "pg";
 import {
   buildHistoricalContext,
+  playedBefore,
   type HistoricalMatch
 } from "../context/build-historical-context.js";
+import {
+  footballDataTeamName,
+  teamNamesOf
+} from "../football-data/team-identity.js";
+import { divisionsOf } from "../football-data/divisions.js";
 import {
   buildFplContext,
   type FplPlayer
@@ -96,6 +102,63 @@ function joinXg(
   });
 }
 
+interface SeasonKickoff {
+  home_team: string;
+  away_team: string;
+  kickoff_at: Date;
+}
+
+/**
+ * Gives each current-Season top-flight result its Fixture's kickoff, so the
+ * Lock bounds it by when it kicked off and not by its day (ticket 0093).
+ *
+ * Keyed by the two stored names without the day: the table's own key is
+ * (season, division, home, away), and a club plays in one division a Season,
+ * so within the top flight a pairing is one Fixture.
+ * ponytail: holds for double round-robin leagues only; a Competition whose
+ * sides meet twice at one venue needs the day in this key.
+ *
+ * A top-flight row with no Fixture keeps its day where that day is before
+ * the Lock's, which settles it without a kickoff. From the Lock's day on it is
+ * refused rather than bounded by its day: that bound is the leak this closes,
+ * and the likeliest cause is a name `teamNamesOf` does not map. Refusing only
+ * there keeps a spelling change from failing every in-time packet. The second
+ * division has no Fixtures and keeps
+ * its day: none of its clubs is a side in this Season's top-flight packets.
+ * Every earlier Season keeps its day too, having ended before any Lock.
+ */
+function joinKickoffs(
+  competition: string,
+  season: string,
+  deadline: Date,
+  matches: HistoricalMatch[],
+  kickoffs: SeasonKickoff[]
+): HistoricalMatch[] {
+  const names = teamNamesOf(competition);
+  const top = divisionsOf(competition)?.[0].name;
+  const kickoffOf = new Map(kickoffs.map((fixture) => [
+    `${footballDataTeamName(names, fixture.home_team)}|`
+    + footballDataTeamName(names, fixture.away_team),
+    fixture.kickoff_at
+  ]));
+  return matches.map((match) => {
+    if (match.season !== season || match.division !== top) {
+      return match;
+    }
+    const kickedOffAt = kickoffOf.get(`${match.home_team}|${match.away_team}`);
+    if (kickedOffAt === undefined) {
+      if (utcDate(match.played_on) < utcDate(deadline)) {
+        return match;
+      }
+      throw new Error(
+        `${competition} ${season} ${match.division} result `
+        + `${match.home_team} v ${match.away_team} has no Fixture`
+      );
+    }
+    return { ...match, kicked_off_at: kickedOffAt };
+  });
+}
+
 export interface MatchContextData {
   competition: string;
   season: string;
@@ -149,8 +212,19 @@ export async function loadMatchContextData(
        from historical_matches
       where competition = $1 and played_on < $2
       order by played_on`,
+    // A coarse prefilter only: a row's day is not its kickoff, and the bound
+    // is `playedBefore`, applied below.
     [competition, deadline]
   );
+  const kickoffs = await database.query<SeasonKickoff>(
+    `select home_team, away_team, kickoff_at
+       from fixtures
+      where competition = $1 and season = $2`,
+    [competition, season]
+  );
+  const historyBeforeLock = joinKickoffs(
+    competition, season, deadline, historicalMatches.rows, kickoffs.rows
+  ).filter((match) => playedBefore(match, deadline));
   // Bounded by the same deadline as the results: an xG row for a Match played
   // after the Lock can never reach a form line.
   const storedXg = await database.query<StoredMatchXg>(
@@ -354,7 +428,7 @@ export async function loadMatchContextData(
     season,
     deadline,
     historicalMatches: joinXg(
-      competition, historicalMatches.rows, storedXg.rows
+      competition, historyBeforeLock, storedXg.rows
     ),
     playedFixtures: playedFixtures?.rows ?? [],
     internationalStats: internationalStats?.rows ?? [],

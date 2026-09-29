@@ -15,6 +15,12 @@ export interface HistoricalMatch {
   home_goals: number;
   away_goals: number;
   /**
+   * The kickoff instant of the Season's own Fixture this row is, where the
+   * record holds one. A row's day is not its kickoff: a match played later on
+   * the Lock's day passes a day bound (ticket 0093).
+   */
+  kicked_off_at?: Date | null;
+  /**
    * Absent and null mean the same thing throughout: the source carried no
    * figure. Never a zero -- a match with no shot data is not a match with no
    * shots, and xG is missing for whole legitimate categories (Championship
@@ -126,8 +132,15 @@ function includesTeam(
     || footballDataTeamName(names, match.away_team) === canonical;
 }
 
-function playedBefore(match: HistoricalMatch, asOf: Date): boolean {
-  return match.played_on.getTime() < asOf.getTime();
+/**
+ * The rule both the loader and this renderer bound a league's history by, so
+ * neither can drift from the other: the kickoff where the record knows it, the
+ * day where it does not. The loader gives every current-Season top-flight row
+ * dated the Lock's day or later its kickoff or refuses it, so the day is left
+ * bounding only rows it already places before the Lock.
+ */
+export function playedBefore(match: HistoricalMatch, asOf: Date): boolean {
+  return (match.kicked_off_at ?? match.played_on).getTime() < asOf.getTime();
 }
 
 function emptyRecord(): TeamRecord {

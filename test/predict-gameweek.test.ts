@@ -236,9 +236,18 @@ describe("predicting a Gameweek", () => {
   });
 
   test("keeps xG from a Match that kicked off after the deadline off the lines", async () => {
-    // Stored results carry the match date at midnight, so a same-day Match
-    // that kicks off after the deadline can still sit in the window. Its xG
-    // carries a real kick-off instant and must not ride in with it.
+    // Stored results carry the match date at midnight and are bounded by
+    // their Fixture's kickoff (ticket 0093), so this one, kicked off before
+    // the deadline, is in the window. An xG row stamped after the deadline
+    // on the same day must still not ride in with it.
+    await client.query(
+      `insert into fixtures (
+         season, fixture_id, gw, home_team, away_team, kickoff_at, result
+       ) values (
+         '2026-27', 90, 1, 'Arsenal', 'Everton', '2026-08-21T11:30:00Z',
+         '{"home_goals":3,"away_goals":1,"outcome":"H"}'
+       )`
+    );
     await client.query(
       `insert into historical_matches (
          competition, season, division, played_on, home_team, away_team,

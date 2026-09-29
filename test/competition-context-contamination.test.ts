@@ -107,6 +107,19 @@ describe("a context packet holds one Competition's data", () => {
          ('BL1', $1, 'Premier League', $3, 'Freiburg', 'Augsburg', 1, 3)`,
       [SEASON, EARLIER, LATER]
     );
+    // PL's two are its top flight in this Season, so each needs the Fixture
+    // it was played as (ticket 0093); no other league's rows are its top flight.
+    await client.query(
+      `insert into fixtures (
+         competition, season, fixture_id, gw, home_team, away_team,
+         kickoff_at, result
+       ) values
+         ('PL', $1, 91101, 1, 'Arsenal', 'Chelsea', $2,
+          '{"home_goals":2,"away_goals":1,"outcome":"H"}'),
+         ('PL', $1, 91102, 1, 'Liverpool', 'Everton', $3,
+          '{"home_goals":1,"away_goals":1,"outcome":"D"}')`,
+      [SEASON, EARLIER, LATER]
+    );
     // Each contaminant is stored under one Competition and names the *other*
     // one's clubs, in that other one's Understat spelling: an unfiltered read
     // does not merely return a foreign row, it resolves under the reading
@@ -449,6 +462,74 @@ describe("a context packet holds one Competition's data", () => {
         .toEqual(["Paris SG", "Lille"]);
       expect(bundesliga.historicalMatches.map((match) => match.home_team))
         .toEqual(["Bayern Munich", "Freiburg"]);
+    });
+
+  test("a league's history holds no match that kicked off after the Lock, even on its day",
+    async () => {
+      // Ticket 0093. Both results are dated the Lock's day; the record's
+      // kickoff is what tells them apart, joined through the reviewed names
+      // (`Coventry City` is stored as `Coventry`).
+      await client.query(
+        `insert into fixtures (
+           competition, season, fixture_id, gw, home_team, away_team,
+           kickoff_at, result
+         ) values
+           ('PL', $1, 91002, 1, 'Everton', 'Chelsea', '2026-08-21T12:00:00Z',
+            '{"home_goals":1,"away_goals":0,"outcome":"H"}'),
+           ('PL', $1, 91003, 1, 'Coventry City', 'Fulham', '2026-08-21T19:00:00Z',
+            '{"home_goals":3,"away_goals":0,"outcome":"H"}')`,
+        [SEASON]
+      );
+      await client.query(
+        `insert into historical_matches (
+           competition, season, division, played_on, home_team, away_team,
+           home_goals, away_goals
+         ) values
+           ('PL', $1, 'Premier League', '2026-08-21T00:00:00Z', 'Everton', 'Chelsea', 1, 0),
+           ('PL', $1, 'Premier League', '2026-08-21T00:00:00Z', 'Coventry', 'Fulham', 3, 0)`,
+        [SEASON]
+      );
+
+      const premierLeague = await loadMatchContextData(client, "PL", SEASON, 1);
+
+      expect(premierLeague.historicalMatches.map((match) => match.home_team))
+        .toEqual(["Arsenal", "Liverpool", "Everton"]);
+      expect(premierLeague.historicalMatches[2]?.kicked_off_at)
+        .toEqual(new Date("2026-08-21T12:00:00Z"));
+    });
+
+  test("a current-Season top-flight result with no Fixture behind it is refused",
+    async () => {
+      // Without a Fixture the row has no kickoff, and a day bound would let a
+      // Lock-day result through unannounced (ticket 0093).
+      await client.query(
+        `insert into historical_matches (
+           competition, season, division, played_on, home_team, away_team,
+           home_goals, away_goals
+         ) values ('PL', $1, 'Premier League', '2026-08-21T00:00:00Z', 'Coventry', 'Fulham', 3, 0)`,
+        [SEASON]
+      );
+
+      await expect(loadMatchContextData(client, "PL", SEASON, 1)).rejects
+        .toThrow("PL 2026-27 Premier League result Coventry v Fulham has no Fixture");
+    });
+
+  test("a result with no Fixture behind it passes when it was played before the Lock's day",
+    async () => {
+      // Its day already puts it before the Lock, so no kickoff is needed, and
+      // refusing it would turn a spelling change into a Gameweek of Gaps.
+      await client.query(
+        `insert into historical_matches (
+           competition, season, division, played_on, home_team, away_team,
+           home_goals, away_goals
+         ) values ('PL', $1, 'Premier League', '2026-08-20T00:00:00Z', 'Coventry', 'Fulham', 3, 0)`,
+        [SEASON]
+      );
+
+      const premierLeague = await loadMatchContextData(client, "PL", SEASON, 1);
+
+      expect(premierLeague.historicalMatches.map((match) => match.home_team))
+        .toEqual(["Arsenal", "Liverpool", "Coventry"]);
     });
 
   test("xG from another Competition never reaches a form line", async () => {

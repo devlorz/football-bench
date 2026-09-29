@@ -30,10 +30,9 @@ export function formatScoringRehearsal(
     lines.push(
       `The packets were built from bytes observed ${observedAt.toISOString()}, `
       + `after the Gameweek's Lock at ${dryRun.deadline.toISOString()}: they `
-      + "prove the path, not what an Entrant would have seen. A result played "
-      + "on the Lock's own day passes the context's date bound, the Fixture's "
-      + "own among them, and the Head Coach state rows, where present, carry "
-      + "what was known at that later instant."
+      + "prove the path, not what an Entrant would have seen. The Head Coach "
+      + "state rows, where present, carry what was known at that later "
+      + "instant."
     );
   }
   lines.push(

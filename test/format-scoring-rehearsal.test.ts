@@ -87,17 +87,17 @@ describe("reading a scoring rehearsal", () => {
 
   test("says the packets were built from bytes newer than the Lock", () => {
     // Observed 2026-09-26, the Lock 2026-08-21. Read off the packets of a
-    // 2026-09-28 run: a result played on the Lock's own day passes the
-    // context's date bound, the Fixture's own among them, and the Head Coach
-    // state carries what was known five weeks later. Availability was empty,
-    // so the output does not claim it.
+    // 2026-09-28 run: the Head Coach state carries what was known five weeks
+    // later. A result from the Lock's own day did too, until ticket 0093
+    // bounded history by kickoff. Availability was empty, so the output does
+    // not claim it.
     const output = formatScoringRehearsal("2026-27", 1, result([]));
 
     expect(output).toContain(
       "The packets were built from bytes observed 2026-09-26T06:33:08.000Z, "
       + "after the Gameweek's Lock at 2026-08-21T19:00:00.000Z"
     );
-    expect(output).toContain("the Fixture's own among them");
+    expect(output).not.toContain("Lock's own day");
     expect(output).toContain("Head Coach");
     expect(output).not.toContain("Availability");
   });

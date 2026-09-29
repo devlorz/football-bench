@@ -27,3 +27,20 @@ grows one sentence before the season's first Lock:
   Model recovers from its own failures, not to route every Entrant through the same
   ambiguity toll. Paired Differences lose nothing by removing a cost all seats paid
   alike.
+
+## Amendment: ticket 0093's bound lands under the frozen league versions
+
+This ADR freezes a version's rendering at first use. Ticket 0093 found where that freeze
+does not reach. A league's history was bounded by each row's day against the Lock's
+instant, so a match played later on the Lock's own day passed. The Fixture's own result
+was one such match, and so the packet would show the result of the match it asks about.
+A packet built in time cannot contain such a row, because the result does not exist
+yet. Only a packet rebuilt afterwards can: the scoring rehearsal, a dry run over a late
+archive, `context:show` for a Gameweek already played.
+
+The fix bounds each current-Season top-flight row by its Fixture's kickoff instant, read
+from `fixtures`. It changes no packet that production builds in time, so it moves no
+pin. On 2026-09-29 the operator ruled that this fix lands as a correction under every
+league's frozen version, with no new version. The ruling covers this ticket only. It
+sets no general rule for later changes to a frozen rendering, and those still go through
+ADR-0017 and a new version.

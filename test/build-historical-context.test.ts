@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   buildHistoricalContext,
+  NO_PRIOR_MEETING,
   type HistoricalMatch
 } from "../src/context/build-historical-context.js";
 import { archivedBody } from "./archived-fixture.js";
@@ -589,6 +590,34 @@ describe("building historical Match context", () => {
       "Arsenal"
     ].join("\n"));
   });
+
+  test("holds no match that kicked off after the Lock, even on the Lock's own day",
+    () => {
+      // Ticket 0093: a row's day is not its kickoff. Both of these are dated
+      // the Lock's day; only the one whose Fixture kicked off before the
+      // deadline may reach any line.
+      const packet = buildHistoricalContext({
+        competition: "PL",
+        season: "2026-27",
+        asOf: new Date("2026-09-26T14:00:00.000Z"),
+        homeTeam: "Arsenal",
+        awayTeam: "Coventry",
+        matches: [
+          match("2026-27", "Premier League", "2026-09-20", "Arsenal", "Chelsea", 1, 0),
+          match("2026-27", "Premier League", "2026-09-26", "Everton", "Fulham", 2, 2,
+            { kicked_off_at: new Date("2026-09-26T11:30:00.000Z") }),
+          match("2026-27", "Premier League", "2026-09-26", "Arsenal", "Coventry", 3, 0,
+            { kicked_off_at: new Date("2026-09-26T16:30:00.000Z") })
+        ]
+      });
+
+      expect(packet).toContain("Premier League table (results through 2026-09-26):");
+      expect(packet).toContain("Everton — Pld 1, W 0, D 1");
+      expect(packet).toContain("Arsenal — Pld 1, W 1, D 0, L 0, GF 1, GA 0");
+      expect(packet).not.toContain("Coventry — Pld");
+      expect(packet).not.toContain("Arsenal 3-0 Coventry");
+      expect(packet).toContain(`Head-to-head history:\n${NO_PRIOR_MEETING}`);
+    });
 
   test("announces an empty table rather than leaving it out", () => {
     // Gameweek 1's normal case, with the prior-Season line still the only

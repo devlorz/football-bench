@@ -9,7 +9,7 @@ yet; every packet built after a result has landed shows it.
 **Blocked by:** None to start. Whether it may *land* before the next Prompt Version of
 each league is the question in "The version question" below, and the operator decides it.
 
-**Status:** needs-triage.
+**Status:** done (2026-09-29), with the instant-exact fix.
 
 ---
 
@@ -68,18 +68,55 @@ So the operator decides one of two things:
 
 Either way, if a pinned render moves, it lands with a new version, as ticket 0092 does.
 
+**Answered 2026-09-29: the instant-exact fix, as a correction with no new version.**
+It is recorded as an amendment to ADR-0026, and the ruling covers this ticket only.
+
+- The kickoff comes from `fixtures.kickoff_at` of the Season being built.
+- A current-Season top-flight row is joined to its Fixture by its two stored names, with
+  no date. The Fixture's names go through `footballDataTeamName`.
+  - The table's key is (season, division, home, away), and a club plays in one division
+    a Season, so within the top flight a pairing is one Fixture.
+  - This holds for double round-robin leagues only. A Competition whose sides meet twice
+    at one venue needs the day in this key.
+- A current-Season top-flight row with no Fixture is handled by its day:
+  - If it is dated before the Lock's UTC day, it keeps its day bound. That day already
+    places it before the Lock.
+  - If it is dated on the Lock's day or later, it is refused with an error rather than
+    bounded by its day, because that bound is the leak. The likeliest cause is a name
+    that `teamNamesOf` does not map.
+  - Refusing only from the Lock's day on keeps a spelling change from failing every
+    in-time packet and turning a Gameweek into Gaps. In time, a Lock-day row exists only
+    for an earlier kickoff on the deadline day, which is rare.
+- The second division has no Fixtures, so it keeps its day bound. None of its clubs is a
+  side in this Season's top-flight packets.
+- Every earlier Season keeps its day bound too, because it ended before any Lock.
+- The loader's SQL `played_on < deadline` is only a coarse prefilter. The bound is
+  `playedBefore`, which the loader and the renderer share.
+
+**Verified 2026-09-29** against the archive observed 2026-09-28T13:23Z:
+
+- `npm run match:rehearse` with `GAMEWEEK=1` passes: 10 of 10 settled, 10 contexts.
+- The Gameweek 1 packet for Arsenal v Coventry now reads "no result has been played yet
+  this Season", where it carried "Arsenal 3-0 Coventry".
+- The Gameweek 4 packet still carries the earlier Gameweeks' table (through
+  2026-09-06) and their form lines.
+- `npm run match:rehearse` with `GAMEWEEK=4` passes.
+- `context:show` for Gameweek 6 of PL, PD, SA, FL1 and BL1 against production renders
+  every packet. Every current-Season top-flight row that football-data.co.uk wrote found
+  its Fixture, so nothing was refused.
+
 ## Acceptance
 
-- [ ] A test builds a league packet over a history holding a match on the Lock's day
+- [x] A test builds a league packet over a history holding a match on the Lock's day
       that kicked off after the deadline. The match and its result are absent from
       every line of the packet: form, the Season table, and head-to-head. A match on the
       same day that kicked off before the deadline is still present, unless the operator
       chose the day-exclusive fix, in which case the ticket says so.
-- [ ] Both bounds, the loader's and the renderer's, apply the same rule, so neither can
+- [x] Both bounds, the loader's and the renderer's, apply the same rule, so neither can
       drift from the other.
-- [ ] The version question above is answered in this ticket before the change lands,
+- [x] The version question above is answered in this ticket before the change lands,
       and the pins say what that answer says: unchanged, or moved under a new version.
-- [ ] The scoring rehearsal's output (ticket 0091) stops listing "results from the
+- [x] The scoring rehearsal's output (ticket 0091) stops listing "results from the
       Lock's day" among what its packets carry, or says why it still must.
 
 ## What this ticket does not do
