@@ -137,25 +137,25 @@ describe("rehearsing the complete scorer on the archived Gameweek", () => {
   test("settles the scripted results and scores the archived Gameweek", async () => {
     const { report } = await rehearse();
 
-    // The script settles Arsenal 2-0 Coventry. The archived response is the
-    // only Prediction the Gameweek holds, and it forecast 3-0: the outcome
-    // right at the wrong goal difference, which spec 0002 pays 2.
+    // sol's archived 3-0 is replayed on all ten Fixtures. Against the script
+    // it calls the Home win at the wrong goal difference four times — 2-0,
+    // 3-1, 4-0 and 2-1 — which spec 0002 pays 2 each, and nothing else.
     expect(report.metrics).toContainEqual({
       entrantId: "sol",
       gw: GAMEWEEK,
       metric: MATCH_POINTS_METRIC,
-      value: 2,
-      n: 1,
+      value: 8,
+      n: 10,
       detail: expect.anything()
     });
   });
 
-  test("settles sol's whole Gameweek into the Bet Points a person computed", async () => {
+  test("settles sol's Gameweek into the Bet Points a person computed", async () => {
     const { report } = await rehearse();
     const rows = report.metrics.filter(({ entrantId }) => entrantId === "sol");
 
-    // sol's whole archived Gameweek is one slip: 3-0 named on Fixture 1, which
-    // the script settles 2-0. Read by hand, leg by leg —
+    // sol's 3-0 slip on Fixture 1, which the script settles 2-0. Read by
+    // hand, leg by leg —
     //   result           3-0 is a Home win, 2-0 is a Home win       won
     //   over/under 1.5   3 goals named is over, 2 settled is over   won
     //   over/under 2.5   3 goals named is over, 2 settled under     lost
@@ -163,9 +163,6 @@ describe("rehearsing the complete scorer on the archived Gameweek", () => {
     //   over/under 4.5   3 is under, 2 is under                     won
     //   btts             3-0 says no, 2-0 says no                   won
     //   handicap 1.5     3-0 backs Home, 2-0 backs Home             won
-    // — six winning legs off seven stated, sol's two-goal call covering the
-    // Handicap the way it was named to. No other Fixture was answered, so the
-    // Gameweek and the Season through it are the same six.
     const slip = [
       { market: "result", position: "H", settled: "H", won: true },
       {
@@ -187,68 +184,53 @@ describe("rehearsing the complete scorer on the archived Gameweek", () => {
       { market: "btts", position: "no", settled: "no", won: true },
       { market: "handicap_1.5", position: "H", settled: "H", won: true }
     ];
+    const betPoints = rows.find(({ metric }) => metric === BET_POINTS_METRIC);
+    expect(betPoints).toMatchObject({ value: 41, n: 10 });
+    expect((betPoints?.detail as { fixtures: unknown[] }).fixtures[0])
+      .toEqual({ fixtureId: 1, predicted: [3, 0], result: [2, 0], slip });
+
+    // The same 3-0 slip against all ten scripted results, market by market:
+    //   result  Home wins at 2-0, 3-1, 4-0, 2-1                      4
+    //   o/u 1.5 over but at 0-1 and 0-0                              8
+    //   o/u 2.5 over at 1-3, 2-2, 3-1, 4-0, 1-2, 2-1                 6
+    //   o/u 3.5 under but at 1-3, 2-2, 3-1, 4-0                      6
+    //   o/u 4.5 under everywhere                                    10
+    //   btts    no at 2-0, 0-1, 0-0, 4-0                             4
+    //   hcp 1.5 Home by two at 2-0, 3-1, 4-0                         3
+    // — 41 of 70, Fixture by Fixture 6+3+3+3+3+5+3+6+4+5, each market's
+    // count stored as its rate over the ten.
     const rate = {
-      won: 6,
-      bet: 7,
+      won: 41,
+      bet: 70,
       markets: {
-        result: 1,
-        "over_under_1.5": 1,
-        "over_under_2.5": 0,
-        "over_under_3.5": 1,
+        result: 0.4,
+        "over_under_1.5": 0.8,
+        "over_under_2.5": 0.6,
+        "over_under_3.5": 0.6,
         "over_under_4.5": 1,
-        btts: 1,
-        "handicap_1.5": 1
+        btts: 0.4,
+        "handicap_1.5": 0.3
       }
     };
     expect(rows).toContainEqual({
       entrantId: "sol",
       gw: GAMEWEEK,
-      metric: BET_POINTS_METRIC,
-      value: 6,
-      n: 1,
-      detail: {
-        qualification: BET_POINTS_QUALIFICATION,
-        fixtures: [
-          { fixtureId: 1, predicted: [3, 0], result: [2, 0], slip }
-        ]
-      }
-    });
-    expect(rows).toContainEqual({
-      entrantId: "sol",
-      gw: GAMEWEEK,
       metric: BET_HIT_PCT_METRIC,
-      value: 6 / 7,
-      n: 1,
+      value: 41 / 70,
+      n: 10,
       detail: rate
     });
 
-    // One Gameweek in, the Season through it is that Gameweek — the ranking a
-    // reader sees, each figure carrying the one Fixture it was taken over.
-    expect(rows).toContainEqual({
-      entrantId: "sol",
-      gw: GAMEWEEK,
-      metric: BET_POINTS_SEASON_TO_DATE_METRIC,
-      value: 6,
-      n: 1,
-      detail: {
-        qualification: BET_POINTS_QUALIFICATION,
-        gameweeks: [
-          {
-            gw: GAMEWEEK,
-            n: 1,
-            points: 6,
-            fixtures: [{ fixtureId: 1, predicted: [3, 0], result: [2, 0], slip }]
-          }
-        ]
-      }
-    });
+    // One Gameweek in, the Season through it is that Gameweek.
+    expect(rows.find(({ metric }) => metric === BET_POINTS_SEASON_TO_DATE_METRIC))
+      .toMatchObject({ value: 41, n: 10 });
     expect(rows).toContainEqual({
       entrantId: "sol",
       gw: GAMEWEEK,
       metric: BET_HIT_PCT_SEASON_TO_DATE_METRIC,
-      value: 6 / 7,
-      n: 1,
-      detail: { ...rate, gameweeks: [{ gw: GAMEWEEK, n: 1, ...rate }] }
+      value: 41 / 70,
+      n: 10,
+      detail: { ...rate, gameweeks: [{ gw: GAMEWEEK, n: 10, ...rate }] }
     });
   });
 
@@ -256,56 +238,56 @@ describe("rehearsing the complete scorer on the archived Gameweek", () => {
     const { report } = await rehearse();
 
     // The ranking a reader takes off the season-to-date rows, with nothing
-    // recomputed from the Predictions. All three answered the same Fixture,
-    // settled 2-0, and each slip was read by hand:
-    //   sol     3-0  Home win, over 2.5 lost, the Handicap covered  6 of 7
-    //   steady  1-0  Home win, every goal-total but 1.5, no
-    //                both-teams, the Handicap left unbacked        5 of 7
-    //   drawish 1-1  a Draw called, both-teams-to-score lost, and
-    //                the Handicap unbacked against a covered one   4 of 7
-    // The Handicap is what moves sol above steady: naming the two-goal win
-    // and getting it outscores the cautious 1-0 that never backed a side.
+    // recomputed from the Predictions. Each Entrant's one archived answer is
+    // replayed on all ten Fixtures, and each slip was read by hand against the
+    // script, Fixture by Fixture:
+    //   sol     3-0  6+3+3+3+3+5+3+6+4+5  41
+    //   drawish 1-1  4+6+3+3+4+3+4+2+4+4  37
+    //   steady  1-0  5+3+5+1+1+2+5+3+2+3  30
+    // Only sol names a two-goal win, so only sol's Handicap can pay: the other
+    // two leave it unbacked on every Fixture, a leg stated and never won.
     const ranked = report.metrics
       .filter(({ metric }) => metric === BET_POINTS_SEASON_TO_DATE_METRIC)
       .sort((one, other) => other.value - one.value)
       .map(({ entrantId, value, n }) => [entrantId, value, n]);
 
     expect(ranked).toEqual([
-      ["sol", 6, 1],
-      ["steady", 5, 1],
-      ["drawish", 4, 1]
+      ["sol", 41, 10],
+      ["drawish", 37, 10],
+      ["steady", 30, 10]
     ]);
   });
 
   test("publishes one comparison per non-anchor Entrant on the complete case", async () => {
     const { report } = await rehearse();
 
-    // Fixture 1 settles 2-0, a Home win, and is the one Fixture every Entrant
-    // answered, so it is the whole complete case. RPS over the ordered
-    // cumulative outcomes:
-    //   sol     0.82/0.12/0.06 → ((0.82-1)² + (0.94-1)²) / 2 = 0.018
-    //   steady  0.50/0.30/0.20 → ((0.50-1)² + (0.80-1)²) / 2 = 0.145
-    //   drawish 0.30/0.40/0.30 → ((0.30-1)² + (0.70-1)²) / 2 = 0.29
-    // sol and steady both call the outcome at the wrong goal difference and
-    // tie on 2 Match Points; sol's lower RPS makes it the Comparison Anchor.
+    // Every Entrant answered all ten Fixtures, so the complete case is the
+    // whole Gameweek: four Home wins, three Draws, three Away wins. RPS over
+    // the ordered cumulative outcomes, per outcome and then the mean:
+    //   sol     0.82/0.12/0.06  H 0.018  D 0.338  A 0.778  → 0.342
+    //   steady  0.50/0.30/0.20  H 0.145  D 0.145  A 0.445  → 0.235
+    //   drawish 0.30/0.40/0.30  H 0.29   D 0.09   A 0.29   → 0.23
+    // Match Points pick the Comparison Anchor: drawish's 1-1 is exact once and
+    // the right goal difference at 2-2 and 0-0 for 11, against steady's 9 and
+    // sol's 8.
     const compared = report.metrics.filter(
       ({ metric }) => metric === RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC
     );
     expect(compared).toEqual([
       {
-        entrantId: "drawish",
+        entrantId: "sol",
         gw: GAMEWEEK,
         metric: RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC,
-        value: expect.closeTo(0.272, 12),
-        n: 1,
+        value: expect.closeTo(0.112, 12),
+        n: 10,
         detail: expect.anything()
       },
       {
         entrantId: "steady",
         gw: GAMEWEEK,
         metric: RPS_PAIRED_DIFFERENCE_SEASON_TO_DATE_METRIC,
-        value: expect.closeTo(0.127, 12),
-        n: 1,
+        value: expect.closeTo(0.005, 12),
+        n: 10,
         detail: expect.anything()
       }
     ]);
@@ -329,18 +311,144 @@ describe("rehearsing the complete scorer on the archived Gameweek", () => {
       });
     }
 
-    // Each Entrant answered one of the ten Fixtures and Gapped the other nine,
-    // which is a behavioural measure and needs no result.
+    // Each Entrant's one archived answer is replayed on every Fixture asked,
+    // so none Gaps — a behavioural measure, and it needs no result.
     for (const entrantId of report.entrants) {
       expect(report.metrics).toContainEqual({
         entrantId,
         gw: GAMEWEEK,
         metric: GAP_RATE_METRIC,
-        value: 0.9,
+        value: 0,
         n: 10,
         detail: expect.anything()
       });
     }
+  });
+
+  test("rehearses a Gameweek from bytes observed long after its Lock", async () => {
+    // The operator's archive on 2026-09-26: five Gameweeks past Gameweek 1's
+    // deadline. Loaded at that instant, every played Fixture is seen for the
+    // first time after its deadline and Locks into the next open Gameweek, so
+    // Gameweek 1's Lock owned nothing and the run scored nothing.
+    const { report, dryRun, shortfalls } = await rehearseScoring({
+      target: client,
+      archive: { ...archive, observedAt: new Date("2026-09-26T06:33:08Z") },
+      competition: "PL",
+      season: SEASON,
+      footballDataSeason: FOOTBALL_DATA_SEASON,
+      gameweek: GAMEWEEK,
+      at: "deadline-6h",
+      concurrency: 4,
+      now: () => SCORED_AT
+    });
+
+    expect(dryRun.contexts).toHaveLength(10);
+    expect(report.settled).toHaveLength(10);
+    expect(shortfalls).toEqual([]);
+  });
+
+  test("settles the rehearsed Gameweek's own Fixtures, not Gameweek 1's", async () => {
+    // Observed after Gameweek 2's deadline too: loaded just before it, every
+    // Gameweek 1 Fixture would Lock into Gameweek 2 beside its own ten.
+    const { report, shortfalls } = await rehearseScoring({
+      target: client,
+      archive: { ...archive, observedAt: new Date("2026-09-26T06:33:08Z") },
+      competition: "PL",
+      season: SEASON,
+      footballDataSeason: FOOTBALL_DATA_SEASON,
+      gameweek: 2,
+      at: "deadline-6h",
+      concurrency: 4,
+      now: () => SCORED_AT
+    });
+
+    // FPL numbers the Season's Fixtures in order, so Gameweek 2's are 11-20,
+    // settled in that order with the scorelines a person chose.
+    expect(report.locked).toEqual([11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+    expect(report.settled.slice(0, 2)).toEqual([
+      { fixtureId: 11, home: 2, away: 0 },
+      { fixtureId: 12, home: 1, away: 1 }
+    ]);
+    expect(shortfalls).toEqual([]);
+  });
+
+  test("answers the Fixture asked, whichever one the archived answer names", async () => {
+    // The newest preflight a Base Model holds is usually about another
+    // league's Fixture: on 2026-09-27 eight of the ten Match seats' answers
+    // named 565776. Replayed as recorded, every Entrant Gapped every Fixture.
+    const sol = archive.snapshots.find(({ source }) =>
+      source === "openrouter-preflight:openai/gpt-5.6-sol-pro")!;
+    const response = JSON.parse(sol.body) as {
+      choices: { message: { content: string } }[];
+    };
+    const answer = JSON.parse(response.choices[0]!.message.content) as
+      Record<string, unknown>;
+    response.choices[0]!.message.content =
+      JSON.stringify({ ...answer, fixture_id: 565776 });
+    const { report } = await rehearseScoring({
+      target: client,
+      archive: {
+        ...archive,
+        snapshots: archive.snapshots.map((snapshot) => snapshot === sol
+          ? { ...snapshot, body: JSON.stringify(response) }
+          : snapshot)
+      },
+      competition: "PL",
+      season: SEASON,
+      footballDataSeason: FOOTBALL_DATA_SEASON,
+      gameweek: GAMEWEEK,
+      at: "deadline-6h",
+      concurrency: 4,
+      now: () => SCORED_AT
+    });
+
+    expect(report.metrics).toContainEqual({
+      entrantId: "sol",
+      gw: GAMEWEEK,
+      metric: GAP_RATE_METRIC,
+      value: 0,
+      n: 10,
+      detail: expect.anything()
+    });
+  });
+
+  test("replays an answer that was never JSON as the Gap it was recorded as", async () => {
+    const steady = archive.snapshots.find(({ source }) =>
+      source === "openrouter-preflight:vendor/steady")!;
+    const response = JSON.parse(steady.body) as {
+      choices: { message: { content: string } }[];
+    };
+    response.choices[0]!.message.content = "I would rather not say.";
+    const { report } = await rehearseScoring({
+      target: client,
+      archive: {
+        ...archive,
+        snapshots: archive.snapshots.map((snapshot) =>
+          snapshot.source === "openrouter-preflight:vendor/steady"
+            ? { ...snapshot, body: JSON.stringify(response) }
+            : snapshot)
+      },
+      competition: "PL",
+      season: SEASON,
+      footballDataSeason: FOOTBALL_DATA_SEASON,
+      gameweek: GAMEWEEK,
+      at: "deadline-6h",
+      concurrency: 4,
+      now: () => SCORED_AT
+    });
+
+    // A schema Gap, as the recorded answer gives replayed untouched — not the
+    // provider Gap a rewrite that threw on it would turn it into.
+    expect(report.metrics).toContainEqual({
+      entrantId: "steady",
+      gw: GAMEWEEK,
+      metric: GAP_RATE_METRIC,
+      value: 1,
+      n: 10,
+      detail: expect.objectContaining({
+        causes: expect.objectContaining({ schema: 10, provider: 0 })
+      })
+    });
   });
 
   test("leaves every value, sample size and detail alone on a second run", async () => {

@@ -1,5 +1,4 @@
 import { type ScoringRehearsalResult } from "./rehearse-scoring.js";
-import { REHEARSED_RESULTS } from "./rehearsed-results.js";
 
 const RULE = "=".repeat(72);
 
@@ -16,14 +15,29 @@ const RULE = "=".repeat(72);
 export function formatScoringRehearsal(
   season: string,
   gameweek: number,
-  { report, dryRun, shortfalls }: ScoringRehearsalResult
+  { report, dryRun, observedAt, shortfalls }: ScoringRehearsalResult
 ): string {
-  const lines = [`${RULE}\nFabricated results\n${RULE}`];
-  for (const [fplId, [home, away]] of REHEARSED_RESULTS) {
-    lines.push(`Fixture ${fplId}: ${home}-${away}`);
+  const lines = [
+    `${RULE}\nFabricated results\n${RULE}`,
+    "Each Entrant's archived answer is replayed on every Fixture asked, its "
+    + "fixture_id rewritten to that Fixture's; every other field is as "
+    + "recorded."
+  ];
+  for (const { fixtureId, home, away } of report.settled) {
+    lines.push(`Fixture ${fixtureId}: ${home}-${away}`);
+  }
+  if (observedAt.getTime() > dryRun.deadline.getTime()) {
+    lines.push(
+      `The packets were built from bytes observed ${observedAt.toISOString()}, `
+      + `after the Gameweek's Lock at ${dryRun.deadline.toISOString()}: they `
+      + "prove the path, not what an Entrant would have seen. A result played "
+      + "on the Lock's own day passes the context's date bound, the Fixture's "
+      + "own among them, and the Head Coach state rows, where present, carry "
+      + "what was known at that later instant."
+    );
   }
   lines.push(
-    `${report.settled} of ${REHEARSED_RESULTS.size} Fixtures settled, `
+    `${report.settled.length} of ${report.scheduled.length} Fixtures settled, `
     + `${dryRun.contexts.length} contexts, `
     + `${dryRun.phases.at(-1)?.predictions ?? 0} Predictions`
   );

@@ -24,7 +24,6 @@ import {
   SCORE_PCT_METRIC,
   SCORE_PCT_SEASON_TO_DATE_METRIC
 } from "../predictions/score-match-gameweek.js";
-import { REHEARSED_RESULTS } from "./rehearsed-results.js";
 
 
 /**
@@ -72,8 +71,16 @@ export interface RehearsedMetric {
 }
 
 export interface ScoringRehearsalReport {
-  /** Fixtures the script settled, so a missing one cannot pass unnoticed. */
-  settled: number;
+  /**
+   * The Gameweek's own Fixtures by `gw`, read from the replayed schedule rather
+   * than from the run: the run Locks only the Fixtures it tried to predict, so
+   * its Lock alone cannot show one it never reached.
+   */
+  scheduled: number[];
+  /** The Fixtures the Gameweek's Lock owns, by id. */
+  locked: number[];
+  /** What the script settled, so a missing one cannot pass unnoticed. */
+  settled: { fixtureId: number; home: number; away: number }[];
   /** The Match roster the run was expected to score, as `models` holds it. */
   entrants: string[];
   metrics: RehearsedMetric[];
@@ -87,8 +94,8 @@ export interface ScoringRehearsalVerdict {
 /**
  * Judges a rehearsal against the record a complete run writes: every Entrant
  * scored, every Reference Line on the probability layer, one comparison for
- * every Entrant that is not the Comparison Anchor, and every scripted Fixture
- * settled.
+ * every Entrant that is not the Comparison Anchor, and every Fixture under the
+ * Gameweek's Lock settled by the script.
  *
  * Separate from the runner so it can be driven against a report built by hand.
  * A check that only ever runs at the end of a whole rehearsal cannot be shown
@@ -105,14 +112,27 @@ export function verifyScoringRehearsal(
     const absent = expected.filter((metric) => !written.has(`${id} ${metric}`));
     return absent.length === 0 ? [] : [`${id} is missing ${absent.join(", ")}`];
   };
-  const shortfalls: string[] = [];
-
-  if (report.settled !== REHEARSED_RESULTS.size) {
-    shortfalls.push(
-      `${REHEARSED_RESULTS.size} Fixtures expected to settle, `
-      + `${report.settled} settled`
-    );
+  // Each of these leaves the metrics below missing or short for a reason the
+  // metric list cannot name, so they are the whole verdict.
+  if (report.locked.length === 0) {
+    return { shortfalls: ["The Gameweek's Lock owns no Fixture"] };
   }
+  const settled = report.settled.map(({ fixtureId }) => fixtureId);
+  const unlocked = report.scheduled.filter((id) => !report.locked.includes(id));
+  const unsettled = report.locked.filter((id) => !settled.includes(id));
+  const unfinished = [
+    ...(unlocked.length === 0 ? [] : [
+      `Scheduled in the Gameweek, not under its Lock: ${unlocked.join(", ")}`
+    ]),
+    ...(unsettled.length === 0 ? [] : [
+      "Under the Gameweek's Lock, not settled by the script: "
+      + unsettled.join(", ")
+    ])
+  ];
+  if (unfinished.length > 0) {
+    return { shortfalls: unfinished };
+  }
+  const shortfalls: string[] = [];
   // Measure by measure rather than a row apiece: an Entrant that holds Match
   // Points and nothing else is a run that produced a leaderboard with no
   // evidence under it, and a count of rows per Entrant cannot tell the two

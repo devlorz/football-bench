@@ -2,6 +2,7 @@ import type { Client } from "pg";
 import {
   DEFAULT_ENTRANT_CALL_TIMEOUT_MS
 } from "../predictions/openrouter-entrant.js";
+import type { HttpFetcher } from "../http.js";
 import type { GapAlert } from "../predictions/gap-alert.js";
 import { predictGameweek } from "../predictions/predict-gameweek.js";
 import { matchPromptOf } from "../predictions/openrouter-entrant.js";
@@ -30,6 +31,18 @@ export interface RunDryRunOptions {
   gameweek: number;
   at: string;
   concurrency: number;
+  /**
+   * When the archived bytes are loaded. The archive's own observation instant
+   * unless a caller says otherwise: the scoring rehearsal loads before the
+   * Season's first deadline so that no Fixture is Locked on the way in.
+   */
+  loadAt?: Date;
+  /**
+   * Who answers the Entrants. The archive replay unless a caller says
+   * otherwise; `expected` in the result assumes the replay, answers as
+   * recorded, and is not true of any other fetcher.
+   */
+  http?: HttpFetcher;
 }
 
 export interface DryRunContext {
@@ -108,7 +121,8 @@ async function readContexts(
 
 /**
  * Rehearses the whole write path against archived bytes in a throwaway
- * database. Loading runs at the archive's own observation instant; the chosen
+ * database. Loading runs at the archive's own observation instant unless the
+ * caller passes `loadAt`, as the scoring rehearsal does; the chosen
  * instant governs the prediction path, which is where the Lock decides whether
  * a Prediction may be written at all.
  */
@@ -120,11 +134,12 @@ export async function runDryRun({
   footballDataSeason,
   gameweek,
   at,
-  concurrency
+  concurrency,
+  loadAt = archive.observedAt,
+  http = createArchiveReplayFetcher(archive.snapshots)
 }: RunDryRunOptions): Promise<DryRunResult> {
-  const http = createArchiveReplayFetcher(archive.snapshots);
   await prepareArchivedGameweek({
-    target, archive, competition, season, footballDataSeason
+    target, archive, competition, season, footballDataSeason, loadAt
   });
 
   const deadline = await readGameweekDeadline(

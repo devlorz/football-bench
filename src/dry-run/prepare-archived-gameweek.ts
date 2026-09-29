@@ -80,6 +80,8 @@ export interface PrepareArchivedGameweekOptions {
   competition: string;
   season: string;
   footballDataSeason: string;
+  /** When the bytes are loaded; the archive's own instant if not given. */
+  loadAt?: Date;
 }
 
 /**
@@ -88,16 +90,17 @@ export interface PrepareArchivedGameweekOptions {
  * the dry run and the preview so both build context from identical inputs and
  * differ only in who answers the prompt.
  *
- * Loading runs at the archive's own observation instant; a caller choosing a
- * later instant governs only the prediction path, where the Lock decides
- * whether a Prediction may be written.
+ * Loading runs at the archive's own observation instant unless the caller
+ * passes `loadAt`; a caller choosing a later instant governs only the
+ * prediction path, where the Lock decides whether a Prediction may be written.
  */
 export async function prepareArchivedGameweek({
   target,
   archive,
   competition,
   season,
-  footballDataSeason
+  footballDataSeason,
+  loadAt = archive.observedAt
 }: PrepareArchivedGameweekOptions): Promise<void> {
   await seedEntrants(target, archive.entrants);
   await listRehearsedCompetitions(target, competition, season);
@@ -114,6 +117,6 @@ export async function prepareArchivedGameweek({
     // have been spent.
     footballDataOrgToken: "archive-replay",
     http: createArchiveReplayFetcher(archive.snapshots),
-    now: () => archive.observedAt
+    now: () => loadAt
   });
 }

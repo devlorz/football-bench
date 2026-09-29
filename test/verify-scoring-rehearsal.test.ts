@@ -73,8 +73,11 @@ function metric(entrantId: string, name: string): RehearsedMetric {
  * the third, and all three Reference Lines on the probability layer.
  */
 function completeReport(): ScoringRehearsalReport {
+  const fixtures = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   return {
-    settled: 10,
+    scheduled: [...fixtures],
+    locked: [...fixtures],
+    settled: fixtures.map((fixtureId) => ({ fixtureId, home: 1, away: 0 })),
     entrants: [...ENTRANTS],
     metrics: [
       ...ENTRANTS.flatMap(
@@ -146,9 +149,35 @@ describe("judging a scoring rehearsal", () => {
     expect(rehearsalExitCode({ shortfalls: ["two is missing rps"] })).toBe(1);
   });
 
-  test("counts a Fixture the script failed to settle", () => {
-    expect(verifyScoringRehearsal({ ...completeReport(), settled: 9 })
-      .shortfalls)
-      .toEqual(["10 Fixtures expected to settle, 9 settled"]);
+  test("names a Fixture the script failed to settle, and nothing else", () => {
+    // Eleven Fixtures under the Lock and ten scorelines: one goes unsettled,
+    // and that is the whole report rather than a list of what it cost.
+    const report = completeReport();
+    report.locked = [...report.locked, 11];
+    report.metrics = [];
+
+    expect(verifyScoringRehearsal(report).shortfalls)
+      .toEqual(["Under the Gameweek's Lock, not settled by the script: 11"]);
+  });
+
+  test("names the Gameweek's own Fixtures its Lock does not own", () => {
+    // The run Locks only the Fixtures it tried to predict, so a run that
+    // reached three of ten would otherwise settle three and pass.
+    const report = completeReport();
+    report.locked = [1, 2, 3];
+    report.settled = report.settled.slice(0, 3);
+
+    expect(verifyScoringRehearsal(report).shortfalls).toEqual([
+      "Scheduled in the Gameweek, not under its Lock: 4, 5, 6, 7, 8, 9, 10"
+    ]);
+  });
+
+  test("says the Gameweek's Lock owns no Fixture rather than listing metrics", () => {
+    const report = {
+      ...completeReport(), locked: [], settled: [], metrics: []
+    };
+
+    expect(verifyScoringRehearsal(report).shortfalls)
+      .toEqual(["The Gameweek's Lock owns no Fixture"]);
   });
 });

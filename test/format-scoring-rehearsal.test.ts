@@ -6,8 +6,15 @@ import { MATCH_POINTS_METRIC } from "../src/predictions/score-match-gameweek.js"
 function result(shortfalls: string[]): ScoringRehearsalResult {
   return {
     shortfalls,
+    observedAt: new Date("2026-09-26T06:33:08Z"),
     report: {
-      settled: 10,
+      scheduled: [11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
+      locked: [11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
+      settled: [
+        [2, 0], [1, 1], [0, 1], [1, 3], [2, 2],
+        [3, 1], [0, 0], [4, 0], [1, 2], [2, 1]
+      ].map(([home, away], index) =>
+        ({ fixtureId: 11 + index, home: home!, away: away! })),
       entrants: ["one", "two"],
       metrics: [
         {
@@ -58,6 +65,51 @@ describe("reading a scoring rehearsal", () => {
     // The Fill runs after the main run and is the state the scoring pass saw.
     expect(formatScoringRehearsal("2026-27", 1, result([])))
       .toContain("10 of 10 Fixtures settled, 0 contexts, 2 Predictions");
+  });
+
+  test("names the Fixtures the script settled by their own ids", () => {
+    const output = formatScoringRehearsal("2026-27", 2, result([]));
+
+    expect(output).toContain("Fixture 11: 2-0\nFixture 12: 1-1");
+    expect(output).toContain("Fixture 20: 2-1");
+  });
+
+  test("says each archived answer was replayed on the Fixture asked", () => {
+    // As fabricated as the results: the rehearsal rewrote it, so it says so
+    // under the same heading.
+    expect(formatScoringRehearsal("2026-27", 1, result([]))).toContain(
+      "Fabricated results\n" + "=".repeat(72) + "\n"
+      + "Each Entrant's archived answer is replayed on every Fixture asked, "
+      + "its fixture_id rewritten to that Fixture's; every other field is as "
+      + "recorded."
+    );
+  });
+
+  test("says the packets were built from bytes newer than the Lock", () => {
+    // Observed 2026-09-26, the Lock 2026-08-21. Read off the packets of a
+    // 2026-09-28 run: a result played on the Lock's own day passes the
+    // context's date bound, the Fixture's own among them, and the Head Coach
+    // state carries what was known five weeks later. Availability was empty,
+    // so the output does not claim it.
+    const output = formatScoringRehearsal("2026-27", 1, result([]));
+
+    expect(output).toContain(
+      "The packets were built from bytes observed 2026-09-26T06:33:08.000Z, "
+      + "after the Gameweek's Lock at 2026-08-21T19:00:00.000Z"
+    );
+    expect(output).toContain("the Fixture's own among them");
+    expect(output).toContain("Head Coach");
+    expect(output).not.toContain("Availability");
+  });
+
+  test("says nothing about newer bytes when the archive predates the Lock", () => {
+    const early = {
+      ...result([]),
+      observedAt: new Date("2026-07-29T00:00:00Z")
+    };
+
+    expect(formatScoringRehearsal("2026-27", 1, early))
+      .not.toContain("The packets were built from bytes observed");
   });
 
   test("spells out every shortfall rather than only failing", () => {
