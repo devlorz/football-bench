@@ -4,6 +4,15 @@ status: proposed
 
 # A Competition reopens its roster at an Edition boundary
 
+> **Amended 2026-10-08, by ticket 0083's review.** *What the record holds* said a seat is on
+> Edition N's roster when its `withdrawn_at` is "null or at or after that Lock". Read
+> literally, a seat stamped exactly at Edition 2's first Lock would be a member of Edition 2
+> — the opposite of what a stamp at that instant means. Ticket 0083 implemented the strict
+> reading (`withdrawn_at > lock`, one helper, four Lock-bound sites) and CONTEXT.md's Season
+> Roster entry already said "later than"; this ADR was the one place still saying
+> otherwise. The bullet now reads **later than**, and the review that caught it is
+> recorded in ticket 0083's evidence. Nothing else in this ADR moves.
+>
 > **Amended 2026-09-22, the day it was drafted.** Rule 4 below first said that Edition 1
 > of every Competition is bound by ADR-0034's 2026-08-19 arrival cutoff, and *Consequences*
 > repeated it. ADR-0060's amendment of the same day seats two Base Models released after
@@ -124,9 +133,12 @@ the definition and are the whole of what the mechanism has to hold:
   first Lock, with `created_at` as its date of entry. Its pre-flight row is a different id,
   as ADR-0034's candidates were.
 - **Membership is derived, not listed.** A seat is on Edition N's roster when its
-  `created_at` is at or before Edition N's first Lock and its `withdrawn_at` is null or at or
-  after that Lock. No per-Edition roster table: the two dates the record already keeps say
-  it, and a third place to say it would be a third place to disagree.
+  `created_at` is at or before Edition N's first Lock and its `withdrawn_at` is null or
+  **later than** that Lock — strictly later, because a seat stamped *at* Edition N's first
+  Lock is a seat leaving as of that Lock, which puts it on Edition N−1's roster and not
+  on Edition N's (amended 2026-10-08; ticket 0083's `askedAt` is the one definition, and
+  it reads `withdrawn_at > lock`). No per-Edition roster table: the two dates the record
+  already keeps say it, and a third place to say it would be a third place to disagree.
 - **Every read that selects a Competition's seats by Prompt Version learns the Edition.**
   As of this ADR there are nine such reads and four writes on the match track — the
   dashboard's seat CTE, the predict path's roster and work list, the Gap alert, the scorer's
