@@ -16,7 +16,8 @@ locks into its Gameweek — which is exactly why it can be the Edition's first L
 
 **Status:** drafted, 2026-09-22; implemented 2026-10-06 as migration 0048 and
 `src/editions.ts`; rehearsed over a copy of production 2026-10-07 (0048 the only
-pending file; every keyed table came back whole). Not yet applied to production.
+pending file; every keyed table came back whole); applied to production
+2026-10-07 (`db:migrate`: "Applied 1: 0048_the_record_says_where_each_edition_begins.sql").
 
 ---
 
@@ -72,3 +73,6 @@ same bytes before and after.
   once the before-worktree's symlinked `node_modules` paths are normalized; the source
   map differs only in `sources`/`sourceRoot`. No module outside its test imports
   `src/editions.ts`.
+- Production read back after `db:migrate` (operator's `psql`): six `editions` rows,
+  `BL1`, `FL1`, `PD`, `PL`, `SA`, `UNL`, each `2026-27`, Edition 1, first Gameweek 1;
+  `relrowsecurity` is `t`.
