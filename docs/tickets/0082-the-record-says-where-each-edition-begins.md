@@ -14,7 +14,9 @@ locks into its Gameweek — which is exactly why it can be the Edition's first L
 
 **Blocked by:** None — can start immediately.
 
-**Status:** drafted, 2026-09-22
+**Status:** drafted, 2026-09-22; implemented 2026-10-06 as migration 0048 and
+`src/editions.ts`; rehearsed over a copy of production 2026-10-07 (0048 the only
+pending file; every keyed table came back whole). Not yet applied to production.
 
 ---
 
@@ -44,16 +46,29 @@ same bytes before and after.
 
 ## Acceptance
 
-- [ ] Migration creates the Editions table keyed by (Competition, Season, Edition) with
+- [x] Migration creates the Editions table keyed by (Competition, Season, Edition) with
       a first Gameweek per row, and inserts Edition 1 at Gameweek 1 for `PL`, `PD`, `SA`,
       `BL1`, `FL1` and `UNL` for `2026-27`. Row-level security is enabled as on
       `competitions`.
-- [ ] The migrations suite and the migration rehearsal both list the file and both pass;
+- [x] The migrations suite and the migration rehearsal both list the file and both pass;
       the rehearsal proves the migration applies over a copy of the production schema.
-- [ ] A helper returns, for (Competition, Season, Gameweek), the Edition number and the
+- [x] A helper returns, for (Competition, Season, Gameweek), the Edition number and the
       first Gameweek; a second returns the Edition's first Lock from `gameweeks`, and says
       "not fetched yet" for a first Gameweek with no row. Tests cover a Competition with
       one Edition, one with two, and the unfetched case.
-- [ ] A test holds that every Competition the domain lists has an Edition 1 row after the
+- [x] A test holds that every Competition the domain lists has an Edition 1 row after the
       migration, so a seventh Competition cannot be added to the domain without one.
-- [ ] No read-api response, no page and no CLI output differs from before this ticket.
+- [x] No read-api response, no page and no CLI output differs from before this ticket.
+
+## Evidence, 2026-10-07
+
+- `tsx --env-file=.env src/cli/migrate-rehearse.ts`: "Rehearsed
+  0048_the_record_says_where_each_edition_begins.sql over a copy of the record", with
+  gameweeks 188, fixtures 1908, predictions 3647, attempts 5037, scores 8904 rows each
+  "every one came back whole". The operator's own `npm run db:rehearse`
+  printed the same counts.
+- Built HEAD (`d051994`) and the change: `astro build` output in `dashboard/dist` is
+  byte-identical, and `wrangler deploy --dry-run` gives a byte-identical `worker.js`
+  once the before-worktree's symlinked `node_modules` paths are normalized; the source
+  map differs only in `sources`/`sourceRoot`. No module outside its test imports
+  `src/editions.ts`.

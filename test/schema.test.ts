@@ -101,6 +101,7 @@ describe("the benchmark database", () => {
       "attempts",
       "competitions",
       "contexts",
+      "editions",
       "fixtures",
       "fpl_player_points",
       "fpl_players",

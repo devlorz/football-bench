@@ -251,7 +251,8 @@ describe("applying migrations", () => {
       "0044_la_liga_gameweek_6_holds_its_lock_open_to_the_last_kickoff.sql",
       "0045_who_picks_each_national_side_and_since_when.sql",
       "0046_the_dataset_source_row_carries_the_instant_it_was_read.sql",
-      "0047_a_cup_fixture_names_its_group.sql"
+      "0047_a_cup_fixture_names_its_group.sql",
+      "0048_the_record_says_where_each_edition_begins.sql"
     ]);
 
     // Relabelled, not rewritten: every row of every rekeyed table comes back
@@ -705,7 +706,8 @@ describe("applying migrations", () => {
       "0044_la_liga_gameweek_6_holds_its_lock_open_to_the_last_kickoff.sql",
       "0045_who_picks_each_national_side_and_since_when.sql",
       "0046_the_dataset_source_row_carries_the_instant_it_was_read.sql",
-      "0047_a_cup_fixture_names_its_group.sql"
+      "0047_a_cup_fixture_names_its_group.sql",
+      "0048_the_record_says_where_each_edition_begins.sql"
     ]);
     const backfill = await client.query<{
       observed_at: Date;
