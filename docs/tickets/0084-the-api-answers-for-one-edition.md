@@ -47,6 +47,14 @@ which Edition of each it summed; the five leagues' Edition N form one set, and `
 never in a set. An Edition set whose Competitions are at different Edition numbers is
 refused, not summed.
 
+**What ticket 0083 left for this one (2026-10-07).** 0083 landed `askedAt` in
+`src/season-roster.ts` as "null or *later than* the Lock" — strict, so a seat stamped at
+Edition 2's first Lock is not on Edition 2. The "at or after" above (and in ADR-0061's
+*Membership is derived*) is the looser reading; use 0083's. And the scorer still writes a
+withdrawn seat's cumulative season-to-date rows at every Gameweek after its stamp (its
+`byEntrant` loop reads Predictions, not the roster), while its `gap_rate` rows stop at the
+stamp. Those frozen totals are what this ticket's Edition bound has to hide.
+
 **A body says which Edition it is.** Each response carries the Edition number, its first
 Gameweek and, for a closed Edition, its last, so the page (ticket 0085) can label it from
 data and the frozen sentence needs no numbers of its own.

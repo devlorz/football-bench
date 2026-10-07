@@ -1,5 +1,6 @@
 import type { Client } from "pg";
 import { matchPromptOf } from "./openrouter-entrant.js";
+import { askedAt } from "../season-roster.js";
 
 type Database = Pick<Client, "query">;
 
@@ -130,7 +131,7 @@ export async function readGapAlert(
   now: () => Date
 ): Promise<GapAlert | null> {
   const result = await database.query<GapRow>(
-    `-- roster: the match track's.
+    `-- roster: the match track's, as the Gameweek's Lock asked it.
      select
        m.id as entrant_id,
        m.name as entrant_name,
@@ -163,6 +164,7 @@ export async function readGapAlert(
        and f.locked_in_gw = $3
        and m.role = 'entrant'
        and m.prompt_version = $4
+       and ${askedAt("m", "g.deadline_at")}
        and not exists (
          select 1
            from predictions p

@@ -16,7 +16,7 @@ import {
   type MatchPromptFixture
 } from "./openrouter-entrant.js";
 import type { AttemptTrigger } from "./prediction-trigger.js";
-import type { ModelRole } from "../season-roster.js";
+import { askedAt, type ModelRole } from "../season-roster.js";
 import {
   readGapAlert,
   type GapAlert
@@ -160,12 +160,16 @@ export async function predictGameweek({
   // is a misconfiguration, so the refusal below asks for an Entrant row by
   // name, not merely for a non-empty roster.
   const entrantResult = await database.query<EntrantRow>(
-    `-- roster: the match track's.
-     select id, base_model, provider, quantization, prompt_version, role
-       from models
-      where role in ('entrant', 'shadow') and prompt_version = $1
-      order by id`,
-    [matchPromptOf(competition).version]
+    `-- roster: the match track's, as the Gameweek's Lock asked it.
+     select m.id, m.base_model, m.provider, m.quantization, m.prompt_version,
+            m.role
+       from models m
+       left join gameweeks g
+         on g.competition = $2 and g.season = $3 and g.gw = $4
+      where m.role in ('entrant', 'shadow') and m.prompt_version = $1
+        and ${askedAt("m", "g.deadline_at")}
+      order by m.id`,
+    [matchPromptOf(competition).version, competition, season, gameweek]
   );
   if (!entrantResult.rows.some((row) => row.role === "entrant")) {
     throw new Error(`No Entrants are configured for ${competition}`);
@@ -173,12 +177,16 @@ export async function predictGameweek({
 
   const asOf = now();
   const work = await database.query<WorkItemRow>(
-    `-- roster: the match track's.
+    `-- roster: the match track's, as the Gameweek's Lock asked it.
      select
        f.fixture_id, f.home_team, f.away_team, f.kickoff_at,
        m.id as entrant_id, m.base_model, m.provider, m.quantization, m.role,
        m.config
       from fixtures f
+      join gameweeks g
+        on g.competition = f.competition
+       and g.season = f.season
+       and g.gw = $3
       cross join models m
       where f.competition = $1
         and f.season = $2
@@ -186,6 +194,7 @@ export async function predictGameweek({
         and f.kickoff_at > $4
         and m.role in ('entrant', 'shadow')
         and m.prompt_version = $5
+        and ${askedAt("m", "g.deadline_at")}
         and not exists (
           select 1
             from predictions p

@@ -197,7 +197,7 @@ export async function rehearseScoring({
     scheduled: await readFixtureIds(target, season, "gw", gameweek),
     locked,
     settled,
-    entrants: await matchRoster(target, "PL"),
+    entrants: await matchRoster(target, "PL", season, gameweek),
     metrics: await readMetrics(target, season)
   };
   return {

@@ -12,6 +12,7 @@ import {
   footballDataTeamName, teamNamesOf, type TeamNames
 } from "../football-data/team-identity.js";
 import { emptyRepairDistribution } from "../repairs.js";
+import { askedAt } from "../season-roster.js";
 import { GAP_CAUSES, type GapCause } from "./gap-alert.js";
 import {
   MATCH_PROMPT_VERSION,
@@ -1652,10 +1653,12 @@ async function targetGameweeks(
 }
 
 /**
- * The Season roster: every Match Entrant `models` holds for this Competition.
- * No exclusion is representable and removing one would need its own decision
- * (CONTEXT.md). Reference Lines are not in it, and so neither empty a complete
- * case nor stand as a Comparison Anchor.
+ * The roster one Gameweek's Lock asked: every Match Entrant `models` holds for
+ * this Competition, less a seat withdrawn at or before that Lock (ticket
+ * 0083). Per Gameweek rather than per Season, because a seat that leaves
+ * still played every Gameweek before it left, and a re-score of one of those
+ * must expect it as it did. Reference Lines are not in it, and so neither
+ * empty a complete case nor stand as a Comparison Anchor.
  *
  * An FPL seat holds the same `entrant` role and is told apart by its Prompt
  * Version, here as in every other place that asks who was asked to answer. The
@@ -1667,14 +1670,19 @@ async function targetGameweeks(
  */
 export async function matchRoster(
   database: Database,
-  competition: string
+  competition: string,
+  season: string,
+  gameweek: number
 ): Promise<string[]> {
   const stored = await database.query<{ id: string }>(
-    `-- roster: the match track's.
-     select id from models
-      where role = 'entrant' and prompt_version = $1
-      order by id`,
-    [matchPromptOf(competition).version]
+    `-- roster: the match track's, as the Gameweek's Lock asked it.
+     select m.id from models m
+       left join gameweeks g
+         on g.competition = $2 and g.season = $3 and g.gw = $4
+      where m.role = 'entrant' and m.prompt_version = $1
+        and ${askedAt("m", "g.deadline_at")}
+      order by m.id`,
+    [matchPromptOf(competition).version, competition, season, gameweek]
   );
   return stored.rows.map(({ id }) => id);
 }
@@ -1727,8 +1735,6 @@ export async function scoreMatchGameweek({
   // carries the same stamp however long the pass takes.
   const scoredAt = now();
 
-  const roster = await matchRoster(database, competition);
-
   // Over every Fixture the Season's Locks own rather than only this Gameweek's,
   // so scoring one Gameweek back-fills the lines across the Season the Entrants
   // already cover.
@@ -1753,6 +1759,7 @@ export async function scoreMatchGameweek({
         database, competition, season, gameweek
       )
     ) {
+      const roster = await matchRoster(database, competition, season, target);
       const pending: PendingScores = new Map();
       for (const [entrantId, predicted] of byEntrant) {
         const own = predicted.filter(({ gw }) => gw === target);

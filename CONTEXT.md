@@ -42,7 +42,9 @@ _Avoid_: baseline as a competitor (a Reference Line never competes)
 The Entrants included in Season-wide comparisons. One per track and, on the match track,
 per Competition: every `models` row with `role = 'entrant'` and no `withdrawn_at`, carrying
 that Prompt Version, since a seat is entered for a track and a Competition while every seat
-holds the same role.
+holds the same role. On the match track the stamp is read against a Gameweek's Lock, not
+against now: a seat is on the roster that Lock asks when it is unstamped or stamped later
+than that Lock, so a seat that left is still expected on every Gameweek it played.
 A track's roster is its own: the two tracks seated the same Base Models on the 2026-27
 Season's first day and no longer do (ADR-0047), so a count read off one track says nothing
 about the other. What multiplies within a track is seats, not Entrants, and a

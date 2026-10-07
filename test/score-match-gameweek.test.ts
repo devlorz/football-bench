@@ -2225,7 +2225,8 @@ describe("the Match roster a Shadow Seat does not join", () => {
       provider: "provider"
     });
 
-    expect(await matchRoster(client, "PL")).toEqual(["entrant/one"]);
+    expect(await matchRoster(client, "PL", SEASON, 1))
+      .toEqual(["entrant/one"]);
   });
 });
 

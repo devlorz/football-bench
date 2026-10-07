@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Client } from "pg";
 import { errorText } from "../error-text.js";
+import { askedAt } from "../season-roster.js";
 import type { HttpFetcher } from "../http.js";
 import {
   matchPromptOf,
@@ -354,13 +355,17 @@ export async function preflightBaseModels({
     // `role = 'entrant'` in the same table. The count is still checked, so a
     // roster short of a Base Model is still refused before the first call.
     const entrants = await database.query<CalledRow>(
-      `-- roster: the match track's, told from this track's by Prompt Version.
-       select id, base_model, provider, quantization, prompt_version, role,
-              config
-         from models
-        where role = 'entrant' and prompt_version = $1
-        order by id`,
-      [promptVersion]
+      `-- roster: the match track's, told from this track's by Prompt Version,
+       -- as the Fixture's Gameweek's Lock asked it.
+       select m.id, m.base_model, m.provider, m.quantization, m.prompt_version,
+              m.role, m.config
+         from models m
+         left join gameweeks g
+           on g.competition = $2 and g.season = $3 and g.gw = $4
+        where m.role = 'entrant' and m.prompt_version = $1
+          and ${askedAt("m", "g.deadline_at")}
+        order by m.id`,
+      [promptVersion, competition, season, fixture.gw]
     );
     if (entrants.rows.length !== expectedEntrantCount) {
       throw new Error(

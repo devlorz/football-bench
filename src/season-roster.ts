@@ -517,6 +517,7 @@ interface StoredSeat {
   provider: string;
   quantization: string | null;
   config: { canonical_slug?: unknown; baseModelClass?: unknown };
+  withdrawn_at: Date | null;
 }
 
 function identityOfSeat(seat: StoredSeat): Record<string, string | null> {
@@ -554,6 +555,21 @@ function identityOfSeat(seat: StoredSeat): Record<string, string | null> {
  */
 export function seatSlug(id: string): string {
   return id.slice(id.lastIndexOf("/") + 1);
+}
+
+/**
+ * Whether the match seat `seat` (a `models` alias) is asked for the Gameweek
+ * whose Lock is `lock` (a SQL expression): unstamped, or stamped later than
+ * that Lock (ticket 0083, ADR-0061). Compared with the Gameweek's Lock and
+ * not with now, because the scorer runs again: a seat that played a Gameweek
+ * is still expected there after it leaves.
+ *
+ * One spelling for every Lock-bound match read, so the next one cannot get
+ * the boundary subtly different. The FPL track's reads keep their own
+ * `withdrawn_at is null` (ADR-0047).
+ */
+export function askedAt(seat: string, lock: string): string {
+  return `(${seat}.withdrawn_at is null or ${seat}.withdrawn_at > ${lock})`;
 }
 
 /**
@@ -598,7 +614,7 @@ async function refuseARosterTheRecordDisagreesWith(
      -- this guard refuses a seat re-entered as a different Base Model, and
      -- a withdrawn row is still a row a Season path points at.
      select id, prompt_version, name, base_model, provider, quantization,
-            config
+            config, withdrawn_at
        from models
       where role = 'entrant' and prompt_version = any($1)
       order by id`,
@@ -611,6 +627,12 @@ async function refuseARosterTheRecordDisagreesWith(
       )
     );
     const entrant = bySlug.get(seatSlug(seat.id));
+    // A withdrawn seat the roster no longer names is an Edition boundary,
+    // not a disagreement (ticket 0083): the stamp is written ahead of the
+    // Lock it dates, so whether it is stamped at all is the whole question.
+    if (entrant === undefined && seat.withdrawn_at !== null) {
+      continue;
+    }
     if (entrant === undefined) {
       throw new Error(
         `Seat ${seat.id} is stored at Prompt Version `
