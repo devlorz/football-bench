@@ -2210,7 +2210,14 @@ describe("the Match roster a Shadow Seat does not join", () => {
   // this ticket. Proven rather than assumed: a Shadow beside its Entrant still
   // leaves the roster the one row it was.
   test("leaves the roster the one Entrant it was", async () => {
-    await client.query("truncate models restart identity cascade");
+    await client.query("truncate models, gameweeks restart identity cascade");
+    // The roster is the one a Gameweek's Lock asked (ticket 0083), so the
+    // Gameweek has to exist for there to be a Lock to ask it.
+    await client.query(
+      `insert into gameweeks (season, gw, deadline_at)
+       values ($1, 1, '2026-08-21T17:30:00Z')`,
+      [SEASON]
+    );
     await client.query(
       `insert into models (
          id, name, base_model, provider, prompt_version, role

@@ -16,7 +16,7 @@ import {
   type MatchPromptFixture
 } from "./openrouter-entrant.js";
 import type { AttemptTrigger } from "./prediction-trigger.js";
-import { askedAt, type ModelRole } from "../season-roster.js";
+import { isAskedAtLock, type ModelRole } from "../season-roster.js";
 import {
   readGapAlert,
   type GapAlert
@@ -164,10 +164,10 @@ export async function predictGameweek({
      select m.id, m.base_model, m.provider, m.quantization, m.prompt_version,
             m.role
        from models m
-       left join gameweeks g
+       join gameweeks g
          on g.competition = $2 and g.season = $3 and g.gw = $4
       where m.role in ('entrant', 'shadow') and m.prompt_version = $1
-        and ${askedAt("m", "g.deadline_at")}
+        and ${isAskedAtLock("m", "g.deadline_at")}
       order by m.id`,
     [matchPromptOf(competition).version, competition, season, gameweek]
   );
@@ -194,7 +194,7 @@ export async function predictGameweek({
         and f.kickoff_at > $4
         and m.role in ('entrant', 'shadow')
         and m.prompt_version = $5
-        and ${askedAt("m", "g.deadline_at")}
+        and ${isAskedAtLock("m", "g.deadline_at")}
         and not exists (
           select 1
             from predictions p

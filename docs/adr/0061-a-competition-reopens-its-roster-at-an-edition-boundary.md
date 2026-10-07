@@ -136,8 +136,8 @@ the definition and are the whole of what the mechanism has to hold:
   `created_at` is at or before Edition N's first Lock and its `withdrawn_at` is null or
   **later than** that Lock — strictly later, because a seat stamped *at* Edition N's first
   Lock is a seat leaving as of that Lock, which puts it on Edition N−1's roster and not
-  on Edition N's (amended 2026-10-08; ticket 0083's `askedAt` is the one definition, and
-  it reads `withdrawn_at > lock`). No per-Edition roster table: the two dates the record
+  on Edition N's (amended 2026-10-08; ticket 0083's `isAskedAtLock` is the one
+  definition, and it reads `withdrawn_at > lock`). No per-Edition roster table: the two dates the record
   already keeps say it, and a third place to say it would be a third place to disagree.
 - **Every read that selects a Competition's seats by Prompt Version learns the Edition.**
   As of this ADR there are nine such reads and four writes on the match track — the

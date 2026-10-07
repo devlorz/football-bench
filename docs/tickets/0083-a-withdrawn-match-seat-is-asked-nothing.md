@@ -82,5 +82,12 @@ decide*).
   `fpl-withdrawal-filter`): 470 passed, 2 failed in `test/seed-season.test.ts` ("already
   holds editions"). Both fail identically on HEAD `09a8c61` in a clean worktree, from
   migration 0048's seeded rows, not this change.
-- Follow-ups recorded in ticket 0084: the strict predicate, and the scorer's frozen
-  cumulative rows for a withdrawn seat.
+- Follow-ups: ADR-0061's membership rule amended to "later than" (2026-10-08, `1132d01`);
+  ticket 0084 records the scorer's frozen cumulative rows for a withdrawn seat.
+- Second review, 2026-10-08: the helper is renamed `isAskedAtLock`; its three
+  `gameweeks` joins are inner, since a missing row would otherwise collapse the
+  predicate to `withdrawn_at is null` without a word. The roster guard is shared with
+  `enterFplRoster`, so the FPL door also accepts a withdrawn seat its roster no longer
+  names: unreachable today (the FPL roster of record still names every stored FPL seat)
+  and the same meaning on both tracks, a stamp being a departure on purpose. No FPL read
+  changes.

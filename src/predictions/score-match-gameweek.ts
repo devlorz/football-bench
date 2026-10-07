@@ -12,7 +12,7 @@ import {
   footballDataTeamName, teamNamesOf, type TeamNames
 } from "../football-data/team-identity.js";
 import { emptyRepairDistribution } from "../repairs.js";
-import { askedAt } from "../season-roster.js";
+import { isAskedAtLock } from "../season-roster.js";
 import { GAP_CAUSES, type GapCause } from "./gap-alert.js";
 import {
   MATCH_PROMPT_VERSION,
@@ -1677,10 +1677,10 @@ export async function matchRoster(
   const stored = await database.query<{ id: string }>(
     `-- roster: the match track's, as the Gameweek's Lock asked it.
      select m.id from models m
-       left join gameweeks g
+       join gameweeks g
          on g.competition = $2 and g.season = $3 and g.gw = $4
       where m.role = 'entrant' and m.prompt_version = $1
-        and ${askedAt("m", "g.deadline_at")}
+        and ${isAskedAtLock("m", "g.deadline_at")}
       order by m.id`,
     [matchPromptOf(competition).version, competition, season, gameweek]
   );

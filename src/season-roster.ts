@@ -568,7 +568,7 @@ export function seatSlug(id: string): string {
  * the boundary subtly different. The FPL track's reads keep their own
  * `withdrawn_at is null` (ADR-0047).
  */
-export function askedAt(seat: string, lock: string): string {
+export function isAskedAtLock(seat: string, lock: string): string {
   return `(${seat}.withdrawn_at is null or ${seat}.withdrawn_at > ${lock})`;
 }
 
@@ -630,6 +630,8 @@ async function refuseARosterTheRecordDisagreesWith(
     // A withdrawn seat the roster no longer names is an Edition boundary,
     // not a disagreement (ticket 0083): the stamp is written ahead of the
     // Lock it dates, so whether it is stamped at all is the whole question.
+    // `enterFplRoster` shares this guard and gets the same reading: on either
+    // track a stamp is a departure on purpose (ADR-0047).
     if (entrant === undefined && seat.withdrawn_at !== null) {
       continue;
     }

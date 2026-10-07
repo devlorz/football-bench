@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Client } from "pg";
 import { errorText } from "../error-text.js";
-import { askedAt } from "../season-roster.js";
+import { isAskedAtLock } from "../season-roster.js";
 import type { HttpFetcher } from "../http.js";
 import {
   matchPromptOf,
@@ -360,10 +360,10 @@ export async function preflightBaseModels({
        select m.id, m.base_model, m.provider, m.quantization, m.prompt_version,
               m.role, m.config
          from models m
-         left join gameweeks g
+         join gameweeks g
            on g.competition = $2 and g.season = $3 and g.gw = $4
         where m.role = 'entrant' and m.prompt_version = $1
-          and ${askedAt("m", "g.deadline_at")}
+          and ${isAskedAtLock("m", "g.deadline_at")}
         order by m.id`,
       [promptVersion, competition, season, fixture.gw]
     );
