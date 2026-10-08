@@ -144,6 +144,12 @@ pre-flights spend money and are asked for one at a time.
 
 ## Consequences
 
+- **Pre-flighted green, 2026-10-08, the day of acceptance**: each of the three unseated
+  Base Models alone, then the eight together — eleven calls, every result `parseable`,
+  every resolved model the dated id this note's table pins, nothing amended. Report:
+  [the leagues' Edition 2 eight-seat pre-flight](../reports/2026-10-08-the-leagues-edition-2-eight-seat-preflight.md).
+  Ticket 0098 (the roster module's second Edition) landed the same day; the runbook is
+  [opening an Edition](../runbooks/opening-an-edition.md).
 - ADR-0061's *What this ADR does not decide* is answered; ticket 0086 is unblocked.
 - The cup's roster and the leagues' Edition 2 roster differ by one seat (Claude Opus 5.5)
   and two successors; `/overall` already sums the leagues alone (ADR-0051 as amended).

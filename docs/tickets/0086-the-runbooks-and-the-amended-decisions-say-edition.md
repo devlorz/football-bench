@@ -59,7 +59,7 @@ and the count of standing seats equals the roster ADR's size.
 
 ## Acceptance
 
-- [ ] `docs/runbooks/opening-an-edition.md` exists, in the order above, with every paid
+- [x] `docs/runbooks/opening-an-edition.md` exists, in the order above, with every paid
       step marked and the "no seat moves before the roster ADR" rule stated first.
 - [ ] "A new Base Model arrives" has the fourth door and the reworded paragraph.
 - [ ] ADR-0034, ADR-0051 and ADR-0060 each carry a dated amendment note naming ADR-0061
