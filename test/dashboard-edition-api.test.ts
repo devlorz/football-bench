@@ -88,8 +88,10 @@ describe("the read API on a one-Edition record", () => {
       expect(await response.text()).toMatch(/(PL|PD) Edition 2/);
     }
     // Not an Edition prefix at all, so the ordinary 404.
-    expect(await (await get("/api/edition-01/pl/leaderboard")).text())
-      .toBe("Not found");
+    for (const prefix of ["edition-01", "edition-99999999999999999999"]) {
+      expect(await (await get(`/api/${prefix}/pl/leaderboard`)).text())
+        .toBe("Not found");
+    }
   });
 });
 

@@ -60,15 +60,6 @@ export type Query = (
   parameters?: readonly unknown[]
 ) => Promise<Array<Record<string, unknown>>>;
 
-/**
- * Which Edition a Match body answers within (ADR-0061, ticket 0084), so the
- * page labels it from data. `lastGameweek` is null while it is the latest.
- */
-export type EditionField = EditionScope;
-
-const editionField = (
-  { number, firstGameweek, lastGameweek }: EditionScope
-): EditionField => ({ number, firstGameweek, lastGameweek });
 
 /**
  * Read off whichever of the roster's Match Points rows carries it: the scorer
@@ -181,7 +172,8 @@ export interface LeaderboardEntrant {
  */
 export interface LeaderboardBody {
   season: string;
-  edition: EditionField;
+  /** The Edition it answers within (ADR-0061), so the page labels it from data. */
+  edition: EditionScope;
   /**
    * The scorer's sentence that Season-to-date counts from this Edition's
    * first Gameweek (ticket 0097, ADR-0012). Omitted in a first Edition,
@@ -268,11 +260,11 @@ const scoredOrNull = (
  * would be counted into the `n` the whole ranking is presented against. Story
  * 28 asks for that accidental read to be impossible; this is where it is made
  * so, because this is where a Gameweek is read without a version beside it.
+ *
+ * And never before the Edition's first Gameweek (ADR-0061, ticket 0084), so
+ * La Liga's retired block stays inside its Edition 1. Every read bounded below
+ * by this is bounded above by the Edition's last Gameweek, null while open.
  */
-//
-// And never before the Edition's first Gameweek (ADR-0061, ticket 0084), so
-// La Liga's retired block stays inside its Edition 1. Every read bounded below
-// by this is bounded above by the Edition's last Gameweek, null while open.
 const rankedFrom = (competition: string, scope: EditionScope): number =>
   Math.max((retiredGameweekOf(competition)?.gw ?? 0) + 1, scope.firstGameweek);
 
@@ -463,7 +455,7 @@ async function leaderboard(
   if (!open) {
     const unopened: LeaderboardBody = {
       season,
-      edition: editionField(scope),
+      edition: scope,
       active: false,
       throughGw: null,
       nextLock: null,
@@ -668,7 +660,7 @@ async function leaderboard(
 
   const body: LeaderboardBody = {
     season,
-    edition: editionField(scope),
+    edition: scope,
     active: true,
     throughGw,
     nextLock: lock
@@ -755,7 +747,7 @@ export interface FixtureView {
  */
 export interface FixturesBody {
   season: string;
-  edition: EditionField;
+  edition: EditionScope;
   gw: number | null;
   deadlineAt: string | null;
   lockPassed: boolean;
@@ -1027,7 +1019,7 @@ async function fixtures(
 
   const body: FixturesBody = {
     season,
-    edition: editionField(scope),
+    edition: scope,
     gw,
     deadlineAt: deadline?.toISOString() ?? null,
     // The one thing the instant is used for: it separates the pre-lock banner
@@ -1116,7 +1108,7 @@ export interface EntrantRecord {
  */
 export interface EntrantsBody {
   season: string;
-  edition: EditionField;
+  edition: EditionScope;
   /** As `LeaderboardBody.editionQualification`. */
   editionQualification?: string;
   throughGw: number | null;
@@ -1287,7 +1279,7 @@ async function entrants(
 
   const body: EntrantsBody = {
     season,
-    edition: editionField(scope),
+    edition: scope,
     throughGw,
     exhibitionCaveat: records.some(({ row }) => row.role === "exhibition")
       ? EXHIBITION_CAVEAT
@@ -2681,7 +2673,7 @@ export interface RetiredGameweekEntrant {
  */
 export interface RetiredGameweekBody {
   season: string;
-  edition: EditionField;
+  edition: EditionScope;
   /** The retired version itself, which the block's label names. */
   promptVersion: string;
   gw: number;
@@ -2811,7 +2803,7 @@ async function retiredGameweek(
 
   const body: RetiredGameweekBody = {
     season,
-    edition: editionField(scope),
+    edition: scope,
     promptVersion: retired.version,
     gw: retired.gw,
     matchPointsQualification: qualification("match_qualification"),
@@ -2876,7 +2868,9 @@ export async function handleDashboardRequest(
   // one every URL before Editions already meant. Stripped here, so the
   // handlers see one shape and a scope.
   const parts = pathname.split("/");
-  const prefix = /^edition-([1-9]\d*)$/.exec(parts[2] ?? "");
+  // Nine digits at most, so the number fits Postgres's `int`; a longer one is
+  // the ordinary 404 and not a query error.
+  const prefix = /^edition-([1-9]\d{0,8})$/.exec(parts[2] ?? "");
   if (prefix !== null) {
     parts.splice(2, 1);
   }

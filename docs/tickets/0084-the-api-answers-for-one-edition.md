@@ -47,7 +47,9 @@ remove it. The bound moved to the scorer (0097); this ticket reads.
 
 **Membership is one predicate, already written.** A seat is on Edition N when
 `isAskedAtLock("m", <Edition N's first Lock>)` holds — ticket 0083's helper, with the
-`created_at` half ticket 0096 adds. The seat CTE calls it for `role = 'entrant'` rows
+`created_at` half ticket 0096 adds. That Lock is its first *ranked* Gameweek's (`rankedFrom`),
+which differs only where the Edition holds a retired Gameweek (ADR-0061 amended
+2026-10-08, from this ticket's review). The seat CTE calls it for `role = 'entrant'` rows
 and does not restate it. Exhibition rows are not filtered by it (ADR-0061: an
 Exhibition Run crosses the boundary as a playing seat does), but the derivation of an
 Exhibition row's "ran after Gameweek N" label is bounded to the Edition's Gameweeks, so
@@ -124,8 +126,9 @@ predicate is what keeps those frozen totals off the page: a seat withdrawn at Ed
   Fixtures route's default Gameweek and Gameweek list are bounded to `[firstGameweek,
   lastGameweek]`, from the first Gameweek rather than `rankedFrom`, because that page has
   always offered the retired Gameweek.
-- **Membership is measured at the Lock of `rankedFrom`, not of `firstGameweek`.** The
-  review found this against production (`models.created_at` against GW1 and GW2 Locks,
+- **Membership is measured at the Lock of `rankedFrom`, not of `firstGameweek`**, and
+  ADR-0061 is amended to say so (second review). The first review found this against
+  production (`models.created_at` against GW1 and GW2 Locks,
   2026-10-08):
   - La Liga's ten v2 seats were entered at 08-20 05:06, after PD GW1's Lock (08-15 17:00)
     and before GW2's (08-20 17:30).
@@ -148,7 +151,8 @@ predicate is what keeps those frozen totals off the page: a seat withdrawn at Ed
 - **`test/dashboard-edition-api.test.ts`** (10 tests, read as `dashboard_read`):
   - **Box 1:** 30 routes over the seeded Season, compared with
     `test/fixtures/dashboard-match-bodies-before-0084.json.gz`, which was captured at
-    `09bf5bb` twice with identical bytes. Each route's body less `edition` is
+    `09bf5bb` twice with identical bytes. The second review re-captured it from a
+    detached worktree of `09bf5bb` and `cmp` matched the committed file. Each route's body less `edition` is
     byte-identical, and `/api/edition-1/...` serves the same bytes.
   - **Edition 2 from GW6, scored by 0097's scorer:**
     - Totals equal the stored GW7 and GW5 rows.
@@ -165,6 +169,12 @@ predicate is what keeps those frozen totals off the page: a seat withdrawn at Ed
   the `infinity` default, `rankedFrom`, the Lock of `rankedFrom` (back to
   `firstGameweek`) and the entrants qualification. Bytes were restored with `cp` and
   checked with `cmp` each time.
+- **Box 3's wording** was changed in `df0cca2`, by this ticket, after the user agreed
+  that no body carries the Anchor or a Paired Difference.
+- **Second review, 2026-10-08:**
+  - `edition-N` takes at most nine digits, so a longer number is the ordinary 404 and not
+    a Postgres `int` overflow (a 500). The old regex fails the test.
+  - The body field is `EditionScope` itself; the copy helper is deleted.
 - **Changed tests.** `dashboard-read-api` (unopened body) and `dashboard-retired-gameweek`
   (key list) gain `edition`. `dashboard-overall-view`'s hand-built body gains it too. The
   migration lists (5) and `schema.test.ts`'s grant list gain 0049 and `editions`.

@@ -4,6 +4,20 @@ status: proposed
 
 # A Competition reopens its roster at an Edition boundary
 
+> **Amended 2026-10-08, by ticket 0084's review.** *What the record holds* measures
+> membership at "Edition N's first Lock". For an Edition holding a retired Gameweek
+> (ADR-0042), that is the wrong Lock: La Liga's v1 played Gameweek 1, and its ten v2 seats
+> were entered on 2026-08-20 05:06, after Gameweek 1's Lock (08-15) and before Gameweek
+> 2's (08-20 17:30). Measured at Gameweek 1, Edition 1 of La Liga has no seats at all.
+> ADR-0042 already lets restarted seats differ "until the restarted versions' first
+> Lock". So an Edition's first Lock, for membership, is **the Lock of its first ranked
+> Gameweek**. That is its first Gameweek's Lock unless the Edition holds a retired
+> Gameweek, and then it is the Gameweek after that. Every other Competition's seats
+> predate their first Gameweek's Lock (production, 2026-10-08), so nothing else moves.
+> Separately, *What the dashboard shows* now says that the current Edition also answers
+> under its own prefix: the same bytes at a second URL, which the edge caches as a second
+> entry.
+
 > **Amended 2026-10-08, by ticket 0083's review.** *What the record holds* said a seat is on
 > Edition N's roster when its `withdrawn_at` is "null or at or after that Lock". Read
 > literally, a seat stamped exactly at Edition 2's first Lock would be a member of Edition 2
@@ -133,7 +147,8 @@ the definition and are the whole of what the mechanism has to hold:
   first Lock, with `created_at` as its date of entry. Its pre-flight row is a different id,
   as ADR-0034's candidates were.
 - **Membership is derived, not listed.** A seat is on Edition N's roster when its
-  `created_at` is at or before Edition N's first Lock and its `withdrawn_at` is null or
+  `created_at` is at or before Edition N's first Lock (its first *ranked* Gameweek's,
+  amended 2026-10-08 above) and its `withdrawn_at` is null or
   **later than** that Lock — strictly later, because a seat stamped *at* Edition N's first
   Lock is a seat leaving as of that Lock, which puts it on Edition N−1's roster and not
   on Edition N's (amended 2026-10-08; ticket 0083's `isAskedAtLock` is the one
@@ -157,7 +172,8 @@ the definition and are the whole of what the mechanism has to hold:
   equals a snapshot without there being one.
 - **The current Edition keeps today's URLs.** `/pl`, `/overall`, `/api/pl/leaderboard` go on
   meaning the Edition now playing, so nothing shared before this ADR breaks. Earlier
-  Editions live under a prefix, `/edition-1/pl`, `/api/edition-1/pl/leaderboard`.
+  Editions live under a prefix, `/edition-1/pl`, `/api/edition-1/pl/leaderboard`; the
+  current one answers under its own prefix too, with the same bytes.
 - **Every figure is within one Edition.** Season-to-date points, the Comparison Anchor and
   every Paired Difference, the settled-Fixture evidence line and n, the Gap count — all read
   from the Edition's first Gameweek. Spend across the whole Season is still in `attempts`
