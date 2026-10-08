@@ -19,6 +19,7 @@ import {
 
 const body = (over: Partial<CompetitionLeaderboard["body"]> = {}) => ({
   season: "2026-27",
+  edition: { number: 1, firstGameweek: 1, lastGameweek: null },
   active: true,
   throughGw: 5,
   nextLock: null,

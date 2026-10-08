@@ -231,8 +231,8 @@ describe("La Liga's retired Gameweek", () => {
       // or a Season total would each be a field here, and one Gameweek supports
       // none of them.
       expect(Object.keys(body).sort()).toEqual([
-        "betPointsQualification", "entrants", "evidenceCaveat", "fixtures",
-        "gw", "matchPointsQualification", "promptVersion", "season"
+        "betPointsQualification", "edition", "entrants", "evidenceCaveat",
+        "fixtures", "gw", "matchPointsQualification", "promptVersion", "season"
       ]);
       // Byte for byte out of storage, which is the claim: the scorer writes the
       // sentence into every row a figure can be read off, and the block reads

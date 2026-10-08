@@ -23,7 +23,9 @@ ADR accepted (ADR-0061 rule 1) → each candidate pre-flighted alone as a tempor
 `EXPECTED_ENTRANT_COUNT` set to its size (paid; ask) → `withdrawn_at` stamped on the
 leaving seats at the Edition's first Lock → `roster:enter` for the joining seats under the
 standing Prompt Version → the Editions row inserted by the operator → the next daily
-fetch and predict run pick it up with no further act. What is *not* done: no Prompt
+fetch and predict run pick it up with no further act. For up to a minute after the
+insert, `/api/edition-N/...` may still answer the edge-cached 404 (`NOT_FOUND_CACHE`,
+ticket 0084); that is the cache, not a missing row. What is *not* done: no Prompt
 Version bump, no `competitions` change, no hand-set Lock (ADR-0054). A table of the
 expected Edition 2 boundaries per league with the caveat that the record decides.
 

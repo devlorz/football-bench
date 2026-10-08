@@ -30,6 +30,9 @@ pass).
 
 **Status:** drafted, 2026-09-22; redrafted 2026-10-08 after reading the scorer — the
 first draft assumed a read-side bound could deliver Edition 2's totals, and it cannot.
+Done 2026-10-08, with migration 0049 (`dashboard_read` reads `editions`): **apply 0049
+to production before the Worker deploys**, or every Match route fails on a table its
+role cannot read.
 
 ---
 
@@ -89,20 +92,81 @@ predicate is what keeps those frozen totals off the page: a seat withdrawn at Ed
 
 ## Acceptance
 
-- [ ] On today's production-shaped record (one Edition everywhere) every existing route
-      returns the same JSON as before this ticket; a snapshot test holds it.
-- [ ] On a fixture record with a league in Edition 2 from Gameweek 6, scored by 0097's
+- [x] On today's production-shaped record (one Edition everywhere) every existing route
+      returns the same JSON as before this ticket plus the `edition` field box 6 adds;
+      a snapshot test holds it.
+- [x] On a fixture record with a league in Edition 2 from Gameweek 6, scored by 0097's
       scorer: the unprefixed leaderboard ranks over Edition 2's members and its totals
       are the Gameweek 6-onward rows; the Edition 1 route ranks Gameweeks 1–5 over
       Edition 1's members, a withdrawn seat included and a seat entered after Edition
       1's last Lock excluded; no count or list in either body reads a Gameweek of the
       other.
-- [ ] The Anchor and Paired Differences a body carries are the rows 0097 wrote for that
-      Gameweek, read unchanged; a test proves the body never recomputes them.
-- [ ] The Fixtures route's Gameweek list and default Gameweek stay within the Edition.
-- [ ] The retired-Gameweek route answers under Edition 1 and 404s under Edition 2.
-- [ ] Every leaderboard body carries `edition`, its first Gameweek and, when closed, its
+- [x] No body carries the Anchor or a Paired Difference (nothing under `src/dashboard/`
+      reads `rps_paired_difference_*`), so there is nothing to recompute and no test;
+      the body that first carries one reads 0097's row for its Gameweek.
+- [x] The Fixtures route's Gameweek list and default Gameweek stay within the Edition.
+- [x] The retired-Gameweek route answers under Edition 1 and 404s under Edition 2.
+- [x] Every leaderboard body carries `edition`, its first Gameweek and, when closed, its
       last; an Exhibition row's "ran after" label never names a Gameweek outside the
       body's Edition.
-- [ ] An unknown Edition number is a 404 with the Edition named; nothing falls back to
+- [x] An unknown Edition number is a 404 with the Edition named; nothing falls back to
       "current".
+
+## Evidence, 2026-10-08
+
+- **Seams.** `readEditionScope` in `src/editions.ts` returns `{ number, firstGameweek,
+  lastGameweek }`, or null for an unknown Edition, and throws for a Season with no
+  Edition at all. The router strips `edition-N` and reads the scope once per Match route
+  (`scoped` in `handleDashboardRequest`). An unknown Edition is a 404 that names it:
+  "The record holds no PL Edition 2 for Season 2026-27".
+- **Range.** `rankedFrom` is `max(retired + 1, firstGameweek)`. `scoredThrough`, the
+  settled-Fixture count and the next-Lock read are bounded above by `lastGameweek`. The
+  Fixtures route's default Gameweek and Gameweek list are bounded to `[firstGameweek,
+  lastGameweek]`, from the first Gameweek rather than `rankedFrom`, because that page has
+  always offered the retired Gameweek.
+- **Membership is measured at the Lock of `rankedFrom`, not of `firstGameweek`.** The
+  review found this against production (`models.created_at` against GW1 and GW2 Locks,
+  2026-10-08):
+  - La Liga's ten v2 seats were entered at 08-20 05:06, after PD GW1's Lock (08-15 17:00)
+    and before GW2's (08-20 17:30).
+  - Measured at GW1, the whole La Liga page would have been empty.
+  - Every other league's seats predate its GW1 Lock.
+  - An unfetched Gameweek is read as `infinity`, so the roster as it stands now: unstamped
+    seats are in, stamped seats are out.
+- **Exhibition label.** The "ran after" lateral is bounded to the Edition's Gameweeks, so
+  an Exhibition Run that replayed only before Edition 2 is not on Edition 2.
+- **Open for 0085.** The literal reading understates on a closed Edition. A run that
+  replayed after GW7 reads "ran after Gameweek 5" in Edition 1's body. ADR-0032 calls the
+  label a ceiling on what the run could know, so 0085 or an ADR-0061 note should decide
+  whether a closed Edition drops it or qualifies it.
+- **`editionQualification`** is spread onto the leaderboard and entrants bodies from the
+  roster's stored Match Points rows when one carries it, so Edition 1 bodies keep their
+  bytes.
+- **`/retired`.** It is served only when the retired Gameweek is inside the scope. The
+  unprefixed route 404s once La Liga opens Edition 2, and the page moving to
+  `/api/edition-1/pd/retired` is 0085's.
+- **`test/dashboard-edition-api.test.ts`** (10 tests, read as `dashboard_read`):
+  - **Box 1:** 30 routes over the seeded Season, compared with
+    `test/fixtures/dashboard-match-bodies-before-0084.json.gz`, which was captured at
+    `09bf5bb` twice with identical bytes. Each route's body less `edition` is
+    byte-identical, and `/api/edition-1/...` serves the same bytes.
+  - **Edition 2 from GW6, scored by 0097's scorer:**
+    - Totals equal the stored GW7 and GW5 rows.
+    - Edition 1 has `w` (withdrawn at GW6's Lock).
+    - Edition 1 excludes `n` (entered during Edition 1) and `m` (entered after its last
+      Lock).
+    - Entrant series are `[6, 7]` and `[1..5]`.
+    - The Fixtures route falls back inside its Edition.
+    - `/retired` answers under Edition 1 only.
+    - The unfetched-first-Gameweek case is covered.
+    - La Liga's production timeline is replayed.
+- **Mutation checks.** Each of the following was mutated one at a time and turned a test
+  red: migration 0049's policy, the five SQL bounds, the retired-range check, membership,
+  the `infinity` default, `rankedFrom`, the Lock of `rankedFrom` (back to
+  `firstGameweek`) and the entrants qualification. Bytes were restored with `cp` and
+  checked with `cmp` each time.
+- **Changed tests.** `dashboard-read-api` (unopened body) and `dashboard-retired-gameweek`
+  (key list) gain `edition`. `dashboard-overall-view`'s hand-built body gains it too. The
+  migration lists (5) and `schema.test.ts`'s grant list gain 0049 and `editions`.
+- **Checks.** `tsc --noEmit` and `astro check`: no errors. 29 targeted files (dashboard,
+  editions, migrations, schema, `fpl-*`): 527 passed, 6 skipped, 0 failed.

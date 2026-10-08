@@ -1,6 +1,7 @@
 import { FPL_PROMPT_VERSION } from "../context/build-fpl-track-context.js";
 import { EXHIBITION_CAVEAT, TYPESAFE_CAVEAT } from "../exhibition/recall-caveat.js";
-import { ROSTER_CAVEATS } from "../season-roster.js";
+import { isAskedAtLock, ROSTER_CAVEATS } from "../season-roster.js";
+import { readEditionScope, type EditionScope } from "../editions.js";
 import {
   argmaxOutcome, outcomeOf, type FixtureResult, type Outcome, type Probs
 } from "../fixture-result.js";
@@ -58,6 +59,27 @@ export type Query = (
   sql: string,
   parameters?: readonly unknown[]
 ) => Promise<Array<Record<string, unknown>>>;
+
+/**
+ * Which Edition a Match body answers within (ADR-0061, ticket 0084), so the
+ * page labels it from data. `lastGameweek` is null while it is the latest.
+ */
+export type EditionField = EditionScope;
+
+const editionField = (
+  { number, firstGameweek, lastGameweek }: EditionScope
+): EditionField => ({ number, firstGameweek, lastGameweek });
+
+/**
+ * Read off whichever of the roster's Match Points rows carries it: the scorer
+ * writes the one sentence on every cumulative row outside Edition 1.
+ */
+function editionQualificationField(
+  stored: unknown[]
+): { editionQualification: string } | Record<string, never> {
+  const found = textOrNull(stored.find((each) => each != null));
+  return found === null ? {} : { editionQualification: found };
+}
 
 /**
  * The edge caches; the browser does not. Two headers rather than one, because
@@ -159,6 +181,13 @@ export interface LeaderboardEntrant {
  */
 export interface LeaderboardBody {
   season: string;
+  edition: EditionField;
+  /**
+   * The scorer's sentence that Season-to-date counts from this Edition's
+   * first Gameweek (ticket 0097, ADR-0012). Omitted in a first Edition,
+   * whose rows carry none, so those bodies keep their bytes.
+   */
+  editionQualification?: string;
   /**
    * Whether the Season lists this Competition at all. False is a league whose
    * Prompt Version is frozen — so it is served, and a 404 would be a lie — and
@@ -240,8 +269,12 @@ const scoredOrNull = (
  * 28 asks for that accidental read to be impossible; this is where it is made
  * so, because this is where a Gameweek is read without a version beside it.
  */
-const rankedFrom = (competition: string): number =>
-  (retiredGameweekOf(competition)?.gw ?? 0) + 1;
+//
+// And never before the Edition's first Gameweek (ADR-0061, ticket 0084), so
+// La Liga's retired block stays inside its Edition 1. Every read bounded below
+// by this is bounded above by the Edition's last Gameweek, null while open.
+const rankedFrom = (competition: string, scope: EditionScope): number =>
+  Math.max((retiredGameweekOf(competition)?.gw ?? 0) + 1, scope.firstGameweek);
 
 /**
  * The Gameweek the Season has been *scored* through, which is not the last
@@ -283,13 +316,16 @@ const rankedFrom = (competition: string): number =>
 async function scoredThrough(
   query: Query,
   season: string,
-  competition: string
+  competition: string,
+  scope: EditionScope
 ): Promise<number | null> {
   const [scored] = await query(
     `select max(gw) as through_gw from scores
       where competition = $3 and season = $1
-        and track = 'match' and metric = $2 and gw >= $4`,
-    [season, RPS_METRIC, competition, rankedFrom(competition)]
+        and track = 'match' and metric = $2 and gw >= $4
+        and ($5::int is null or gw <= $5)`,
+    [season, RPS_METRIC, competition, rankedFrom(competition, scope),
+      scope.lastGameweek]
   );
   return numberOrNull(scored?.through_gw);
 }
@@ -309,6 +345,15 @@ async function scoredThrough(
  *   $3 = prompt_version
  *   $4 = admit_unscored (boolean: true on fixtures, false on scored surfaces)
  *   $5 = through_gw (int or null)
+ *   $6 = the Edition's first Gameweek, which bounds an Exhibition Run's
+ *        "ran after" label below (ticket 0084)
+ *   $7 = the Edition's last Gameweek (int or null), which bounds it above
+ *   $8 = the Edition's first ranked Gameweek, `rankedFrom`: an entered seat
+ *        is on the Edition when it is asked at that Gameweek's Lock
+ *        (ADR-0061). Ranked and not first, because a restarted Competition's
+ *        seats were entered after the retired Gameweek's Lock (ADR-0042) --
+ *        La Liga's v2 ten were. An unfetched Gameweek is read as the roster
+ *        now.
  */
 
 /**
@@ -367,9 +412,14 @@ const SEATS_CTE = `
         select max(gw) as gw from gameweeks
          where competition = $2 and season = $1
            and deadline_at < last_prediction.at
+           and gw >= $6 and ($7::int is null or gw <= $7)
       ) ran_after on true
      where m.prompt_version = $3
-       and (m.role = 'entrant'
+       and ((m.role = 'entrant'
+             and ${isAskedAtLock("m", `coalesce(
+               (select deadline_at from gameweeks
+                 where competition = $2 and season = $1 and gw = $8),
+               'infinity')`)})
             or (m.role = 'exhibition'
                 and ran_after.gw is not null
                 and ($4::boolean or $5::int is not null)))
@@ -395,7 +445,8 @@ const SEATS_CTE = `
 async function leaderboard(
   query: Query,
   season: string,
-  competition: string
+  competition: string,
+  scope: EditionScope
 ): Promise<Response> {
   // A successful response and not a status: every status the page can read is
   // its failure line, which tells a reader something is broken and that
@@ -412,6 +463,7 @@ async function leaderboard(
   if (!open) {
     const unopened: LeaderboardBody = {
       season,
+      edition: editionField(scope),
       active: false,
       throughGw: null,
       nextLock: null,
@@ -424,7 +476,7 @@ async function leaderboard(
     return json(unopened, SCORED_CACHE);
   }
 
-  const throughGw = await scoredThrough(query, season, competition);
+  const throughGw = await scoredThrough(query, season, competition, scope);
 
   // What the pre-season page is waiting on, and read only there: a Season with
   // a table to show has no use for a deadline, and the Fixtures page answers
@@ -439,8 +491,9 @@ async function leaderboard(
     ? await query(
       `select gw, deadline_at from gameweeks
         where competition = $2 and season = $1 and gw >= $3
+          and ($4::int is null or gw <= $4)
         order by gw limit 1`,
-      [season, competition, rankedFrom(competition)]
+      [season, competition, rankedFrom(competition, scope), scope.lastGameweek]
     )
     : [];
 
@@ -453,8 +506,9 @@ async function leaderboard(
   const [settled] = await query(
     `select count(*) as settled from fixtures
       where competition = $2 and season = $1
-        and locked_in_gw >= $3 and result is not null`,
-    [season, competition, rankedFrom(competition)]
+        and locked_in_gw >= $3 and ($4::int is null or locked_in_gw <= $4)
+        and result is not null`,
+    [season, competition, rankedFrom(competition, scope), scope.lastGameweek]
   );
 
   // `role = 'entrant'` selects both tracks' seats, so the roster is the Season
@@ -500,6 +554,7 @@ async function leaderboard(
             s.ran_after_gw,
             points.value as match_points, points.n as n,
             points.detail ->> 'qualification' as match_qualification,
+            points.detail ->> 'editionQualification' as edition_qualification,
             bets.value as bet_points,
             bets.detail ->> 'qualification' as bet_qualification
        from seats s
@@ -508,12 +563,12 @@ async function leaderboard(
          on points.model_id = s.id and points.competition = $2
         and points.season = $1
         and points.track = 'match' and points.gw = $5
-        and points.metric = $6
+        and points.metric = $9
        left join scores bets
          on bets.model_id = s.id and bets.competition = $2
         and bets.season = $1
         and bets.track = 'match' and bets.gw = $5
-        and bets.metric = $7
+        and bets.metric = $10
       order by s.id`,
     [
       season,
@@ -527,6 +582,9 @@ async function leaderboard(
       // (ADR-0052, ticket 0052).
       false,
       throughGw,
+      scope.firstGameweek,
+      scope.lastGameweek,
+      rankedFrom(competition, scope),
       MATCH_POINTS_SEASON_TO_DATE_METRIC,
       BET_POINTS_SEASON_TO_DATE_METRIC
     ]
@@ -610,6 +668,7 @@ async function leaderboard(
 
   const body: LeaderboardBody = {
     season,
+    edition: editionField(scope),
     active: true,
     throughGw,
     nextLock: lock
@@ -635,6 +694,9 @@ async function leaderboard(
     // rule — read off the rows shown, never merely off a row entered.
     ...typesafeCaveatField(rows.some(isTypesafeExhibitionRow)),
     ...rosterCaveatField(competition),
+    ...editionQualificationField(
+      rosterRows.map((row) => row.edition_qualification)
+    ),
     entrants
   };
 
@@ -693,6 +755,7 @@ export interface FixtureView {
  */
 export interface FixturesBody {
   season: string;
+  edition: EditionField;
   gw: number | null;
   deadlineAt: string | null;
   lockPassed: boolean;
@@ -732,6 +795,7 @@ async function fixtures(
   query: Query,
   season: string,
   competition: string,
+  scope: EditionScope,
   now: Date,
   /**
    * The Gameweek the reader asked for, or null for the one in front of them.
@@ -763,28 +827,33 @@ async function fixtures(
   //
   // `deferred` in the first branch keeps a Fixture that will never gain a
   // result from pinning the page to its Gameweek for the rest of the Season.
+  //
+  // Both within the Edition (ticket 0084), from its first Gameweek and not
+  // `rankedFrom`: this page has always offered the retired Gameweek.
+  const inEdition = `coalesce(locked_in_gw, gw) >= $3
+    and ($4::int is null or coalesce(locked_in_gw, gw) <= $4)`;
   const [current] = await query(
     `with current as (
        select coalesce(
          (select min(coalesce(locked_in_gw, gw)) from fixtures
-           where competition = $2 and season = $1
+           where competition = $2 and season = $1 and ${inEdition}
              and not deferred and result is null),
          (select max(coalesce(locked_in_gw, gw)) from fixtures
-           where competition = $2 and season = $1
+           where competition = $2 and season = $1 and ${inEdition}
              and (not deferred or locked_in_gw is not null))
        ) as gw
      )
      select current.gw from current`,
-    [season, competition]
+    [season, competition, scope.firstGameweek, scope.lastGameweek]
   );
 
   // Every Gameweek with something to show, by the listing's own predicate.
   const offered = await query(
     `select distinct coalesce(locked_in_gw, gw) as gw from fixtures
-      where competition = $2 and season = $1
+      where competition = $2 and season = $1 and ${inEdition}
         and (not deferred or locked_in_gw is not null)
       order by 1`,
-    [season, competition]
+    [season, competition, scope.firstGameweek, scope.lastGameweek]
   );
   const gws = offered.map((row) => Number(row.gw));
 
@@ -836,7 +905,10 @@ async function fixtures(
       competition,
       matchPromptOf(competition).version,
       true,
-      null
+      null,
+      scope.firstGameweek,
+      scope.lastGameweek,
+      rankedFrom(competition, scope)
     ]
   );
 
@@ -955,6 +1027,7 @@ async function fixtures(
 
   const body: FixturesBody = {
     season,
+    edition: editionField(scope),
     gw,
     deadlineAt: deadline?.toISOString() ?? null,
     // The one thing the instant is used for: it separates the pre-lock banner
@@ -1043,6 +1116,9 @@ export interface EntrantRecord {
  */
 export interface EntrantsBody {
   season: string;
+  edition: EditionField;
+  /** As `LeaderboardBody.editionQualification`. */
+  editionQualification?: string;
   throughGw: number | null;
   entrants: EntrantRecord[];
   /**
@@ -1112,9 +1188,10 @@ interface GapGameweek {
 async function entrants(
   query: Query,
   season: string,
-  competition: string
+  competition: string,
+  scope: EditionScope
 ): Promise<Response> {
-  const throughGw = await scoredThrough(query, season, competition);
+  const throughGw = await scoredThrough(query, season, competition, scope);
 
   // The cumulative rows at the scored Gameweek carry the whole Season each, so
   // the series is four rows per Entrant rather than four per Gameweek.
@@ -1129,6 +1206,7 @@ async function entrants(
             s.ran_after_gw,
             points.value as match_points, points.n as n,
             points.detail as points_detail,
+            points.detail ->> 'editionQualification' as edition_qualification,
             bets.value as bet_points, bets.detail as bets_detail,
             rps.value as rps, rps.detail as rps_detail,
             gaps.detail as gaps_detail
@@ -1137,19 +1215,19 @@ async function entrants(
          on points.model_id = s.id and points.competition = $2
         and points.season = $1
         and points.track = 'match' and points.gw = $5
-        and points.metric = $6
+        and points.metric = $9
        left join scores bets
          on bets.model_id = s.id and bets.competition = $2
         and bets.season = $1
-        and bets.track = 'match' and bets.gw = $5 and bets.metric = $7
+        and bets.track = 'match' and bets.gw = $5 and bets.metric = $10
        left join scores rps
          on rps.model_id = s.id and rps.competition = $2
         and rps.season = $1
-        and rps.track = 'match' and rps.gw = $5 and rps.metric = $8
+        and rps.track = 'match' and rps.gw = $5 and rps.metric = $11
        left join scores gaps
          on gaps.model_id = s.id and gaps.competition = $2
         and gaps.season = $1
-        and gaps.track = 'match' and gaps.gw = $5 and gaps.metric = $9
+        and gaps.track = 'match' and gaps.gw = $5 and gaps.metric = $12
       -- The roster first in id order, then the Exhibition Runs (ADR-0052):
       -- the record page draws all its tabs off this array, and the Entrants'
       -- are where a reader expects them.
@@ -1165,6 +1243,9 @@ async function entrants(
       // (ADR-0052, ticket 0052).
       false,
       throughGw,
+      scope.firstGameweek,
+      scope.lastGameweek,
+      rankedFrom(competition, scope),
       MATCH_POINTS_SEASON_TO_DATE_METRIC,
       BET_POINTS_SEASON_TO_DATE_METRIC,
       RPS_SEASON_TO_DATE_METRIC,
@@ -1206,6 +1287,7 @@ async function entrants(
 
   const body: EntrantsBody = {
     season,
+    edition: editionField(scope),
     throughGw,
     exhibitionCaveat: records.some(({ row }) => row.role === "exhibition")
       ? EXHIBITION_CAVEAT
@@ -1215,6 +1297,9 @@ async function entrants(
     ...typesafeCaveatField(
       records.some(({ row }) => isTypesafeExhibitionRow(row))
     ),
+    ...editionQualificationField(records
+      .filter(({ row }) => row.role !== "exhibition")
+      .map(({ row }) => row.edition_qualification)),
     entrants: records.map(({ row, points, bets, rps, gaps }) => {
       const settled = points.flatMap(({ fixtures }) => fixtures);
       const legs = legsOf(bets);
@@ -2596,6 +2681,7 @@ export interface RetiredGameweekEntrant {
  */
 export interface RetiredGameweekBody {
   season: string;
+  edition: EditionField;
   /** The retired version itself, which the block's label names. */
   promptVersion: string;
   gw: number;
@@ -2636,6 +2722,7 @@ async function retiredGameweek(
   query: Query,
   season: string,
   competition: string,
+  scope: EditionScope,
   retired: RetiredGameweek
 ): Promise<Response> {
   const rows = await query(
@@ -2724,6 +2811,7 @@ async function retiredGameweek(
 
   const body: RetiredGameweekBody = {
     season,
+    edition: editionField(scope),
     promptVersion: retired.version,
     gw: retired.gw,
     matchPointsQualification: qualification("match_qualification"),
@@ -2782,12 +2870,35 @@ export async function handleDashboardRequest(
   // Read before the FPL paths and unable to collide with them: `fpl` is not a
   // Competition code and never will be, the FPL track being the Premier League
   // by nature.
-  const [, api, segment, endpoint, ...rest] = pathname.split("/");
+  //
+  // An earlier Edition is the same path under `/api/edition-N/` (ADR-0061,
+  // ticket 0084); without the prefix a route answers the latest, which is the
+  // one every URL before Editions already meant. Stripped here, so the
+  // handlers see one shape and a scope.
+  const parts = pathname.split("/");
+  const prefix = /^edition-([1-9]\d*)$/.exec(parts[2] ?? "");
+  if (prefix !== null) {
+    parts.splice(2, 1);
+  }
+  const [, api, segment, endpoint, ...rest] = parts;
   const competition = MATCH_PROMPT_COMPETITIONS
     .find((code) => code.toLowerCase() === segment);
   if (api === "api" && competition !== undefined && rest.length === 0) {
+    // Named, and never answered as the current Edition instead: a URL that
+    // names an Edition is a claim about that Edition.
+    const scoped = async (
+      serve: (scope: EditionScope) => Promise<Response>
+    ): Promise<Response> => {
+      const asked = prefix === null ? null : Number(prefix[1]);
+      const scope = await readEditionScope(query, competition, season, asked);
+      return scope === null
+        ? notFound(`The record holds no ${competition} Edition ${asked} `
+          + `for Season ${season}`)
+        : await serve(scope);
+    };
     if (endpoint === "leaderboard") {
-      return await leaderboard(query, season, competition);
+      return await scoped((scope) =>
+        leaderboard(query, season, competition, scope));
     }
     if (endpoint === "fixtures") {
       // `?gw=` and nothing else. Anything unparseable is null, which is the
@@ -2797,10 +2908,12 @@ export async function handleDashboardRequest(
       const requested = asked !== null && /^\d+$/.test(asked)
         ? Number(asked)
         : null;
-      return await fixtures(query, season, competition, now, requested);
+      return await scoped((scope) =>
+        fixtures(query, season, competition, scope, now, requested));
     }
     if (endpoint === "entrants") {
-      return await entrants(query, season, competition);
+      return await scoped((scope) =>
+        entrants(query, season, competition, scope));
     }
     // Served only where there is a retired Gameweek to serve. A Competition
     // that never restarted has no block on its page and no body for one to be
@@ -2809,8 +2922,12 @@ export async function handleDashboardRequest(
     // path gets.
     if (endpoint === "retired") {
       const retired = retiredGameweekOf(competition);
+      // And only in the Edition that holds it (ADR-0042 keeps it in Edition 1).
       if (retired !== null) {
-        return await retiredGameweek(query, season, competition, retired);
+        return await scoped((scope) => retired.gw >= scope.firstGameweek
+          && (scope.lastGameweek === null || retired.gw <= scope.lastGameweek)
+          ? retiredGameweek(query, season, competition, scope, retired)
+          : Promise.resolve(notFound("Not found")));
       }
     }
   }
@@ -2824,7 +2941,11 @@ export async function handleDashboardRequest(
   if (pathname === "/api/fpl/entrants") {
     return await fplEntrants(query, season);
   }
-  return new Response("Not found", {
+  return notFound("Not found");
+}
+
+function notFound(text: string): Response {
+  return new Response(text, {
     status: 404,
     headers: {
       "content-type": "text/plain; charset=utf-8",

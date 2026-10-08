@@ -64,3 +64,52 @@ export async function readEditionFirstLock(
   }
   return row.deadline_at;
 }
+
+/** What a dashboard body answers within (ticket 0084). */
+export interface EditionScope {
+  number: number;
+  firstGameweek: number;
+  /** The Gameweek before the next Edition's first; null while this is the last. */
+  lastGameweek: number | null;
+}
+
+/**
+ * The Edition a read answers within: `edition`, or the latest when it is
+ * null. An Edition the record does not hold is null, for the caller's 404;
+ * no Edition at all for an omitted number is an error, as `readEdition`'s is.
+ */
+export async function readEditionScope(
+  query: (
+    sql: string,
+    parameters: readonly unknown[]
+  ) => Promise<Array<Record<string, unknown>>>,
+  competition: string,
+  season: string,
+  edition: number | null
+): Promise<EditionScope | null> {
+  const [row] = await query(
+    `select e.edition, e.first_gw,
+            (select min(n.first_gw) - 1 from editions n
+              where n.competition = e.competition and n.season = e.season
+                and n.first_gw > e.first_gw) as last_gw
+       from editions e
+      where e.competition = $1 and e.season = $2
+        and ($3::int is null or e.edition = $3)
+      order by e.edition desc
+      limit 1`,
+    [competition, season, edition]
+  );
+  if (row === undefined) {
+    if (edition === null) {
+      throw new Error(
+        `The record holds no ${competition} Edition for Season ${season}`
+      );
+    }
+    return null;
+  }
+  return {
+    number: Number(row.edition),
+    firstGameweek: Number(row.first_gw),
+    lastGameweek: row.last_gw == null ? null : Number(row.last_gw)
+  };
+}

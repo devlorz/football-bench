@@ -335,6 +335,7 @@ describe("the dashboard read API", () => {
     expect(response.status).toBe(200);
     expect(await response.json() as LeaderboardBody).toEqual({
       season: SEASON,
+      edition: { number: 1, firstGameweek: 1, lastGameweek: null },
       active: false,
       throughGw: null,
       nextLock: null,
