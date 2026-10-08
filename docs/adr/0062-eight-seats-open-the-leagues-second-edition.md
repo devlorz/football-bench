@@ -150,6 +150,14 @@ pre-flights spend money and are asked for one at a time.
   [the leagues' Edition 2 eight-seat pre-flight](../reports/2026-10-08-the-leagues-edition-2-eight-seat-preflight.md).
   Ticket 0098 (the roster module's second Edition) landed the same day; the runbook is
   [opening an Edition](../runbooks/opening-an-edition.md).
+- **Edition 2 opened on production, 2026-10-08 evening**, at the Gameweeks whose Locks
+  fall on 2026-10-09/10: BL1 at Gameweek 5, FL1 and PL and SA at Gameweek 6, PD at
+  Gameweek 8 — so Edition 1 closed at BL1 4, FL1 5, PL 5, SA 5, PD 7, which is every
+  Gameweek each league had scored. The operator ran the runbook's three writes in order
+  (thirty stamps by slug at each league's Lock, `EDITION=2 roster:enter` entering forty,
+  five Editions rows); the read API answered `edition.number: 2` with eight seats for
+  every league and `lastGameweek` for every Edition 1 within minutes. The 10-16/17 row
+  of the boundary table was not needed.
 - ADR-0061's *What this ADR does not decide* is answered; ticket 0086 is unblocked.
 - The cup's roster and the leagues' Edition 2 roster differ by one seat (Claude Opus 5.5)
   and two successors; `/overall` already sums the leagues alone (ADR-0051 as amended).
