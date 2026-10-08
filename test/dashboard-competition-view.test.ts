@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   competitionRoutes, overallRoutes, pageHref, switchers
 } from "../dashboard/src/competition-view.js";
+import { CLOSED_LEAGUE_EDITIONS } from "../dashboard/src/edition-note.js";
 import { entrantOf, entrantSlug } from "../dashboard/src/entrant-link.js";
 import {
   matchRosterSizeOf, SEASON_ROSTER, seatSlug
@@ -26,7 +27,10 @@ describe("the Match track's Competition routes", () => {
     // Nations League all appear here from their freeze and before any of them
     // is listed in `competitions` -- the cup's row is ticket 0076's, and the
     // first step that spends money.
-    expect(competitionRoutes()).toEqual([
+    // Over a record with no closed Edition, so the list is the six current
+    // pages and nothing under a prefix; the closed-Edition routes have their
+    // own test below, and the deployed constant its own.
+    expect(competitionRoutes([])).toEqual([
       {
         params: { competition: "pl" },
         props: {
@@ -38,6 +42,7 @@ describe("the Match track's Competition routes", () => {
           // block at all. A label here would put one on it, and the block
           // claims a Gameweek was played under a question nobody asked.
           retiredLabel: null,
+          edition: 1,
           view: {
             prefix: "", overallPath: "/overall", closedEdition: null,
             editionEndpoint: "/api/pl/leaderboard"
@@ -56,6 +61,7 @@ describe("the Match track's Competition routes", () => {
           // another is the one lie this block can tell.
           retiredLabel:
             "Gameweek 1 — played under match-pd/2026-27-v1, before the restart",
+          edition: 1,
           view: {
             prefix: "", overallPath: "/overall", closedEdition: null,
             editionEndpoint: "/api/pd/leaderboard"
@@ -69,6 +75,7 @@ describe("the Match track's Competition routes", () => {
           switcherLabel: "Serie A",
           path: "/sa", api: "/api/sa",
           retiredLabel: null,
+          edition: 1,
           view: {
             prefix: "", overallPath: "/overall", closedEdition: null,
             editionEndpoint: "/api/sa/leaderboard"
@@ -82,6 +89,7 @@ describe("the Match track's Competition routes", () => {
           switcherLabel: "Ligue 1",
           path: "/fl1", api: "/api/fl1",
           retiredLabel: null,
+          edition: 1,
           view: {
             prefix: "", overallPath: "/overall", closedEdition: null,
             editionEndpoint: "/api/fl1/leaderboard"
@@ -95,6 +103,7 @@ describe("the Match track's Competition routes", () => {
           switcherLabel: "Bundesliga",
           path: "/bl1", api: "/api/bl1",
           retiredLabel: null,
+          edition: 1,
           view: {
             prefix: "", overallPath: "/overall", closedEdition: null,
             editionEndpoint: "/api/bl1/leaderboard"
@@ -110,6 +119,7 @@ describe("the Match track's Competition routes", () => {
           switcherLabel: "UNL",
           path: "/unl", api: "/api/unl",
           retiredLabel: null,
+          edition: 1,
           // ADR-0061: the cup's own `/overall` is its leaderboard, because no
           // Edition set sums it.
           view: {
@@ -126,7 +136,7 @@ describe("the Match track's Competition routes", () => {
     // page that asked for `/api/PD/leaderboard` would be served a 404, and a
     // second spelling that was served would split the edge cache spec 0017
     // states it moves no lifetime of.
-    for (const { params, props } of competitionRoutes()) {
+    for (const { params, props } of competitionRoutes([])) {
       const segment = props.competition.toLowerCase();
 
       expect(props.api).toBe(`/api/${segment}`);
@@ -216,12 +226,12 @@ describe("the link to a page of a Competition", () => {
     // the function does could not disagree with it, and disagreeing is the job.
     // Every one of these twelve is a file the build emits, from the one
     // function both pages under the segment now call.
-    expect(competitionRoutes().map(({ props }) => pageHref(props.path, "fixtures")))
+    expect(competitionRoutes([]).map(({ props }) => pageHref(props.path, "fixtures")))
       .toEqual([
         "/pl/fixtures", "/pd/fixtures", "/sa/fixtures", "/fl1/fixtures",
         "/bl1/fixtures", "/unl/fixtures"
       ]);
-    expect(competitionRoutes().map(({ props }) => pageHref(props.path, "entrants")))
+    expect(competitionRoutes([]).map(({ props }) => pageHref(props.path, "entrants")))
       .toEqual([
         "/pl/entrants", "/pd/entrants", "/sa/entrants", "/fl1/entrants",
         "/bl1/entrants", "/unl/entrants"
@@ -243,7 +253,9 @@ describe("the Competition switcher", () => {
   // Competition, under the name and at the path the route already carries. The
   // names and paths themselves are pinned by the route list above — what is
   // left to get wrong is where an entry sends a reader.
-  const SWITCHER = competitionRoutes().map(({ props }) => props);
+  // The current view's six, not the closed Edition's copies: the switcher
+  // crosses Competitions inside one view, and the view is pinned below.
+  const SWITCHER = competitionRoutes([]).map(({ props }) => props);
 
   test("holds the reader's page across every crossing", () => {
     // Every combination of the page a reader is on and the Competition they
@@ -448,12 +460,16 @@ describe("the Entrant a link names", () => {
       );
 
       expect(page).toMatch(/Array\.from\(\{ length: rosterSize \}\)/);
-      expect(page).toMatch(/const rosterSize = matchRosterSizeOf\(competition\)/);
-      // Which is seven for the cup and ten for every league, so the one
-      // expression above is the whole of the difference.
+      expect(page).toMatch(
+        /const rosterSize = matchRosterSizeOf\(competition, edition\)/
+      );
+      // Which is seven for the cup, ten for every league's Edition 1 and
+      // eight for its Edition 2 (ADR-0062), so the one expression above is the
+      // whole of the difference.
       expect(matchRosterSizeOf("UNL")).toBe(7);
       for (const competition of ["PL", "PD", "SA", "FL1", "BL1"]) {
         expect(matchRosterSizeOf(competition)).toBe(SEASON_ROSTER.length);
+        expect(matchRosterSizeOf(competition, 2)).toBe(8);
       }
     });
 
@@ -554,10 +570,20 @@ describe("an earlier Edition", () => {
   };
 
   test("adds nothing while no Edition has closed", () => {
-    expect(competitionRoutes([])).toEqual(competitionRoutes());
     expect(overallRoutes([])).toEqual([
       { params: { view: undefined }, props: { view: CURRENT_OVERALL } }
     ]);
+    expect(competitionRoutes([]).every(({ props }) => props.view.prefix === ""))
+      .toBe(true);
+  });
+
+  // The deployed constant, pinned: ticket 0085 made the boundary a deploy, and
+  // this is the deploy ADR-0062 asked for -- Edition 1 of the leagues closed,
+  // the next opened by that ADR. The default route set is built from it.
+  test("is deployed with Edition 1 closed by ADR-0062", () => {
+    expect(CLOSED_LEAGUE_EDITIONS).toEqual(CLOSED);
+    expect(competitionRoutes()).toEqual(competitionRoutes(CLOSED));
+    expect(overallRoutes()).toEqual(overallRoutes(CLOSED));
   });
 
   test("is a second route set of the five leagues under its prefix", () => {
@@ -577,11 +603,15 @@ describe("an earlier Edition", () => {
       expect(props.view.prefix).toBe("/edition-1");
       expect(props.view.closedEdition).toEqual(CLOSED[0]);
       expect(props.view.editionEndpoint).toBe(`${props.api}/leaderboard`);
+      expect(props.edition).toBe(1);
     }
-    // The current set keeps every URL it had (ADR-0061).
-    expect(routes.filter(({ props }) => props.view.prefix === "")
-      .map(({ props }) => props.path))
+    // The current set keeps every URL it had (ADR-0061), and reads the
+    // Edition after the last closed -- the cup its own first (ADR-0062).
+    const current = routes.filter(({ props }) => props.view.prefix === "");
+    expect(current.map(({ props }) => props.path))
       .toEqual(["/pl", "/pd", "/sa", "/fl1", "/bl1", "/unl"]);
+    expect(current.map(({ props }) => [props.competition, props.edition]))
+      .toEqual([["PL", 2], ["PD", 2], ["SA", 2], ["FL1", 2], ["BL1", 2], ["UNL", 1]]);
     expect(overallRoutes(CLOSED)).toEqual([
       { params: { view: undefined }, props: { view: CURRENT_OVERALL } },
       {

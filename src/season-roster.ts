@@ -337,6 +337,20 @@ export const MATCH_EXCLUSIONS:
  * refused by the pre-flight the operator runs before the insert (ticket 0076),
  * exactly as ADR-0034's three arriving seats were entered.
  */
+/**
+ * One identity for Grok 4.7 wherever it is seated: the cup's substitute
+ * (ADR-0060) and the leagues' (ADR-0062) are the same seat, pre-flighted once
+ * on 2026-09-22, and a copy would be a second place for its pin to drift.
+ */
+const GROK_4_7: Entrant = {
+  id: "match/grok-4.7", name: "Grok 4.7",
+  baseModel: "x-ai/grok-4.7", provider: "xai",
+  quantization: null,
+  canonicalSlug: "x-ai/grok-4.7-20260916",
+  catalogCheckedAt: "2026-09-22",
+  baseModelClass: "First-party"
+};
+
 export const MATCH_SUBSTITUTIONS:
   Readonly<Record<string, readonly MatchSubstitution[]>> = {
   UNL: [
@@ -361,17 +375,132 @@ export const MATCH_SUBSTITUTIONS:
       ground: "Its house shipped a successor, listed 2026-09-21, and the cup "
         + "seats the newest of each house rather than August's freeze "
         + "(ADR-0060). Nothing is measured against the seat it replaces.",
+      entrant: GROK_4_7
+    }
+  ]
+};
+
+/**
+ * A seat an Edition adds beside the Season Roster, replacing nobody. The third
+ * shape a roster of record can take, and the one ticket 0081's two lists could
+ * not say: ADR-0062 seats Claude Opus 5.5 next to Claude Opus 5, not in its
+ * place.
+ */
+interface MatchAddition {
+  ground: string;
+  entrant: Entrant;
+}
+
+/** The three lists one Edition of one Competition is read off (ADR-0061). */
+export interface EditionRoster {
+  excludes: readonly MatchExclusion[];
+  substitutes: readonly MatchSubstitution[];
+  adds: readonly MatchAddition[];
+}
+
+/**
+ * The five leagues' Edition 2 (ADR-0062): the Season Roster less the three
+ * ADR-0060 cut from the cup, with three houses' successors standing where
+ * their predecessors stood, and one seat added. One object for the five
+ * leagues because it is one decision about one roster, not five coincidences
+ * (the same reason the registry shares `THE_DOMESTIC_FOUR`).
+ *
+ * Every joining seat carries the catalog's word of 2026-10-08 as its
+ * `canonicalSlug`, to be confirmed or refused by the pre-flights ADR-0062
+ * owes before the first Lock; Grok 4.7 is the same identity the cup seated
+ * and pre-flighted on 2026-09-22, and is the one object, not a copy.
+ */
+const LEAGUE_EDITION_2: EditionRoster = {
+  // The same three, on the same ground (ADR-0062 carries ADR-0060's table
+  // over): one list, not a second spelling of it.
+  excludes: MATCH_EXCLUSIONS.UNL!,
+  substitutes: [
+    {
+      replaces: "match/gpt-5.6-sol-pro",
+      ground: "Its house shipped a successor, listed 2026-09-29, and Edition 2 "
+        + "seats the newest of each house (ADR-0062). Nothing is measured "
+        + "against the seat it replaces, fourth of ten on 2026-09-22.",
       entrant: {
-        id: "match/grok-4.7", name: "Grok 4.7",
-        baseModel: "x-ai/grok-4.7", provider: "xai",
+        id: "match/gpt-6.1-sol", name: "GPT-6.1 Sol",
+        baseModel: "openai/gpt-6.1-sol", provider: "openai",
         quantization: null,
-        canonicalSlug: "x-ai/grok-4.7-20260916",
-        catalogCheckedAt: "2026-09-22",
+        canonicalSlug: "openai/gpt-6.1-sol-20260929",
+        catalogCheckedAt: "2026-10-08",
+        baseModelClass: "Frontier"
+      }
+    },
+    {
+      replaces: "match/grok-4.6",
+      ground: "Its house shipped a successor, listed 2026-09-21, seated in the "
+        + "cup since ADR-0060 and pre-flighted there; Edition 2 seats it in "
+        + "the leagues (ADR-0062). Nothing is measured against the seat it "
+        + "replaces, fifth of ten on 2026-09-22.",
+      entrant: GROK_4_7
+    },
+    {
+      replaces: "match/muse-spark-1.2",
+      ground: "Its house shipped a successor, listed 2026-09-02, and Edition 2 "
+        + "seats the newest of each house (ADR-0062). Nothing is measured "
+        + "against the seat it replaces, sixth of ten on 2026-09-22.",
+      entrant: {
+        id: "match/muse-spark-1.3", name: "Muse Spark 1.3",
+        baseModel: "meta/muse-spark-1.3", provider: "meta",
+        quantization: null,
+        canonicalSlug: "meta/muse-spark-1.3-20260902",
+        catalogCheckedAt: "2026-10-08",
         baseModelClass: "First-party"
+      }
+    }
+  ],
+  adds: [
+    {
+      ground: "The operator's addition (ADR-0062): a second Anthropic seat "
+        + "beside Claude Opus 5, not in its place -- the first time one house "
+        + "holds two seats, which the ADR states as a cost rather than hides.",
+      entrant: {
+        id: "match/claude-opus-5.5", name: "Claude Opus 5.5",
+        baseModel: "anthropic/claude-opus-5.5", provider: "anthropic",
+        quantization: null,
+        canonicalSlug: "anthropic/claude-opus-5.5-20260921",
+        catalogCheckedAt: "2026-10-08",
+        baseModelClass: "Frontier"
       }
     }
   ]
 };
+
+/**
+ * Every Edition after the first, by number and then by Competition. Edition 1
+ * is not here: it is `MATCH_EXCLUSIONS` and `MATCH_SUBSTITUTIONS` above, which
+ * every Competition reads today, and a Competition absent from an Edition's
+ * entry has no roster of record for it -- the cup, in Edition 2, is still in
+ * its Edition 1 (ADR-0062).
+ */
+export const MATCH_EDITION_ROSTERS:
+  Readonly<Record<number, Readonly<Record<string, EditionRoster>>>> = {
+  2: {
+    PL: LEAGUE_EDITION_2, PD: LEAGUE_EDITION_2, SA: LEAGUE_EDITION_2,
+    BL1: LEAGUE_EDITION_2, FL1: LEAGUE_EDITION_2
+  }
+};
+
+/**
+ * The three lists a Competition's Edition is read off, or null for an Edition
+ * the Competition has no roster of record for. Edition 1 is the two constants
+ * every Competition reads and adds nobody.
+ */
+export function editionRosterOf(
+  competition: string, edition: number
+): EditionRoster | null {
+  if (edition === 1) {
+    return {
+      excludes: MATCH_EXCLUSIONS[competition] ?? [],
+      substitutes: MATCH_SUBSTITUTIONS[competition] ?? [],
+      adds: []
+    };
+  }
+  return MATCH_EDITION_ROSTERS[edition]?.[competition] ?? null;
+}
 
 /**
  * A Competition's roster of record: the Season Roster in its own order, less
@@ -395,10 +524,22 @@ export const MATCH_SUBSTITUTIONS:
  */
 export function matchRosterOf(
   competition: string,
-  excludes: readonly MatchExclusion[] = MATCH_EXCLUSIONS[competition] ?? [],
-  substitutes: readonly MatchSubstitution[] =
-    MATCH_SUBSTITUTIONS[competition] ?? []
+  edition = 1,
+  lists: Partial<EditionRoster> = {}
 ): readonly Entrant[] {
+  // The Edition's own lists, which a caller may override one at a time to walk
+  // into a refusal; an Edition the Competition has no entry for is refused by
+  // name rather than answered with Edition 1's roster, because the caller
+  // asked a question about a roster that does not exist.
+  const ofRecord = editionRosterOf(competition, edition);
+  if (ofRecord === null) {
+    throw new Error(
+      `${competition} has no Edition ${edition} roster of record`
+    );
+  }
+  const excludes = lists.excludes ?? ofRecord.excludes;
+  const substitutes = lists.substitutes ?? ofRecord.substitutes;
+  const adds = lists.adds ?? ofRecord.adds;
   const seats = (id: string): boolean =>
     SEASON_ROSTER.some((entrant) => entrant.id === id);
   for (const { id } of excludes) {
@@ -416,11 +557,45 @@ export function matchRosterOf(
       );
     }
   }
-  return SEASON_ROSTER
-    .filter((entrant) => !excludes.some(({ id }) => id === entrant.id))
-    .map((entrant) =>
-      substitutes.find(({ replaces }) => replaces === entrant.id)?.entrant
-        ?? entrant);
+  // An addition is refused on the opposite ground: it claims to seat somebody
+  // new, and an id the Season Roster or a substitution already seats is a
+  // seat counted twice, not a roster one seat larger.
+  for (const { entrant } of adds) {
+    if (seats(entrant.id)) {
+      throw new Error(
+        `${competition} adds ${entrant.id}, which the Season Roster already `
+        + "seats"
+      );
+    }
+    if (substitutes.some((s) => s.entrant.id === entrant.id)) {
+      throw new Error(
+        `${competition} adds ${entrant.id}, which a substitution already seats`
+      );
+    }
+  }
+  return [
+    ...SEASON_ROSTER
+      .filter((entrant) => !excludes.some(({ id }) => id === entrant.id))
+      .map((entrant) =>
+        substitutes.find(({ replaces }) => replaces === entrant.id)?.entrant
+          ?? entrant),
+    ...adds.map(({ entrant }) => entrant)
+  ];
+}
+
+/**
+ * A Competition's roster of record for an Edition it may have no entry for:
+ * a Competition still in its first Edition when another opens its second --
+ * the cup, under ADR-0062 -- is placed against the roster it is actually in.
+ * What the stored-record guard reads, so that `EDITION=2` can place the cup's
+ * rows without the cup having an Edition 2.
+ */
+function rosterOfRecordIn(
+  competition: string, edition: number
+): readonly Entrant[] {
+  return editionRosterOf(competition, edition) === null
+    ? matchRosterOf(competition)
+    : matchRosterOf(competition, edition);
 }
 
 /**
@@ -429,8 +604,8 @@ export function matchRosterOf(
  * at once. The dashboard's loading skeleton is the one that would otherwise go
  * stale in silence.
  */
-export function matchRosterSizeOf(competition: string): number {
-  return matchRosterOf(competition).length;
+export function matchRosterSizeOf(competition: string, edition = 1): number {
+  return matchRosterOf(competition, edition).length;
 }
 
 /**
@@ -676,15 +851,18 @@ export async function enterSeasonRoster(
   database: Database,
   competition: string,
   season: string,
-  roster: readonly Entrant[] = matchRosterOf(competition)
+  roster?: readonly Entrant[],
+  edition = 1
 ): Promise<readonly string[]> {
   const { version } = matchPromptOf(competition);
   // The list this Competition is checked against: the Season Roster for a
   // league, and the Season Roster less its exclusions plus its substitutions
-  // for a Competition that named either (ADR-0060). The check below does not
-  // weaken -- it gains a second roster of record, and a league handed one of
-  // the cup's substitutes is refused by it exactly as before.
-  const rosterOfRecord = matchRosterOf(competition);
+  // for a Competition that named either (ADR-0060) -- and, from Edition 2, the
+  // Edition's own three lists (ADR-0062). The check below does not weaken: it
+  // gains a roster of record per Edition, and a league handed one of the
+  // cup's substitutes under Edition 1 is refused by it exactly as before.
+  const rosterOfRecord = matchRosterOf(competition, edition);
+  roster ??= rosterOfRecord;
   const seatPrefix = seatPrefixOf(version, season);
   // Refused by name, ahead of the identity check below, rather than left to
   // surface as an unnamed field disagreeing with the roster of record: an
@@ -750,7 +928,7 @@ export async function enterSeasonRoster(
   await refuseARosterTheRecordDisagreesWith(
     database,
     new Map(MATCH_PROMPT_COMPETITIONS.map((listed) => [
-      matchPromptOf(listed).version, matchRosterOf(listed)
+      matchPromptOf(listed).version, rosterOfRecordIn(listed, edition)
     ]))
   );
 
@@ -938,7 +1116,8 @@ export async function enterFplRoster(
  */
 export async function enterActiveCompetitionRosters(
   database: Database,
-  season: string
+  season: string,
+  edition = 1
 ): Promise<readonly string[]> {
   const active = await database.query<{ competition: string }>(
     `select competition from competitions
@@ -948,8 +1127,18 @@ export async function enterActiveCompetitionRosters(
   const entered: string[] = [];
   const seated: string[] = [];
   for (const { competition } of active.rows) {
+    // A listed Competition with no roster of record for this Edition is in an
+    // earlier one -- the cup, when the leagues open their second (ADR-0062) --
+    // and is left exactly as it stands rather than refused: the operator
+    // asked for an Edition the Competition does not have, which is not the
+    // same question as a roster the record disagrees with.
+    if (editionRosterOf(competition, edition) === null) {
+      continue;
+    }
     try {
-      entered.push(...await enterSeasonRoster(database, competition, season));
+      entered.push(...await enterSeasonRoster(
+        database, competition, season, undefined, edition
+      ));
       seated.push(competition);
     } catch (error) {
       // What was already seated, in the message: the leagues before the

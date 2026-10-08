@@ -77,6 +77,13 @@ export interface CompetitionRoute {
      * arrive with the rest of them, from `/api/{code}/retired`.
      */
     retiredLabel: string | null;
+    /**
+     * The Edition this page reads, by number: the one after the last closed
+     * for a league's current page, the closed one under a prefix, and 1 for
+     * the cup. What sizes the loading skeleton, since an Edition seats its
+     * own roster (ADR-0062 seats eight where Edition 1 seated ten).
+     */
+    edition: number;
     /** Which Edition view the page is in, which the chrome reads. */
     view: PageView;
   };
@@ -167,6 +174,7 @@ const route = (
       path: `${prefix}/${segment}`,
       api: `/api${prefix}/${segment}`,
       retiredLabel: retired === null ? null : retiredGameweekLabel(retired),
+      edition,
       view: {
         prefix,
         overallPath: isLeague(competition) ? `${prefix}${OVERALL_PATH}` : `/${segment}`,

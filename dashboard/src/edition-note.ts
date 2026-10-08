@@ -18,7 +18,12 @@ export interface ClosedEdition {
  * that opened the next one, so a boundary is a deploy whatever the switcher
  * reads, and the routes are built from the same list as the sentence.
  */
-export const CLOSED_LEAGUE_EDITIONS: readonly ClosedEdition[] = [];
+export const CLOSED_LEAGUE_EDITIONS: readonly ClosedEdition[] = [
+  // Edition 1 of the five leagues closes at each league's last Gameweek
+  // before ADR-0062's eight take the next Lock; the Gameweek numbers are the
+  // body's, and only the decision is named here.
+  { number: 1, openedBy: "ADR-0062" }
+];
 
 /** The part of an `EditionScope` the note reads; a type here imports nothing. */
 interface Scope {

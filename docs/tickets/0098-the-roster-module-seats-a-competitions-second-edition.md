@@ -24,7 +24,12 @@ FPL door).
 pushed and be deployed before 2026-10-09T11:00Z**, six hours ahead of BL1's Lock, which
 is when the scheduled predict run first asks that Gameweek.
 
-**Status:** drafted, 2026-10-08
+**Status:** built 2026-10-08, same day. `MATCH_EDITION_ROSTERS` keyed by Edition then
+Competition, one `LEAGUE_EDITION_2` object for the five leagues, `editionRosterOf`,
+`matchRosterOf(competition, edition, lists)`, `EDITION` on `roster:enter`, `edition` on
+every built route, `CLOSED_LEAGUE_EDITIONS` naming Edition 1 closed by ADR-0062. Ten
+suites green (192), `tsc` and `astro check` clean, the build emits the five
+`/edition-1/…` page sets. Box 7's runbook line is ticket 0086's and is the one box left.
 
 ---
 
@@ -72,22 +77,22 @@ ticket 0086's runbook writes down. It does not change `SEASON_ROSTER`.
 
 ## Acceptance
 
-- [ ] `matchRosterOf("PL", 2)` is ADR-0062's eight, in Season Roster order with the
+- [x] `matchRosterOf("PL", 2)` is ADR-0062's eight, in Season Roster order with the
       addition last; `matchRosterOf("PL", 1)` and `matchRosterOf("PL")` are still the ten;
       `matchRosterOf("UNL", 1)` is still the seven; the five leagues answer the same eight.
       Class mix asserted four–two–two for Edition 2.
-- [ ] An addition whose id the Season Roster already seats, an exclusion or substitution
+- [x] An addition whose id the Season Roster already seats, an exclusion or substitution
       naming an unseated id, and an Edition with no entry for a league are each refused by
       name.
-- [ ] On a record holding a league's ten Edition 1 rows with the six stamped,
+- [x] On a record holding a league's ten Edition 1 rows with the six stamped,
       `EDITION=2 roster:enter` inserts exactly four rows, leaves the ten byte-for-byte
       (`created_at` and `withdrawn_at` included), and the four new rows carry `created_at`
       of the run; on a record where any of the six is not stamped it refuses by name.
-- [ ] The cup's rows are untouched by an `EDITION=2` run (it has no Edition 2 entry and is
+- [x] The cup's rows are untouched by an `EDITION=2` run (it has no Edition 2 entry and is
       skipped with a line saying so, not refused).
-- [ ] The competition page's skeleton draws eight rows under an Edition 2 scope and ten
+- [x] The competition page's skeleton draws eight rows under an Edition 2 scope and ten
       under Edition 1; the FPL pages and the FPL roster suite are untouched.
-- [ ] `CLOSED_LEAGUE_EDITIONS` names Edition 1 closed by ADR-0062; the frozen sentence's
+- [x] `CLOSED_LEAGUE_EDITIONS` names Edition 1 closed by ADR-0062; the frozen sentence's
       bytes are re-pinned with the ADR names; the two-Edition build renders the note on
       `/edition-1/pl` and not on `/pl`.
 - [ ] The Edition 2 pre-flight count is read from `EXPECTED_ENTRANT_COUNT=8` with no code
