@@ -4,7 +4,7 @@ status: accepted
 
 # Eight seats open the leagues' second Edition
 
-> **Accepted 2026-10-08** by the operator with "เอาให้ทัน lock พรุ่งนี้": open at the 2026-10-09/10 Locks after all, not the 10-16/17 row the table below expected. The grounds in *Leaving, and the ground each leaves on* stand as drafted — the operator was asked to confirm or amend them and chose to proceed. What that compresses into one day is listed under *What it takes*; the boundary table keeps its 10-16/17 row as the fallback ADR-0054 provides if anything below is not in place by a league's Lock.
+> **Accepted 2026-10-08** by the operator with "เอาให้ทัน lock พรุ่งนี้": open at the 2026-10-09/10 Locks after all, not the 10-16/17 row the table below expected. The grounds in *Leaving, and the ground each leaves on* stand as drafted and were confirmed by the operator the same hour, as was the second Anthropic seat being an addition and not a replacement. What that compresses into one day is listed under *What it takes*; the boundary table keeps its 10-16/17 row as the fallback ADR-0054 provides if anything below is not in place by a league's Lock.
 
 **The five leagues' Edition 2 seats eight: Claude Opus 5, Claude Opus 5.5, Gemini 3.1 Pro
 Preview, GPT-6.1 Sol, Grok 4.7, Muse Spark 1.3, Kimi K3 and GLM 5.3.** Six of Edition 1's
