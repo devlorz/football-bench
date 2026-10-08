@@ -1,5 +1,10 @@
 # Each snapshot publishes against one Comparison Anchor
 
+> Amended 2026-10-08 by ticket 0097, under ADR-0061: the snapshot at Gameweek N selects
+> its anchor, and pairs its Fixtures, over `locked_in_gw` from the first Gameweek of N's
+> Edition through N, not from Gameweek 1. Until a Competition opens a second Edition that
+> first Gameweek is 1 and nothing below changes.
+
 Nine Entrants create 36 possible pairs, enough for an all-pairs leaderboard to manufacture
 spurious separations. Each cumulative Gameweek snapshot therefore publishes one complete-case
 RPS comparison against its Comparison Anchor for every other Entrant retained in the Season

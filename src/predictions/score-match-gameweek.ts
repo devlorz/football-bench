@@ -11,6 +11,7 @@ import {
 import {
   footballDataTeamName, teamNamesOf, type TeamNames
 } from "../football-data/team-identity.js";
+import { readEdition } from "../editions.js";
 import { emptyRepairDistribution } from "../repairs.js";
 import { isAskedAtLock } from "../season-roster.js";
 import { GAP_CAUSES, type GapCause } from "./gap-alert.js";
@@ -36,6 +37,19 @@ export const MATCH_POINTS_QUALIFICATION =
   + "named scoreline per Fixture, and whether one Entrant forecasts better "
   + "than another is only supported by the probability layer's Paired "
   + "Differences and their interval.";
+
+/**
+ * What a cumulative row outside a Competition's first Edition is cumulative
+ * over (ADR-0061, ticket 0097): the metric keeps its "season_to_date" name, so
+ * the row has to say it counts from the Edition's first Gameweek. Written only
+ * when that Gameweek is not 1, so an Edition 1 row keeps the bytes it had.
+ *
+ * A key of its own rather than `qualification`, because on a Paired Difference
+ * row the presence of `qualification` is what marks an interval spanning zero.
+ */
+export const editionScopeQualification = (firstGameweek: number): string =>
+  "Season-to-date here is cumulative over this Edition's Gameweeks, "
+  + `from Gameweek ${firstGameweek}.`;
 
 /** One Gameweek's Match Points, and the Season's through the same Gameweek. */
 export const MATCH_POINTS_METRIC = "match_points";
@@ -1480,7 +1494,7 @@ export interface PairedDifferenceDetail {
  * every other Entrant retained in the Season roster (ADR-0016).
  *
  * The Comparison Anchor is chosen over each candidate's own scoreable Fixtures
- * through this Gameweek — highest Match Points, then lower RPS, then Entrant
+ * from its Edition's first Gameweek through this one — highest Match Points, then lower RPS, then Entrant
  * id — which is the same data the snapshot's own rows are computed from. It
  * selects a reference and does not break the Match Points tie itself.
  *
@@ -1506,11 +1520,12 @@ async function writeComparisons(
   gameweek: number,
   roster: string[],
   byEntrant: Map<string, PredictedFixture[]>,
+  inEdition: (fixture: { gw: number }) => boolean,
   scoredAt: Date
 ): Promise<void> {
   const through = new Map(roster.map((entrantId) => [
     entrantId,
-    settledOf(byEntrant.get(entrantId) ?? []).filter(({ gw }) => gw <= gameweek)
+    settledOf(byEntrant.get(entrantId) ?? []).filter(inEdition)
   ]));
 
   // The last tie-break compares Entrant ids by code point rather than by
@@ -1716,6 +1731,10 @@ export interface ScoreMatchGameweekOptions {
  * returns before opening a transaction. A Gameweek nobody predicted is not that
  * Gameweek: every Entrant Gapped every Fixture of it, and reporting that is what
  * `gap_rate` is for.
+ *
+ * Every Gameweek it writes must fall in an Edition the record holds
+ * (`readEdition`): a Season or Competition with no `editions` row is refused,
+ * not scored as if it were in its first Edition.
  */
 export async function scoreMatchGameweek({
   database,
@@ -1760,6 +1779,14 @@ export async function scoreMatchGameweek({
       )
     ) {
       const roster = await matchRoster(database, competition, season, target);
+      // Cumulative over the target's Edition alone (ADR-0061, ticket 0097): a
+      // continuing seat keeps its row, so a total from Gameweek 1 would carry
+      // the previous Edition inside it.
+      const { firstGameweek } = await readEdition(
+        database, competition, season, target
+      );
+      const inEdition = ({ gw }: { gw: number }): boolean =>
+        gw >= firstGameweek && gw <= target;
       const pending: PendingScores = new Map();
       for (const [entrantId, predicted] of byEntrant) {
         const own = predicted.filter(({ gw }) => gw === target);
@@ -1769,7 +1796,7 @@ export async function scoreMatchGameweek({
             scoredAt
           );
         }
-        const through = predicted.filter(({ gw }) => gw <= target);
+        const through = predicted.filter(inEdition);
         if (through.length > 0) {
           writeRows(
             pending, competition, season, target, entrantId, through, true,
@@ -1790,7 +1817,7 @@ export async function scoreMatchGameweek({
         const answered = new Set(repairsBy.keys());
         for (const [fixtures, cumulative] of [
           [locked.filter(({ gw }) => gw === target), false],
-          [locked.filter(({ gw }) => gw <= target), true]
+          [locked.filter(inEdition), true]
         ] as const) {
           if (fixtures.length === 0) {
             continue;
@@ -1816,13 +1843,26 @@ export async function scoreMatchGameweek({
           store, settledOf(forecast.filter(({ gw }) => gw === target)), false
         );
         writeProbabilityRows(
-          store, settledOf(forecast.filter(({ gw }) => gw <= target)), true
+          store, settledOf(forecast.filter(inEdition)), true
         );
       }
       await writeComparisons(
         database, pending, competition, season, target, roster, byEntrant,
-        scoredAt
+        inEdition, scoredAt
       );
+      // A cumulative row is told by its metric's name: every one ends in
+      // `_season_to_date`, and a new cumulative metric has to as well, or it
+      // is published without saying what it is cumulative over.
+      if (firstGameweek > 1) {
+        for (const row of pending.values()) {
+          if (row.metric.endsWith("_season_to_date")) {
+            row.detail = {
+              ...(row.detail as object),
+              editionQualification: editionScopeQualification(firstGameweek)
+            };
+          }
+        }
+      }
       await writeScores(database, pending);
     }
     await database.query("commit");

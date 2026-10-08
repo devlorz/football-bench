@@ -74,6 +74,13 @@ on the page from these bodies, so "a mixed set is refused" is the page's check (
 over the `edition` field this ticket adds — there is no Combined Ranking route to refuse
 it here.
 
+**What ticket 0097 left for this one (2026-10-08).** Outside a Competition's first
+Edition, every cumulative row the scorer writes carries `detail.editionQualification`
+(`editionScopeQualification` in the scorer), the sentence that says the
+"season_to_date" figure counts from the Edition's first Gameweek. Nothing reads it yet.
+A body that serves an Edition 2 figure carries that sentence beside it (ADR-0012), so
+the page (0085) can show it.
+
 **What ticket 0083 left for this one (2026-10-07).** The scorer writes a withdrawn seat's
 cumulative rows at every Gameweek after its stamp (its `byEntrant` loop reads
 Predictions, not the roster) while its `gap_rate` rows stop at the stamp. The seat CTE's
