@@ -7,8 +7,12 @@ Lock-bound sites ask only one of the two questions ADR-0061 says membership is m
 `isAskedAtLock` reads `withdrawn_at` against the Lock and nothing reads `created_at`, so
 a seat that joins the five leagues at Edition 2 and then re-scoring any Edition 1
 Gameweek would expect that seat, count it as a Gap on every Fixture, and empty Edition
-1's complete case. This has to land before the first `roster:enter` of Edition 2; it
-has no effect until then. Source:
+1's complete case. This has to land before the first `roster:enter` of Edition 2. *It is
+not true that it has no effect until then* (corrected 2026-10-08, by the first attempt):
+`models.created_at` defaults to `now()`, so every path that enters a seat and then
+replays a Gameweek whose Lock has passed — the dry run, the scoring rehearsal, and some
+sixty test fixtures — would find no seat asked at all. See *The archive and the test
+fixture* below. Source:
 [ADR-0061](../adr/0061-a-competition-reopens-its-roster-at-an-edition-boundary.md), *What
 the record holds* ("a seat is on Edition N's roster when its `created_at` is at or before
 Edition N's first Lock and its `withdrawn_at` is null or later than that Lock").
@@ -51,8 +55,33 @@ acceptance to hold, not this ticket's.
 **The FPL track has no joiners** (ADR-0047 made its roster irreversible once started) and
 its reads are untouched.
 
+**The archive and the test fixture (found 2026-10-08).** Two places enter seats after
+the Lock they are about to be asked at, and both are this ticket's to fix:
+
+- *The dry run's archive* carries a seat's identity but neither of its dates, so
+  `seedEntrants` writes every replayed seat with `created_at = now()` — and, since
+  ticket 0083, without the `withdrawn_at` production holds, so the dry run has gone on
+  asking withdrawn seats. The archive carries both dates and the seed writes them. The
+  `withdrawn_at` half is a gap 0083 left and is closed here because it is the same three
+  lines.
+- *The test fixture* — `resetSchema` applies the real migrations, so every test seat is
+  entered at `now()` against deadlines in August 2026, and a Lock-bound `created_at` empties
+  roughly sixty tests. The seed already states its answer as `SEED_ENTERED_AT`, thirty days
+  before the first deadline; the fixture states the same one as `TEST_ENTERED_AT` and sets
+  it as the column's default after the migrations run. This is the one deliberate place the
+  test schema differs from production's, said so in the fixture's comment beside the
+  statement. Two kinds of test opt back to `now()` by writing `created_at` themselves: this
+  ticket's own boundary tests, and one test in the roster suite that proves `roster:enter`
+  stamps a real entry time, so production's default is still exercised somewhere.
+
 ## Acceptance
 
+- [ ] The dry run's archive carries each seat's `created_at` and `withdrawn_at`, and a
+      replayed Gameweek asks exactly the seats production would have asked at that Lock;
+      the existing dry-run suite holds it, including a withdrawn seat that is not asked.
+- [ ] `TEST_ENTERED_AT` is the test schema's one documented divergence from production,
+      set in the fixture with its reason beside it; the roster suite proves `roster:enter`
+      stamps a real entry time; this ticket's boundary tests set `created_at` explicitly.
 - [ ] `isAskedAtLock` holds both halves of ADR-0061's membership and is still the only
       spelling: a grep of the match-track code finds no second comparison of `created_at`
       or `withdrawn_at` against a Lock.

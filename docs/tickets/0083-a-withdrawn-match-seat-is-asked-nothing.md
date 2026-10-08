@@ -91,3 +91,7 @@ decide*).
   names: unreachable today (the FPL roster of record still names every stored FPL seat)
   and the same meaning on both tracks, a stamp being a departure on purpose. No FPL read
   changes.
+- **Gap found 2026-10-08, closed by ticket 0096:** the dry run's archive carries no
+  `withdrawn_at`, so a replayed Gameweek kept asking a seat production would not. No
+  production seat is stamped yet, so nothing was mis-replayed; the archive learns both
+  dates in 0096.
