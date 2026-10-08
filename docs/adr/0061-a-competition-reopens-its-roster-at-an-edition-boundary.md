@@ -162,6 +162,14 @@ the definition and are the whole of what the mechanism has to hold:
   every Paired Difference, the settled-Fixture evidence line and n, the Gap count — all read
   from the Edition's first Gameweek. Spend across the whole Season is still in `attempts`
   and belongs in a report, not on a leaderboard.
+  *Amended 2026-10-08:* "read from" understated where the bound has to sit. The
+  cumulative figures are **written** bounded, by the scorer, from the Edition's first
+  Gameweek (ticket 0097); the API reads the row the scorer wrote and bounds only what it
+  counts at read time (ticket 0084). ADR-0042's retired cut could live on the read side
+  because La Liga's retired seats are different rows; an Edition keeps the continuing
+  seat's row, so a stored total at an Edition 2 Gameweek would otherwise carry Edition 1
+  inside it, and no read can take that back out. The metric names keep saying
+  "season-to-date"; the qualification each row carries says which Gameweek it counts from.
 - **`/overall` sums an Edition set, not "every Active Competition".** ADR-0051's sentence is
   amended: the Combined Ranking of Edition 2 sums the five leagues' Edition 2 and nothing
   else; the Nations League is not added to any set, because its roster is not either

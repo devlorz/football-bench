@@ -57,6 +57,10 @@ testing-narrow-viewports runbook's checklist runs over it.
       the retired block where one exists; links between pages stay inside the view.
 - [ ] `/overall` and `/edition-1/overall` each sum their own set and say so in the
       qualification; neither includes the cup.
+- [ ] The Combined Ranking is summed on the page from the five leaderboard bodies, so the
+      page is where an Edition set is checked: a set whose bodies carry different
+      `edition` numbers is refused with the mismatch named, never summed (moved here from
+      ticket 0084 on 2026-10-08 — there is no Combined Ranking route to refuse it in).
 - [ ] The switcher moves between the three views on every page, and the current view is
       marked; deep links into an earlier Edition work without visiting the switcher.
 - [ ] The frozen sentence's bytes are pinned by a test; the Gameweek numbers on the label
