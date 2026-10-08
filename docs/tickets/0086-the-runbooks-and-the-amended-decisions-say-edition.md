@@ -25,7 +25,11 @@ leaving seats at the Edition's first Lock → `roster:enter` for the joining sea
 standing Prompt Version → the Editions row inserted by the operator → the next daily
 fetch and predict run pick it up with no further act. For up to a minute after the
 insert, `/api/edition-N/...` may still answer the edge-cached 404 (the read API's `NOT_FOUND_CACHE`);
-that is the cache, not a missing row. What is *not* done: no Prompt
+that is the cache, not a missing row. Right after the insert, the dashboard gains its
+`CLOSED_LEAGUE_EDITIONS` entry (`{ number: 1, openedBy: "ADR-00NN" }`, ticket 0085) and is
+deployed. Until that deploy, there are no `/edition-1/...` pages, and La Liga's retired block
+on `/pd` reads "could not be read", because the unprefixed `/retired` 404s once Edition 2
+exists. What is *not* done: no Prompt
 Version bump, no `competitions` change, no hand-set Lock (ADR-0054). A table of the
 expected Edition 2 boundaries per league with the caveat that the record decides.
 

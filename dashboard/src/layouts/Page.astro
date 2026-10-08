@@ -1,7 +1,9 @@
 ---
 import {
-  competitionRoutes, pageHref, type MatchPage
+  pageHref, switchers, type MatchPage
 } from "../competition-view.js";
+import EditionNote from "../components/EditionNote.astro";
+import type { ClosedEdition } from "../edition-note.js";
 
 /**
  * The chrome every page of the dashboard wears: the sheets, the theme, the
@@ -35,14 +37,26 @@ interface Props {
    * without saying so.
    */
   competitionPath: string;
+  /** The view's prefix, `""` for the current Edition (ADR-0061). */
+  prefix: string;
+  /** Where the Overall link goes: the view's `/overall`, or the cup's own page. */
+  overallPath: string;
+  /** The closed Edition this page reads, null on the current one. */
+  closedEdition: ClosedEdition | null;
+  /** The leaderboard the note reads its Gameweeks from; null on `/overall`. */
+  editionEndpoint: string | null;
 }
 
-const { title, current, competition, competitionName, competitionPath } = Astro.props;
+const {
+  title, current, competition, competitionName, competitionPath, prefix,
+  overallPath, closedEdition, editionEndpoint
+} = Astro.props;
 
-// Every served Competition, once each and under its own name, from the list
-// the routes are built from: no league can be reachable by URL and missing
-// from the header, or offered here and served by nothing.
-const SWITCHER = competitionRoutes().map(({ props }) => props);
+// Both switchers from the list the routes are built from: no page can be
+// reachable by URL and missing from the header, or offered here and served by
+// nothing. The views are the leagues' Editions and the cup; the Competitions
+// are the reader's own view's.
+const { views, competitions } = switchers({ prefix, competition, page: current });
 
 const LINKS = [
   { key: "leaderboard", label: "Leaderboard" },
@@ -90,7 +104,7 @@ const LINKS = [
       <nav class="navlinks" id="navlinks">
         {LINKS.map(({ key, label }) => (
           <a
-            href={pageHref(competitionPath, key)}
+            href={pageHref(competitionPath, key, overallPath)}
             aria-current={key === current ? "page" : undefined}
           >
             {label}
@@ -118,27 +132,31 @@ const LINKS = [
           stood here has nothing left to substitute. A link marked as the
           current page must point at the current page — the rule stated on
           `competitionPath` above — and it now holds by construction. */}
-      <nav class="switcher" aria-label="Competition">
-        <div class="seg">
-          {SWITCHER.map(({ competition: code, path, switcherLabel }) => (
-            <a
-              class="seg-opt"
-              href={pageHref(
-                path,
-                // Overall has no per-league copy for `pageHref` to hang the
-                // crossing off (it ignores `path` entirely, spec 0025), so a
-                // league picked from here falls back to that league's own
-                // leaderboard rather than every entry linking to `/overall`
-                // itself.
-                current === "overall" ? "leaderboard" : current
-              )}
-              aria-current={code === competition ? "page" : undefined}
-            >
-              {switcherLabel}
+      {/* Two segmented controls on the switcher's row: the view (ADR-0061),
+          then the Competitions inside it. Each entry is the reader's page in
+          the other view or league, from `switchers`. */}
+      <div class="switcher">
+        <nav class="seg" aria-label="View">
+          {views.map(({ label, href, current: here }) => (
+            <a class="seg-opt" href={href} aria-current={here ? "page" : undefined}>
+              {label}
             </a>
           ))}
-        </div>
-      </nav>
+        </nav>
+        {/* Not on a view of one Competition, the cup's: its one entry would
+            repeat the view switcher's. */}
+        {competitions.length > 1 && (
+          <div class="switcher-scroll">
+            <nav class="seg" aria-label="Competition">
+              {competitions.map(({ label, href, current: here }) => (
+                <a class="seg-opt" href={href} aria-current={here ? "page" : undefined}>
+                  {label}
+                </a>
+              ))}
+            </nav>
+          </div>
+        )}
+      </div>
       <div class="navtools">
         <button
           class="btn btn-ghost btn-icon burger"
@@ -162,6 +180,9 @@ const LINKS = [
       </div>
     </header>
     <main class="page">
+      {closedEdition !== null && (
+        <EditionNote closed={closedEdition} endpoint={editionEndpoint} />
+      )}
       <slot />
     </main>
 
@@ -213,7 +234,7 @@ const LINKS = [
         // The switcher scrolls on a phone, and the league being read may sit
         // past its edge: bring it into view so the page never opens on a
         // switcher that hides its own answer.
-        document.querySelector(".switcher [aria-current]")
+        document.querySelector('.switcher [aria-label="Competition"] [aria-current]')
           ?.scrollIntoView({ block: "nearest", inline: "nearest" });
       })();
     </script>

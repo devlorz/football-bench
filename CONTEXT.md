@@ -117,6 +117,16 @@ _Avoid_: Season 1 / Season 2 (a Season is the campaign, `2026-27`, and an Editio
 stretch of one Competition's campaign), restart (ADR-0042's restart changed the Prompt
 Version; an Edition changes the roster and keeps the Prompt Version), phase, era, series
 
+**Edition set**:
+The same-numbered Edition of each league that seats the Season Roster, taken together: the
+five leagues' Edition 2 is one set. A set is one decision's roster across the leagues, and
+only because the opening ADR named it for all five. It is what `/overall` sums and what the
+dashboard's `/edition-N/` prefix and "Edition N" switcher entry name (ADR-0061, ticket
+0085). A set whose bodies carry different Edition numbers is not summed. A cup is in no set,
+and its own Edition 1 is a view of its own.
+_Avoid_: Edition N of the Season (the number belongs to each league; the set is the leagues
+that share it)
+
 **Leaderboard**:
 One Competition's ranking: Match Points and Bet Points over its own Season Roster, read from
 its own `scores` rows and nothing else. Spans one Competition and never two — the benchmark

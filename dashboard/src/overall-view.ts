@@ -9,6 +9,7 @@
 import type { LeaderboardBody } from "../../src/dashboard/read-api.js";
 import { entrantSlug } from "./entrant-link.js";
 import {
+  COMBINED_RANKING_CUP_CLAUSE,
   COMBINED_RANKING_QUALIFICATION,
   COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION
 } from "./overall-caveat.js";
@@ -54,6 +55,11 @@ export interface OverallFixtures {
 
 export type OverallRanking =
   | { kind: "nothing-covered" }
+  /**
+   * Bodies from different Editions, which are never summed (ADR-0061): the
+   * page names each Competition's Edition instead of a total.
+   */
+  | { kind: "mixed-editions"; editions: { competition: string; number: number }[] }
   | {
       kind: "ranking";
       /** The covered Competitions, in the order they are rendered. */
@@ -162,6 +168,14 @@ const rankedBy = (
 export const overallRanking = (
   leaderboards: readonly CompetitionLeaderboard[]
 ): OverallRanking => {
+  // Every body, covered or not: an Edition that has scored nothing yet still
+  // makes the set two Editions.
+  const editions = leaderboards.map(({ competition, body }) => ({
+    competition, number: body.edition.number
+  }));
+  if (new Set(editions.map(({ number }) => number)).size > 1) {
+    return { kind: "mixed-editions", editions };
+  }
   const covered = leaderboards.filter(isCovered);
   if (covered.length === 0) return { kind: "nothing-covered" };
 
@@ -174,9 +188,14 @@ export const overallRanking = (
   const typesafeCaveat =
     covered.find(({ body }) => body.typesafeCaveat !== undefined)
       ?.body.typesafeCaveat ?? null;
-  const qualification = exhibitionCaveat !== null
+  // Which set was summed heads the sentence, and the cup's absence with it
+  // (ADR-0060, ADR-0061).
+  const editionClause = `Edition ${editions[0]!.number} of `
+    + new Intl.ListFormat("en").format(covered.map(({ competition }) => competition))
+    + ` is summed here; ${COMBINED_RANKING_CUP_CLAUSE}`;
+  const qualification = `${editionClause} ${exhibitionCaveat !== null
     ? COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION
-    : COMBINED_RANKING_QUALIFICATION;
+    : COMBINED_RANKING_QUALIFICATION}`;
 
   return {
     kind: "ranking",

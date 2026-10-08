@@ -172,10 +172,22 @@ html {
    its 2px thickness -- and the negative margin returns it, so spec 0011's
    story 48 holds on every segment. */
 .nav { flex-wrap: wrap; row-gap: 12px; }
+/* Two controls on the row since ticket 0085: the views, which are few and
+   stay put, then the Competitions, which scroll in what is left. Only the
+   second scrolls, so the view being read is never scrolled out of sight by
+   bringing the league being read into it. */
 .switcher {
   order: 1;
   flex-basis: 100%;
+  /* Without it the row is as wide as both controls, and the page scrolls
+     instead of the Competitions. */
+  min-width: 0;
   display: flex;
+  gap: 12px;
+}
+.switcher-scroll {
+  display: flex;
+  min-width: 0;
   overflow-x: auto;
   padding: 4px;
   margin: -4px;
@@ -831,3 +843,11 @@ html {
      paragraphs. */
   .sttable .table { min-width: 560px; }
 }
+
+/* An earlier Edition's label and frozen sentence (ADR-0061), above the page it
+   qualifies. */
+.edition-note {
+  padding: 28px 0;
+  border-bottom: 2px solid var(--color-divider);
+}
+.edition-note p { margin: 0; max-width: 72ch; }

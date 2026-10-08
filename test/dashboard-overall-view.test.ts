@@ -222,7 +222,8 @@ describe("an Exhibition Run", () => {
       .toEqual([["ox-alpha", true], ["claude-opus-5", false]]);
     expect(result.betRanked.map((row) => [row.slug, row.exhibition]))
       .toEqual([["claude-opus-5", false], ["ox-alpha", true]]);
-    expect(result.qualification).toBe(COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION);
+    expect(result.qualification)
+      .toMatch(new RegExp(` ${COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION.replace(/[.()]/g, "\\$&")}$`));
     expect(result.exhibitionCaveat).toBe(EXHIBITION_CAVEAT);
   });
 
@@ -367,7 +368,8 @@ describe("without an Exhibition Run", () => {
     ];
     const result = overallRanking(leaderboards);
     if (result.kind !== "ranking") throw new Error("expected a ranking");
-    expect(result.qualification).toBe(COMBINED_RANKING_QUALIFICATION);
+    expect(result.qualification)
+      .toMatch(new RegExp(` ${COMBINED_RANKING_QUALIFICATION.replace(/[.()]/g, "\\$&")}$`));
     expect(result.qualification).not.toContain(COMBINED_RANKING_EXHIBITION_CLAUSE);
     expect(result.exhibitionCaveat).toBeNull();
     expect(result.matchRanked.map((row) => row.slug)).toEqual(["gpt-5", "claude-opus-5"]);
@@ -407,5 +409,38 @@ describe("ties", () => {
     // this column, not carried over from the match-points sort above.
     expect(result.betRanked.map((row) => row.slug))
       .toEqual(["claude-opus-5", "gemini", "llama", "gpt-5"]);
+  });
+});
+
+/**
+ * ADR-0061: `/overall` sums one Edition set, says which, and leaves the cup
+ * out. The page is where the set is checked, because it is where the sum is.
+ */
+describe("an Edition set", () => {
+  test("is named at the head of the qualification, with the cup's absence", () => {
+    const result = overallRanking([
+      { competition: "PL", body: body({ edition: { number: 2, firstGameweek: 6, lastGameweek: null } }) },
+      { competition: "PD", body: body({ edition: { number: 2, firstGameweek: 7, lastGameweek: null } }) },
+      { competition: "SA", body: body({ edition: { number: 2, firstGameweek: 6, lastGameweek: null } }) }
+    ]);
+    if (result.kind !== "ranking") throw new Error("expected a ranking");
+
+    expect(result.qualification).toBe(
+      "Edition 2 of PL, PD, and SA is summed here; the Nations League is not in "
+      + "it, because its roster is not the leagues' (ADR-0060). "
+      + COMBINED_RANKING_QUALIFICATION
+    );
+  });
+
+  test("is refused, naming the mismatch, when the bodies carry different Editions", () => {
+    // Every body and not only the covered ones: an Edition 2 that has scored
+    // nothing yet still says the set is not one Edition.
+    expect(overallRanking([
+      { competition: "PL", body: body({ edition: { number: 2, firstGameweek: 6, lastGameweek: null }, throughGw: null }) },
+      { competition: "PD", body: body() }
+    ])).toEqual({
+      kind: "mixed-editions",
+      editions: [{ competition: "PL", number: 2 }, { competition: "PD", number: 1 }]
+    });
   });
 });

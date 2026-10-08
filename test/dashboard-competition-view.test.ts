@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import {
-  competitionRoutes, pageHref
+  competitionRoutes, overallRoutes, pageHref, switchers
 } from "../dashboard/src/competition-view.js";
 import { entrantOf, entrantSlug } from "../dashboard/src/entrant-link.js";
 import {
@@ -37,7 +37,8 @@ describe("the Match track's Competition routes", () => {
           // never used a version it has retired, so its page carries no frozen
           // block at all. A label here would put one on it, and the block
           // claims a Gameweek was played under a question nobody asked.
-          retiredLabel: null
+          retiredLabel: null,
+          prefix: "", overallPath: "/overall", closedEdition: null
         }
       },
       {
@@ -51,7 +52,8 @@ describe("the Match track's Competition routes", () => {
           // may not drift: a label naming one version over figures read by
           // another is the one lie this block can tell.
           retiredLabel:
-            "Gameweek 1 — played under match-pd/2026-27-v1, before the restart"
+            "Gameweek 1 — played under match-pd/2026-27-v1, before the restart",
+          prefix: "", overallPath: "/overall", closedEdition: null
         }
       },
       {
@@ -60,7 +62,8 @@ describe("the Match track's Competition routes", () => {
           competition: "SA", competitionName: "Serie A",
           switcherLabel: "Serie A",
           path: "/sa", api: "/api/sa",
-          retiredLabel: null
+          retiredLabel: null,
+          prefix: "", overallPath: "/overall", closedEdition: null
         }
       },
       {
@@ -69,7 +72,8 @@ describe("the Match track's Competition routes", () => {
           competition: "FL1", competitionName: "Ligue 1",
           switcherLabel: "Ligue 1",
           path: "/fl1", api: "/api/fl1",
-          retiredLabel: null
+          retiredLabel: null,
+          prefix: "", overallPath: "/overall", closedEdition: null
         }
       },
       {
@@ -78,7 +82,8 @@ describe("the Match track's Competition routes", () => {
           competition: "BL1", competitionName: "Bundesliga",
           switcherLabel: "Bundesliga",
           path: "/bl1", api: "/api/bl1",
-          retiredLabel: null
+          retiredLabel: null,
+          prefix: "", overallPath: "/overall", closedEdition: null
         }
       },
       {
@@ -89,7 +94,10 @@ describe("the Match track's Competition routes", () => {
           // the code is what the header has room for.
           switcherLabel: "UNL",
           path: "/unl", api: "/api/unl",
-          retiredLabel: null
+          retiredLabel: null,
+          // ADR-0061: the cup's own `/overall` is its leaderboard, because no
+          // Edition set sums it.
+          prefix: "", overallPath: "/unl", closedEdition: null
         }
       }
     ]);
@@ -384,7 +392,7 @@ describe("the Entrant a link names", () => {
     expect(read("../src/exhibition/recall-caveat.ts")).not.toMatch(/^\s*import\b/m);
 
     const script = read(
-      "../dashboard/src/pages/[competition]/entrants.astro"
+      "../dashboard/src/pages/[...competition]/entrants.astro"
     ).split("<script>")[1] ?? "";
     // Every import the bundler follows, which is every one that is not a type:
     // the whole list, so a module added later is as visible as a module swapped.
@@ -398,6 +406,16 @@ describe("the Entrant a link names", () => {
       "../../entrant-link.js",
       "../../exhibition-view.js"
     ]);
+
+    // An earlier Edition's note is bundled onto its pages too (ticket 0085),
+    // so it is held the same way: a module that imports nothing, and a script
+    // that reaches that module alone.
+    expect(read("../dashboard/src/edition-note.ts")).not.toMatch(/^\s*import\b/m);
+    const note = read("../dashboard/src/components/EditionNote.astro")
+      .split("<script>")[1] ?? "";
+    expect([
+      ...note.matchAll(/^\s*import\s+(?!type\b)[^;]*?from\s+"([^"]+)"/gm)
+    ].map(([, from]) => from)).toEqual(["../edition-note.js"]);
   });
 
   // ADR-0060: the cup's table lands at seven rows, so the block covering for
@@ -407,7 +425,7 @@ describe("the Entrant a link names", () => {
   test("draws a loading skeleton the height its Competition's table lands at",
     () => {
       const page = readFileSync(
-        new URL("../dashboard/src/pages/[competition].astro", import.meta.url),
+        new URL("../dashboard/src/pages/[...competition].astro", import.meta.url),
         "utf8"
       );
 
@@ -430,7 +448,7 @@ describe("the Entrant a link names", () => {
   // scored Season would ever show.
   test("says whose field it is in the state that first lists the seats", () => {
     const page = readFileSync(
-      new URL("../dashboard/src/pages/[competition].astro", import.meta.url),
+      new URL("../dashboard/src/pages/[...competition].astro", import.meta.url),
       "utf8"
     );
     const sectionOf = (id: string): string => {
@@ -468,5 +486,124 @@ describe("the Entrant a link names", () => {
 
     expect(new Set(slugs).size).toBe(SEASON_ROSTER.length);
     expect(slugs).not.toContain("");
+  });
+});
+
+/**
+ * The views ADR-0061 adds: the leagues' Editions, one set each, and the cup's
+ * own. A closed Edition is the code's (ticket 0085): its frozen sentence names
+ * the ADR that opened the next one, so every boundary is a deploy anyway, and
+ * the routes are built from the same list as that sentence.
+ */
+describe("an earlier Edition", () => {
+  const CLOSED = [{ number: 1, openedBy: "ADR-0062" }];
+
+  test("adds nothing while no Edition has closed", () => {
+    expect(competitionRoutes([])).toEqual(competitionRoutes());
+    expect(overallRoutes([])).toEqual([
+      { params: { view: undefined }, props: { prefix: "", closedEdition: null } }
+    ]);
+  });
+
+  test("is a second route set of the five leagues under its prefix", () => {
+    const routes = competitionRoutes(CLOSED);
+    const prefixed = routes.filter(({ props }) => props.prefix !== "");
+
+    expect(prefixed.map(({ params, props }) => [
+      params.competition, props.path, props.api, props.overallPath
+    ])).toEqual([
+      ["edition-1/pl", "/edition-1/pl", "/api/edition-1/pl", "/edition-1/overall"],
+      ["edition-1/pd", "/edition-1/pd", "/api/edition-1/pd", "/edition-1/overall"],
+      ["edition-1/sa", "/edition-1/sa", "/api/edition-1/sa", "/edition-1/overall"],
+      ["edition-1/fl1", "/edition-1/fl1", "/api/edition-1/fl1", "/edition-1/overall"],
+      ["edition-1/bl1", "/edition-1/bl1", "/api/edition-1/bl1", "/edition-1/overall"]
+    ]);
+    for (const { props } of prefixed) {
+      expect(props.prefix).toBe("/edition-1");
+      expect(props.closedEdition).toEqual(CLOSED[0]);
+    }
+    // The current set keeps every URL it had (ADR-0061).
+    expect(routes.filter(({ props }) => props.prefix === "")
+      .map(({ props }) => props.path))
+      .toEqual(["/pl", "/pd", "/sa", "/fl1", "/bl1", "/unl"]);
+    expect(overallRoutes(CLOSED)).toEqual([
+      { params: { view: undefined }, props: { prefix: "", closedEdition: null } },
+      { params: { view: "edition-1" }, props: { prefix: "/edition-1", closedEdition: CLOSED[0] } }
+    ]);
+  });
+
+  test("takes La Liga's retired block with it, out of the current set", () => {
+    // ADR-0042's Gameweek 1 is in every Competition's Edition 1.
+    const pd = (prefix: string) => competitionRoutes(CLOSED)
+      .find(({ props }) => props.competition === "PD" && props.prefix === prefix)!;
+
+    expect(pd("/edition-1").props.retiredLabel)
+      .toBe("Gameweek 1 — played under match-pd/2026-27-v1, before the restart");
+    expect(pd("").props.retiredLabel).toBeNull();
+  });
+});
+
+describe("the two switchers", () => {
+  const CLOSED = [{ number: 1, openedBy: "ADR-0062" }];
+  const LEAGUES = ["Premier League", "La Liga", "Serie A", "Ligue 1", "Bundesliga"];
+
+  test("offer the Season's leagues and the cup on a one-Edition record", () => {
+    const { views, competitions } =
+      switchers({ prefix: "", competition: "PD", page: "fixtures" }, []);
+
+    expect(views).toEqual([
+      { label: "2026-27", href: "/pd/fixtures", current: true },
+      { label: "UNL", href: "/unl/fixtures", current: false }
+    ]);
+    // The view's own set: the cup is reached by the view switcher only.
+    expect(competitions.map(({ label }) => label)).toEqual(LEAGUES);
+    expect(competitions.find(({ current }) => current)?.href).toBe("/pd/fixtures");
+  });
+
+  test("hold the reader's page and league across the three views", () => {
+    const { views, competitions } =
+      switchers({ prefix: "/edition-1", competition: "PD", page: "fixtures" }, CLOSED);
+
+    expect(views).toEqual([
+      { label: "Edition 1", href: "/edition-1/pd/fixtures", current: true },
+      { label: "Edition 2", href: "/pd/fixtures", current: false },
+      { label: "UNL", href: "/unl/fixtures", current: false }
+    ]);
+    expect(competitions.map(({ href }) => href)).toEqual([
+      "/edition-1/pl/fixtures", "/edition-1/pd/fixtures", "/edition-1/sa/fixtures",
+      "/edition-1/fl1/fixtures", "/edition-1/bl1/fixtures"
+    ]);
+  });
+
+  test("land on the Premier League leaving the cup, and on the cup's leaderboard for its Overall", () => {
+    expect(switchers({ prefix: "", competition: "UNL", page: "entrants" }, CLOSED))
+      .toEqual({
+        views: [
+          { label: "Edition 1", href: "/edition-1/pl/entrants", current: false },
+          { label: "Edition 2", href: "/pl/entrants", current: false },
+          { label: "UNL", href: "/unl/entrants", current: true }
+        ],
+        competitions: [{ label: "UNL", href: "/unl/entrants", current: true }]
+      });
+    expect(switchers({ prefix: "/edition-1", competition: "", page: "overall" }, CLOSED)
+      .views.map(({ href }) => href))
+      .toEqual(["/edition-1/overall", "/overall", "/unl"]);
+  });
+
+  test("send a reader on Overall to each league's leaderboard", () => {
+    // Overall has no per-league copy, so the Competition crossing falls back
+    // to the leaderboard, as it did before Editions.
+    expect(switchers({ prefix: "/edition-1", competition: "", page: "overall" }, CLOSED)
+      .competitions.map(({ href, current }) => [href, current]))
+      .toEqual([
+        ["/edition-1/pl", false], ["/edition-1/pd", false], ["/edition-1/sa", false],
+        ["/edition-1/fl1", false], ["/edition-1/bl1", false]
+      ]);
+  });
+
+  test("link Overall inside the view", () => {
+    expect(pageHref("/edition-1/pd", "overall", "/edition-1/overall"))
+      .toBe("/edition-1/overall");
+    expect(pageHref("/unl", "overall", "/unl")).toBe("/unl");
   });
 });

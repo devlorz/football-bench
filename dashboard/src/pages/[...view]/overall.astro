@@ -1,8 +1,10 @@
 ---
-import Page from "../layouts/Page.astro";
-import { SEASON_ROSTER_SIZE } from "../../../src/season-roster.js";
-import { competitionRoutes } from "../competition-view.js";
-import { COMBINED_RANKING_QUALIFICATION } from "../overall-caveat.js";
+import Page from "../../layouts/Page.astro";
+import { SEASON_ROSTER_SIZE } from "../../../../src/season-roster.js";
+import {
+  competitionRoutes, isLeague, overallRoutes
+} from "../../competition-view.js";
+import { COMBINED_RANKING_QUALIFICATION } from "../../overall-caveat.js";
 
 /**
  * The one page with no Competition of its own (spec 0025). `routes` is the
@@ -11,7 +13,15 @@ import { COMBINED_RANKING_QUALIFICATION } from "../overall-caveat.js";
  * anchor Competition the three Competition-scoped nav links (Leaderboard,
  * Fixtures, Entrant record) can point at.
  */
-const routes = competitionRoutes().map(({ props }) => props);
+// `/overall` and each closed Edition's `/edition-N/overall` (ADR-0061).
+export const getStaticPaths = () => overallRoutes();
+const { prefix, closedEdition } = Astro.props;
+
+// The view's leagues and nothing else: the cup's roster is not theirs, so it
+// is in no Edition set's sum (ADR-0060, ADR-0061), and its own Overall link
+// is its leaderboard.
+const routes = competitionRoutes().map(({ props }) => props)
+  .filter((props) => props.prefix === prefix && isLeague(props.competition));
 // `PL` by the same literal `_redirects` sends `/`, `/fixtures` and
 // `/entrants` to, not `routes[0]` -- an anchor picked by array order would
 // silently follow `MATCH_PROMPTS` if its keys were ever reordered, and drift
@@ -27,6 +37,10 @@ const fetches = routes.map(({ competition, api }) => ({
   competition=""
   competitionName="Overall"
   competitionPath={anchor.path}
+  prefix={prefix}
+  overallPath={`${prefix}/overall`}
+  closedEdition={closedEdition}
+  editionEndpoint={null}
 >
   {/*
     As on a Competition's leaderboard: every heading, label, column header
@@ -68,6 +82,16 @@ const fetches = routes.map(({ competition, api }) => ({
         No Competition covered here is both open and settled yet. Check back
         after the first Gameweek of one of them is scored.
       </p>
+    </div>
+  </section>
+
+  {/* The leagues answered from different Editions (ADR-0061): refused, and
+      the mismatch named, rather than summed. */}
+  <section class="preseason" id="mixed-editions" hidden>
+    <div>
+      <div class="kicker">Not summed</div>
+      <h2>These leagues are not in one Edition</h2>
+      <p id="mixed-note"></p>
     </div>
   </section>
 
@@ -138,7 +162,7 @@ const fetches = routes.map(({ competition, api }) => ({
   </section>
 
   {/* The build-time fetch list, carried into the module script below by
-      `define:vars` -- which, like `[competition].astro`'s own use of it,
+      `define:vars` -- which, like `[...competition].astro`'s own use of it,
       implies `is:inline` and only works on a script Astro renders rather than
       bundles. A bundled `type="module"` script cannot receive `define:vars`
       itself, so this inline script's only job is to hand the list off on
@@ -157,8 +181,8 @@ const fetches = routes.map(({ competition, api }) => ({
   <script>
     import {
       overallRanking, type OverallRanking, type OverallRow
-    } from "../overall-view.js";
-    import { EXHIBITION_RUN_LABEL } from "../exhibition-view.js";
+    } from "../../overall-view.js";
+    import { EXHIBITION_RUN_LABEL } from "../../exhibition-view.js";
 
     const $ = (id: string): HTMLElement => document.getElementById(id)!;
     const text = (node: HTMLElement, value: string) => { node.textContent = value; };
@@ -166,7 +190,7 @@ const fetches = routes.map(({ competition, api }) => ({
     const SORTS = { match: "matchRanked", bet: "betRanked" } as const;
     type Sort = keyof typeof SORTS;
 
-    const STATES = ["nothing-covered", "ranking"] as const;
+    const STATES = ["nothing-covered", "mixed-editions", "ranking"] as const;
 
     const sortFromUrl = (): Sort => {
       const asked = new URL(location.href).searchParams.get("sort");
@@ -265,6 +289,13 @@ const fetches = routes.map(({ competition, api }) => ({
         ranking.kind === "ranking" ? String(ranking.totalFixtures) : "0");
 
       if (ranking.kind === "ranking") renderRanking(ranking);
+      if (ranking.kind === "mixed-editions") {
+        text($("mixed-note"), "A total is one Edition of every league, and "
+          + "these leaderboards answer from "
+          + ranking.editions.map(({ competition, number }) =>
+            competition + " Edition " + number).join(", ")
+          + ". Nothing is summed until they agree.");
+      }
     }
 
     const fetches = (window as unknown as {

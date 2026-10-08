@@ -1,7 +1,9 @@
 import {
-  MATCH_PROMPT_COMPETITIONS, matchPromptOf, retiredGameweekLabel,
-  retiredGameweekOf
+  MATCH_PROMPT_COMPETITIONS, MATCH_PROMPT_VERSION, matchPromptOf,
+  retiredGameweekLabel, retiredGameweekOf
 } from "../../src/predictions/openrouter-entrant.js";
+import { ROSTER_CAVEATS } from "../../src/season-roster.js";
+import { CLOSED_LEAGUE_EDITIONS, type ClosedEdition } from "./edition-note.js";
 
 /**
  * The Match track's four pages, which are the four links in the chrome.
@@ -28,12 +30,14 @@ export const OVERALL_PATH = "/overall";
  * about where a page of a Competition is.
  *
  * The leaderboard is the Competition's own path rather than a page under it.
- * `overall` ignores `path` entirely — every Competition's nav links at the
- * same one page.
+ * `overall` ignores `path` and is the view's `overallPath`: one page for the
+ * leagues of a view, and the cup's own leaderboard for the cup (ADR-0061).
  */
-export const pageHref = (path: string, page: MatchPage): string =>
+export const pageHref = (
+  path: string, page: MatchPage, overallPath: string = OVERALL_PATH
+): string =>
   page === "leaderboard" ? path
-  : page === "overall" ? OVERALL_PATH
+  : page === "overall" ? overallPath
   : `${path}/${page}`;
 
 /** One built page: the path a reader types and everything the page reads by. */
@@ -73,6 +77,12 @@ export interface CompetitionRoute {
      * arrive with the rest of them, from `/api/{code}/retired`.
      */
     retiredLabel: string | null;
+    /** `""` for the current Edition, `/edition-N` for an earlier one. */
+    prefix: string;
+    /** Where this page's Overall link goes, which is `pageHref`'s third. */
+    overallPath: string;
+    /** The earlier Edition this page reads, null on the current one. */
+    closedEdition: ClosedEdition | null;
   };
 }
 
@@ -116,20 +126,136 @@ export interface CompetitionRoute {
  */
 const SWITCHER_LABELS: Readonly<Record<string, string>> = { UNL: "UNL" };
 
-export const competitionRoutes = (): CompetitionRoute[] =>
-  MATCH_PROMPT_COMPETITIONS.map((competition) => {
-    const segment = competition.toLowerCase();
-    const retired = retiredGameweekOf(competition);
+/**
+ * Whether a Competition is one of the leagues an Edition set sums: the ones
+ * seating the Season Roster, which is every one without a roster caveat. A cup
+ * is its own view and in no set (ADR-0060, ADR-0061).
+ */
+export const isLeague = (competition: string): boolean =>
+  ROSTER_CAVEATS[competition] === undefined;
+
+/** An earlier Edition's URL prefix, the one spelling of it (ADR-0061). */
+const editionPrefix = (number: number): string => `/edition-${number}`;
+
+/**
+ * One Competition's pages in one Edition: `closed` when that Edition has
+ * ended, null for the one playing. A retired Gameweek is in Edition 1
+ * (ADR-0042 retired Gameweek 1), so its block is built where `edition` is 1.
+ */
+const route = (
+  competition: string, closed: ClosedEdition | null, edition: number
+): CompetitionRoute => {
+  const segment = competition.toLowerCase();
+  const prefix = closed === null ? "" : editionPrefix(closed.number);
+  const retired = edition === 1 ? retiredGameweekOf(competition) : null;
+  return {
+    params: { competition: `${prefix}/${segment}`.slice(1) },
+    props: {
+      competition,
+      competitionName: matchPromptOf(competition).competitionName,
+      switcherLabel: SWITCHER_LABELS[competition]
+        ?? matchPromptOf(competition).competitionName,
+      path: `${prefix}/${segment}`,
+      api: `/api${prefix}/${segment}`,
+      retiredLabel: retired === null ? null : retiredGameweekLabel(retired),
+      prefix,
+      overallPath: isLeague(competition) ? `${prefix}${OVERALL_PATH}` : `/${segment}`,
+      closedEdition: closed
+    }
+  };
+};
+
+/**
+ * The current Edition's routes under today's URLs, then each closed Edition's
+ * five leagues under its prefix (ADR-0061). A cup is in its Edition 1; the
+ * leagues play the one after the last closed.
+ */
+export const competitionRoutes = (
+  closed: readonly ClosedEdition[] = CLOSED_LEAGUE_EDITIONS
+): CompetitionRoute[] => [
+  ...MATCH_PROMPT_COMPETITIONS.map((competition) =>
+    route(competition, null, isLeague(competition) ? closed.length + 1 : 1)),
+  ...closed.flatMap((edition) => MATCH_PROMPT_COMPETITIONS
+    .filter(isLeague)
+    .map((competition) => route(competition, edition, edition.number)))
+];
+
+/** `/overall` for the current Edition and under each closed one's prefix. */
+export const overallRoutes = (
+  closed: readonly ClosedEdition[] = CLOSED_LEAGUE_EDITIONS
+): { params: { view: string | undefined };
+     props: { prefix: string; closedEdition: ClosedEdition | null } }[] => [
+  { params: { view: undefined }, props: { prefix: "", closedEdition: null } },
+  ...closed.map((edition) => ({
+    params: { view: editionPrefix(edition.number).slice(1) },
+    props: { prefix: editionPrefix(edition.number), closedEdition: edition }
+  }))
+];
+
+/** One switcher entry: a link, and whether it is where the reader stands. */
+export interface SwitcherLink {
+  label: string;
+  href: string;
+  current: boolean;
+}
+
+/** The Season as a reader writes it, `2026-27`, read off the frozen version. */
+const SEASON_LABEL = /\/(\d{4}-\d{2})-v/.exec(MATCH_PROMPT_VERSION)![1]!;
+
+/**
+ * The header's two switchers for a page: the views (each Edition of the
+ * leagues, then each cup) and the Competitions of the reader's own view. Both
+ * keep the page the reader is on; a view without the reader's Competition
+ * lands on its first, which is the Premier League for the leagues.
+ * `competition` is `""` on `/overall`, which belongs to the leagues.
+ */
+export const switchers = (
+  here: { prefix: string; competition: string; page: MatchPage },
+  closed: readonly ClosedEdition[] = CLOSED_LEAGUE_EDITIONS
+): { views: SwitcherLink[]; competitions: SwitcherLink[] } => {
+  const routes = competitionRoutes(closed).map(({ props }) => props);
+  const leagues = MATCH_PROMPT_COMPETITIONS.filter(isLeague);
+  const current = closed.length + 1;
+  const views = [
+    ...closed.map(({ number }) => ({
+      label: `Edition ${number}`, prefix: editionPrefix(number), set: leagues
+    })),
+    {
+      label: closed.length === 0 ? SEASON_LABEL : `Edition ${current}`,
+      prefix: "", set: leagues
+    },
+    ...MATCH_PROMPT_COMPETITIONS.filter((code) => !isLeague(code)).map((code) => ({
+      label: SWITCHER_LABELS[code] ?? matchPromptOf(code).competitionName,
+      prefix: "", set: [code]
+    }))
+  ];
+  const inSet = (set: readonly string[]) =>
+    here.competition === "" ? isLeague(set[0]!) : set.includes(here.competition);
+  const link = (prefix: string, code: string, label: string, isCurrent: boolean) => {
+    const props = routes.find((r) => r.prefix === prefix && r.competition === code)!;
     return {
-      params: { competition: segment },
-      props: {
-        competition,
-        competitionName: matchPromptOf(competition).competitionName,
-        switcherLabel: SWITCHER_LABELS[competition]
-          ?? matchPromptOf(competition).competitionName,
-        path: `/${segment}`,
-        api: `/api/${segment}`,
-        retiredLabel: retired === null ? null : retiredGameweekLabel(retired)
-      }
+      label,
+      href: pageHref(props.path, here.page, props.overallPath),
+      current: isCurrent
     };
-  });
+  };
+  const mine = views.find(({ prefix, set }) => prefix === here.prefix && inSet(set))!;
+  return {
+    views: views.map((view) => link(
+      view.prefix,
+      inSet(view.set) && here.competition !== "" ? here.competition : view.set[0]!,
+      view.label,
+      view === mine
+    )),
+    // Overall has no per-league copy, so a league picked on it lands on that
+    // league's leaderboard.
+    competitions: mine.set.map((code) => {
+      const props = routes.find((r) => r.prefix === mine.prefix && r.competition === code)!;
+      return {
+        label: props.switcherLabel,
+        href: pageHref(props.path, here.page === "overall" ? "leaderboard" : here.page),
+        current: code === here.competition
+      };
+    })
+  };
+};

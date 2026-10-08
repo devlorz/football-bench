@@ -33,3 +33,12 @@ export const COMBINED_RANKING_QUALIFICATION =
 
 export const COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION =
   `${COMBINED_RANKING_PREFACE} ${COMBINED_RANKING_EXHIBITION_CLAUSE} ${COMBINED_RANKING_CLOSING}`;
+
+/**
+ * Why the cup is in no Edition set's sum (ADR-0060, ADR-0061), closing the
+ * clause that names the set. The set's Edition and Competitions are figures
+ * and arrive with the bodies; this is the part that is not.
+ */
+export const COMBINED_RANKING_CUP_CLAUSE =
+  "the Nations League is not in it, because its roster is not the leagues' "
+  + "(ADR-0060).";

@@ -7,11 +7,15 @@ import { EXHIBITION_LABEL_PREFIX } from "../../exhibition-view.js";
 /**
  * One Fixtures page per Competition, from the list the read API serves.
  */
-export const getStaticPaths = competitionRoutes;
+// Wrapped: Astro calls `getStaticPaths` with an argument of its own.
+export const getStaticPaths = () => competitionRoutes();
 
 // The Competition's endpoint prefix, its own path and its name, all three the
 // route's and spelled once in `competition-view.ts`.
-const { competition, competitionName, path, api } = Astro.props;
+const {
+  competition, competitionName, path, api, prefix, overallPath,
+  closedEdition
+} = Astro.props;
 ---
 <Page
   title={`${competitionName} fixtures — Football Bench, match track`}
@@ -19,6 +23,10 @@ const { competition, competitionName, path, api } = Astro.props;
   competition={competition}
   competitionName={competitionName}
   competitionPath={path}
+  prefix={prefix}
+  overallPath={overallPath}
+  closedEdition={closedEdition}
+  editionEndpoint={`${api}/leaderboard`}
 >
   {/*
     The chrome, the headings and the column headers are in the built HTML.

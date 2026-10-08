@@ -4,6 +4,19 @@ status: proposed
 
 # A Competition reopens its roster at an Edition boundary
 
+> **Amended 2026-10-08, by ticket 0085.** Two points in *What the dashboard shows*, made
+> where the pages were built:
+> - **A closed Edition is a constant in the dashboard's code, not a read of `editions`.**
+>   Its frozen sentence names the ADR that opened the next Edition, so every boundary is
+>   a deploy whatever the switcher reads. The routes under `/edition-N/`, the switcher and
+>   the sentence are all built from that one list (`CLOSED_LEAGUE_EDITIONS`). The numbers
+>   on the label still come from the body the page fetched, as this ADR says.
+> - **An Exhibition Run's "ran after Gameweek N" stays capped at a closed Edition's last
+>   Gameweek.** On a closed Edition's page it says that the run answered after every
+>   Fixture on that page, which is the ceiling ADR-0032 asks the label to state for the
+>   figures beside it. When the run actually replayed is in its `attempts` rows, not on
+>   this page.
+>
 > **Amended 2026-10-08, by ticket 0084's review.** *What the record holds* measures
 > membership at "Edition N's first Lock". For an Edition holding a retired Gameweek
 > (ADR-0042), that is the wrong Lock: La Liga's v1 played Gameweek 1, and its ten v2 seats

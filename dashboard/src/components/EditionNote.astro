@@ -1,0 +1,58 @@
+---
+import {
+  overallEditionNote, type ClosedEdition
+} from "../edition-note.js";
+
+/**
+ * What an earlier Edition's page opens with (ADR-0061): its label and the
+ * frozen sentence. Rendered only on a closed Edition's routes, so the current
+ * Edition's pages carry none of it, script included.
+ *
+ * `endpoint` is the league's leaderboard, read for its `edition`: the numbers
+ * are the body's, never the build's. Null on `/overall`, whose note names no
+ * Gameweek and is the build's whole.
+ */
+interface Props {
+  closed: ClosedEdition;
+  endpoint: string | null;
+}
+
+const { closed, endpoint } = Astro.props;
+const overall = endpoint === null ? overallEditionNote(closed) : null;
+---
+<section
+  class="edition-note"
+  id="edition-note"
+  data-endpoint={endpoint}
+  data-number={closed.number}
+  data-opened-by={closed.openedBy}
+  hidden={overall === null}
+>
+  <div class="kicker" id="edition-label">{overall?.label}</div>
+  <p id="edition-sentence">{overall?.sentence}</p>
+</section>
+
+<script>
+  import { editionNote } from "../edition-note.js";
+
+  const note = document.getElementById("edition-note")!;
+  const { endpoint, number, openedBy } = note.dataset;
+  // ponytail: a second read of the leaderboard the page may also fetch; the
+  // edge caches it, and one shared fetch per page is the upgrade if it shows.
+  if (endpoint !== undefined) {
+    fetch(endpoint)
+      .then((response) => response.ok ? response.json() : null)
+      .then((body) => {
+        const shown = body === null ? null : editionNote(
+          body.edition, { number: Number(number), openedBy: openedBy! }
+        );
+        // Nothing while the Edition is still playing, and nothing on a failed
+        // read: the page's own error line already says that.
+        if (shown === null) return;
+        document.getElementById("edition-label")!.textContent = shown.label;
+        document.getElementById("edition-sentence")!.textContent = shown.sentence;
+        note.hidden = false;
+      })
+      .catch(() => {});
+  }
+</script>

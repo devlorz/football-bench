@@ -19,7 +19,7 @@ retired block's rendering is unchanged and appears on Edition 1's La Liga page o
 
 **Blocked by:** 0084 (the bodies carry the Edition and the prefixed routes exist).
 
-**Status:** drafted, 2026-09-22
+**Status:** done, 2026-10-08
 
 ---
 
@@ -48,21 +48,97 @@ testing-narrow-viewports runbook's checklist runs over it.
 
 ## Acceptance
 
-- [ ] On a one-Edition record, the built site's HTML and the rendered pages are
+- [x] On a one-Edition record, the built site's HTML and the rendered pages are
       byte-identical to today's except for the switcher, which offers "2026-27" for the
       leagues and "UNL" for the cup and nothing else.
-- [ ] On a two-Edition record: `/pl` shows Edition 2 from its first Gameweek with a
+- [x] On a two-Edition record: `/pl` shows Edition 2 from its first Gameweek with a
       leaderboard, Fixtures and Entrant pages reading only Edition 2; `/edition-1/pl`
       shows Edition 1 through its last Gameweek with the label, the frozen sentence and
       the retired block where one exists; links between pages stay inside the view.
-- [ ] `/overall` and `/edition-1/overall` each sum their own set and say so in the
+- [x] `/overall` and `/edition-1/overall` each sum their own set and say so in the
       qualification; neither includes the cup.
-- [ ] The Combined Ranking is summed on the page from the five leaderboard bodies, so the
+- [x] The Combined Ranking is summed on the page from the five leaderboard bodies, so the
       page is where an Edition set is checked: a set whose bodies carry different
       `edition` numbers is refused with the mismatch named, never summed (moved here from
       ticket 0084 on 2026-10-08 — there is no Combined Ranking route to refuse it in).
-- [ ] The switcher moves between the three views on every page, and the current view is
+- [x] The switcher moves between the three views on every page, and the current view is
       marked; deep links into an earlier Edition work without visiting the switcher.
-- [ ] The frozen sentence's bytes are pinned by a test; the Gameweek numbers on the label
+- [x] The frozen sentence's bytes are pinned by a test; the Gameweek numbers on the label
       are proven to come from the body by changing the fixture data.
-- [ ] Narrow-viewport checklist passes with the switcher present.
+- [x] Narrow-viewport checklist passes with the switcher present.
+
+## Evidence, 2026-10-08
+
+- **Seams, agreed before the first test.** The user agreed the closed Editions should be
+  code, not a read: `CLOSED_LEAGUE_EDITIONS` in `dashboard/src/edition-note.ts`, `[]`
+  today.
+  - The frozen sentence names the ADR that opened the next Edition, so every boundary is
+    a deploy whatever the switcher reads. The routes, both switchers and the sentence are
+    therefore built from that one list. This departs from *What is already known* ("the
+    switcher reads the Editions table through the API"), and ADR-0061's amendment of
+    today records it.
+  - The constant is not beside `RETIRED_GAMEWEEK_CAVEAT`. The Edition note's script is
+    bundled, and `openrouter-entrant.ts` would bring `zod` into it. The module imports
+    nothing, and `dashboard-competition-view.test.ts` asserts that, along with the
+    script's one import.
+- **Routes.** `[competition]` became `[...competition]` and `overall.astro` became
+  `[...view]/overall.astro`. There is one page code. With `{ number: 1 }`,
+  `competitionRoutes` adds `/edition-1/{pl,pd,sa,fl1,bl1}`, whose `api` is
+  `/api/edition-1/<code>`, and `overallRoutes` adds `/edition-1/overall`. The cup gets
+  no prefixed copy.
+- **Switchers (`switchers` in `competition-view.ts`).**
+  - The views are "2026-27" and "UNL" on one Edition, and "Edition 1", "Edition 2" and
+    "UNL" on two. Each entry keeps the reader's page, and leaving the cup lands on the
+    Premier League.
+  - The Competition control lists only the view's set. The cup's view has none, because
+    its one entry would repeat "UNL".
+  - The view control is `aria-label="View"`.
+  - On the cup's view the Overall link is `/unl` (ADR-0061: its `/overall` is its
+    leaderboard).
+- **Box 1.** A build at `548ee8a` was kept and compared with the new build:
+  - The file list is identical.
+  - With the switcher markup stripped, every HTML page is byte-identical except these,
+    each agreed:
+    - The three `/unl*` pages: the Overall link.
+    - `/overall`: its fetch list loses UNL, which ADR-0060 had already promised.
+    - Every page: the `scrollIntoView` selector, which now names the Competition
+      control.
+  - `/overall`'s bundled script changed because `overall-view.ts` did.
+- **Box 2.** A build with `{ number: 1, openedBy: "ADR-0062" }` (bytes restored with
+  `cp`/`cmp`) emits 16 `/edition-1/` pages.
+  - Every nav, switcher and footnote link stays under `/edition-1/`.
+  - `/edition-1/pd` fetches `/api/edition-1/pd/retired`, and `/pd` builds no block, as
+    0084 handed over.
+  - What each body holds is 0084's (`dashboard-edition-api.test.ts`).
+  - It was not run against a live two-Edition API: the local database has Edition 1 only.
+- **Box 3.** `overallRanking` checks every body's `edition.number`, covered or not, and
+  returns `{ kind: "mixed-editions", editions }`. The page names each Competition's
+  Edition and sums nothing. The qualification opens with "Edition N of PL, PD, and SA is
+  summed here; " + `COMBINED_RANKING_CUP_CLAUSE`.
+- **Box 6.**
+  - `dashboard-edition-note.test.ts` pins both sentences' bytes. The league one now reads
+    "Its Gameweeks stay here whole", since the note opens the page. `/overall`'s names no
+    Gameweek, because each league may close at its own.
+  - It also proves the numbers follow the body (5, then 7), and that no note is shown
+    while `lastGameweek` is null.
+  - In the browser, the two-Edition build was served with a stub
+    `/api/edition-1/pd/leaderboard`. Headless Chrome rendered "Edition 1 · Gameweek 1–5",
+    then "1–7" after the stub changed, and kept the note hidden for `lastGameweek: null`.
+- **Box 7.** The runbook's iframe method was used: a 375px iframe in headless Chrome,
+  over 7 pages of both builds.
+  - The review caught a problem the first check missed: with the whole row scrolling,
+    bringing the league into view pushed the current view out of sight.
+  - Now only the Competition control scrolls, and `.switcher` has `min-width: 0`. Its
+    absence was measured at a `scrollWidth` of 672.
+  - After the fix, `scrollWidth` ≤ 375 on every page, and both current entries are on
+    screen.
+- **"Ran after Gameweek N" (0084's open item).** It stays capped at a closed Edition's
+  last Gameweek, recorded in ADR-0061's amendment.
+- **Also.** CONTEXT.md gains **Edition set**, and ticket 0086 gains the deploy step after
+  inserting Edition 2.
+- **Review (Standards and Spec in parallel).** Eleven findings were fixed and eight
+  declined, each with the user's "ตกลง".
+- **Mutation checks.** Every new test was red before its code. The import-free assertion
+  was also mutated (a `zod` import added): red, then restored with `cp`/`cmp`.
+- **Checks.** `tsc --noEmit` and `astro check`: no errors. 31 targeted files: 564 passed,
+  6 skipped, 0 failed.
