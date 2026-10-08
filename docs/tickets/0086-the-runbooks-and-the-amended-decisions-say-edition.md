@@ -41,8 +41,11 @@ the roster module, the predict path reading `withdrawn_at` — are met by ticket
 0083, and the cup is its own Edition 1. Each note is a dated block at the top in the
 house style (ADR-0059's amendment is the model), not a rewrite.
 
-**Opening a Competition** gets one line: a Competition opens in Edition 1 and its Editions
-row is seeded by the migration, so the cup column has nothing to add.
+**Opening a Competition** gets one line: a Competition opens in Edition 1, and migration
+0048 seeds that row for `2026-27` only. Opening any later Season inserts an Edition 1
+row at Gameweek 1 for every Competition before the first scoring run, or `readEdition`
+refuses the Season and the scorer scores nothing (ticket 0097). The cup column has
+nothing to add.
 
 **The pre-cron checklist** gains one check before any Edition 2 Lock: the Editions row
 exists for every league, the leaving seats are stamped, the joining seats are entered,

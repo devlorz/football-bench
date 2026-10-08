@@ -72,8 +72,8 @@ Gameweeks; which seats).
 ## Acceptance
 
 - [x] On a record whose every Competition is in Edition 1, scoring any Gameweek writes
-      rows byte-identical to the rows the current scorer writes; a test runs both over
-      the same fixture and compares every `scores` row.
+      rows byte-identical to the rows the scorer before this ticket wrote, proven by the
+      pre-0090 archive still matching at HEAD.
 - [x] On a record with a league in Edition 2 from Gameweek 6: scoring Gameweek 7 writes
       season-to-date rows over Gameweeks 6–7 only, a Comparison Anchor chosen over
       Gameweeks 6–7, and a `detail.gameweeks` list beginning at 6; the seat that played
