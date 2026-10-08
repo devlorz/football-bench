@@ -49,13 +49,16 @@ export const editionNote = (
 
 /**
  * `/overall`'s, which names no Gameweek: each league may close at its own,
- * and its own page says which.
+ * and its own page says which. Null until every league's body has a last
+ * Gameweek, because the leagues' boundaries fall days apart (ADR-0061 opens
+ * an Edition per Competition).
  */
 export const overallEditionNote = (
-  closed: ClosedEdition
-): { label: string; sentence: string } => ({
+  closed: ClosedEdition, scopes: readonly Scope[]
+): { label: string; sentence: string } | null =>
+  scopes.some(({ lastGameweek }) => lastGameweek === null) ? null : {
   label: `Edition ${closed.number}`,
   sentence: `Edition ${closed.number} of each league ends at the Gameweek its `
     + "own page names. From the next one each league is played by a new "
     + `roster, ${rule(closed, "Their")}`
-});
+};

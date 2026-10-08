@@ -1,16 +1,16 @@
 ---
-import {
-  overallEditionNote, type ClosedEdition
-} from "../edition-note.js";
+import type { ClosedEdition } from "../edition-note.js";
 
 /**
  * What an earlier Edition's page opens with (ADR-0061): its label and the
  * frozen sentence. Rendered only on a closed Edition's routes, so the current
- * Edition's pages carry none of it, script included.
+ * Edition's pages carry none of it, script included. Hidden until a body says
+ * the Edition has ended: the constant can be deployed before the operator
+ * inserts the next Edition, and until then the prefix answers the current one.
  *
  * `endpoint` is the league's leaderboard, read for its `edition`: the numbers
- * are the body's, never the build's. Null on `/overall`, whose note names no
- * Gameweek and is the build's whole.
+ * are the body's, never the build's. Null on `/overall`, whose own script
+ * fills the note from the five bodies it already reads.
  */
 interface Props {
   closed: ClosedEdition;
@@ -18,7 +18,6 @@ interface Props {
 }
 
 const { closed, endpoint } = Astro.props;
-const overall = endpoint === null ? overallEditionNote(closed) : null;
 ---
 <section
   class="edition-note"
@@ -26,10 +25,10 @@ const overall = endpoint === null ? overallEditionNote(closed) : null;
   data-endpoint={endpoint}
   data-number={closed.number}
   data-opened-by={closed.openedBy}
-  hidden={overall === null}
+  hidden
 >
-  <div class="kicker" id="edition-label">{overall?.label}</div>
-  <p id="edition-sentence">{overall?.sentence}</p>
+  <div class="kicker" id="edition-label"></div>
+  <p id="edition-sentence"></p>
 </section>
 
 <script>

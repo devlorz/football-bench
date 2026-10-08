@@ -16,6 +16,10 @@ status: proposed
 >   Fixture on that page, which is the ceiling ADR-0032 asks the label to state for the
 >   figures beside it. When the run actually replayed is in its `attempts` rows, not on
 >   this page.
+> - **The frozen sentence lives in `dashboard/src/edition-note.ts`**, not beside
+>   `RETIRED_GAMEWEEK_CAVEAT` as *What the dashboard shows* says. The page's script bundles
+>   it for the browser, and `openrouter-entrant.ts` would bring `zod` with it. It is still a
+>   constant and never a row, and a test keeps its module free of imports.
 >
 > **Amended 2026-10-08, by ticket 0084's review.** *What the record holds* measures
 > membership at "Edition N's first Lock". For an Edition holding a retired Gameweek

@@ -38,7 +38,10 @@ describe("the Match track's Competition routes", () => {
           // block at all. A label here would put one on it, and the block
           // claims a Gameweek was played under a question nobody asked.
           retiredLabel: null,
-          prefix: "", overallPath: "/overall", closedEdition: null
+          view: {
+            prefix: "", overallPath: "/overall", closedEdition: null,
+            editionEndpoint: "/api/pl/leaderboard"
+          }
         }
       },
       {
@@ -53,7 +56,10 @@ describe("the Match track's Competition routes", () => {
           // another is the one lie this block can tell.
           retiredLabel:
             "Gameweek 1 — played under match-pd/2026-27-v1, before the restart",
-          prefix: "", overallPath: "/overall", closedEdition: null
+          view: {
+            prefix: "", overallPath: "/overall", closedEdition: null,
+            editionEndpoint: "/api/pd/leaderboard"
+          }
         }
       },
       {
@@ -63,7 +69,10 @@ describe("the Match track's Competition routes", () => {
           switcherLabel: "Serie A",
           path: "/sa", api: "/api/sa",
           retiredLabel: null,
-          prefix: "", overallPath: "/overall", closedEdition: null
+          view: {
+            prefix: "", overallPath: "/overall", closedEdition: null,
+            editionEndpoint: "/api/sa/leaderboard"
+          }
         }
       },
       {
@@ -73,7 +82,10 @@ describe("the Match track's Competition routes", () => {
           switcherLabel: "Ligue 1",
           path: "/fl1", api: "/api/fl1",
           retiredLabel: null,
-          prefix: "", overallPath: "/overall", closedEdition: null
+          view: {
+            prefix: "", overallPath: "/overall", closedEdition: null,
+            editionEndpoint: "/api/fl1/leaderboard"
+          }
         }
       },
       {
@@ -83,7 +95,10 @@ describe("the Match track's Competition routes", () => {
           switcherLabel: "Bundesliga",
           path: "/bl1", api: "/api/bl1",
           retiredLabel: null,
-          prefix: "", overallPath: "/overall", closedEdition: null
+          view: {
+            prefix: "", overallPath: "/overall", closedEdition: null,
+            editionEndpoint: "/api/bl1/leaderboard"
+          }
         }
       },
       {
@@ -97,7 +112,10 @@ describe("the Match track's Competition routes", () => {
           retiredLabel: null,
           // ADR-0061: the cup's own `/overall` is its leaderboard, because no
           // Edition set sums it.
-          prefix: "", overallPath: "/unl", closedEdition: null
+          view: {
+            prefix: "", overallPath: "/unl", closedEdition: null,
+            editionEndpoint: "/api/unl/leaderboard"
+          }
         }
       }
     ]);
@@ -479,6 +497,40 @@ describe("the Entrant a link names", () => {
     expect(functionOf("renderRanking")).toContain('body.rosterCaveat ?? ""');
   });
 
+  // ADR-0012, ADR-0061: on a later Edition the cumulative figures count from
+  // its first Gameweek, and the scorer's sentence saying so is on the body
+  // (ticket 0097, 0084). It goes where the roster's does, in both states that
+  // show figures or seats, and on the Entrant record.
+  test("says which Gameweek the figures count from, wherever they are shown", () => {
+    const page = readFileSync(
+      new URL("../dashboard/src/pages/[...competition].astro", import.meta.url),
+      "utf8"
+    );
+    const sectionOf = (id: string): string => {
+      const opened = page.slice(page.indexOf(`id="${id}"`));
+      return opened.slice(0, opened.indexOf("</section>"));
+    };
+    const functionOf = (name: string): string => {
+      const opened = page.slice(page.indexOf(`function ${name}()`));
+      return opened.slice(0, opened.indexOf("\n    function "));
+    };
+
+    expect(sectionOf("preseason")).toContain('id="pre-qual-edition"');
+    expect(sectionOf("ranking")).toContain('id="qual-edition"');
+    expect(functionOf("renderPreSeason"))
+      .toContain('text($("pre-qual-edition"), body.editionQualification ?? "")');
+    expect(functionOf("renderRanking"))
+      .toContain('text($("qual-edition"), body.editionQualification ?? "")');
+
+    const record = readFileSync(
+      new URL("../dashboard/src/pages/[...competition]/entrants.astro", import.meta.url),
+      "utf8"
+    );
+    expect(record).toContain('<p id="qual-edition"></p>');
+    expect(record)
+      .toContain('$("qual-edition").textContent = data.editionQualification ?? "";');
+  });
+
   test("tells the Season Roster's seats apart by slug alone", () => {
     // The whole scheme rests on this: two seats sharing a slug would make one
     // of them unreachable by link in every league at once.
@@ -497,20 +549,23 @@ describe("the Entrant a link names", () => {
  */
 describe("an earlier Edition", () => {
   const CLOSED = [{ number: 1, openedBy: "ADR-0062" }];
+  const CURRENT_OVERALL = {
+    prefix: "", overallPath: "/overall", closedEdition: null, editionEndpoint: null
+  };
 
   test("adds nothing while no Edition has closed", () => {
     expect(competitionRoutes([])).toEqual(competitionRoutes());
     expect(overallRoutes([])).toEqual([
-      { params: { view: undefined }, props: { prefix: "", closedEdition: null } }
+      { params: { view: undefined }, props: { view: CURRENT_OVERALL } }
     ]);
   });
 
   test("is a second route set of the five leagues under its prefix", () => {
     const routes = competitionRoutes(CLOSED);
-    const prefixed = routes.filter(({ props }) => props.prefix !== "");
+    const prefixed = routes.filter(({ props }) => props.view.prefix !== "");
 
     expect(prefixed.map(({ params, props }) => [
-      params.competition, props.path, props.api, props.overallPath
+      params.competition, props.path, props.api, props.view.overallPath
     ])).toEqual([
       ["edition-1/pl", "/edition-1/pl", "/api/edition-1/pl", "/edition-1/overall"],
       ["edition-1/pd", "/edition-1/pd", "/api/edition-1/pd", "/edition-1/overall"],
@@ -519,23 +574,32 @@ describe("an earlier Edition", () => {
       ["edition-1/bl1", "/edition-1/bl1", "/api/edition-1/bl1", "/edition-1/overall"]
     ]);
     for (const { props } of prefixed) {
-      expect(props.prefix).toBe("/edition-1");
-      expect(props.closedEdition).toEqual(CLOSED[0]);
+      expect(props.view.prefix).toBe("/edition-1");
+      expect(props.view.closedEdition).toEqual(CLOSED[0]);
+      expect(props.view.editionEndpoint).toBe(`${props.api}/leaderboard`);
     }
     // The current set keeps every URL it had (ADR-0061).
-    expect(routes.filter(({ props }) => props.prefix === "")
+    expect(routes.filter(({ props }) => props.view.prefix === "")
       .map(({ props }) => props.path))
       .toEqual(["/pl", "/pd", "/sa", "/fl1", "/bl1", "/unl"]);
     expect(overallRoutes(CLOSED)).toEqual([
-      { params: { view: undefined }, props: { prefix: "", closedEdition: null } },
-      { params: { view: "edition-1" }, props: { prefix: "/edition-1", closedEdition: CLOSED[0] } }
+      { params: { view: undefined }, props: { view: CURRENT_OVERALL } },
+      {
+        params: { view: "edition-1" },
+        props: {
+          view: {
+            prefix: "/edition-1", overallPath: "/edition-1/overall",
+            closedEdition: CLOSED[0], editionEndpoint: null
+          }
+        }
+      }
     ]);
   });
 
   test("takes La Liga's retired block with it, out of the current set", () => {
     // ADR-0042's Gameweek 1 is in every Competition's Edition 1.
     const pd = (prefix: string) => competitionRoutes(CLOSED)
-      .find(({ props }) => props.competition === "PD" && props.prefix === prefix)!;
+      .find(({ props }) => props.competition === "PD" && props.view.prefix === prefix)!;
 
     expect(pd("/edition-1").props.retiredLabel)
       .toBe("Gameweek 1 — played under match-pd/2026-27-v1, before the restart");

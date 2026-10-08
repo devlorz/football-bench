@@ -1,9 +1,8 @@
 ---
 import {
-  pageHref, switchers, type MatchPage
+  pageHref, switchers, type MatchPage, type PageView
 } from "../competition-view.js";
 import EditionNote from "../components/EditionNote.astro";
-import type { ClosedEdition } from "../edition-note.js";
 
 /**
  * The chrome every page of the dashboard wears: the sheets, the theme, the
@@ -37,19 +36,13 @@ interface Props {
    * without saying so.
    */
   competitionPath: string;
-  /** The view's prefix, `""` for the current Edition (ADR-0061). */
-  prefix: string;
-  /** Where the Overall link goes: the view's `/overall`, or the cup's own page. */
-  overallPath: string;
-  /** The closed Edition this page reads, null on the current one. */
-  closedEdition: ClosedEdition | null;
-  /** The leaderboard the note reads its Gameweeks from; null on `/overall`. */
-  editionEndpoint: string | null;
+  /** The Edition view the page is in (ADR-0061), from its route. */
+  view: PageView;
 }
 
 const {
-  title, current, competition, competitionName, competitionPath, prefix,
-  overallPath, closedEdition, editionEndpoint
+  title, current, competition, competitionName, competitionPath,
+  view: { prefix, overallPath, closedEdition, editionEndpoint }
 } = Astro.props;
 
 // Both switchers from the list the routes are built from: no page can be

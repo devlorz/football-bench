@@ -13,6 +13,21 @@
 > page carries the detail and the one decision it takes — that the qualification does **not**
 > grow a fourth clause for a cup.
 
+> Amended 2026-10-08 by ticket 0085. **`/overall` sums one Edition set of the leagues, and
+> the cup is in no sum.** This follows ADR-0061 and ADR-0060: the Nations League's roster is
+> not the leagues', so it does not belong to any league Edition set. `/overall` reads only
+> the leagues that seat the Season Roster. Under a prefix, `/edition-N/overall`, it reads
+> that Edition of each. It refuses to sum bodies that carry different Edition numbers, and
+> names each one's Edition instead. Its qualification now opens with the set: "Edition N of
+> PL, … is summed here; the Nations League is not in it, because its roster is not the
+> leagues' (ADR-0060)."
+>
+> **This changes the published numbers from this commit on.** At `548ee8a`, `/overall`
+> added UNL in once it was scored, as ticket 0076 and spec 0027's story 51 asked. It no
+> longer does. The 2026-09-18 amendment above still holds for what each row is called. The
+> decision it records, adding the cup to the sum, is reversed here. The cup's own `/overall`
+> is its leaderboard (ADR-0061).
+
 ADR-0035 made each Competition its own benchmark and closed with a sentence: "no combined
 cross-league ranking is published". This supersedes **that sentence and nothing else in that
 ADR**. A combined ranking is published, at `/overall`, as the raw sum of each Entrant's

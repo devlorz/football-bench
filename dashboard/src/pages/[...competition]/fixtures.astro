@@ -13,8 +13,7 @@ export const getStaticPaths = () => competitionRoutes();
 // The Competition's endpoint prefix, its own path and its name, all three the
 // route's and spelled once in `competition-view.ts`.
 const {
-  competition, competitionName, path, api, prefix, overallPath,
-  closedEdition
+  competition, competitionName, path, api, view
 } = Astro.props;
 ---
 <Page
@@ -23,10 +22,7 @@ const {
   competition={competition}
   competitionName={competitionName}
   competitionPath={path}
-  prefix={prefix}
-  overallPath={overallPath}
-  closedEdition={closedEdition}
-  editionEndpoint={`${api}/leaderboard`}
+  view={view}
 >
   {/*
     The chrome, the headings and the column headers are in the built HTML.

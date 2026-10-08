@@ -41,7 +41,7 @@ does not conclude an Edition must touch the FPL track.
 
 **Amendment notes on the ADRs ADR-0061 changes.** ADR-0034: "irreversible from the first
 Lock" is per Edition, and the 2026-08-19 cutoff binds Edition 1 while later Editions
-take their opening ADR's date. ADR-0051: the Combined Ranking sums an Edition set.
+take their opening ADR's date. ADR-0051 is already done: ticket 0085 amended it when `/overall` stopped summing the cup.
 ADR-0060: the *What it takes* paragraph's two demands — a per-Competition exclusion in
 the roster module, the predict path reading `withdrawn_at` — are met by tickets 0081 and
 0083, and the cup is its own Edition 1. Each note is a dated block at the top in the

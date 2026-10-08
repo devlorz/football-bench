@@ -13,8 +13,7 @@ export const getStaticPaths = () => competitionRoutes();
 // The Competition's endpoint prefix, its own path and its name, all three the
 // route's and spelled once in `competition-view.ts`.
 const {
-  competition, competitionName, path, api, prefix, overallPath,
-  closedEdition
+  competition, competitionName, path, api, view
 } = Astro.props;
 ---
 <Page
@@ -23,10 +22,7 @@ const {
   competition={competition}
   competitionName={competitionName}
   competitionPath={path}
-  prefix={prefix}
-  overallPath={overallPath}
-  closedEdition={closedEdition}
-  editionEndpoint={`${api}/leaderboard`}
+  view={view}
 >
   {/*
     Everything that is not a number is in the built HTML: the headings, the
@@ -161,6 +157,9 @@ const {
         {/* ADR-0059: additional to qual-exhibition above, and empty unless the
             record holds a typesafe row. */}
         <p id="qual-typesafe"></p>
+        {/* ADR-0061, ADR-0012: on a later Edition, which Gameweek the
+            cumulative figures count from (ticket 0097). Empty in Edition 1. */}
+        <p id="qual-edition"></p>
       </div>
     </div>
   </section>
@@ -483,6 +482,7 @@ const {
       }
       $("qual-exhibition").textContent = data.exhibitionCaveat ?? "";
       $("qual-typesafe").textContent = data.typesafeCaveat ?? "";
+      $("qual-edition").textContent = data.editionQualification ?? "";
 
       renderChart(entrant, data.entrants);
       renderTiers(entrant);

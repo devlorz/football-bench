@@ -5,9 +5,10 @@ import { competitionRoutes } from "../competition-view.js";
 import { EXHIBITION_LABEL_PREFIX } from "../exhibition-view.js";
 
 /**
- * One leaderboard per Competition, from the list the read API serves. A plain
- * segment and no longer a rest route: `/` is a redirect since ticket 6 of spec
- * 0017, so no route spells an empty segment and nothing needs one.
+ * One leaderboard per Competition, from the list the read API serves. A rest
+ * route since ticket 0085, so an earlier Edition's copy is `edition-1/pl`
+ * (ADR-0061). No route spells an empty segment: `/` is a redirect since
+ * ticket 6 of spec 0017.
  */
 // Wrapped: Astro calls `getStaticPaths` with an argument of its own.
 export const getStaticPaths = () => competitionRoutes();
@@ -21,8 +22,7 @@ export const getStaticPaths = () => competitionRoutes();
 // restarted and null on the ones that never did (ADR-0042), so it is what
 // decides whether this page carries a block at all.
 const {
-  competition, competitionName, path, api, retiredLabel, prefix, overallPath,
-  closedEdition
+  competition, competitionName, path, api, retiredLabel, view
 } = Astro.props;
 
 // Ten for a league and seven for the Nations League (ADR-0060), derived from
@@ -38,10 +38,7 @@ const rosterSize = matchRosterSizeOf(competition);
   competition={competition}
   competitionName={competitionName}
   competitionPath={path}
-  prefix={prefix}
-  overallPath={overallPath}
-  closedEdition={closedEdition}
-  editionEndpoint={`${api}/leaderboard`}
+  view={view}
 >
   {/*
     Everything below that is not a number is in the built HTML: the headings,
@@ -90,6 +87,9 @@ const rosterSize = matchRosterSizeOf(competition);
           qualify. Empty on every Competition seating the Season Roster, and
           never written from here -- the sentence is the API's. */}
       <p class="entered-note" id="pre-qual-roster"></p>
+      {/* ADR-0061: on a later Edition, which Gameweek the figures count from.
+          Empty in Edition 1, and the sentence is the scorer's (ticket 0097). */}
+      <p class="entered-note" id="pre-qual-edition"></p>
       <div class="entered-note">
         One Prompt Version, one context arm. Three Reference Lines run alongside
         and are never ranked.
@@ -164,6 +164,10 @@ const rosterSize = matchRosterSizeOf(competition);
           of the ranking like the two above, not of a row, and never written
           from here -- the sentence is the API's. */}
       <p id="qual-roster"></p>
+      {/* ADR-0061, ADR-0012: on a later Edition, the scorer's sentence saying
+          the cumulative figures count from its first Gameweek (ticket 0097).
+          Empty in Edition 1. */}
+      <p id="qual-edition"></p>
     </div>
 
     <div class="footnotes">
@@ -182,7 +186,7 @@ const rosterSize = matchRosterSizeOf(competition);
         Base Models on its own. The evidential layer is the ranked probability
         score. Each Competition is its own benchmark: no ranking here spans
         two, and a Base Model's place here says nothing about its place in
-        another league. The <a href={`${prefix}/overall`}>Overall ranking</a> sums every
+        another league. The <a href={`${view.prefix}/overall`}>Overall ranking</a> sums every
         league's season-to-date total and says what that costs; it is not a
         second reading of this one.
       </p>
@@ -372,6 +376,7 @@ const rosterSize = matchRosterSizeOf(competition);
       text($("qual-exhibition"), body.exhibitionCaveat ?? "");
       text($("qual-typesafe"), body.typesafeCaveat ?? "");
       text($("qual-roster"), body.rosterCaveat ?? "");
+      text($("qual-edition"), body.editionQualification ?? "");
     }
 
     function renderPreSeason() {
@@ -390,6 +395,7 @@ const rosterSize = matchRosterSizeOf(competition);
       }
       $("entered-rows").replaceChildren(rows);
       text($("pre-qual-roster"), body.rosterCaveat ?? "");
+      text($("pre-qual-edition"), body.editionQualification ?? "");
     }
 
     function render() {

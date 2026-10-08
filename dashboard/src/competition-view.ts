@@ -77,13 +77,21 @@ export interface CompetitionRoute {
      * arrive with the rest of them, from `/api/{code}/retired`.
      */
     retiredLabel: string | null;
-    /** `""` for the current Edition, `/edition-N` for an earlier one. */
-    prefix: string;
-    /** Where this page's Overall link goes, which is `pageHref`'s third. */
-    overallPath: string;
-    /** The earlier Edition this page reads, null on the current one. */
-    closedEdition: ClosedEdition | null;
+    /** Which Edition view the page is in, which the chrome reads. */
+    view: PageView;
   };
+}
+
+/** What the chrome needs to know about the view a page is in (ADR-0061). */
+export interface PageView {
+  /** `""` for the current Edition, `/edition-N` for an earlier one. */
+  prefix: string;
+  /** Where the Overall link goes, which is `pageHref`'s third. */
+  overallPath: string;
+  /** The earlier Edition the page reads, null on the current one. */
+  closedEdition: ClosedEdition | null;
+  /** The leaderboard the Edition note reads its Gameweeks from; null on `/overall`. */
+  editionEndpoint: string | null;
 }
 
 /**
@@ -115,9 +123,10 @@ export interface CompetitionRoute {
  * the function `getStaticPaths` already is, and no page can hold the objects
  * another page needs.
  *
- * The redirects in `dashboard/public/_redirects` are what `/` is instead, and
- * with no empty segment left the routes are plain `[competition]` segments
- * rather than rest parameters.
+ * The redirects in `dashboard/public/_redirects` are what `/` is instead, so
+ * no route spells an empty segment. The routes are `[...competition]` rest
+ * parameters since ticket 0085, because an earlier Edition's copy takes two
+ * segments, `edition-1/pl` (ADR-0061).
  */
 /**
  * The switcher's abbreviations, by code -- data, so that nothing in the
@@ -158,9 +167,12 @@ const route = (
       path: `${prefix}/${segment}`,
       api: `/api${prefix}/${segment}`,
       retiredLabel: retired === null ? null : retiredGameweekLabel(retired),
-      prefix,
-      overallPath: isLeague(competition) ? `${prefix}${OVERALL_PATH}` : `/${segment}`,
-      closedEdition: closed
+      view: {
+        prefix,
+        overallPath: isLeague(competition) ? `${prefix}${OVERALL_PATH}` : `/${segment}`,
+        closedEdition: closed,
+        editionEndpoint: `/api${prefix}/${segment}/leaderboard`
+      }
     }
   };
 };
@@ -184,13 +196,19 @@ export const competitionRoutes = (
 export const overallRoutes = (
   closed: readonly ClosedEdition[] = CLOSED_LEAGUE_EDITIONS
 ): { params: { view: string | undefined };
-     props: { prefix: string; closedEdition: ClosedEdition | null } }[] => [
-  { params: { view: undefined }, props: { prefix: "", closedEdition: null } },
-  ...closed.map((edition) => ({
-    params: { view: editionPrefix(edition.number).slice(1) },
-    props: { prefix: editionPrefix(edition.number), closedEdition: edition }
-  }))
-];
+     props: { view: PageView } }[] =>
+  [null, ...closed].map((edition) => {
+    const prefix = edition === null ? "" : editionPrefix(edition.number);
+    return {
+      params: { view: prefix === "" ? undefined : prefix.slice(1) },
+      props: {
+        view: {
+          prefix, overallPath: `${prefix}${OVERALL_PATH}`,
+          closedEdition: edition, editionEndpoint: null
+        }
+      }
+    };
+  });
 
 /** One switcher entry: a link, and whether it is where the reader stands. */
 export interface SwitcherLink {
@@ -231,11 +249,13 @@ export const switchers = (
   ];
   const inSet = (set: readonly string[]) =>
     here.competition === "" ? isLeague(set[0]!) : set.includes(here.competition);
+  const routeOf = (prefix: string, code: string) =>
+    routes.find((r) => r.view.prefix === prefix && r.competition === code)!;
   const link = (prefix: string, code: string, label: string, isCurrent: boolean) => {
-    const props = routes.find((r) => r.prefix === prefix && r.competition === code)!;
+    const props = routeOf(prefix, code);
     return {
       label,
-      href: pageHref(props.path, here.page, props.overallPath),
+      href: pageHref(props.path, here.page, props.view.overallPath),
       current: isCurrent
     };
   };
@@ -250,7 +270,7 @@ export const switchers = (
     // Overall has no per-league copy, so a league picked on it lands on that
     // league's leaderboard.
     competitions: mine.set.map((code) => {
-      const props = routes.find((r) => r.prefix === mine.prefix && r.competition === code)!;
+      const props = routeOf(mine.prefix, code);
       return {
         label: props.switcherLabel,
         href: pageHref(props.path, here.page === "overall" ? "leaderboard" : here.page),

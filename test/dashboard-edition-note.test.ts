@@ -8,6 +8,8 @@ import { editionNote, overallEditionNote } from "../dashboard/src/edition-note.j
  */
 describe("an earlier Edition's note", () => {
   const CLOSED = { number: 1, openedBy: "ADR-0062" };
+  const CLOSED_1_5 = { number: 1, firstGameweek: 1, lastGameweek: 5 };
+  const CLOSED_1_6 = { number: 1, firstGameweek: 1, lastGameweek: 6 };
 
   test("pins the sentence's bytes", () => {
     expect(editionNote({ number: 1, firstGameweek: 1, lastGameweek: 5 }, CLOSED))
@@ -19,7 +21,7 @@ describe("an earlier Edition's note", () => {
           + "ADR-0062 named. Its Gameweeks stay here whole, ranked by the roster "
           + "that played them, and none of them counts in Edition 2."
       });
-    expect(overallEditionNote(CLOSED)).toEqual({
+    expect(overallEditionNote(CLOSED, [CLOSED_1_5, CLOSED_1_6])).toEqual({
       label: "Edition 1",
       sentence:
         "Edition 1 of each league ends at the Gameweek its own page names. From "
@@ -42,5 +44,13 @@ describe("an earlier Edition's note", () => {
     // `/edition-1/pl` then answers with the current Edition.
     expect(editionNote({ number: 1, firstGameweek: 1, lastGameweek: null }, CLOSED))
       .toBeNull();
+  });
+
+  test("says nothing on /overall until every league's Edition has ended", () => {
+    // ADR-0061 opens an Edition per Competition, and the leagues' boundaries
+    // differ by days: one still playing is enough to keep the note off.
+    expect(overallEditionNote(CLOSED, [
+      CLOSED_1_5, { number: 1, firstGameweek: 1, lastGameweek: null }
+    ])).toBeNull();
   });
 });

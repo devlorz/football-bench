@@ -15,13 +15,14 @@ import { COMBINED_RANKING_QUALIFICATION } from "../../overall-caveat.js";
  */
 // `/overall` and each closed Edition's `/edition-N/overall` (ADR-0061).
 export const getStaticPaths = () => overallRoutes();
-const { prefix, closedEdition } = Astro.props;
+const { view } = Astro.props;
+const { prefix } = view;
 
 // The view's leagues and nothing else: the cup's roster is not theirs, so it
 // is in no Edition set's sum (ADR-0060, ADR-0061), and its own Overall link
 // is its leaderboard.
 const routes = competitionRoutes().map(({ props }) => props)
-  .filter((props) => props.prefix === prefix && isLeague(props.competition));
+  .filter((props) => props.view.prefix === prefix && isLeague(props.competition));
 // `PL` by the same literal `_redirects` sends `/`, `/fixtures` and
 // `/entrants` to, not `routes[0]` -- an anchor picked by array order would
 // silently follow `MATCH_PROMPTS` if its keys were ever reordered, and drift
@@ -37,10 +38,7 @@ const fetches = routes.map(({ competition, api }) => ({
   competition=""
   competitionName="Overall"
   competitionPath={anchor.path}
-  prefix={prefix}
-  overallPath={`${prefix}/overall`}
-  closedEdition={closedEdition}
-  editionEndpoint={null}
+  view={view}
 >
   {/*
     As on a Competition's leaderboard: every heading, label, column header
@@ -183,6 +181,7 @@ const fetches = routes.map(({ competition, api }) => ({
       overallRanking, type OverallRanking, type OverallRow
     } from "../../overall-view.js";
     import { EXHIBITION_RUN_LABEL } from "../../exhibition-view.js";
+    import { overallEditionNote } from "../../edition-note.js";
 
     const $ = (id: string): HTMLElement => document.getElementById(id)!;
     const text = (node: HTMLElement, value: string) => { node.textContent = value; };
@@ -323,6 +322,18 @@ const fetches = routes.map(({ competition, api }) => ({
     )
       .then((leaderboards) => {
         ranking = overallRanking(leaderboards);
+        // A closed Edition's note, once every league's body says its Edition
+        // has ended; the section is only on `/edition-N/overall`.
+        const note = document.getElementById("edition-note");
+        const shown = note === null ? null : overallEditionNote(
+          { number: Number(note.dataset.number), openedBy: note.dataset.openedBy! },
+          leaderboards.map(({ body }) => body.edition)
+        );
+        if (note !== null && shown !== null) {
+          text($("edition-label"), shown.label);
+          text($("edition-sentence"), shown.sentence);
+          note.hidden = false;
+        }
         render();
       })
       .catch(() => {

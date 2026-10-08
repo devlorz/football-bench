@@ -249,6 +249,8 @@ Fixture, including the roughly four per cent of Fixtures 365Scores holds no xG f
 51. As a reader of `/overall`, I want `UNL` in the Combined Ranking from the Gameweek it
     is first scored, with ADR-0051's prose corrected from "league" to Competition, so
     that the page says what it sums.
+    *Superseded 2026-10-08 by ADR-0061 and ticket 0085: the cup is in no Edition set's
+    sum, and `/overall` sums the leagues only (ADR-0051's amendment of that date).*
 
 ### The runbook
 
