@@ -559,17 +559,20 @@ export function seatSlug(id: string): string {
 
 /**
  * Whether the match seat `seat` (a `models` alias) is asked for the Gameweek
- * whose Lock is `lock` (a SQL expression): unstamped, or stamped later than
- * that Lock (ticket 0083, ADR-0061). Compared with the Gameweek's Lock and
+ * whose Lock is `lock` (a SQL expression): entered at or before that Lock
+ * (ticket 0096), and unstamped or stamped later than it (ticket 0083) --
+ * ADR-0061's two halves of membership. Compared with the Gameweek's Lock and
  * not with now, because the scorer runs again: a seat that played a Gameweek
- * is still expected there after it leaves.
+ * is still expected there after it leaves, and a seat that joined later is
+ * not expected there after it arrives.
  *
  * One spelling for every Lock-bound match read, so the next one cannot get
  * the boundary subtly different. The FPL track's reads keep their own
  * `withdrawn_at is null` (ADR-0047).
  */
 export function isAskedAtLock(seat: string, lock: string): string {
-  return `(${seat}.withdrawn_at is null or ${seat}.withdrawn_at > ${lock})`;
+  return `(${seat}.created_at <= ${lock}
+     and (${seat}.withdrawn_at is null or ${seat}.withdrawn_at > ${lock}))`;
 }
 
 /**
@@ -820,11 +823,14 @@ async function upsertSeats(
   await database.query("begin");
   try {
     for (const entrant of seats) {
+      // `created_at` is the date of entry (ADR-0061), stated rather than left
+      // to a column default, and left as it was on a re-entry, which enters
+      // nobody.
       await database.query(
         `insert into models (
            id, name, base_model, provider, quantization, prompt_version, role,
-           config
-         ) values ($1, $2, $3, $4, $5, $6, 'entrant', $7)
+           config, created_at
+         ) values ($1, $2, $3, $4, $5, $6, 'entrant', $7, now())
          on conflict (id) do update set
            name = excluded.name,
            base_model = excluded.base_model,

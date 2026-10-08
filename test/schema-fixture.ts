@@ -7,12 +7,29 @@ import {
 type Database = Pick<Client, "query">;
 
 /**
+ * When a test's seats were entered unless it says otherwise: before every
+ * Lock any test dates, so a seat inserted without a `created_at` is on the
+ * roster of every Gameweek it is asked about (ADR-0061's membership reads
+ * `created_at <= lock`, ticket 0096).
+ */
+const TEST_ENTERED_AT = "2000-01-01T00:00:00Z";
+
+/**
  * Rebuilds an empty database from every migration. Tests share this with the
  * migrate CLI so a new migration reaches them without editing each test.
+ *
+ * The one place a test database differs from production's: `models.created_at`
+ * defaults to `TEST_ENTERED_AT` instead of `now()`. Production enters a seat
+ * before the Lock that first asks it; tests date their Locks in the past and
+ * insert seats today. A test about the date of entry sets `created_at` itself,
+ * and `roster:enter` writes `now()` explicitly rather than trusting a default.
  */
 export async function resetSchema(database: Database): Promise<void> {
   await database.query("drop schema public cascade; create schema public");
   await applyMigrations(database);
+  await database.query(
+    `alter table models alter column created_at set default '${TEST_ENTERED_AT}'`
+  );
 }
 
 interface UnrankedRow {

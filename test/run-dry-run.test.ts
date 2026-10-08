@@ -59,7 +59,9 @@ describe("a dry run against an archived Gameweek", () => {
           provider: "openai",
           quantization: null,
           prompt_version: MATCH_PROMPT_VERSION,
-          config: {}
+          config: {},
+          created_at: new Date("2026-07-01T00:00:00Z"),
+          withdrawn_at: null
         }
       ]
     };
@@ -183,6 +185,46 @@ describe("a dry run against an archived Gameweek", () => {
     );
     expect(predictions.rows[0].n).toBe(0);
     expect(refused.rows[0].n).toBeGreaterThan(0);
+  });
+
+  // A seat the archive holds is asked at the rehearsed Lock exactly when the
+  // real Lock asked it (ticket 0096): entered at or before it, and not
+  // withdrawn at or before it. Reseeded at today's instant, or unstamped,
+  // both would be asked.
+  test("asks only the seats the rehearsed Lock asked", async () => {
+    const [sol] = archive.entrants;
+    const result = await runDryRun({
+      target: client,
+      archive: {
+        ...archive,
+        entrants: [
+          sol!,
+          {
+            ...sol!, id: "joined", base_model: "vendor/joined",
+            created_at: new Date("2026-12-31T00:00:00Z")
+          },
+          {
+            ...sol!, id: "departed", base_model: "vendor/departed",
+            withdrawn_at: new Date("2026-07-02T00:00:00Z")
+          }
+        ]
+      },
+      competition: "PL",
+      season: SEASON,
+      footballDataSeason: FOOTBALL_DATA_SEASON,
+      gameweek: GAMEWEEK,
+      at: "deadline-6h",
+      concurrency: 4
+    });
+
+    const attempted = await client.query(
+      "select distinct model_id from attempts order by model_id"
+    );
+    expect(attempted.rows).toEqual([{ model_id: "sol" }]);
+    expect(
+      [...new Set(result.phases[0]!.gapAlert?.gaps.map(({ entrantId }) =>
+        entrantId))]
+    ).toEqual(["sol"]);
   });
 
   test("rehearses one Competition, not every league the archive has bytes for", async () => {

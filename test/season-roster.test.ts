@@ -56,6 +56,22 @@ describe("entering the Season Roster", () => {
     )
   ).rows;
 
+  // `created_at` is the date of entry ADR-0061's membership reads, so the
+  // write states it rather than trusting a column default: the test schema
+  // moves that default (`resetSchema`), and production's must not be what
+  // decides who a Lock asks.
+  test("stamps each seat with the instant it was entered", async () => {
+    const before = new Date();
+    await enterSeasonRoster(client, "PL", SEASON);
+    const after = new Date();
+
+    // A second either side: Postgres's clock and this process's are not one.
+    for (const { created_at } of await entrants()) {
+      expect(created_at.getTime()).toBeGreaterThanOrEqual(before.getTime() - 1000);
+      expect(created_at.getTime()).toBeLessThanOrEqual(after.getTime() + 1000);
+    }
+  });
+
   test("writes the ten seats of ADR-0034 under the Season's Prompt Version",
     async () => {
       await enterSeasonRoster(client, "PL", SEASON);

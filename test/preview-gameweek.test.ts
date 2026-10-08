@@ -59,12 +59,14 @@ describe("previewing a Gameweek with live Entrants", () => {
         {
           id: "one", name: "Entrant One", role: "entrant",
           base_model: "vendor/base-1", provider: "vendor", quantization: null,
-          prompt_version: MATCH_PROMPT_VERSION, config: {}
+          prompt_version: MATCH_PROMPT_VERSION, config: {},
+          created_at: new Date("2026-07-01T00:00:00Z"), withdrawn_at: null
         },
         {
           id: "two", name: "Entrant Two", role: "entrant",
           base_model: "vendor/base-2", provider: "vendor", quantization: "fp8",
-          prompt_version: MATCH_PROMPT_VERSION, config: {}
+          prompt_version: MATCH_PROMPT_VERSION, config: {},
+          created_at: new Date("2026-07-01T00:00:00Z"), withdrawn_at: null
         }
       ]
     };

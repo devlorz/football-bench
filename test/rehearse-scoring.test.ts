@@ -61,7 +61,9 @@ function entrant(id: string, baseModel: string): DryRunArchive["entrants"][0] {
     provider: "openai",
     quantization: null,
     prompt_version: MATCH_PROMPT_VERSION,
-    config: {}
+    config: {},
+    created_at: new Date("2026-07-01T00:00:00Z"),
+    withdrawn_at: null
   };
 }
 

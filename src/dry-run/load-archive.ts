@@ -12,6 +12,9 @@ export interface ArchivedEntrant {
   quantization: string | null;
   prompt_version: string;
   config: Record<string, unknown>;
+  /** Membership's two dates (ADR-0061), so a rehearsed Lock asks who it did. */
+  created_at: Date;
+  withdrawn_at: Date | null;
 }
 
 export interface DryRunArchive {
@@ -57,7 +60,7 @@ export async function loadDryRunArchive(
   const entrants = await database.query<ArchivedEntrant>(
     `-- roster: whichever track the archive holds; the caller filters it.
      select id, name, role, base_model, provider, quantization,
-            prompt_version, config
+            prompt_version, config, created_at, withdrawn_at
        from models
       order by id`
   );

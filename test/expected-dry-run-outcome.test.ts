@@ -11,7 +11,9 @@ function entrant(id: string, baseModel: string): ArchivedEntrant {
     provider: "p",
     quantization: null,
     prompt_version: "match/2026-27-v1",
-    config: {}
+    config: {},
+    created_at: new Date("2026-07-01T00:00:00Z"),
+    withdrawn_at: null
   };
 }
 

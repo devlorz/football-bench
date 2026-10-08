@@ -46,10 +46,11 @@ describe("the dry run archive", () => {
     );
     await client.query(
       `insert into models
-         (id, name, role, base_model, provider, quantization, prompt_version)
+         (id, name, role, base_model, provider, quantization, prompt_version,
+          created_at, withdrawn_at)
        values
          ('grok', 'Grok', 'entrant', 'x-ai/grok-4.5', 'xai', null,
-          'match/2026-27-v1')`
+          'match/2026-27-v1', '2026-07-01T00:00:00Z', '2026-10-09T17:00:00Z')`
     );
 
     const archive = await loadDryRunArchive(client);
@@ -69,7 +70,11 @@ describe("the dry run archive", () => {
         provider: "xai",
         quantization: null,
         prompt_version: "match/2026-27-v1",
-        config: {}
+        config: {},
+        // The two dates membership is read from (ADR-0061), so a rehearsed
+        // Lock asks the seats the real one asked (ticket 0096).
+        created_at: new Date("2026-07-01T00:00:00Z"),
+        withdrawn_at: new Date("2026-10-09T17:00:00Z")
       }
     ]);
   });

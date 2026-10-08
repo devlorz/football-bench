@@ -23,7 +23,7 @@ among the seats asked that Gameweek), ADR-0047 (the FPL reads are not touched).
 **Blocked by:** None — can start immediately. It does not need the roster ADR: it changes
 what a Gameweek expects of a seat that *could* join, and no seat joins until that ADR.
 
-**Status:** drafted, 2026-10-08
+**Status:** drafted, 2026-10-08; done 2026-10-08 (no migration; code only)
 
 ---
 
@@ -76,22 +76,62 @@ the Lock they are about to be asked at, and both are this ticket's to fix:
 
 ## Acceptance
 
-- [ ] The dry run's archive carries each seat's `created_at` and `withdrawn_at`, and a
+- [x] The dry run's archive carries each seat's `created_at` and `withdrawn_at`, and a
       replayed Gameweek asks exactly the seats production would have asked at that Lock;
       the existing dry-run suite holds it, including a withdrawn seat that is not asked.
-- [ ] `TEST_ENTERED_AT` is the test schema's one documented divergence from production,
+- [x] `TEST_ENTERED_AT` is the test schema's one documented divergence from production,
       set in the fixture with its reason beside it; the roster suite proves `roster:enter`
       stamps a real entry time; this ticket's boundary tests set `created_at` explicitly.
-- [ ] `isAskedAtLock` holds both halves of ADR-0061's membership and is still the only
+- [x] `isAskedAtLock` holds both halves of ADR-0061's membership and is still the only
       spelling: a grep of the match-track code finds no second comparison of `created_at`
       or `withdrawn_at` against a Lock.
-- [ ] With one seat entered one second after Gameweek 1's Lock and before Gameweek 2's:
+- [x] With one seat entered one second after Gameweek 1's Lock and before Gameweek 2's:
       scoring or re-scoring Gameweek 1 expects it nowhere — no Gap, no row in the
       complete case, no comparison — and Gameweek 1's rows are byte-identical to a score
       taken before the seat existed; Gameweek 2 expects it.
-- [ ] The same seat entered one second *before* Gameweek 1's Lock is expected at
+- [x] The same seat entered one second *before* Gameweek 1's Lock is expected at
       Gameweek 1 — the boundary is at-or-before, tested on both sides.
-- [ ] A dry run of a Gameweek whose Lock has passed builds no call for a seat entered
+- [x] A dry run of a Gameweek whose Lock has passed builds no call for a seat entered
       after that Lock, and the Gap alert for that Gameweek names it nowhere.
-- [ ] The pre-flight's count ignores a seat entered after the target Fixture's Lock.
-- [ ] No FPL read changes; the FPL suites pass untouched.
+- [x] The pre-flight's count ignores a seat entered after the target Fixture's Lock.
+- [x] No FPL read changes; the FPL suites pass untouched.
+
+## Evidence, 2026-10-08
+
+- `isAskedAtLock` reads `created_at <= lock` beside the `withdrawn_at` half. A grep of
+  `src` and `dashboard/src` for `created_at` or `withdrawn_at` compared with `<` or `>`
+  finds that helper and nothing else.
+- `test/match-late-entry.test.ts` has 4 tests. Every seat in it states its `created_at`,
+  using a seat entered 1s before the Lock and one entered 1s after:
+  - The scorer: re-scoring GW1 after the late entry leaves GW1's rows byte-identical,
+    and GW2 expects the seat.
+  - At-or-before: a seat entered 1s before the Lock is expected at GW1.
+  - The predict path and Gap alert: only the standing seat and the before seat are
+    called and Gapped.
+  - The pre-flight count: refused as "found 2".
+- Removing `created_at <=` from the helper turns three of the four red. The at-or-before
+  test passes either way, as it should. The bytes were restored afterwards.
+- `roster:enter` writes `created_at = now()` explicitly and does not move it on a
+  re-entry. The new test "stamps each seat with the instant it was entered" in
+  `test/season-roster.test.ts` was red against the column default before that change.
+- The archive carries both dates (`load-archive.ts`), and `seedEntrants` writes them.
+  `test/dry-run-archive.test.ts` reads both dates back. A new `run-dry-run` test archives
+  three seats: `sol`, a seat that joined after GW1's Lock, and a seat withdrawn before it.
+  Only `sol` is attempted, and the alert still holds 9 Gaps. Both tests were red before
+  the change.
+- `TEST_ENTERED_AT` (`2000-01-01T00:00:00Z`) is set by `resetSchema` as the default of
+  `models.created_at`, with its reason beside it. The archive fixtures in
+  `expected-dry-run-outcome`, `preview-gameweek` and `rehearse-scoring` gained the two
+  fields the type now requires.
+- `tsc --noEmit`: no errors.
+- 49 targeted files, covering every suite that touches the four sites, the dry run,
+  rehearsals, the roster, `resetSchema`, and `fpl-withdrawal-filter`: 689 passed and 2
+  failed. Both failures are in `test/seed-season.test.ts` ("The seed needs an empty
+  database"), which is ticket 0095's known pre-existing pair.
+- All 23 FPL suites: 412 passed. No FPL file changed.
+- Review, 2026-10-08:
+  - CONTEXT.md's Season Roster now states both halves of membership.
+  - The dry-run test names the Gapped seats (only `sol`) instead of counting them.
+  - `upsertSeats` is shared with `startFplTrack`, so FPL seats are now also written
+    with an explicit `now()`. That is the same value production's column default
+    gives, and no FPL read changed.

@@ -13,8 +13,8 @@ async function seedEntrants(
     await database.query(
       `insert into models
          (id, name, base_model, provider, quantization, prompt_version,
-          role, config)
-       values ($1, $2, $3, $4, $5, $6, $7, $8)
+          role, config, created_at, withdrawn_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        on conflict (id) do nothing`,
       [
         entrant.id,
@@ -24,7 +24,9 @@ async function seedEntrants(
         entrant.quantization,
         entrant.prompt_version,
         entrant.role,
-        entrant.config
+        entrant.config,
+        entrant.created_at,
+        entrant.withdrawn_at
       ]
     );
   }
