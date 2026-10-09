@@ -129,6 +129,12 @@ for the four under each league's Prompt Version → the five Editions rows inser
 dashboard deploy carrying the closed-Edition constant (ticket 0085's deviation). The
 pre-flights spend money and are asked for one at a time.
 
+> Corrected 2026-10-09 by ticket 0086. **The deploy goes before the inserts, not after.**
+> Cron runs `origin/main`, so the code has to be pushed and deployed before the earliest
+> Lock − 6h. A dashboard carrying the constant before the Editions rows exist is the
+> window ticket 0085 designed. *Opening an Edition* §3 orders it so, and the operator
+> followed that order on 2026-10-08.
+
 ## Considered options
 
 - **Keep ten by not dropping the bottom three.** Rejected by the operator; the cup's

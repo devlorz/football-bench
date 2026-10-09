@@ -205,6 +205,11 @@ cannot be ordered the way a league's reads here. See §5.
 ## 5. Before trusting cron
 
 - [ ] **GitHub Issues is enabled.** Both alert paths open issues; neither works without it.
+- [ ] **Before an Edition's first Lock (Edition 2 on), the Edition is in place.** Every
+      Competition the roster ADR opens has its `editions` row, the leaving seats carry
+      `withdrawn_at`, the joining seats are entered, and each one's count of seats not
+      withdrawn equals the roster ADR's size. The steps are in
+      [Opening an Edition](opening-an-edition.md).
 - [ ] **Run `fetch.yml` once by hand** via `workflow_dispatch`. It is idempotent, so a second
       run costs nothing.
 

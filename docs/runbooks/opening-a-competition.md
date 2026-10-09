@@ -53,6 +53,16 @@ Decisions: [ADR-0035](../adr/0035-the-match-track-grows-a-competition-dimension.
 Applying a pending migration is [the Competition migration](the-competition-migration.md).
 This page is what to write before that one runs.
 
+A Competition opens in Edition 1 (ADR-0061). Migration 0048 seeds Edition 1 only for the
+six Competitions open in `2026-27`. A Competition opened after it, and every Competition in
+a later Season, needs an Edition 1 row inserted at Gameweek 1 before its first scoring
+run. Without it, `readEdition` refuses the Season, and the scoring run fails and writes
+nothing (ticket 0097). It is the operator's psql, not a migration:
+
+```sql
+insert into editions (competition, season, edition, first_gw) values ('XX', '2027-28', 1, 1);
+```
+
 ---
 
 ## 1. The thirteen edits

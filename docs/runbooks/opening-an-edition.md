@@ -25,6 +25,10 @@ below must be on production — rows and code both — before the earliest leagu
 Lock − 6h, or that league's Edition opens one Gameweek later (ADR-0054) and its Edition 1
 plays on. Cron runs `origin/main`: an unpushed commit is not deployed.
 
+**What is not done:** no Prompt Version bump, no `competitions` change, no hand-set Lock
+(ADR-0054). The seats that play on keep their rows; an Edition is a row in `editions`, not
+a new Competition.
+
 ## 1. What has to be true before the first paid step
 
 - The roster ADR is accepted and names each joining seat's `baseModel`, provider pin,
@@ -136,7 +140,18 @@ EDITION=2 npm run --silent roster:enter
 It refuses by name if any leaving seat is still standing (4a not run) — that refusal is
 the guard, not an obstacle.
 
-**4c. Insert the Editions rows**, one per league, first Gameweek = the boundary above:
+**4c. Insert the Editions rows**, one per league, first Gameweek = the boundary above.
+For the leagues' Edition 2 it opened at these (ADR-0062, consequences); the `editions`
+rows decide, not this table:
+
+| League | Edition 1 closed at | Edition 2 opened at |
+| --- | ---: | ---: |
+| BL1 | Gameweek 4 | Gameweek 5 |
+| FL1 | Gameweek 5 | Gameweek 6 |
+| PD | Gameweek 7 | Gameweek 8 |
+| PL | Gameweek 5 | Gameweek 6 |
+| SA | Gameweek 5 | Gameweek 6 |
+
 
 ```sql
 insert into editions (competition, season, edition, first_gw) values
@@ -156,6 +171,10 @@ COMPETITION=PL GAMEWEEK=6 npm run --silent dry-run | tail -8          # 8 seats 
 curl -s https://football-bench.leelorz6.workers.dev/api/pl/leaderboard | head -c 300   # edition: 2
 curl -s https://football-bench.leelorz6.workers.dev/api/edition-1/pl/leaderboard | head -c 300
 ```
+
+For up to a minute after 4c, `/api/edition-N/…` may still answer 404: the read API
+edge-caches a 404 for 60 seconds (`NOT_FOUND_CACHE`). That is the cache, not a missing
+row. Ask again after a minute before suspecting the insert.
 
 A Gameweek the sequence misses is not a failure: the league's Edition 1 plays it, the
 Editions row is inserted with the next Gameweek's number instead, and the stamps move

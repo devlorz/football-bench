@@ -4,6 +4,17 @@ status: proposed
 
 # The roster refreshes to ten Entrants before the first Lock
 
+> Amended 2026-10-09 by ticket 0086, under ADR-0061. **"After the first Lock this door
+> closes" holds per Edition.** A Competition's roster reopens at an Edition boundary that
+> its own ADR names in advance. Ticket 0082 landed the record of where each Edition
+> begins. Ticket 0098 built the leagues' Edition 2 roster of record, and the operator
+> entered it under ADR-0062. The **2026-08-19** cutoff below binds the five leagues'
+> Edition 1 only. Every other Edition takes its opening ADR's date as its cutoff: the
+> Nations League's Edition 1 takes ADR-0060's, and the leagues' Edition 2 takes
+> ADR-0062's. The other edge below, the FPL track's start, does not move at all: the FPL
+> track has no Editions (ADR-0061 rule 6), so a Base Model that joins at an Edition joins
+> the match track only. Inside an Edition, everything below stands as written.
+
 Three changes to ADR-0014's nine, all landing before the 2026-27 Gameweek 1 deadline
 (2026-08-21T17:30Z): the Qwen seat moves from Qwen3.7 Max to Qwen3.8 Max, the Grok seat
 moves from Grok 4.5 to Grok 4.6, and Meta's Muse Spark 1.2 joins as a tenth Entrant. Both

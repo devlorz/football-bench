@@ -1,7 +1,7 @@
 # A new Base Model arrives
 
 Base Models ship all year; a Season starts once. This is what to do when a vendor
-releases something newer than a seat on the roster — which of three doors it goes
+releases something newer than a seat on the roster — which of four doors it goes
 through, and why the answer is usually a date rather than a judgement about the model.
 
 Vocabulary: [CONTEXT.md](../../CONTEXT.md). Decisions:
@@ -10,26 +10,32 @@ Vocabulary: [CONTEXT.md](../../CONTEXT.md). Decisions:
 [ADR-0034](../adr/0034-the-roster-refreshes-to-ten-entrants-before-the-first-lock.md)
 (who is on the roster), [ADR-0032](../adr/0032-exhibition-runs-join-the-record-after-the-fact.md)
 (the door after the Lock), [ADR-0016](../adr/0016-each-snapshot-publishes-against-one-comparison-anchor.md)
-(what the roster size is load-bearing for).
+(what the roster size is load-bearing for), [ADR-0047](../adr/0047-three-seats-leave-the-fpl-track-before-its-first-lock.md)
+(the tracks may seat different Base Models),
+[ADR-0061](../adr/0061-a-competition-reopens-its-roster-at-an-edition-boundary.md) and
+[ADR-0062](../adr/0062-eight-seats-open-the-leagues-second-edition.md) (the next Edition's door).
 
 ---
 
 ## 1. Decide which door, by date
 
-Three windows, and the release date picks one. This is not a question about how good
+Three windows, four doors, and the release date picks among them. This is not a question about how good
 the model is.
 
 | When it arrives | Door |
 | --- | --- |
 | Before the FPL track has started and before the roster cutoff | Joins the Season Roster — sections 2–5 |
-| After the FPL track started, or after the cutoff, or after the first Lock | Exhibition Run — section 6 |
+| After the FPL track started, or after the cutoff, or after the first Lock | Exhibition Run — section 6. A seat only at the next Edition, if its roster ADR names it and it was released before that ADR's date — section 8 |
 | Any time, if the seat it would replace is fine | Nothing. Section 7 |
 
 **The binding edge is the FPL track's start, not the Match track's first Lock.**
 `manager_states` is insert-only, so once the track opens, a seat's Season path exists and
-cannot be reassigned to a different Base Model. Moving only the Match seat would leave
-the two tracks running different Base Models under one Entrant name, which ADR-0034
-forbids. Both tracks move together or neither moves.
+cannot be reassigned to a different Base Model. What ADR-0034 forbids is one Entrant name
+covering two Base Models: a Match seat moved under the name its FPL seat still answers
+to. It does not forbid the two tracks seating different Base Models under different names
+— ADR-0047 already seats them so, and an Edition boundary moves the Match track alone
+(ADR-0061 rule 6). A swap inside sections 2–5 moves one name on both tracks or on
+neither.
 
 The cutoff is the second edge, and it exists so nothing enters the Season unobserved: a
 candidate that has not passed a pre-flight with time to spare for a second, full-roster
@@ -140,3 +146,13 @@ Doing nothing is a real answer. Every swap resets a seat's observation history t
 and a seat that has passed several pre-flights with stable resolution is worth more than
 a version number. Chase a successor when the seat is genuinely behind its tier — not
 because the catalog moved.
+
+## 8. The fourth door: wait for an Edition
+
+A Base Model released after the first Lock can hold a seat only from the next Edition
+boundary (ADR-0061), and only if that Edition's roster ADR names it and it was released
+before that ADR's date (rule 4). Whether to name it is the ADR's question, not this
+page's; until the ADR is accepted, its door is section 6 and nothing in sections 3–4 is
+done for it. After acceptance, follow [Opening an Edition](opening-an-edition.md) in
+order. ADR-0062 is the worked example: Claude Opus 5.5, GPT-6.1 Sol, Muse Spark 1.3 and
+Grok 4.7, all released after Edition 1's cutoff, joined the leagues at their Edition 2.

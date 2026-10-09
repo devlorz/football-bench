@@ -14,6 +14,16 @@ status: proposed
 > needs ADR-0061's rule 4 amended to allow it — that amendment is dated the same day.
 > The title keeps its three; the cup seats seven, five of them the leagues' and two not.
 
+> Amended 2026-10-09 by ticket 0086, under ADR-0061. ***What it takes* is done.** It
+> asked for two things before the insert. Ticket 0081 built a roster of record per
+> Competition and ran the identity check against it, and both pre-flights were read. The
+> operator then entered the cup's seven (ticket 0076). The `withdrawn_at` filter, which
+> the section gave to ticket 0083 and did not need for the cup, has landed too: the match
+> predict path asks no seat whose `withdrawn_at` is at or before the Gameweek's Lock
+> (`isAskedAtLock`). The Nations League is its own Edition 1. Under `EDITION=2`,
+> `roster:enter` leaves the cup's seven as they stand (ticket 0098), so the leagues'
+> Edition 2 (ADR-0062) did not touch them. The body is unchanged.
+
 **DeepSeek V4 Pro, MiniMax M3 and Qwen3.8 Max are not seated in `UNL` for 2026-27, and
 neither are GPT-5.6 Sol Pro and Grok 4.6, whose places go to GPT-6 Astra and Grok 4.7.**
 The cup's Season Roster is seven: Claude Opus 5, Gemini 3.1 Pro Preview, GPT-6 Astra,
