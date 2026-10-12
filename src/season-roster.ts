@@ -470,14 +470,18 @@ const LEAGUE_EDITION_2: EditionRoster = {
 };
 
 /**
- * Every Edition after the first, by number and then by Competition. Edition 1
- * is not here: it is `MATCH_EXCLUSIONS` and `MATCH_SUBSTITUTIONS` above, which
- * every Competition reads today, and a Competition absent from an Edition's
- * entry has no roster of record for it -- the cup, in Edition 2, is still in
- * its Edition 1 (ADR-0062).
+ * Each Edition's rosters named outright, by number and then by Competition.
+ * Edition 1 names only the three club cups, which seat the leagues' Edition 2
+ * eight (ADR-0063); every other Competition's Edition 1 is `MATCH_EXCLUSIONS`
+ * and `MATCH_SUBSTITUTIONS` above. A named entry is the whole roster, so a
+ * Competition is named here or in those two lists, never both -- the test
+ * beside this refuses the overlap. In a later Edition, a Competition absent
+ * from its entry has no roster of record for it -- the cup, in Edition 2, is
+ * still in its Edition 1 (ADR-0062).
  */
 export const MATCH_EDITION_ROSTERS:
   Readonly<Record<number, Readonly<Record<string, EditionRoster>>>> = {
+  1: { UCL: LEAGUE_EDITION_2, UEL: LEAGUE_EDITION_2, UECL: LEAGUE_EDITION_2 },
   2: {
     PL: LEAGUE_EDITION_2, PD: LEAGUE_EDITION_2, SA: LEAGUE_EDITION_2,
     BL1: LEAGUE_EDITION_2, FL1: LEAGUE_EDITION_2
@@ -486,12 +490,14 @@ export const MATCH_EDITION_ROSTERS:
 
 /**
  * The three lists a Competition's Edition is read off, or null for an Edition
- * the Competition has no roster of record for. Edition 1 is the two constants
- * every Competition reads and adds nobody.
+ * the Competition has no roster of record for. An Edition 1 not named outright
+ * is the two constants and adds nobody.
  */
 export function editionRosterOf(
   competition: string, edition: number
 ): EditionRoster | null {
+  const named = MATCH_EDITION_ROSTERS[edition]?.[competition];
+  if (named !== undefined) return named;
   if (edition === 1) {
     return {
       excludes: MATCH_EXCLUSIONS[competition] ?? [],
@@ -499,7 +505,7 @@ export function editionRosterOf(
       adds: []
     };
   }
-  return MATCH_EDITION_ROSTERS[edition]?.[competition] ?? null;
+  return null;
 }
 
 /**
@@ -584,25 +590,26 @@ export function matchRosterOf(
 }
 
 /**
- * A Competition's roster of record for an Edition it may have no entry for:
- * a Competition still in its first Edition when another opens its second --
- * the cup, under ADR-0062 -- is placed against the roster it is actually in.
- * What the stored-record guard reads, so that `EDITION=2` can place the cup's
- * rows without the cup having an Edition 2.
+ * Every seat any of a Competition's Editions names: what the stored-record
+ * guard places another Competition's rows against. Another Competition may be
+ * in an earlier Edition or a later one than the one being entered -- the
+ * cups in their first while the leagues play their second (ADR-0062,
+ * ADR-0063) -- and its rows are its own door's to refuse, by Edition, when it
+ * is entered. A slug is one identity in every Edition that seats it, so a
+ * swapped Base Model is still refused.
  */
-function rosterOfRecordIn(
-  competition: string, edition: number
-): readonly Entrant[] {
-  return editionRosterOf(competition, edition) === null
-    ? matchRosterOf(competition)
-    : matchRosterOf(competition, edition);
+function everySeatOf(competition: string): readonly Entrant[] {
+  return [...new Set([1, ...Object.keys(MATCH_EDITION_ROSTERS).map(Number)])]
+    .filter((edition) => editionRosterOf(competition, edition) !== null)
+    .flatMap((edition) => matchRosterOf(competition, edition));
 }
 
 /**
- * How many seats a Competition seats: ten for a league and seven for the cup,
- * computed rather than written, so a fourth exclusion moves every reader of it
- * at once. The dashboard's loading skeleton is the one that would otherwise go
- * stale in silence.
+ * How many seats a Competition seats in an Edition: ten for a league's first
+ * and eight for its second, seven for the Nations League and eight for a club
+ * cup, computed rather than written, so a fourth exclusion moves every reader
+ * of it at once. The dashboard's loading skeleton is the one that would
+ * otherwise go stale in silence.
  */
 export function matchRosterSizeOf(competition: string, edition = 1): number {
   return matchRosterOf(competition, edition).length;
@@ -610,14 +617,16 @@ export function matchRosterSizeOf(competition: string, edition = 1): number {
 
 /**
  * What a Competition whose roster of record is not the Season Roster owes a
- * reader, stated wherever its ranking is shown (ADR-0060).
+ * reader, stated wherever its ranking is shown (ADR-0060, ADR-0063).
  *
- * A constant keyed by Competition rather than a sentence derived from the two
- * lists above: what it says is a decision's reasoning — which standings cut
- * the field, and that two seats have no league record to be read against — and
- * a sentence assembled from counts would say none of that. ADR-0060 froze it,
- * and nothing about a Season can change it, which is the same ground
- * `EXHIBITION_CAVEAT` is a constant on.
+ * A constant keyed by Competition rather than a sentence derived from the
+ * lists above: what it says is a decision's reasoning — for the Nations
+ * League, which standings cut the field and that two seats have no league
+ * record to be read against; for a club cup, whose eight it seats and that
+ * its ranking is its own — and a sentence assembled from counts would say
+ * none of that. Each opening decision froze its own sentence (the club cups'
+ * with the cup's name in it), and nothing about a Season can change one,
+ * which is the same ground `EXHIBITION_CAVEAT` is a constant on.
  *
  * Keyed rather than a `UNL` literal at the one call site, so the next
  * Competition that opens with a cut roster adds its own opening decision's
@@ -631,7 +640,22 @@ export const ROSTER_CAVEATS: Readonly<Record<string, string>> = {
     + "never entered here — and two of its seven are Base Models no league "
     + "seats, entered for this Competition alone and with no league record to "
     + "be read against. Nothing ranked here is the field a league's table "
-    + "ranks (ADR-0060)."
+    + "ranks (ADR-0060).",
+  UCL:
+    "The Champions League seats the eight Base Models of the leagues' "
+    + "Edition 2, from its own first predicted Gameweek. This is the "
+    + "Champions League's Edition 1, and its ranking here is its own "
+    + "(ADR-0063).",
+  UEL:
+    "The Europa League seats the eight Base Models of the leagues' "
+    + "Edition 2, from its own first predicted Gameweek. This is the "
+    + "Europa League's Edition 1, and its ranking here is its own "
+    + "(ADR-0063).",
+  UECL:
+    "The Conference League seats the eight Base Models of the leagues' "
+    + "Edition 2, from its own first predicted Gameweek. This is the "
+    + "Conference League's Edition 1, and its ranking here is its own "
+    + "(ADR-0063)."
 };
 
 /**
@@ -920,7 +944,8 @@ export async function enterSeasonRoster(
   // Every match Prompt Version and what each one seats, because the stored
   // seats this reads span all of them — the cup's two substitutes and the
   // leagues' five excluded seats are all rows it must be able to place, and
-  // each against its own Competition's roster and no other (ADR-0047).
+  // each against its own Competition's roster and no other (ADR-0047): this
+  // Competition's in the Edition asked for, every other's in any of its own.
   //
   // Read from the constants rather than from `roster`, so a walked-in roster
   // cannot answer the guard with its own copy of the fact it is being checked
@@ -928,7 +953,8 @@ export async function enterSeasonRoster(
   await refuseARosterTheRecordDisagreesWith(
     database,
     new Map(MATCH_PROMPT_COMPETITIONS.map((listed) => [
-      matchPromptOf(listed).version, rosterOfRecordIn(listed, edition)
+      matchPromptOf(listed).version,
+      listed === competition ? rosterOfRecord : everySeatOf(listed)
     ]))
   );
 
@@ -1118,21 +1144,33 @@ export async function enterActiveCompetitionRosters(
   database: Database,
   season: string,
   edition = 1
-): Promise<readonly string[]> {
-  const active = await database.query<{ competition: string }>(
-    `select competition from competitions
-      where season = $1 order by competition`,
+): Promise<{ entered: readonly string[]; skipped: readonly string[] }> {
+  // Each listed Competition with the latest Edition the record says it has
+  // opened (ADR-0061): the operator inserts that row, so it is the record's
+  // word for where the Competition stands, not this door's guess.
+  const active = await database.query<{ competition: string; current: number }>(
+    `select c.competition, coalesce(max(e.edition), 1) as current
+       from competitions c
+       left join editions e
+         on e.competition = c.competition and e.season = c.season
+      where c.season = $1
+      group by c.competition
+      order by c.competition`,
     [season]
   );
   const entered: string[] = [];
+  const skipped: string[] = [];
   const seated: string[] = [];
-  for (const { competition } of active.rows) {
+  for (const { competition, current } of active.rows) {
     // A listed Competition with no roster of record for this Edition is in an
-    // earlier one -- the cup, when the leagues open their second (ADR-0062) --
-    // and is left exactly as it stands rather than refused: the operator
-    // asked for an Edition the Competition does not have, which is not the
-    // same question as a roster the record disagrees with.
-    if (editionRosterOf(competition, edition) === null) {
+    // earlier one -- the cup, when the leagues open their second (ADR-0062);
+    // one the record has opened a later Edition for is past it -- the
+    // leagues, when a club cup opens its first (ADR-0063). Either is left
+    // exactly as it stands rather than refused: the operator asked for an
+    // Edition the Competition is not in, which is not the same question as a
+    // roster the record disagrees with.
+    if (editionRosterOf(competition, edition) === null || current > edition) {
+      skipped.push(competition);
       continue;
     }
     try {
@@ -1151,5 +1189,5 @@ export async function enterActiveCompetitionRosters(
       );
     }
   }
-  return entered;
+  return { entered, skipped };
 }

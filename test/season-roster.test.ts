@@ -9,7 +9,7 @@ import {
   editionRosterOf,
   enterActiveCompetitionRosters, enterFplRoster, enterSeasonRoster,
   FPL_ROSTER_SIZE, FPL_WITHDRAWALS, MATCH_EDITION_ROSTERS, MATCH_EXCLUSIONS,
-  MATCH_SUBSTITUTIONS, matchRosterOf, matchRosterSizeOf,
+  MATCH_SUBSTITUTIONS, matchRosterOf, matchRosterSizeOf, ROSTER_CAVEATS,
   SEASON_ROSTER, SEASON_ROSTER_SIZE, seatPrefixOf, seatSlug
 } from "../src/season-roster.js";
 import {
@@ -49,6 +49,8 @@ describe("entering the Season Roster", () => {
     await client.query(
       "truncate models, competitions restart identity cascade"
     );
+    // The migrations' Edition 1 rows stay; a later Edition is a test's own.
+    await client.query("delete from editions where edition > 1");
   });
 
   const entrants = async (): Promise<ModelRow[]> => (
@@ -504,6 +506,47 @@ describe("entering the Season Roster", () => {
           .toThrow("UNL has no Edition 2 roster of record");
       });
 
+    // ADR-0063: each club cup's Edition 1 is the leagues' Edition 2, named
+    // outright -- the same objects, so a summed row is one Base Model's record.
+    test("is each club cup's Edition 1, the same objects in the same order",
+      () => {
+        const leagues = matchRosterOf("PL", 2);
+        for (const cup of ["UCL", "UEL", "UECL"]) {
+          const seats = matchRosterOf(cup, 1);
+          expect(seats).toHaveLength(8);
+          seats.forEach((entrant, i) => expect(entrant).toBe(leagues[i]));
+          expect(matchRosterOf(cup)).toEqual(seats);
+          // What the dashboard's loading skeleton reads.
+          expect(matchRosterSizeOf(cup)).toBe(8);
+          expect(editionRosterOf(cup, 1)).toBe(MATCH_EDITION_ROSTERS[2]!.PL);
+          expect(ROSTER_CAVEATS[cup]).toBeDefined();
+        }
+        // A named Edition 1 is the whole roster, so a Competition named there
+        // and in either list would have that list ignored in silence.
+        for (const cup of Object.keys(MATCH_EDITION_ROSTERS[1]!)) {
+          expect(MATCH_EXCLUSIONS[cup]).toBeUndefined();
+          expect(MATCH_SUBSTITUTIONS[cup]).toBeUndefined();
+        }
+        expect(ROSTER_CAVEATS.UCL).toBe(
+          "The Champions League seats the eight Base Models of the leagues' "
+          + "Edition 2, from its own first predicted Gameweek. This is the "
+          + "Champions League's Edition 1, and its ranking here is its own "
+          + "(ADR-0063)."
+        );
+        expect(ROSTER_CAVEATS.UEL).toBe(
+          "The Europa League seats the eight Base Models of the leagues' "
+          + "Edition 2, from its own first predicted Gameweek. This is the "
+          + "Europa League's Edition 1, and its ranking here is its own "
+          + "(ADR-0063)."
+        );
+        expect(ROSTER_CAVEATS.UECL).toBe(
+          "The Conference League seats the eight Base Models of the leagues' "
+          + "Edition 2, from its own first predicted Gameweek. This is the "
+          + "Conference League's Edition 1, and its ranking here is its own "
+          + "(ADR-0063)."
+        );
+      });
+
     test("comes to four Frontier, two first-party, two open-weight", () => {
       const classes = matchRosterOf("PL", 2).reduce<Record<string, number>>(
         (counts, { baseModelClass }) =>
@@ -602,13 +645,50 @@ describe("entering the Season Roster", () => {
         const cupBefore = (await entrants())
           .filter(({ id }) => id.startsWith("match-unl/"));
 
-        const entered = await enterActiveCompetitionRosters(client, SEASON, 2);
+        const { entered, skipped } =
+          await enterActiveCompetitionRosters(client, SEASON, 2);
 
         expect(entered.map(seatSlug)).toEqual(EIGHT);
+        expect(skipped).toEqual(["UNL"]);
         const cupAfter = (await entrants())
           .filter(({ id }) => id.startsWith("match-unl/"));
         expect(cupAfter).toEqual(cupBefore);
         expect(cupAfter).toHaveLength(7);
+      });
+
+    // The club cups' door (ADR-0063): EDITION=1 once the leagues are in their
+    // second. `UNL` stands in for a club cup, which has no Prompt Version
+    // until ticket 0105; both are a Competition in Edition 1 beside leagues
+    // in Edition 2.
+    test("enters a Competition still in Edition 1 once the leagues are past it",
+      async () => {
+        await client.query(
+          `insert into competitions (competition, season)
+           values ('PL', $1), ('UNL', $1)`,
+          [SEASON]
+        );
+        await enterSeasonRoster(client, "PL", SEASON);
+        await client.query(
+          "update models set withdrawn_at = $1 where id = any($2)",
+          [new Date("2026-10-09T17:00:00Z"), LEAVING]
+        );
+        await enterSeasonRoster(client, "PL", SEASON, undefined, 2);
+        await client.query(
+          `insert into editions (competition, season, edition, first_gw)
+           values ('PL', $1, 2, 8)`,
+          [SEASON]
+        );
+        const leagueBefore = (await entrants())
+          .filter(({ id }) => id.startsWith("match/"));
+
+        const { entered, skipped } =
+          await enterActiveCompetitionRosters(client, SEASON);
+
+        expect(entered).toHaveLength(7);
+        expect(skipped).toEqual(["PL"]);
+        expect(entered.every((id) => id.startsWith("match-unl/"))).toBe(true);
+        expect((await entrants()).filter(({ id }) => id.startsWith("match/")))
+          .toEqual(leagueBefore);
       });
   });
 
@@ -832,7 +912,7 @@ describe("entering the Season Roster", () => {
 
       // Opening a league is the insert above and no edit here — the shape the
       // scheduler, the scorer and the daily fetch already take.
-      const entered = await enterActiveCompetitionRosters(client, SEASON);
+      const { entered } = await enterActiveCompetitionRosters(client, SEASON);
 
       expect(entered).toHaveLength(SEASON_ROSTER_SIZE * 2);
       expect(await entrants()).toHaveLength(SEASON_ROSTER_SIZE * 2);

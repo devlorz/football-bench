@@ -12,6 +12,11 @@ status: accepted
 > club cups into `/overall`. The roster section now says the cups join the leagues'
 > current Edition set by roster, once ticket 0110 lands. The frozen caveat sentence no
 > longer claims the cups are summed nowhere.
+>
+> Amended 2026-10-13, by the operator's decision while ticket 0102 was in review: `{cup}`
+> in the frozen caveat is the short name without "UEFA", as the Nations League's caveat
+> reads "The Nations League". The three names are "Champions League", "Europa League"
+> and "Conference League".
 
 **The UEFA Champions League (`UCL`), Europa League (`UEL`) and Conference League
 (`UECL`) open for 2026-27, league phase only, each at its `MD2`.** Each cup has 36 clubs
@@ -250,7 +255,8 @@ this note:
   roster rule above, the caveat is also what keeps the cups out. The caveat is owed to
   readers in its own right, because the cup's roster is not the Season Roster. Its frozen
   sentence says nothing about any sum, so it stays true on both sides of that ticket.
-  With the cup's name in it, it reads: "The {cup} seats the eight Base Models of the
+  With the cup's short name in it ("Champions League", "Europa League", "Conference
+  League"), it reads: "The {cup} seats the eight Base Models of the
   leagues' Edition 2, from its own first predicted Gameweek. This is the {cup}'s
   Edition 1, and its ranking here is its own (ADR-0063)."
 

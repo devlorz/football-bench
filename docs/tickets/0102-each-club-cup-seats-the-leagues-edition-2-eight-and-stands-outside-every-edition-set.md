@@ -24,7 +24,18 @@ Decisions it must not bend:
 dashboard routes for a cup appear only once ticket 0105 adds its `MATCH_PROMPTS` entry,
 and the caveat must exist by then.
 
-**Status:** ready-for-agent
+**Status:** built 2026-10-13, one box open. The three cups name `LEAGUE_EDITION_2` under
+a new `MATCH_EDITION_ROSTERS[1]` entry, which `editionRosterOf` reads before deriving an
+Edition 1 from the two constants; a test refuses a Competition named both there and in
+either list. Review found that `roster:enter` could not seat a Competition in Edition 1
+once the leagues were in Edition 2: the stored-record guard placed every league's seats
+against the requested Edition, and `EDITION=1` walked the leagues too. The guard now
+places another Competition's seats against any of its Editions, and the door skips a
+Competition whose latest `editions` row is past the one asked for, reporting it as left
+standing. `UNL` walks that path in the test, because a club cup has no Prompt Version
+until 0105. The `ROSTER_CAVEATS` box stays unticked: the sentences are in, but no cup's
+leaderboard can be read until 0105, so `rosterCaveat` on a cup's body is unwalked. A cup
+appears in the switcher only once 0105 lands.
 
 ---
 
@@ -45,14 +56,16 @@ and the caveat must exist by then.
   predicted Gameweek. This is the {cup}'s Edition 1, and its ranking here is its own
   (ADR-0063)." It is a constant per Competition and is never
   assembled at read time (the frozen-text-is-a-constant rule).
-- The pre-flight's expected count reads the roster of record, so it answers eight for a
-  cup with no new code. A test proves it.
+- The pre-flight's expected count does **not** read the roster: `EXPECTED_ENTRANT_COUNT`
+  is an env var the operator types (`src/cli/config.ts`). The operator sets it to 8 for a
+  cup. `matchRosterSizeOf` answers 8, which is what the dashboard's skeleton reads.
+  (Corrected in review; the ticket first said the pre-flight reads the roster.)
 
 ## Acceptance criteria
 
-- [ ] `matchRosterOf("UCL"|"UEL"|"UECL", 1)` is the eight in Edition 2's order, identical objects; `matchRosterSizeOf` is 8.
-- [ ] Every existing Competition's Edition 1 and Edition 2 roster is unchanged, entry for entry.
+- [x] `matchRosterOf("UCL"|"UEL"|"UECL", 1)` is the eight in Edition 2's order, identical objects; `matchRosterSizeOf` is 8.
+- [x] Every existing Competition's Edition 1 and Edition 2 roster is unchanged, entry for entry.
 - [ ] `ROSTER_CAVEATS` holds the three frozen sentences; the read API serves each as `rosterCaveat`.
-- [ ] The dashboard treats the three cups as not leagues; the leagues' set is still the five, and `/overall` renders a total.
-- [ ] The switcher labels read `UCL`, `UEL`, `UECL`.
-- [ ] The touched roster and dashboard suites pass.
+- [x] The dashboard treats the three cups as not leagues; the leagues' set is still the five, and `/overall` renders a total.
+- [x] The switcher labels read `UCL`, `UEL`, `UECL`.
+- [x] The touched roster and dashboard suites pass.

@@ -140,7 +140,9 @@ export interface PageView {
  * chrome tests a Competition's code. A Competition absent here is labelled
  * by the packet's own name.
  */
-const SWITCHER_LABELS: Readonly<Record<string, string>> = { UNL: "UNL" };
+export const SWITCHER_LABELS: Readonly<Record<string, string>> = {
+  UNL: "UNL", UCL: "UCL", UEL: "UEL", UECL: "UECL"
+};
 
 /**
  * Whether a Competition is one of the leagues an Edition set sums: the ones

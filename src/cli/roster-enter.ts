@@ -1,8 +1,5 @@
 import pg from "pg";
-import {
-  editionRosterOf, enterActiveCompetitionRosters
-} from "../season-roster.js";
-import { MATCH_PROMPT_COMPETITIONS } from "../predictions/openrouter-entrant.js";
+import { enterActiveCompetitionRosters } from "../season-roster.js";
 import { readScoreJobConfig } from "./config.js";
 
 const { Client } = pg;
@@ -27,22 +24,19 @@ const database = new Client({ connectionString: config.databaseUrl });
 
 await database.connect();
 try {
-  const entered = await enterActiveCompetitionRosters(
+  const { entered, skipped } = await enterActiveCompetitionRosters(
     database, config.season, edition
   );
   console.log(
     `Entered ${entered.length} Entrants for Edition ${edition}: `
     + entered.join(", ")
   );
-  // Said rather than silent: a Competition with no roster of record for this
-  // Edition was left as it stands, and an operator reading a count of
-  // thirty-two who expected thirty-nine should see which one was not asked.
-  const skipped = MATCH_PROMPT_COMPETITIONS
-    .filter((competition) => editionRosterOf(competition, edition) === null);
+  // Said rather than silent: a Competition not in this Edition was left as
+  // it stands, and an operator reading a count of thirty-two who expected
+  // thirty-nine should see which one was not asked.
   if (skipped.length > 0) {
     console.log(
-      `Left as they stand, having no Edition ${edition} roster of record: `
-      + skipped.join(", ")
+      `Left as they stand, not in Edition ${edition}: ${skipped.join(", ")}`
     );
   }
 } finally {

@@ -1,9 +1,13 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import {
-  competitionRoutes, overallRoutes, pageHref, switchers
+  competitionRoutes, isLeague, overallRoutes, pageHref, SWITCHER_LABELS,
+  switchers
 } from "../dashboard/src/competition-view.js";
 import { CLOSED_LEAGUE_EDITIONS } from "../dashboard/src/edition-note.js";
+import {
+  MATCH_PROMPT_COMPETITIONS
+} from "../src/predictions/openrouter-entrant.js";
 import { entrantOf, entrantSlug } from "../dashboard/src/entrant-link.js";
 import {
   matchRosterSizeOf, SEASON_ROSTER, seatSlug
@@ -699,5 +703,18 @@ describe("the two switchers", () => {
     expect(pageHref("/edition-1/pd", "overall", "/edition-1/overall"))
       .toBe("/edition-1/overall");
     expect(pageHref("/unl", "overall", "/unl")).toBe("/unl");
+  });
+});
+
+// ADR-0063: until ticket 0110 sums them by roster, each club cup's caveat is
+// what keeps it out of the leagues' set, so `/overall` sums the five alone.
+describe("the club cups", () => {
+  test("stand outside the leagues' set, under UEFA's abbreviations", () => {
+    for (const cup of ["UCL", "UEL", "UECL"]) {
+      expect(isLeague(cup)).toBe(false);
+      expect(SWITCHER_LABELS[cup]).toBe(cup);
+    }
+    expect(MATCH_PROMPT_COMPETITIONS.filter(isLeague))
+      .toEqual(["PL", "PD", "SA", "FL1", "BL1"]);
   });
 });
