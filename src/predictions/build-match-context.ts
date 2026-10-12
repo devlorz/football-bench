@@ -42,6 +42,10 @@ import {
 } from "../fetch/competition-sources.js";
 import { SCORES_365_SOURCE } from "../365scores/fetch-match-stats.js";
 import {
+  buildClubResultsContext,
+  type ClubResult
+} from "../context/build-club-results-context.js";
+import {
   INTERNATIONAL_RESULTS_SOURCE,
   RESULTS_SNAPSHOT
 } from "../international-results/fetch-results.js";
@@ -177,6 +181,8 @@ export interface MatchContextData {
    */
   sources: CompetitionSources | undefined;
   internationals: InternationalMatch[];
+  /** A club cup's sides' recent results in every competition (ADR-0063). */
+  clubResults: ClubResult[];
   /** The date of the dataset's latest row, or null where it was never read. */
   datasetUpdatedOn: string | null;
   fplPlayers: FplPlayer[];
@@ -338,6 +344,24 @@ export async function loadMatchContextData(
       [deadline]
     )
     : undefined;
+  // A club cup's history, gated by the registry on the same terms: the table
+  // has no Competition column (migration 0050), so it is asked of this
+  // Competition's own sides, bounded by the Lock.
+  const clubResults = sources?.history === SCORES_365_SOURCE
+    ? await database.query<ClubResult>(
+      `select source_match_id, kicked_off_at, home_team, away_team,
+              home_goals, away_goals, competition_name
+         from club_results r
+        where r.kicked_off_at < $3
+          and exists (
+            select 1 from fixtures f
+             where f.competition = $1 and f.season = $2
+               and (r.home_team in (f.home_team, f.away_team)
+                 or r.away_team in (f.home_team, f.away_team)))
+        order by r.kicked_off_at`,
+      [competition, season, deadline]
+    )
+    : undefined;
   // How fresh that file was when it was last read, which is a fact about the
   // file and not about its rows: its latest row is usually a match between two
   // sides no Competition here stores (migration 0043).
@@ -435,6 +459,7 @@ export async function loadMatchContextData(
     groupFixtures: groupFixtures?.rows ?? [],
     sources,
     internationals: internationals?.rows ?? [],
+    clubResults: clubResults?.rows ?? [],
     datasetUpdatedOn: datasetRead?.rows[0]?.latest_row_on ?? null,
     fplPlayers: fplPlayers.rows,
     squadChanges: squadChanges.rows,
@@ -474,7 +499,14 @@ export function buildMatchContext(
           groupFixtures: data.groupFixtures,
           datasetUpdatedOn: data.datasetUpdatedOn
         })
-        : buildHistoricalContext({
+        : data.sources?.history === SCORES_365_SOURCE
+          ? buildClubResultsContext({
+            asOf: data.deadline,
+            homeTeam: fixture.home_team,
+            awayTeam: fixture.away_team,
+            results: data.clubResults
+          })
+          : buildHistoricalContext({
           competition: data.competition,
           season: data.season,
           asOf: data.deadline,

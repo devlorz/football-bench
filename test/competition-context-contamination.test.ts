@@ -12,6 +12,9 @@ import { sourcesOf } from "../src/fetch/competition-sources.js";
 import {
   NATIONAL_TEAM_HEAD_COACHES_SOURCE
 } from "../src/head-coach/fetch-national-team-head-coaches.js";
+import {
+  buildClubResultsContext
+} from "../src/context/build-club-results-context.js";
 import { resetSchema } from "./schema-fixture.js";
 
 const { Client } = pg;
@@ -69,7 +72,8 @@ describe("a context packet holds one Competition's data", () => {
          competitions, gameweeks, fixtures, historical_matches,
          understat_match_xg, team_match_stats, fpl_players,
          international_results, international_results_source,
-         head_coaches, head_coach_changes, national_team_head_coaches
+         head_coaches, head_coach_changes, national_team_head_coaches,
+         club_results
        restart identity cascade`
     );
     // `UNL` is listed with the five because the cup's own case below needs a
@@ -325,6 +329,122 @@ describe("a context packet holds one Competition's data", () => {
       // neither of these two sides played it.
       expect(cupPacket).not.toContain("Arsenal");
       expect(cupPacket).not.toContain("Historical context as of");
+    });
+
+  test("a club cup's history comes from its own table, and no league reads it",
+    async () => {
+      // `club_results` has no Competition column either (migration 0050): a
+      // club plays in competitions under none of this record's codes. Arsenal
+      // is a Premier League club and a Champions League side at once, so a
+      // league packet that read this table would put these lines on its form.
+      await client.query(
+        `insert into competitions (competition, season) values ('UCL', $1)`,
+        [SEASON]
+      );
+      await client.query(
+        `insert into gameweeks (competition, season, gw, deadline_at)
+         values ('UCL', $1, 2, $2)`,
+        [SEASON, DEADLINE]
+      );
+      await client.query(
+        `insert into fixtures (
+           competition, season, fixture_id, gw, home_team, away_team, kickoff_at
+         ) values ('UCL', $1, 2049999, 2, 'Arsenal', 'Bayern München', $2)`,
+        [SEASON, "2026-08-21T19:00:00Z"]
+      );
+      await client.query(
+        `insert into club_results (
+           source, source_match_id, kicked_off_at, home_team, away_team,
+           home_goals, away_goals, competition_name
+         ) values
+           ('365scores', '1', '2026-07-26T14:00:00Z', 'Arsenal', 'Leeds', 3, 0, 'Premier League'),
+           ('365scores', '2', '2026-08-02T14:00:00Z', 'Arsenal', 'Wolves', 1, 0, 'Premier League'),
+           ('365scores', '3', '2026-08-09T14:00:00Z', 'Arsenal', 'Newcastle', 2, 2, 'Community Shield'),
+           ('365scores', '4', '2026-08-12T19:00:00Z', 'Brentford', 'Arsenal', 0, 1, 'EFL Cup'),
+           ('365scores', '5', '2026-08-16T14:00:00Z', 'Chelsea', 'Arsenal', 1, 1, 'Premier League'),
+           ('365scores', '6', '2026-08-19T19:00:00Z', 'Arsenal', 'Fulham', 4, 1, 'Premier League'),
+           ('365scores', '7', '2026-08-21T18:00:00Z', 'Arsenal', 'Spurs', 9, 9, 'Premier League'),
+           ('365scores', '8', '2026-08-02T13:30:00Z', 'Bayern München', 'Lyon', 2, 1, 'Super Cup'),
+           ('365scores', '9', '2026-08-15T13:30:00Z', 'FC Augsburg', 'Bayern München', 2, 2, 'Bundesliga'),
+           ('365scores', '10', '2026-08-19T18:45:00Z', 'Bayern München', 'Stuttgart', 3, 0, 'DFB-Pokal')`
+      );
+
+      const championsLeague = await loadMatchContextData(
+        client, "UCL", SEASON, 2
+      );
+      const premierLeague = await loadMatchContextData(client, "PL", SEASON, 1);
+
+      // The cup reads its own sides' rows, bounded by its Lock, and none of
+      // the leagues' tables: no Premier League result reaches it.
+      expect(championsLeague.historicalMatches).toEqual([]);
+      expect(championsLeague.clubResults.map((row) => row.source_match_id))
+        .toEqual(["1", "8", "2", "3", "4", "9", "5", "10", "6"]);
+      // And the league never opens the table.
+      expect(premierLeague.clubResults).toEqual([]);
+
+      const section = buildClubResultsContext({
+        asOf: championsLeague.deadline,
+        homeTeam: "Arsenal",
+        awayTeam: "Bayern München",
+        results: championsLeague.clubResults
+      });
+      expect(section).toBe([
+        "Recent matches as of 2026-08-21T17:30:00.000Z",
+        "",
+        "Arsenal",
+        "Last 5 competitive matches:",
+        "- Premier League | 2026-08-19 | Arsenal 4-1 Fulham",
+        "- Premier League | 2026-08-16 | Chelsea 1-1 Arsenal",
+        "- EFL Cup | 2026-08-12 | Brentford 0-1 Arsenal",
+        "- Community Shield | 2026-08-09 | Arsenal 2-2 Newcastle",
+        "- Premier League | 2026-08-02 | Arsenal 1-0 Wolves",
+        "",
+        "Bayern München",
+        "Last 5 competitive matches: only 3 stored for this side.",
+        "- DFB-Pokal | 2026-08-19 | Bayern München 3-0 Stuttgart",
+        "- Bundesliga | 2026-08-15 | FC Augsburg 2-2 Bayern München",
+        "- Super Cup | 2026-08-02 | Bayern München 2-1 Lyon"
+      ].join("\n"));
+      // The renderer bounds its rows itself, whatever its caller read.
+      expect(buildClubResultsContext({
+        asOf: championsLeague.deadline,
+        homeTeam: "Arsenal",
+        awayTeam: "Bayern München",
+        results: [{
+          source_match_id: "7",
+          kicked_off_at: new Date("2026-08-21T18:00:00Z"),
+          home_team: "Arsenal",
+          away_team: "Spurs",
+          home_goals: 9,
+          away_goals: 9,
+          competition_name: "Premier League"
+        }]
+      })).not.toContain("9-9");
+
+      const fixture = {
+        fixture_id: 1,
+        home_team: "Arsenal",
+        away_team: "Chelsea",
+        kickoff_at: new Date("2026-08-21T19:00:00Z")
+      };
+      // The league packet over the same club grows no such section.
+      const leaguePacket = buildMatchContext(fixture, premierLeague);
+      expect(leaguePacket).toContain(HISTORICAL_SECTION);
+      expect(leaguePacket).not.toContain("Recent matches as of");
+      expect(leaguePacket).not.toContain("Community Shield");
+      // And the registry is what chooses: the same packet with `history`
+      // alone swapped renders the club section in place of the league one.
+      // `UCL`'s own packet cannot render until ticket 0105 freezes its prompt.
+      const asAClubCup = buildMatchContext(fixture, {
+        ...premierLeague,
+        sources: { ...sourcesOf("PL")!, history: SCORES_365_SOURCE },
+        clubResults: championsLeague.clubResults
+      });
+      expect(asAClubCup).toContain(
+        "Arsenal\nLast 5 competitive matches:\n"
+        + "- Premier League | 2026-08-19 | Arsenal 4-1 Fulham"
+      );
+      expect(asAClubCup).not.toContain(HISTORICAL_SECTION);
     });
 
   test("a cup's Head Coaches come from its own table, and no league reads it",

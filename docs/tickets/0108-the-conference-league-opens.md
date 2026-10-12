@@ -29,6 +29,11 @@ Lock 11-05T16:15Z.
   Whether every `MD1` sheet of 2026-27 does is read after 10-15. ADR-0063 states that
   "at least one match with xG from Gameweek 2" holds for `UECL` once those sheets exist.
 - The pre-flight is paid: eight calls, roughly $0.30, and asked for separately.
+- **From 0103**: club results read one page a side, and `previousPage` is not followed.
+  Check that every side has five competitive matches on its page. `FRIENDLIES` in
+  `src/365scores/fetch-club-results.ts` holds only the names in `UCL`'s 2026-10-12
+  archive. Check this cup's archive for friendlies under other names, and check again
+  in January for winter-break tournaments.
 
 ## Acceptance criteria
 

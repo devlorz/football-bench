@@ -268,6 +268,12 @@ export function sheetUrl(gameId: string): string {
   return `${API_ROOT}/game/stats/?${COMMON_PARAMS}&games=${gameId}`;
 }
 
+/** One club's latest results page, every competition it plays in (ADR-0063). */
+export function clubResultsUrl(competitorId: number): string {
+  return `${API_ROOT}/games/results/?${COMMON_PARAMS}`
+    + `&competitors=${competitorId}`;
+}
+
 /**
  * `source:season:competition:...`, the shape every other source in this
  * archive is named by (`uefa:2026-27:UNL:0`, `understat:2026-27:EPL`).
@@ -288,6 +294,15 @@ export function listingSource(
   return `365scores:${season}:${competition}:games:${date}`;
 }
 
+/** One club's results page, read for one cup; neither is in its URL. */
+export function clubResultsSource(
+  competition: string,
+  season: string,
+  competitorId: number
+): string {
+  return `365scores:${season}:${competition}:results:${competitorId}`;
+}
+
 export function sheetSource(
   competition: string,
   season: string,
@@ -299,7 +314,7 @@ export function sheetSource(
 /** What the replay matches a sheet's URL on, Season and Competition aside. */
 export const SHEET_SOURCE_ENDING = ":stats:";
 
-function parsed<T>(
+export function parsed<T>(
   source: string,
   schema: z.ZodType<T>,
   body: string
@@ -487,7 +502,7 @@ function scoreLine(home: number, away: number): string {
   return `${home}-${away}`;
 }
 
-async function readAndArchive(
+export async function readAndArchive(
   database: Database,
   http: HttpFetcher,
   url: string,

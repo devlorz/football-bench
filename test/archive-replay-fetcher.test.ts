@@ -8,6 +8,8 @@ import {
   sourceUrl as uefaSourceUrl
 } from "../src/uefa/fetch-competition.js";
 import {
+  clubResultsSource,
+  clubResultsUrl,
   listingSource,
   listingUrl,
   sheetSource,
@@ -141,6 +143,20 @@ describe("the archive replay fetcher", () => {
         .toBe("{\"games\":[]}");
       expect((await http(sheetUrl("4444714"))).body)
         .toBe("{\"statistics\":[]}");
+    });
+
+  test("replays a club's 365Scores results page under its archived name",
+    async () => {
+      const http = createArchiveReplayFetcher([
+        {
+          source: clubResultsSource("UCL", "2026-27", 331),
+          body: "{\"games\":[]}"
+        }
+      ]);
+
+      expect((await http(clubResultsUrl(331))).body).toBe("{\"games\":[]}");
+      await expect(http(clubResultsUrl(104))).rejects
+        .toThrow("365scores:<season>:<competition>:results:104");
     });
 
   test("replays the international results dataset under its one name",

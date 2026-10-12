@@ -27,6 +27,7 @@ import {
   type ResultDisagreement,
   type UnlistedFixture
 } from "../365scores/fetch-match-stats.js";
+import { fetchClubResults } from "../365scores/fetch-club-results.js";
 import {
   fetchInternationalResults,
   INTERNATIONAL_RESULTS_SOURCE,
@@ -74,6 +75,8 @@ export interface RunDailyFetchOptions {
   footballDataOrgToken: string | null;
   http: HttpFetcher;
   now: () => Date;
+  /** Between two of a club cup's results pages; tests pass a no-op. */
+  pause?: () => Promise<void>;
 }
 
 /**
@@ -149,6 +152,17 @@ export class StaleFootballDataSeasonError extends Error {
   }
 }
 
+export class StaleClubResultsError extends Error {
+  constructor(public readonly competition: string) {
+    super(
+      `Competition ${competition} has stored no club result kicked off since `
+      + "its own Gameweek 1 deadline; 365Scores' results pages have not "
+      + "reached this record since that Competition Locked"
+    );
+    this.name = "StaleClubResultsError";
+  }
+}
+
 export class StaleInternationalResultsError extends Error {
   constructor(public readonly competition: string) {
     super(
@@ -210,6 +224,27 @@ async function requireHistoryAfterFirstDeadline(
       throw new StaleFootballDataSeasonError(
         competition, season, footballDataSeason
       );
+    }
+    return;
+  }
+  // A club cup's sides play every week, so a match kicked off since the first
+  // Lock is the current-Season result the league half asks for. The table
+  // holds no Competition column (migration 0050), so it is asked of the
+  // Competition's own sides.
+  if (sources.history === SCORES_365_SOURCE) {
+    const stored = await database.query(
+      `select 1 from club_results r
+        where r.kicked_off_at >= $3
+          and exists (
+            select 1 from fixtures f
+             where f.competition = $1 and f.season = $2
+               and (r.home_team in (f.home_team, f.away_team)
+                 or r.away_team in (f.home_team, f.away_team)))
+        limit 1`,
+      [competition, season, deadline]
+    );
+    if (stored.rows.length === 0) {
+      throw new StaleClubResultsError(competition);
     }
     return;
   }
@@ -289,7 +324,8 @@ export async function runDailyFetch({
   footballDataSeason,
   footballDataOrgToken,
   http,
-  now
+  now,
+  pause
 }: RunDailyFetchOptions): Promise<DailyFetchResult> {
   const observedAt = now();
   const errors: unknown[] = [];
@@ -459,6 +495,16 @@ export async function runDailyFetch({
         await fetchInternationalResults({
           database, competition, season, http, now: () => observedAt
         });
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    // A club cup's history, one 365Scores page per side (ADR-0063), into its
+    // own table for the reason the dataset above has one: a club cup's sides
+    // play under Divisions this record does not curate (migration 0050).
+    if (sources.history === SCORES_365_SOURCE) {
+      try {
+        await fetchClubResults({ database, competition, season, http, pause });
       } catch (error) {
         errors.push(error);
       }

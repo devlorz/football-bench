@@ -2,6 +2,7 @@ import pg from "pg";
 import { beforeAll, beforeEach, describe, expect, test } from "vitest";
 import {
   runDailyFetch,
+  StaleClubResultsError,
   StaleFootballDataSeasonError
 } from "../src/fetch/daily-fetch.js";
 import {
@@ -15,6 +16,10 @@ import {
 } from "../src/fetch/competition-sources.js";
 import { UnknownUefaMatchdayError } from "../src/uefa/fetch-competition.js";
 import {
+  ClubResultsFetchError
+} from "../src/365scores/fetch-club-results.js";
+import {
+  clubResultsUrl,
   listingUrl,
   Scores365ValidationError,
   sheetUrl
@@ -240,7 +245,7 @@ describe("the daily fetch", () => {
          historical_matches, fpl_players, fixtures, gameweeks, raw_snapshots,
          understat_match_xg, team_match_stats, squad_changes,
          head_coach_changes, competitions, international_results,
-         international_results_source
+         international_results_source, club_results
        restart identity cascade`
     );
     // Every source the fetch reaches, it reaches per listed Competition, so a
@@ -705,7 +710,8 @@ describe("the daily fetch", () => {
    * own guard quiet, as in the test above that lists `PD`.
    */
   const withTheChampionsLeague = async (
-    championsLeaguePages: string[]
+    championsLeaguePages: string[],
+    clubResults?: (url: string, body: string) => { status: number; body: string }
   ): Promise<unknown> => {
     for (const competition of ["PD", "UNL", "UCL"]) {
       await client.query(
@@ -738,6 +744,10 @@ describe("the daily fetch", () => {
       // 365Scores' answers for `MD1`'s three days and eighteen sheets.
       ...Object.entries(JSON.parse(await archivedBody(
         "365scores-UCL-MD1-recorded-2026-10-12.json.gz"
+      )) as Record<string, string>),
+      // 365Scores' results page for each of the 36 sides.
+      ...Object.entries(JSON.parse(await archivedBody(
+        "365scores-UCL-club-results-recorded-2026-10-12.json.gz"
       )) as Record<string, string>)
     ]);
     return runDailyFetch({
@@ -746,10 +756,13 @@ describe("the daily fetch", () => {
       footballDataSeason: "2025-26",
       footballDataOrgToken: "a-football-data-org-token",
       now: () => new Date("2026-10-12T12:00:00.000Z"),
-      http: async (url: string) => ({
-        status: 200,
-        body: responses.get(url) ?? ""
-      })
+      http: async (url: string) => {
+        const body = responses.get(url) ?? "";
+        return clubResults !== undefined && url.includes("/games/results/")
+          ? clubResults(url, body)
+          : { status: 200, body };
+      },
+      pause: async () => {}
     }).then(() => undefined, (error: unknown) => error);
   };
 
@@ -796,6 +809,56 @@ describe("the daily fetch", () => {
             and away_xg is not null`
       );
       expect(stats.rows[0]!.count).toBe(18);
+      // And each side's recent matches in every competition, Bayern's latest
+      // among them.
+      const latest = await client.query(
+        `select home_team, away_team, competition_name from club_results
+          where source_match_id = '4755385'`
+      );
+      expect(latest.rows).toEqual([{
+        home_team: "FC Augsburg",
+        away_team: "Bayern München",
+        competition_name: "Bundesliga"
+      }]);
+    });
+
+  test("one club's failed listing fails the Champions League's day by name, and no other's",
+    async () => {
+      const bayern = clubResultsUrl(331);
+
+      const thrown = await withTheChampionsLeague(
+        await championsLeaguePages(),
+        (url, body) => url === bayern
+          ? { status: 502, body: "<html>502 Bad Gateway</html>" }
+          : { status: 200, body }
+      );
+
+      expect(thrown).toMatchObject({
+        name: ClubResultsFetchError.name,
+        competition: "UCL",
+        teams: ["Bayern München"]
+      });
+      expect(await fixturesByCompetition()).toEqual([
+        { competition: "PD", fixtures: 380, settled: 0, gameweeks: 38 },
+        { competition: "PL", fixtures: 380, settled: 0, gameweeks: 38 },
+        { competition: "UCL", fixtures: 144, settled: 18, gameweeks: 8 },
+        { competition: "UNL", fixtures: 156, settled: 0, gameweeks: 6 }
+      ]);
+    });
+
+  test("a Champions League past its first Lock with no club result since fails by name",
+    async () => {
+      // Every page answers and lists nothing: no request failed, and still
+      // nothing current reached the record.
+      const thrown = await withTheChampionsLeague(
+        await championsLeaguePages(),
+        () => ({ status: 200, body: "{\"competitions\":[],\"games\":[]}" })
+      );
+
+      expect(thrown).toMatchObject({
+        name: StaleClubResultsError.name,
+        competition: "UCL"
+      });
     });
 
   test("a Champions League refusal is named and costs no other Competition its day",

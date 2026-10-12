@@ -26,6 +26,11 @@ Lock 10-22T15:15Z.
   first try. Derive the map from the archive like `UCL`'s.
 - Head Coach acceptance includes Lech Poznań (Frederiksen) and Viktoria Plzeň (Kováč).
 - The pre-flight is paid: eight calls, roughly $0.30, and asked for separately.
+- **From 0103**: club results read one page a side, and `previousPage` is not followed.
+  Check that every side has five competitive matches on its page. `FRIENDLIES` in
+  `src/365scores/fetch-club-results.ts` holds only the names in `UCL`'s 2026-10-12
+  archive. Check this cup's archive for friendlies under other names, and check again
+  in January for winter-break tournaments.
 
 ## Acceptance criteria
 

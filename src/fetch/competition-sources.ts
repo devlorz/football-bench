@@ -14,10 +14,10 @@
  * national side has no transfer window, so it says this Competition has no
  * such source, the daily fetch does not walk it, and the packet states the
  * absence. The three UEFA club cups name UEFA for their schedule (ticket
- * 0099), and `UCL` names 365Scores for its shots and xG (ticket 0101): their
- * other `null`s are the fetches tickets 0103, 0104, 0107 and 0108 have not
- * built. Naming a source before its fetch exists would be the lie, because
- * the fetch would believe it.
+ * 0099), and `UCL` names 365Scores for its shots and xG (ticket 0101) and its
+ * history (ticket 0103): their other `null`s are the fetches tickets 0104,
+ * 0107 and 0108 have not built. Naming a source before its fetch exists
+ * would be the lie, because the fetch would believe it.
  *
  * A listed Competition with no entry fails the run by name (ADR-0054: a
  * missing map fails loudly, a wrong one fails nothing).
@@ -40,14 +40,16 @@ export interface CompetitionSources {
   readonly schedule: "fpl" | "football-data.org" | "uefa";
   /**
    * Where "what each side did last" comes from, and the table the
-   * after-first-deadline guard asks. The two names are two sources and not two
-   * spellings of one: a league's results are rows of `historical_matches`
-   * under a Division, and a cup's are rows of `international_results` under
-   * none (migration 0042).
+   * after-first-deadline guard asks. The three names are three sources and not
+   * three spellings of one: a league's results are rows of
+   * `historical_matches` under a Division, a national cup's are rows of
+   * `international_results` under none (migration 0042), and a club cup's are
+   * rows of `club_results`, read from 365Scores (migration 0050).
    */
   readonly history:
     | "football-data.co.uk"
     | "martj42/international_results"
+    | "365scores"
     | null;
   readonly stats: "understat" | "365scores" | null;
   readonly squadChanges: "wikipedia-transfers" | null;
@@ -111,15 +113,15 @@ const BY_COMPETITION: Readonly<Record<string, CompetitionSources>> = {
     headCoaches: "wikipedia-national-team-head-coaches"
   },
   // The three UEFA club cups (ADR-0063) name UEFA for their schedule, and
-  // `UCL` 365Scores for its shots and xG (ticket 0101). `UEL` and `UECL` take
-  // `stats` when tickets 0107 and 0108 review their name maps; tickets 0103
-  // and 0104 replace `history` and `headCoaches` with the fetch each one
-  // builds. `squadChanges` stays null by ADR-0063's decision: clubs have
+  // `UCL` 365Scores for its shots and xG (ticket 0101) and its clubs' recent
+  // results (ticket 0103). `UEL` and `UECL` take both when tickets 0107 and
+  // 0108 review their maps; ticket 0104 replaces `headCoaches` with the fetch
+  // it builds. `squadChanges` stays null by ADR-0063's decision: clubs have
   // transfer windows, and the packet says this Competition does not read
   // them.
   UCL: {
     schedule: "uefa",
-    history: null,
+    history: "365scores",
     stats: "365scores",
     squadChanges: null,
     headCoaches: null

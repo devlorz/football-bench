@@ -161,6 +161,7 @@ const contextData = (competition: string): MatchContextData => ({
     { group_name: "Group A2", home_team: "Norway", away_team: "Arsenal", kickoff_at: new Date("2026-09-30T19:00:00Z"), home_goals: null, away_goals: null }
   ],
   datasetUpdatedOn: "2026-08-14",
+  clubResults: [],
   nationalTeamHeadCoaches: [
     {
       // Two mornings that disagree: a name with its assumption date, and the

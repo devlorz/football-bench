@@ -179,6 +179,9 @@ const SCORES_365_LISTING_URL =
 const SCORES_365_SHEET_URL =
   /^https:\/\/webws\.365scores\.com\/web\/game\/stats\/\?.*&games=(\d+)$/;
 
+const SCORES_365_RESULTS_URL =
+  /^https:\/\/webws\.365scores\.com\/web\/games\/results\/\?.*&competitors=(\d+)$/;
+
 /**
  * The archived name whose ending this URL names, or null if the archive holds
  * none. The same read `fplLiveSource` above makes, and for the same reason: a
@@ -214,6 +217,14 @@ function scores365Source(
   const sheet = SCORES_365_SHEET_URL.exec(url);
   if (sheet !== null) {
     const ending = `${SHEET_SOURCE_ENDING}${sheet[1]}`;
+    return endingIn(sources, ending)
+      ?? `365scores:<season>:<competition>${ending}`;
+  }
+  // A club's results page names neither its Season nor the cup it was read
+  // for, so the ending is matched as a sheet's is.
+  const results = SCORES_365_RESULTS_URL.exec(url);
+  if (results !== null) {
+    const ending = `:results:${results[1]}`;
     return endingIn(sources, ending)
       ?? `365scores:<season>:<competition>${ending}`;
   }

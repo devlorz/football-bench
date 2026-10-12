@@ -23,8 +23,34 @@ for `UCL` at 2026-10-13T06:00Z. If it is not green by then, ticket 0105 states t
 section absent for `UCL`'s whole league phase, and this ticket carries on for `UEL` and
 `UECL`.
 
-**Status:** ready-for-agent
+**Status:** built 2026-10-13, with one box left open. `UCL`'s registry names `"365scores"`
+for its history. `fetchClubResults` reads one page for each of the 36 sides from a
+reviewed competitor-id map. Each page is read into rows whole before any row is written,
+then upserted into `club_results` from 2026-07-01 forward (spec 0028). Friendlies are
+dropped by a reviewed list of names: `Club Friendlies`, `Emirates Cup` and
+`Joan Gamper Trophy`. 365Scores' competition metadata has no field that marks a
+friendly. A match with a `-1` score (Postponed) is not settled. A page holding a game
+under a competition id it does not name is refused whole. A side whose page fails is
+named at the end of the run, and every other side is still stored. The guard asks
+`club_results` for a match the cup's own sides kicked off since the Gameweek 1 deadline.
+The packet section is `buildClubResultsContext`, which the registry chooses in
+`buildMatchContext`. The dry-run replay reads a results URL back to its archived name.
+The archive is `test/fixtures/365scores-UCL-club-results-recorded-2026-10-12.json.gz`:
+the standings plus 36 pages.
 
+The Gameweek 2 box stays unticked. `UCL` cannot render until 0105 adds its
+`MATCH_PROMPTS` entry, so the section is proven through the loader, the builder and a PL
+packet with `history` swapped. Walk it in 0105's render. Left open: `previousPage` is
+not followed. Every `UCL` side had 12 or more competitive matches on one page. Re-check
+this for `UEL` and `UECL` in 0107 and 0108. The same goes for `FRIENDLIES`: it holds only
+the names in today's archive, and a friendly under a name not on it is stored as
+competitive without an error, such as a winter-break tournament or a pre-season cup at a
+`UEL`/`UECL` club. Re-check it against the `UEL` and `UECL` archives, and again in
+January.
+
+A cup opponent is stored under the record's spelling, not 365Scores'. The same
+`source_match_id` is upserted from both sides' pages, so the two spellings would
+otherwise overwrite each other. ADR-0063 is amended to say so (2026-10-13).
 ---
 
 ## What is already known
@@ -54,9 +80,9 @@ section absent for `UCL`'s whole league phase, and this ticket carries on for `U
 
 ## Acceptance criteria
 
-- [ ] Over archived listings, the fetch stores each side's settled matches, drops friendlies, and upserts by match id without duplicating on a re-read.
-- [ ] A side missing from the competitor-id map is refused by name; one club's failed listing fails `UCL`'s day by name and no other Competition's.
+- [x] Over archived listings, the fetch stores each side's settled matches, drops friendlies, and upserts by match id without duplicating on a re-read.
+- [x] A side missing from the competitor-id map is refused by name; one club's failed listing fails `UCL`'s day by name and no other Competition's.
 - [ ] A `UCL` Gameweek 2 packet shows five lines a side, newest first, competition named, scores only, nothing after the Lock.
-- [ ] A side with three stored matches shows three and says the list is short.
-- [ ] No cup row reaches a league packet and no league row reaches a cup packet (the coexistence tracer).
-- [ ] The competitor-id map test derives 36 pairs from the archive with nothing left over.
+- [x] A side with three stored matches shows three and says the list is short.
+- [x] No cup row reaches a league packet and no league row reaches a cup packet (the coexistence tracer).
+- [x] The competitor-id map test derives 36 pairs from the archive with nothing left over.

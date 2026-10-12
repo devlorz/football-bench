@@ -17,6 +17,11 @@ status: accepted
 > in the frozen caveat is the short name without "UEFA", as the Nations League's caveat
 > reads "The Nations League". The three names are "Champions League", "Europa League"
 > and "Conference League".
+>
+> Amended 2026-10-13, by the operator's decision while ticket 0103 was in review: an
+> opponent that is itself one of the cup's sides is stored under the record's spelling.
+> The same match arrives on both sides' pages under one source match id, so two
+> spellings would overwrite each other. Every other opponent keeps 365Scores' spelling.
 
 **The UEFA Champions League (`UCL`), Europa League (`UEL`) and Conference League
 (`UECL`) open for 2026-27, league phase only, each at its `MD2`.** Each cup has 36 clubs
@@ -144,10 +149,10 @@ Portugal or Israel — the figure exists and the line omits it by this decision,
 every line reads alike. The cup's own played Fixtures carry their figures in
 the played-Fixtures section instead, so from `MD2` each side has at least one match
 with xG in its packet (for `UECL`, once its `MD1` sheets exist). Opponents are named
-as 365Scores spells them. Only the cup's own 36 sides are mapped. Rows go in a new
-`club_results` table keyed by source and source match id, not in `historical_matches`
-(no Division) and not in `international_results` (national sides, keyed without a
-source).
+as 365Scores spells them, except the cup's own sides (as amended). Only the cup's own
+36 sides are mapped. Rows go in a new `club_results` table keyed by source and source
+match id, not in `historical_matches` (no Division) and not in `international_results`
+(national sides, keyed without a source).
 
 **FotMob is not opened.** The operator named it as the fallback for history. 365Scores
 answered for all 108 clubs, so there is nothing for a fallback to fill. ADR-0058 rejected

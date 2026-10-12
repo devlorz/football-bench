@@ -13,6 +13,9 @@ import {
   SCORES_365_SOURCE
 } from "../src/365scores/fetch-match-stats.js";
 import {
+  clubCompetitorIdsOf
+} from "../src/365scores/fetch-club-results.js";
+import {
   datasetNameOf,
   INTERNATIONAL_RESULTS_SOURCE
 } from "../src/international-results/fetch-results.js";
@@ -61,7 +64,12 @@ describe("the source registry", () => {
             ? divisionsOf(competition) !== undefined
             : sources.history === INTERNATIONAL_RESULTS_SOURCE
               ? datasetNameOf(competition) !== undefined
-              : null,
+              // A club cup's results pages are asked for by competitor id,
+              // and their sides named through the cup's spelling map.
+              : sources.history === SCORES_365_SOURCE
+                ? clubCompetitorIdsOf(competition) !== undefined
+                  && scores365NameMapOf(competition) !== undefined
+                : null,
           // Two sources under one name, because a cup's shots come from
           // neither of the leagues' (ADR-0058): each is asked for its own map,
           // and an entry naming one while the other has the row would be the
