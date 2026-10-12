@@ -22,7 +22,7 @@ Decisions it must not bend:
 **Blocked by:** None — can start immediately. **On the `UCL` critical path**: the cut line
 is 2026-10-13T06:00Z.
 
-**Status:** ready-for-agent
+**Status:** done, 2026-10-12, as migration `0050`. Not yet applied to production: the operator runs `db:rehearse`, then applies it.
 
 ---
 
@@ -45,17 +45,19 @@ is 2026-10-13T06:00Z.
   0042.
 - **A migration is five filename-list edits across two suites.** Targeted runs never find
   `rehearse-migration.test.ts`, so run it by name.
-- **Registry**: the `history` and `headCoaches` unions each gain one name, for the
-  365Scores club results and for the Wikipedia club infobox. The three entries use
-  neither yet. They are `schedule: "uefa"`, `stats: null`, `history: null`,
-  `squadChanges: null`, `headCoaches: null`. Tickets 0101, 0103 and 0104 fill them.
+- **Registry**: the three entries are `schedule: "uefa"`, `stats: null`,
+  `history: null`, `squadChanges: null`, `headCoaches: null`. Tickets 0101, 0103 and
+  0104 fill them. The `history` and `headCoaches` unions gain no name here: a name
+  added before its fetch exists is the lie the registry's header names, so each
+  joins its union in the ticket that builds its fetch (0103, 0104). *Amended
+  2026-10-12 after review; the first draft added both names here.*
 
 ## Acceptance criteria
 
-- [ ] The domain accepts `UCL`, `UEL`, `UECL` and still refuses an unknown code; the six existing codes are unchanged.
-- [ ] Both tables exist with the keys and checks above; a `club_head_coaches` row with a coach and no date is accepted.
-- [ ] Each cup has exactly one Editions row, Edition 1 from Gameweek 1.
-- [ ] Each cup's registry entry exists and names only `uefa`, and the registry test holds the registry against the domain.
-- [ ] CONTEXT.md's Competition entry lists nine and states the amended naming rule; its Gameweek entry says what a Gameweek is for a club cup.
-- [ ] The migration filename lists in both suites name the new file, and the rehearsal test passes when run by name.
-- [ ] Every existing schema, registry and daily-fetch test still passes.
+- [x] The domain accepts `UCL`, `UEL`, `UECL` and still refuses an unknown code; the six existing codes are unchanged.
+- [x] Both tables exist with the keys and checks above; a `club_head_coaches` row with a coach and no date is accepted.
+- [x] Each cup has exactly one Editions row, Edition 1 from Gameweek 1.
+- [x] Each cup's registry entry exists and names only `uefa`, and the registry test holds the registry against the domain.
+- [x] CONTEXT.md's Competition entry lists nine and states the amended naming rule; its Gameweek entry says what a Gameweek is for a club cup.
+- [x] The migration filename lists in both suites name the new file, and the rehearsal test passes when run by name.
+- [x] Every existing schema, registry and daily-fetch test still passes.

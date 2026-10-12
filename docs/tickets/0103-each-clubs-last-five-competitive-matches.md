@@ -7,7 +7,9 @@ from friendlies. Each stored row keeps the competition's name as 365Scores gives
 Lock, newest first. Each line gives the date, the competition, both sides and the score,
 and scores only. A side with fewer than five stored matches shows what exists and says
 so. `UCL`'s registry entry names the 365Scores club results for its history, and the
-after-first-deadline guard asks this table for it.
+after-first-deadline guard asks this table for it. That name joins the `history` union
+in this ticket, not before (ticket 0099), and names the source only, as
+`"football-data.co.uk"` and `"365scores"` do — not the table.
 
 Source: ADR-0063 *History*, spec 0028 stories 27–34 and 49–52.
 

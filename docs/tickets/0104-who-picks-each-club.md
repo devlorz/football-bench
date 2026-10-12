@@ -6,7 +6,8 @@ field, and stores one snapshot row per club per day. A `UCL` packet gives each s
 Head Coach line naming who picks the team as of the Lock. When two consecutive stored
 snapshots before the Lock disagree, it adds a Change line dated by the first snapshot
 that shows the change. It also carries one line saying the source has no appointment
-date. `UCL`'s registry entry names the Wikipedia club infobox for its Head Coaches.
+date. `UCL`'s registry entry names the Wikipedia club infobox for its Head Coaches. That
+name joins the `headCoaches` union in this ticket, not before (ticket 0099).
 
 Source: ADR-0063 *Head coaches*, spec 0028 stories 35–42.
 

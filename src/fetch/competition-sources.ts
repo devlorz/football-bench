@@ -13,8 +13,10 @@
  * one remaining `null` is `squadChanges`, and that one is not a placeholder: a
  * national side has no transfer window, so it says this Competition has no
  * such source, the daily fetch does not walk it, and the packet states the
- * absence. Naming a source before its fetch exists would be the lie, because
- * the fetch would believe it.
+ * absence. The three UEFA club cups name UEFA for their schedule and nothing
+ * else yet (ticket 0099): their other `null`s are the fetches tickets 0101,
+ * 0103 and 0104 have not built. Naming a source before its fetch exists would
+ * be the lie, because the fetch would believe it.
  *
  * A listed Competition with no entry fails the run by name (ADR-0054: a
  * missing map fails loudly, a wrong one fails nothing).
@@ -97,15 +99,42 @@ const BY_COMPETITION: Readonly<Record<string, CompetitionSources>> = {
   // international competition at all (ADR-0058), football-data.co.uk no
   // international file (ADR-0057), and no season article names a national
   // side's Head Coach — so each of those three unions holds two sources and
-  // not two spellings of one. A cup keeps `squadChanges` null for good, a
+  // not two spellings of one. It keeps `squadChanges` null for good, a
   // national team having no transfer window, and that is the whole of what a
-  // cup does not have.
+  // national cup does not have.
   UNL: {
     schedule: "uefa",
     history: "martj42/international_results",
     stats: "365scores",
     squadChanges: null,
     headCoaches: "wikipedia-national-team-head-coaches"
+  },
+  // The three UEFA club cups (ADR-0063) name UEFA for their schedule and
+  // nothing else yet, because no other fetch for them exists yet. Tickets
+  // 0101, 0103 and 0104 replace `stats`, `history` and `headCoaches` with the
+  // fetch each one builds. `squadChanges` stays null by ADR-0063's decision:
+  // clubs have transfer windows, and the packet says this Competition does
+  // not read them.
+  UCL: {
+    schedule: "uefa",
+    history: null,
+    stats: null,
+    squadChanges: null,
+    headCoaches: null
+  },
+  UEL: {
+    schedule: "uefa",
+    history: null,
+    stats: null,
+    squadChanges: null,
+    headCoaches: null
+  },
+  UECL: {
+    schedule: "uefa",
+    history: null,
+    stats: null,
+    squadChanges: null,
+    headCoaches: null
   }
 };
 

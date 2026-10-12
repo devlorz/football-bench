@@ -253,7 +253,8 @@ describe("applying migrations", () => {
       "0046_the_dataset_source_row_carries_the_instant_it_was_read.sql",
       "0047_a_cup_fixture_names_its_group.sql",
       "0048_the_record_says_where_each_edition_begins.sql",
-      "0049_dashboard_reads_the_editions.sql"
+      "0049_dashboard_reads_the_editions.sql",
+      "0050_the_club_cups_join_the_record.sql"
     ]);
 
     // Relabelled, not rewritten: every row of every rekeyed table comes back
@@ -709,7 +710,8 @@ describe("applying migrations", () => {
       "0046_the_dataset_source_row_carries_the_instant_it_was_read.sql",
       "0047_a_cup_fixture_names_its_group.sql",
       "0048_the_record_says_where_each_edition_begins.sql",
-      "0049_dashboard_reads_the_editions.sql"
+      "0049_dashboard_reads_the_editions.sql",
+      "0050_the_club_cups_join_the_record.sql"
     ]);
     const backfill = await client.query<{
       observed_at: Date;

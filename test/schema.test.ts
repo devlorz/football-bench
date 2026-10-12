@@ -32,7 +32,8 @@ describe("the benchmark database", () => {
          predictions, contexts, fixtures, manager_states, attempts, scores,
          models, gameweeks, raw_snapshots, historical_matches, fpl_players,
          fpl_player_points, squad_changes, head_coach_changes, head_coaches,
-         international_results, team_match_stats, national_team_head_coaches
+         international_results, team_match_stats, national_team_head_coaches,
+         club_results, club_head_coaches
        restart identity cascade`
     );
   });
@@ -99,6 +100,8 @@ describe("the benchmark database", () => {
 
     expect(result.rows.map(({ table_name }) => table_name)).toEqual([
       "attempts",
+      "club_head_coaches",
+      "club_results",
       "competitions",
       "contexts",
       "editions",
@@ -265,6 +268,21 @@ describe("the benchmark database", () => {
     expect([...held].sort()).toEqual([...COMPETITIONS_WITH_SOURCES].sort());
   });
 
+  // UEFA's own abbreviations, not football-data.org's `CL` and `EL`: none of
+  // the three is read from it, and its `UCL` would name a cup this project's
+  // token cannot read (ADR-0063's amended naming rule).
+  test("accepts the three club cups and still refuses an unknown code",
+    async () => {
+      for (const code of [
+        "PL", "PD", "SA", "BL1", "FL1", "UNL", "UCL", "UEL", "UECL"
+      ]) {
+        await client.query("select $1::competition_code", [code]);
+      }
+
+      await expect(client.query("select 'CL'::competition_code"))
+        .rejects.toMatchObject({ code: "23514" });
+    });
+
   // Keyed by date and the two sides, and by nothing else: national sides meet
   // twice a year in different competitions under no Division and no Season, so
   // the same pair playing twice in one year is two rows and the same match
@@ -324,6 +342,51 @@ describe("the benchmark database", () => {
       );
       expect(rows[0]?.snapshots).toBe(2);
     });
+
+  // Keyed by the source and its id, with no Season, Division or Competition:
+  // a club plays in competitions under none of this record's codes, and the
+  // name the source gives it is carried as a string (ADR-0063).
+  test("keeps one club result per source match", async () => {
+    const row =
+      `insert into club_results (
+         source, source_match_id, kicked_off_at, home_team, away_team,
+         home_goals, away_goals, competition_name
+       ) values ($1, '4700001', '2026-10-04T14:00:00Z',
+         'Arsenal', 'Chelsea', $2, 1, 'Premier League')`;
+    await client.query(row, ["365scores", 2]);
+    await client.query(row, ["another-source", 2]);
+
+    await expect(client.query(row, ["365scores", 3]))
+      .rejects.toMatchObject({ code: "23505" });
+    await expect(client.query(row, ["a-third-source", -1]))
+      .rejects.toMatchObject({ code: "23514" });
+    const { rows } = await client.query(
+      "select count(*)::int as results from club_results"
+    );
+    expect(rows[0]?.results).toBe(2);
+  });
+
+  // Keyed by the club and the morning, as migration 0045's national sides
+  // are, but with no appointment date: an infobox carries none, so a named
+  // Head Coach with no date is the ordinary row here (ADR-0063).
+  test("keeps one head coach per club per morning, with no date", async () => {
+    const row =
+      `insert into club_head_coaches (
+         team, observed_on, observed_at, head_coach
+       ) values ('RC Lens', $1, $2, $3)`;
+    await client.query(
+      row, ["2026-10-13", "2026-10-13T06:00:00Z", "Yannick Cahuzac"]
+    );
+    await client.query(row, ["2026-10-14", "2026-10-14T06:00:00Z", null]);
+
+    await expect(client.query(
+      row, ["2026-10-13", "2026-10-13T11:00:00Z", "Dino Toppmöller"]
+    )).rejects.toMatchObject({ code: "23505" });
+    const { rows } = await client.query(
+      "select count(*)::int as snapshots from club_head_coaches"
+    );
+    expect(rows[0]?.snapshots).toBe(2);
+  });
 
   // Keyed by source and source match id, because the id means nothing without
   // the source that issued it, and nullable per side, because a hole is a row

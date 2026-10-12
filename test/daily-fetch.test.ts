@@ -1244,7 +1244,7 @@ describe("the daily fetch", () => {
 
   test("fails by name for a listed Competition the registry has no entry for",
     async () => {
-      await listUnnamedCompetition("UCL");
+      await listUnnamedCompetition("CL");
       const responses = await sourceResponses();
       const requested: string[] = [];
 
@@ -1262,7 +1262,7 @@ describe("the daily fetch", () => {
 
       expect(thrown).toMatchObject({
         name: UnknownCompetitionSourcesError.name,
-        competition: "UCL"
+        competition: "CL"
       });
       // Nothing was reached on its behalf -- every URL of the run belongs to
       // the Premier League's entry -- and the Premier League's day landed
@@ -1283,7 +1283,7 @@ describe("the daily fetch", () => {
   // in execution order, so first there means before the run's first request.
   test("refuses an unnamed Competition before the run's first request",
     async () => {
-      await listUnnamedCompetition("UCL");
+      await listUnnamedCompetition("CL");
       const bootstrap = JSON.parse(
         await archivedBody("fpl-bootstrap-2026-27.json.gz")
       );
@@ -1307,7 +1307,7 @@ describe("the daily fetch", () => {
 
       expect(thrown).toBeInstanceOf(AggregateError);
       expect((thrown as AggregateError).errors).toMatchObject([
-        { name: UnknownCompetitionSourcesError.name, competition: "UCL" },
+        { name: UnknownCompetitionSourcesError.name, competition: "CL" },
         { message: expect.stringContaining("fpl_bootstrap.events.0.deadline_time") }
       ]);
     });

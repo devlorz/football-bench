@@ -88,10 +88,12 @@ already-played Gameweeks)
 ### Forecasting
 
 **Competition**:
-One competition the match track runs, named by football-data.org's code whether or not
-that source is read — the five leagues `PL`, `PD`, `SA`, `BL1`, `FL1`, and `UNL`, the
-UEFA Nations League, the first cup (ADR-0057). Each is its own benchmark with its own
-leaderboard; no leaderboard spans two.
+One competition the match track runs, named by football-data.org's code when it is read
+from that source and by UEFA's own abbreviation for a UEFA cup that is not (ADR-0063) — the
+five leagues `PL`, `PD`, `SA`, `BL1`, `FL1`; `UNL`, the UEFA Nations League, the first cup
+(ADR-0057); and the three UEFA club cups `UCL`, `UEL` and `UECL`, the Champions League,
+Europa League and Conference League, the first cups whose sides are clubs (ADR-0063). Nine
+in all. Each is its own benchmark with its own leaderboard; no leaderboard spans two.
 _Avoid_: league (in identifiers, and as the word for what a Competition is), tournament
 
 **Active Competition**:
@@ -160,7 +162,10 @@ One scheduled match of a Competition, unique within a Competition and Season.
 **Gameweek**:
 One Competition's numbered batch of Fixtures — FPL-defined for the Premier League,
 source-defined elsewhere, and a Gameweek in both: "La Liga's Gameweek 5". For `UNL` a
-Gameweek is one UEFA matchday of the league phase, `MD1` to `MD6` (ADR-0057). The unit of
+Gameweek is one UEFA matchday of the league phase, `MD1` to `MD6` (ADR-0057). For a club
+cup it is one matchday of the league phase and nothing else — `MD1` to `MD8` for `UCL` and
+`UEL`, `MD1` to `MD6` for `UECL` — where Gameweek *n* is matchday *n*; the qualifying
+rounds share those matchday names and are not Gameweeks (ADR-0063). The unit of
 prediction batching and of leaderboard updates.
 _Avoid_: matchday, round, GW week — as **synonyms**. `matchday` is still the right word for
 one thing it is not a synonym of: football-data.org's own column, the league's round number,
