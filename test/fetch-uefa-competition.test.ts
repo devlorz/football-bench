@@ -8,6 +8,7 @@ import {
   settledResultOf,
   StaleUefaSourceError,
   UefaValidationError,
+  UefaMatchWithoutRoundError,
   UnknownUefaMatchdayError,
   type UefaMatch
 } from "../src/uefa/fetch-competition.js";
@@ -533,4 +534,157 @@ describe("the Nations League read from UEFA", () => {
     );
     expect(rows[0]?.body).toBe(unusable);
   });
+});
+
+/**
+ * UEFA's pages for the three club cups, recorded on 2026-10-12 and kept as
+ * they arrived: the league phase last match first, then every qualifier since
+ * July, a hundred a page. `UCL` and `UEL` have played their `MD1`; `UECL` has
+ * not. The qualifiers share the names `MD1` and `MD2` with the league phase.
+ */
+const cupPages = async (competition: string): Promise<string[]> =>
+  Promise.all(
+    (competition === "UECL" ? [0, 100, 200, 300] : [0, 100, 200]).map(
+      (offset) => archivedBody(
+        `uefa-2026-27-${competition}-recorded-offset-${offset}.json.gz`
+      )
+    )
+  );
+
+describe("the club cups' league phase read from UEFA", () => {
+  test.each([
+    ["UCL", 234, 8],
+    ["UEL", 224, 8],
+    ["UECL", 366, 6]
+  ])("%s keeps its league phase over its own matchdays and skips the qualifiers",
+    async (competition, inTheFeed, matchdays) => {
+      const matches = parsePages(await cupPages(competition));
+      expect(matches).toHaveLength(inTheFeed);
+
+      const { scheduled, groups } = normaliseUefaMatches(competition, matches);
+
+      expect(scheduled).toHaveLength(18 * matchdays);
+      expect(new Set(scheduled.map(({ matchday }) => matchday)))
+        .toEqual(new Set(Array.from({ length: matchdays }, (_, i) => i + 1)));
+      expect(new Set(groups.values())).toEqual(new Set(["League"]));
+      expect(groups.size).toBe(18 * matchdays);
+    });
+
+  test.each([
+    ["UCL", "MD9"],
+    ["UEL", "MD9"],
+    ["UECL", "MD7"]
+  ])("a %s League Phase match in %s is refused by name, not skipped",
+    async (competition, matchday) => {
+      const leaguePhase = parsePages(await cupPages(competition))
+        .find((match) => match.matchday.name === "MD1"
+          && match.round?.metaData?.name === "League Phase")!;
+      const outside = { ...leaguePhase, matchday: { name: matchday } };
+
+      expect(() => normaliseUefaMatches(competition, [outside]))
+        .toThrow(UnknownUefaMatchdayError);
+      expect(() => normaliseUefaMatches(competition, [outside]))
+        .toThrow(new RegExp(`\\b${matchday}\\b`));
+    });
+});
+
+test.each([
+  ["no round", (match: UefaMatch): void => { delete match.round; }],
+  ["an empty round name", (match: UefaMatch): void => {
+    match.round = { metaData: { name: "" } };
+  }]
+])("a cup match with %s is refused, not withdrawn", async (_, cut) => {
+  // Skipped, it would read as gone from the feed, and a stored Fixture gone
+  // from the feed is withdrawn.
+  const [first] = await cupPages("UCL");
+  const roundless = parsePages([first!])[0]!;
+  cut(roundless);
+
+  expect(() => normaliseUefaMatches("UCL", [roundless]))
+    .toThrow(UefaMatchWithoutRoundError);
+  expect(() => normaliseUefaMatches("UCL", [roundless]))
+    .toThrow(new RegExp(`match ${roundless.id} names no round`));
+});
+
+describe("the Champions League read from UEFA", () => {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+
+  beforeAll(async () => {
+    await client.connect();
+    await resetSchema(client);
+
+    return async () => {
+      await client.end();
+    };
+  });
+
+  test("lands 144 league-phase Fixtures and adopts Gameweek 1 as Locked history",
+    async () => {
+      const [first, second, third] = await cupPages("UCL");
+      const { http } = respondingWith({
+        0: first!, 100: second!, 200: third!
+      });
+      const observedAt = new Date("2026-10-12T12:00:00Z");
+
+      await fetchUefaCompetition({
+        database: client,
+        competition: "UCL",
+        season: SEASON,
+        http,
+        now: () => observedAt
+      });
+
+      const leaguePhase = parsePages([first!, second!, third!])
+        .filter((match) => match.round?.metaData?.name === "League Phase");
+      const { rows: fixtures } = await client.query<{
+        fixture_id: number;
+        gw: number;
+        group_name: string;
+        result: unknown;
+        locked_in_gw: number | null;
+      }>(
+        `select fixture_id, gw, group_name, result, locked_in_gw from fixtures
+          where competition = 'UCL' and season = $1`,
+        [SEASON]
+      );
+      expect(new Set(fixtures.map(({ fixture_id: id }) => String(id))))
+        .toEqual(new Set(leaguePhase.map(({ id }) => id)));
+      expect(new Set(fixtures.map(({ group_name: group }) => group)))
+        .toEqual(new Set(["League"]));
+
+      const { rows: gameweeks } = await client.query<{
+        gw: number;
+        deadline_at: Date;
+      }>(
+        `select gw, deadline_at from gameweeks
+          where competition = 'UCL' and season = $1 order by gw`,
+        [SEASON]
+      );
+      expect(gameweeks.map(({ gw }) => gw)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+      expect(gameweeks[0]!.deadline_at.getTime())
+        .toBeLessThan(observedAt.getTime());
+      expect(gameweeks[1]!.deadline_at.toISOString())
+        .toBe("2026-10-13T15:15:00.000Z");
+
+      // Gameweek 1 is history: every Fixture settled at its ninety-minute
+      // score, and none attached to a Gameweek, because no Prediction was
+      // ever made for it.
+      const md1 = fixtures.filter(({ gw }) => gw === 1);
+      expect(md1).toHaveLength(18);
+      for (const fixture of md1) {
+        const match = leaguePhase.find(
+          ({ id }) => id === String(fixture.fixture_id)
+        )!;
+        // Read off `regular` here rather than through `settledResultOf`, the
+        // function under test. Every recorded `MD1` score equals its total,
+        // so ninety minutes against extra time is proven on the Nations
+        // League's 2024-25 knockouts above, not here.
+        const { home, away } = match.score!.regular!;
+        expect(fixture.result).toMatchObject({
+          home_goals: home, away_goals: away
+        });
+        expect(fixture.locked_in_gw).toBeNull();
+      }
+      expect(fixtures.filter(({ result }) => result !== null)).toHaveLength(18);
+    });
 });

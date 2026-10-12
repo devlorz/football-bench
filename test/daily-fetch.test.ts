@@ -697,6 +697,117 @@ describe("the daily fetch", () => {
       expect(rows[0]?.fixtures).toBe(380);
     });
 
+  /**
+   * The Champions League beside a league and the Nations League: the three
+   * schedule sources the registry dispatches on, listed together, on the day
+   * the Champions League's `MD1` is already played. Both leagues have Locked
+   * their Gameweek 1 by then, so each holds the history row that keeps its
+   * own guard quiet, as in the test above that lists `PD`.
+   */
+  const withTheChampionsLeague = async (
+    championsLeaguePages: string[]
+  ): Promise<unknown> => {
+    for (const competition of ["PD", "UNL", "UCL"]) {
+      await client.query(
+        "insert into competitions (competition, season) values ($1, $2)",
+        [competition, "2026-27"]
+      );
+    }
+    await client.query(
+      `insert into historical_matches
+         (competition, season, division, played_on,
+          home_team, away_team, home_goals, away_goals)
+       values ('PD', '2026-27', 'La Liga', '2026-08-16T19:00:00Z',
+               'Barcelona', 'Getafe', 2, 0),
+              ('PL', '2026-27', 'Premier League', '2026-08-15T11:30:00Z',
+               'Liverpool', 'Bournemouth', 2, 1)`
+    );
+    const responses = await sourceResponses([
+      [
+        LA_LIGA_MATCHES_URL,
+        await archivedBody("football-data-org-2026-27-PD-recorded.json.gz")
+      ],
+      [NATIONS_LEAGUE_URLS[0], await archivedBody(UEFA_PAGES[0])],
+      [NATIONS_LEAGUE_URLS[1], await archivedBody(UEFA_PAGES[1])],
+      [RESULTS_URL, await archivedBody(INTERNATIONAL_RESULTS)],
+      ...championsLeaguePages.map((body, page): [string, string] => [
+        "https://match.uefa.com/v5/matches"
+        + `?competitionId=1&seasonYear=2027&limit=100&offset=${page * 100}`,
+        body
+      ])
+    ]);
+    return runDailyFetch({
+      database: client,
+      season: "2026-27",
+      footballDataSeason: "2025-26",
+      footballDataOrgToken: "a-football-data-org-token",
+      now: () => new Date("2026-10-12T12:00:00.000Z"),
+      http: async (url: string) => ({
+        status: 200,
+        body: responses.get(url) ?? ""
+      })
+    }).then(() => undefined, (error: unknown) => error);
+  };
+
+  const championsLeaguePages = async (): Promise<string[]> => Promise.all(
+    [0, 100, 200].map((offset) => archivedBody(
+      `uefa-2026-27-UCL-recorded-offset-${offset}.json.gz`
+    ))
+  );
+
+  const fixturesByCompetition = async (): Promise<unknown[]> =>
+    (await client.query(
+      `select competition, count(*)::int as fixtures,
+              count(*) filter (where result is not null)::int as settled,
+              count(distinct gw)::int as gameweeks
+         from fixtures where season = '2026-27'
+        group by competition order by competition`
+    )).rows;
+
+  test("lands the Champions League's league phase beside a league and the Nations League",
+    async () => {
+      expect(await withTheChampionsLeague(await championsLeaguePages()))
+        .toBeUndefined();
+
+      expect(await fixturesByCompetition()).toEqual([
+        { competition: "PD", fixtures: 380, settled: 0, gameweeks: 38 },
+        { competition: "PL", fixtures: 380, settled: 0, gameweeks: 38 },
+        { competition: "UCL", fixtures: 144, settled: 18, gameweeks: 8 },
+        { competition: "UNL", fixtures: 156, settled: 0, gameweeks: 6 }
+      ]);
+      // Adopted mid-Season (ADR-0015): the first Gameweek is Locked history
+      // the moment it is stored, and the second Locks off its own kickoffs.
+      const { rows } = await client.query(
+        `select gw, deadline_at from gameweeks
+          where competition = 'UCL' and season = '2026-27' and gw <= 2
+          order by gw`
+      );
+      expect(rows.map(({ deadline_at: at }) => (at as Date).toISOString()))
+        .toEqual(["2026-09-08T15:15:00.000Z", "2026-10-13T15:15:00.000Z"]);
+    });
+
+  test("a Champions League refusal is named and costs no other Competition its day",
+    async () => {
+      // One League Phase match moved into a matchday the map does not have.
+      // A knockout would not look like this: it arrives as a round of its
+      // own and is skipped (ADR-0063).
+      const pages = await championsLeaguePages();
+      const first = JSON.parse(pages[0]!) as { matchday: { name: string } }[];
+      first[0]!.matchday.name = "MD9";
+      pages[0] = JSON.stringify(first);
+
+      expect(await withTheChampionsLeague(pages)).toMatchObject({
+        name: UnknownUefaMatchdayError.name,
+        competition: "UCL",
+        matchday: "MD9"
+      });
+      expect(await fixturesByCompetition()).toEqual([
+        { competition: "PD", fixtures: 380, settled: 0, gameweeks: 38 },
+        { competition: "PL", fixtures: 380, settled: 0, gameweeks: 38 },
+        { competition: "UNL", fixtures: 156, settled: 0, gameweeks: 6 }
+      ]);
+    });
+
   test("a retry completes a partially failed run without duplicating completed work", async () => {
     const bootstrap = JSON.parse(
       await archivedBody("fpl-bootstrap-2026-27.json.gz")

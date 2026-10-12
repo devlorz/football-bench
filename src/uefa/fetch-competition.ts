@@ -20,26 +20,45 @@ const API_ROOT = "https://match.uefa.com/v5/matches";
 const PAGE_LIMIT = 100;
 
 /**
- * UEFA's own id for each Competition this record reads from it. One entry, and
- * a Competition not in it is refused rather than guessed: the id is not
- * derivable from the Competition code, and a wrong one would return another
- * Competition's schedule under this one's name.
+ * What this record reads of one Competition in UEFA's feed.
+ *
+ * - `id` is UEFA's own competitionId. It is not derivable from the
+ *   Competition code, and a wrong one would return another Competition's
+ *   schedule under this one's name.
+ * - `round`, where present, is the one round read, spelled exactly as the feed
+ *   spells it. Every match of any other round is skipped without a word: the
+ *   club cups' qualifiers have been in their feeds since July and share the
+ *   names `MD1` and `MD2` with the league phase, and a knockout round arrives
+ *   the same way (ADR-0063). A respelling skips every match, which the stale
+ *   guard then refuses. `UNL` names none, so its knockouts reach the map below
+ *   and are refused there, as they always have been (ADR-0057).
+ * - `matchdays` is the league phase's length: matchday `MDn` is Gameweek *n*
+ *   up to it, and a read match outside it is refused with its name.
  */
-const UEFA_COMPETITION_IDS: Readonly<Record<string, string>> = {
-  UNL: "2014"
+interface UefaCompetition {
+  id: string;
+  round?: string;
+  matchdays: number;
+}
+
+/** A Competition not in it is refused rather than guessed. */
+const UEFA_COMPETITIONS: Readonly<Record<string, UefaCompetition>> = {
+  UNL: { id: "2014", matchdays: 6 },
+  UCL: { id: "1", round: "League Phase", matchdays: 8 },
+  UEL: { id: "14", round: "League Phase", matchdays: 8 },
+  UECL: { id: "2019", round: "League Phase", matchdays: 6 }
 };
 
 /**
- * The matchdays the league phase is played under, and the whole map (ADR-0057).
- * `MD7` and `MD8` are the two-legged quarter-finals, and `SF`, `3rd place` and
- * `Final` are the finals tournament — all of them deferred, none of them
- * handled. The day November's draw puts one in this feed it is refused with
- * its name, which is how a decision nobody has taken stays a decision nobody
- * has taken rather than becoming a Gameweek 7.
+ * The matchday names this Competition's read round is played under, in
+ * Gameweek order: the whole map, and the one place its spelling lives.
  */
-const GAMEWEEK_BY_MATCHDAY: ReadonlyMap<string, number> = new Map([
-  ["MD1", 1], ["MD2", 2], ["MD3", 3], ["MD4", 4], ["MD5", 5], ["MD6", 6]
-]);
+function matchdayNames(competition: string): string[] {
+  return Array.from(
+    { length: uefaCompetition(competition).matchdays },
+    (_, i) => `MD${i + 1}`
+  );
+}
 
 /**
  * The status that takes a Fixture off the live calendar here. It is the only
@@ -72,6 +91,14 @@ const matchSchema = z.looseObject({
   status: z.string().min(1),
   kickOffTime: z.looseObject({ dateTime: z.iso.datetime() }),
   matchday: z.looseObject({ name: z.string().min(1) }),
+  /**
+   * "League Phase": which round of the Competition the match belongs to.
+   * Lenient at every level, because `UNL` does not read it and a cup that
+   * does refuses a match without it by name (`inTheReadRound`).
+   */
+  round: z.looseObject({
+    metaData: z.looseObject({ name: z.string() }).optional()
+  }).optional(),
   homeTeam: teamSchema,
   awayTeam: teamSchema,
   /** "Group A2": the league-phase group, absent on a knockout match. */
@@ -144,6 +171,19 @@ export class UnknownUefaCompetitionError extends Error {
   }
 }
 
+export class UefaMatchWithoutRoundError extends Error {
+  constructor(
+    public readonly competition: string,
+    public readonly matchId: string
+  ) {
+    super(
+      `Competition ${competition} match ${matchId} names no round, so it `
+      + "cannot be told from a qualifier; nothing has been written"
+    );
+    this.name = "UefaMatchWithoutRoundError";
+  }
+}
+
 export class UnknownUefaMatchdayError extends Error {
   constructor(
     public readonly competition: string,
@@ -152,8 +192,8 @@ export class UnknownUefaMatchdayError extends Error {
   ) {
     super(
       `Competition ${competition} match ${matchId} is in matchday `
-      + `${matchday}, which is not one of MD1-MD6; the knockout rounds are `
-      + "deferred (ADR-0057) and no Gameweek has been decided for them"
+      + `${matchday}, which is outside its league phase; no Gameweek has `
+      + "been decided for it (ADR-0057, ADR-0063)"
     );
     this.name = "UnknownUefaMatchdayError";
   }
@@ -251,16 +291,43 @@ export function seasonYear(season: string): string {
 
 /** The Competition a UEFA competitionId stands for, for reading a URL back. */
 export function uefaCompetitionOf(id: string): string | undefined {
-  return Object.entries(UEFA_COMPETITION_IDS)
-    .find(([, known]) => known === id)?.[0];
+  return Object.entries(UEFA_COMPETITIONS)
+    .find(([, known]) => known.id === id)?.[0];
+}
+
+function uefaCompetition(competition: string): UefaCompetition {
+  const entry = UEFA_COMPETITIONS[competition];
+  if (entry === undefined) {
+    throw new UnknownUefaCompetitionError(competition);
+  }
+  return entry;
 }
 
 export function competitionId(competition: string): string {
-  const id = UEFA_COMPETITION_IDS[competition];
-  if (id === undefined) {
-    throw new UnknownUefaCompetitionError(competition);
+  return uefaCompetition(competition).id;
+}
+
+/**
+ * The matches of the one round this Competition is read in, and every match
+ * when it names none. A match with no round at all is refused: skipped, a
+ * league-phase match would read as gone from the feed and be withdrawn.
+ */
+function inTheReadRound(
+  competition: string,
+  matches: readonly UefaMatch[]
+): UefaMatch[] {
+  const { round } = uefaCompetition(competition);
+  if (round === undefined) {
+    return [...matches];
   }
-  return id;
+  return matches.filter((match) => {
+    const name = match.round?.metaData?.name;
+    // An empty name is no name: skipped, it would be withdrawn all the same.
+    if (name === undefined || name === "") {
+      throw new UefaMatchWithoutRoundError(competition, match.id);
+    }
+    return name === round;
+  });
 }
 
 export function sourceUrl(
@@ -350,11 +417,12 @@ export function normaliseUefaMatches(
   const scheduled: ScheduledMatch[] = [];
   const withdrawnIds: number[] = [];
   const groups = new Map<number, string>();
-  for (const match of matches) {
+  const names = matchdayNames(competition);
+  for (const match of inTheReadRound(competition, matches)) {
     // Asked of every match and not only of the ones still on, so that a
     // knockout Fixture is a refusal whatever its status says.
-    const gameweek = GAMEWEEK_BY_MATCHDAY.get(match.matchday.name);
-    if (gameweek === undefined) {
+    const gameweek = names.indexOf(match.matchday.name) + 1;
+    if (gameweek === 0) {
       throw new UnknownUefaMatchdayError(
         competition,
         match.matchday.name,
@@ -445,7 +513,7 @@ export async function fetchUefaCompetition({
   now
 }: FetchUefaCompetitionOptions): Promise<FetchUefaCompetitionResult> {
   const observedAt = now();
-  const matches: UefaMatch[] = [];
+  const everyMatch: UefaMatch[] = [];
   for (let offset = 0; ; offset += PAGE_LIMIT) {
     const source = sourceName(competition, season, offset);
     const url = sourceUrl(competition, season, offset);
@@ -457,7 +525,7 @@ export async function fetchUefaCompetition({
       throw new UefaHttpError(source, response.status, url);
     }
     const page = parseUefaMatches(source, response.body);
-    matches.push(...page);
+    everyMatch.push(...page);
     // A page shorter than the one asked for is the last one, and an empty page
     // is how a Season whose match count divides by a hundred says the same
     // thing. Both are needed: neither alone terminates both Seasons.
@@ -465,11 +533,14 @@ export async function fetchUefaCompetition({
       break;
     }
   }
+  // Narrowed before either guard: a qualifier's `MD1` would otherwise answer
+  // for a league-phase page that never arrived.
+  const matches = inTheReadRound(competition, everyMatch);
   if (matches.length === 0) {
     throw new StaleUefaSourceError(competition, season);
   }
   const roundsRead = new Set(matches.map((match) => match.matchday.name));
-  const missing = [...GAMEWEEK_BY_MATCHDAY.keys()]
+  const missing = matchdayNames(competition)
     .filter((round) => !roundsRead.has(round));
   if (missing.length > 0) {
     throw new IncompleteUefaSeasonError(

@@ -22,7 +22,7 @@ Decisions it must not bend:
 
 **Blocked by:** 0099. **On the `UCL` critical path.**
 
-**Status:** ready-for-agent
+**Status:** done, 2026-10-12. Each UEFA Competition has an entry in `src/uefa/fetch-competition.ts` with its id, the one round it is read in (none for `UNL`, whose knockouts are refused rather than skipped) and its matchday count. The recordings are `test/fixtures/uefa-2026-27-{UCL,UEL,UECL}-recorded-offset-*.json.gz`.
 
 ---
 
@@ -49,9 +49,9 @@ Decisions it must not bend:
 
 ## Acceptance criteria
 
-- [ ] Over the archived `UCL` feed, the daily fetch stores 144 Fixtures in Gameweeks 1–8, each Fixture with group `League`, and no qualifier.
-- [ ] Gameweek 1 is Locked with its 18 Fixtures settled at the ninety-minute score; Gameweek 2's Lock is 2026-10-13T15:15Z.
-- [ ] A `League Phase` match with a matchday outside the map is refused by name; a match from any other round is skipped.
-- [ ] `UECL`'s map stops at `MD6` and `UEL`'s at `MD8`, proven over their archived feeds.
-- [ ] `UNL`'s fetch tests pass unchanged, including the refusal of `MD7`.
-- [ ] With `UCL` listed beside `PD` and `UNL`, each reaches what it reaches today, and a `UCL` failure is named while the others land.
+- [x] Over the archived `UCL` feed, the daily fetch stores 144 Fixtures in Gameweeks 1–8, each Fixture with group `League`, and no qualifier.
+- [x] Gameweek 1 is Locked with its 18 Fixtures settled at the ninety-minute score; Gameweek 2's Lock is 2026-10-13T15:15Z.
+- [x] A `League Phase` match with a matchday outside the map is refused by name; a match from any other round is skipped.
+- [x] `UECL`'s map stops at `MD6` and `UEL`'s at `MD8`, proven over their archived feeds.
+- [x] `UNL`'s fetch tests pass unchanged, including the refusal of `MD7`.
+- [x] With `UCL` listed beside `PD` and `UNL`, each reaches what it reaches today, and a `UCL` failure is named while the others land.
