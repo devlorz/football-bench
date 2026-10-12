@@ -386,8 +386,9 @@ export function settledResultOf(match: UefaMatch): string | null {
  * that never joins any of them.
  *
  * Written as the removal of the stray mark rather than as a one-entry name
- * map, because that is what the defect is; no other name in the fifty-four
- * carries a combining mark after an `i`.
+ * map, because that is what the defect is; no other name in the Nations
+ * League's fifty-four or a club cup's league phase carries a combining mark
+ * after an `i`.
  */
 function storedTeamName(internationalName: string): string {
   return internationalName.replace(/i̇/g, "i");

@@ -193,8 +193,8 @@ try {
       }
     }
     for (const game of games) {
-      const listedHome = storedTeamName(game.home.name);
-      const listedAway = storedTeamName(game.away.name);
+      const listedHome = storedTeamName(competition, game.home.name);
+      const listedAway = storedTeamName(competition, game.away.name);
       // Stored in the dataset's orientation, which is the key the packet
       // joins on; a listing that has the sides the other way round has its
       // figures swapped to match.

@@ -24,20 +24,51 @@ const COMMON_PARAMS =
  * Competition's number.
  */
 const SCORES_365_COMPETITION_IDS: Readonly<Record<string, string>> = {
-  UNL: "7016"
+  UNL: "7016",
+  UCL: "572",
+  UEL: "573",
+  UECL: "7685"
 };
 
 /**
- * The three sides 365Scores spells differently from the record (ADR-0058);
- * the other fifty-one match character for character. A map and not a
- * normalisation rule: "Ireland" is a different side from the "Northern
- * Ireland" the record also holds, so nothing but a reviewed pair can say
- * which one this source means.
+ * Each Competition's sides 365Scores spells differently from the record
+ * (ADR-0058, ADR-0063); every other side matches character for character. A
+ * map and not a normalisation rule: "Ireland" is a different side from the
+ * "Northern Ireland" the record also holds, and "PSG" shares no word with
+ * "Paris", so nothing but a reviewed pair can say which side this source
+ * means. Keyed by Competition because a spelling is only reviewed against the
+ * sides that Competition stores. A Competition with no map is refused on the
+ * same terms as one with no id (ADR-0054: a missing map fails loudly), so
+ * `UEL` and `UECL` read nothing here until tickets 0107 and 0108 review
+ * theirs.
  */
-const STORED_NAME_BY_LISTED_NAME: Readonly<Record<string, string>> = {
-  Ireland: "Republic of Ireland",
-  Turkiye: "Türkiye",
-  "Bosnia & Herzegovina": "Bosnia and Herzegovina"
+const STORED_NAME_BY_LISTED_NAME: Readonly<
+  Record<string, Readonly<Record<string, string>>>
+> = {
+  UNL: {
+    Ireland: "Republic of Ireland",
+    Turkiye: "Türkiye",
+    "Bosnia & Herzegovina": "Bosnia and Herzegovina"
+  },
+  UCL: {
+    "AS Roma": "Roma",
+    "Atletico Madrid": "Atleti",
+    "Bayern Munich": "Bayern München",
+    "Bodo Glimt": "Bodø/Glimt",
+    "Borussia Dortmund": "B. Dortmund",
+    "FC Barcelona": "Barcelona",
+    "FC Porto": "Porto",
+    "Fenerbahçe SK": "Fenerbahçe",
+    "Inter Milan": "Inter",
+    "LASK Linz": "LASK",
+    "Manchester City": "Man City",
+    "Manchester United": "Man Utd",
+    PSG: "Paris",
+    "PSV Eindhoven": "PSV",
+    "RB Leipzig": "Leipzig",
+    "Shakhtar Donetsk": "Shakhtar",
+    "Slovan Bratislava": "S. Bratislava"
+  }
 };
 
 /**
@@ -160,7 +191,7 @@ export class UnknownScores365CompetitionError extends Error {
   constructor(public readonly competition: string) {
     super(
       `Competition ${competition} reads 365Scores, which needs its 365Scores `
-      + "competition id in src/365scores/fetch-match-stats.ts"
+      + "competition id and its name map in src/365scores/fetch-match-stats.ts"
     );
     this.name = "UnknownScores365CompetitionError";
   }
@@ -181,8 +212,22 @@ export class UnknownScores365TeamError extends Error {
   }
 }
 
-export function storedTeamName(listedName: string): string {
-  return STORED_NAME_BY_LISTED_NAME[listedName] ?? listedName;
+/** This Competition's reviewed spellings, or undefined where it has none. */
+export function scores365NameMapOf(
+  competition: string
+): Readonly<Record<string, string>> | undefined {
+  return STORED_NAME_BY_LISTED_NAME[competition];
+}
+
+export function storedTeamName(
+  competition: string,
+  listedName: string
+): string {
+  const map = scores365NameMapOf(competition);
+  if (map === undefined) {
+    throw new UnknownScores365CompetitionError(competition);
+  }
+  return map[listedName] ?? listedName;
 }
 
 /** This Competition's 365Scores id, or undefined where the map has none. */
@@ -491,11 +536,13 @@ export async function fetchScores365Stats({
   if (fixtures.length === 0) {
     return { disagreements: [], unlistedFixtures: [] };
   }
-  // The record's own fifty-four, which is the only list of them there is: a
-  // side is stored under the spelling its schedule source published. Reading
-  // them off the stored Fixtures is sound because the schedule source refuses
-  // a Season that is missing a round (ticket 0071), so this set is all
-  // fifty-four or it is empty and nothing below runs at all.
+  // The Competition's own sides -- fifty-four in the Nations League,
+  // thirty-six in a club cup's league phase -- which is the only list of them
+  // there is: a side is stored under the spelling its schedule source
+  // published. Reading them off the stored Fixtures is sound because the
+  // schedule source refuses a Season that is missing a round (tickets 0071
+  // and 0100), so this set is all of them or it is empty and nothing below
+  // runs at all.
   const storedNames = new Set(fixtures
     .flatMap(({ home_team: home, away_team: away }) => [home, away]));
 
@@ -538,8 +585,8 @@ export async function fetchScores365Stats({
       database, http, listingUrl(competition, date), source
     ));
     for (const game of games) {
-      const home = storedTeamName(game.home.name);
-      const away = storedTeamName(game.away.name);
+      const home = storedTeamName(competition, game.home.name);
+      const away = storedTeamName(competition, game.away.name);
       // Asked of every listed side before anything is joined: a name this
       // record does not hold is a Fixture about to be joined to the wrong
       // side or to none, and neither is a thing to discover in a packet.
@@ -563,7 +610,7 @@ export async function fetchScores365Stats({
         // 365Scores reports the score a match finished on, which past the
         // league phase includes extra time; the only Fixtures the record
         // holds here are league-phase ones, where there is none to include
-        // (ticket 0071 refuses the knockout matchdays outright).
+        // (tickets 0071 and 0100 read nothing past the league phase).
         //
         // Checked on the read that the shots arrive with, and so once per
         // Fixture rather than every morning: the listing is not asked for
@@ -601,7 +648,7 @@ export async function fetchScores365Stats({
       // One row per sheet as it is read, and no transaction around the loop:
       // the writes are interleaved with requests to another host, and a
       // transaction held open across them would hold a row lock for as long
-      // as that host takes to answer twenty-six times. A run that fails
+      // as that host takes to answer every listing and sheet. A run that fails
       // half-way leaves the sheets it did read stored, which costs nothing --
       // every read is an upsert and the next morning asks only for what is
       // still outstanding.

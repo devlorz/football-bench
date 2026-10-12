@@ -17,7 +17,7 @@ Decisions it must not bend:
 
 **Blocked by:** 0100. **On the `UCL` critical path.**
 
-**Status:** ready-for-agent
+**Status:** done, 2026-10-12. The name map is per Competition in `src/365scores/fetch-match-stats.ts`, beside the ids for `UCL` (572), `UEL` (573) and `UECL` (7685). `UEL` and `UECL` have no map and no registry `stats` yet. The recording is `test/fixtures/365scores-UCL-MD1-recorded-2026-10-12.json.gz`, which holds three listings and eighteen sheets keyed by request URL. The last box is left unticked. `storedTeamName` now takes the Competition, so five UNL assertion lines changed at their call sites, though nothing they assert changed. A Competition with no name map is refused, as one with no id is.
 
 ---
 
@@ -40,9 +40,9 @@ Decisions it must not bend:
 
 ## Acceptance criteria
 
-- [ ] Over archived responses, the first fetch after `UCL`'s schedule lands stores 18 `MD1` rows with both sides' xG and shots.
-- [ ] A 365Scores side not in `UCL`'s map is refused by name; no row is stored under an unmapped name.
-- [ ] A sheet with shots and no xG is stored as a hole and read again on the next fetch.
-- [ ] A score disagreement with UEFA surfaces as it does for `UNL`.
-- [ ] The `UCL` map test derives 36 pairs from the archive with nothing left over.
+- [x] Over archived responses, the first fetch after `UCL`'s schedule lands stores 18 `MD1` rows with both sides' xG and shots.
+- [x] A 365Scores side not in `UCL`'s map is refused by name; no row is stored under an unmapped name.
+- [x] A sheet with shots and no xG is stored as a hole and read again on the next fetch.
+- [x] A score disagreement with UEFA surfaces as it does for `UNL`.
+- [x] The `UCL` map test derives 36 pairs from the archive with nothing left over.
 - [ ] `UNL`'s stats tests pass unchanged.

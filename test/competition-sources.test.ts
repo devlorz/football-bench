@@ -9,6 +9,7 @@ import {
 import { understatTeamNamesOf } from "../src/understat/team-identity.js";
 import {
   scores365CompetitionIdOf,
+  scores365NameMapOf,
   SCORES_365_SOURCE
 } from "../src/365scores/fetch-match-stats.js";
 import {
@@ -69,6 +70,7 @@ describe("the source registry", () => {
             ? understatTeamNamesOf(competition) !== undefined
             : sources.stats === SCORES_365_SOURCE
               ? scores365CompetitionIdOf(competition) !== undefined
+                && scores365NameMapOf(competition) !== undefined
               : null,
           squadChanges: sources.squadChanges === "wikipedia-transfers"
             ? transferWindowsOf(competition) !== undefined

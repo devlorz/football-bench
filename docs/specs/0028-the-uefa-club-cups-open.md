@@ -103,7 +103,7 @@ and deployed.
 21. As a maintainer, I want the 365Scores fetch to know competitions 572, 573 and 7685, so that each cup's sheets are read under its own id.
 22. As a maintainer, I want one reviewed name map per cup from 365Scores' spelling to UEFA's `internationalName`, so that every one of the 36 sides joins its Fixture.
 23. As a maintainer, I want a 365Scores side missing from its cup's map to refuse by name, so that a missing entry fails loudly and never renders as a hole the source does not have.
-24. As the operator, I want the stats fetch to read the sheet of every settled Fixture of the cup that has no stored row, including those settled before the Competition was listed, so that `MD1`'s 36 sheets are stored before Gameweek 2's Lock.
+24. As the operator, I want the stats fetch to read the sheet of every settled Fixture of the cup that has no stored row, including those settled before the Competition was listed, so that each cup's `MD1` sheets (18 for `UCL`) are stored before Gameweek 2's Lock.
 25. As the operator, I want a settled Fixture with no xG on its sheet stored as a hole and read again on later days, as for `UNL`, so that a late sheet fills itself in.
 26. As the operator, I want 365Scores' score compared with UEFA's as the second source of results (ADR-0056), so that a disagreement surfaces as it does for `UNL`.
 

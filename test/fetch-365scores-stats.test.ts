@@ -6,9 +6,11 @@ import {
   parseScores365Games,
   parseScores365Sheet,
   sheetUrl,
+  scores365NameMapOf,
   storedTeamName,
   Scores365HttpError,
   Scores365ValidationError,
+  UnknownScores365CompetitionError,
   UnknownScores365TeamError,
   type Scores365Sheet
 } from "../src/365scores/fetch-match-stats.js";
@@ -140,10 +142,11 @@ describe("the shape a 365Scores match sheet is read into", () => {
 
 describe("the three spellings 365Scores does not share", () => {
   test("maps exactly the three, and leaves every other name alone", () => {
-    expect(storedTeamName("Ireland")).toBe("Republic of Ireland");
-    expect(storedTeamName("Turkiye")).toBe("Türkiye");
-    expect(storedTeamName("Bosnia & Herzegovina")).toBe("Bosnia and Herzegovina");
-    expect(storedTeamName("Portugal")).toBe("Portugal");
+    expect(storedTeamName(COMPETITION, "Ireland")).toBe("Republic of Ireland");
+    expect(storedTeamName(COMPETITION, "Turkiye")).toBe("Türkiye");
+    expect(storedTeamName(COMPETITION, "Bosnia & Herzegovina"))
+      .toBe("Bosnia and Herzegovina");
+    expect(storedTeamName(COMPETITION, "Portugal")).toBe("Portugal");
   });
 
   test("every name the recorded listings carry resolves onto a stored side",
@@ -173,13 +176,14 @@ describe("the three spellings 365Scores does not share", () => {
       )).flatMap((body) => parseScores365Games("test", body))
         .flatMap((game) => [game.home.name, game.away.name]));
 
-      expect([...listed].filter((name) => !stored.has(storedTeamName(name))))
+      expect([...listed]
+        .filter((name) => !stored.has(storedTeamName(COMPETITION, name))))
         .toEqual([]);
       // The map earns its three entries: each key is a name the record does
       // not hold, and each value is one it does.
       for (const spelling of ["Ireland", "Turkiye", "Bosnia & Herzegovina"]) {
         expect(stored.has(spelling)).toBe(false);
-        expect(stored.has(storedTeamName(spelling))).toBe(true);
+        expect(stored.has(storedTeamName(COMPETITION, spelling))).toBe(true);
       }
     });
 });
@@ -648,5 +652,257 @@ describe("the Nations League's shots and xG read from 365Scores", () => {
         "select count(*) from team_match_stats"
       );
       expect(Number(stats.rows[0]!.count)).toBe(1);
+    });
+});
+
+/**
+ * 365Scores' answers for the Champions League's `MD1`, recorded 2026-10-12:
+ * the listings of its three days and all eighteen sheets, each keyed by the
+ * URL it answered. Every sheet carries both sides' xG.
+ */
+const CHAMPIONS_LEAGUE = "UCL";
+const CHAMPIONS_LEAGUE_MD1 = "365scores-UCL-MD1-recorded-2026-10-12.json.gz";
+const CHAMPIONS_LEAGUE_PAGES = [0, 100, 200].map((offset) =>
+  `uefa-2026-27-UCL-recorded-offset-${offset}.json.gz`);
+
+const championsLeagueMd1 = async (): Promise<Record<string, string>> =>
+  JSON.parse(await archivedBody(CHAMPIONS_LEAGUE_MD1)) as Record<string, string>;
+
+describe("the seventeen Champions League spellings 365Scores does not share", () => {
+  test("map MD1's listings onto UEFA's own eighteen Fixtures, nothing left over",
+    async () => {
+      // The derivation a reviewer checks instead of a transcription: every
+      // listed game, its sides mapped, is one of UEFA's own `MD1` Fixtures at
+      // the same kickoff on the same score, and the other way round.
+      const uefa = (await Promise.all(CHAMPIONS_LEAGUE_PAGES.map(archivedBody)))
+        .flatMap((page) => JSON.parse(page) as {
+          kickOffTime: { dateTime: string };
+          matchday: { name: string };
+          round: { metaData: { name: string } };
+          homeTeam: { internationalName: string };
+          awayTeam: { internationalName: string };
+          score: { total: { home: number; away: number } };
+        }[])
+        .filter((match) => match.round.metaData.name === "League Phase"
+          && match.matchday.name === "MD1");
+      const games = Object.entries(await championsLeagueMd1())
+        .filter(([url]) => url.includes("/web/games/"))
+        .flatMap(([url, body]) => parseScores365Games(url, body));
+      const line = (at: string | Date, home: string, away: string,
+        homeGoals: number, awayGoals: number): string =>
+        `${new Date(at).toISOString()} ${home} ${homeGoals}-${awayGoals} ${away}`;
+
+      expect(games.map((game) => line(
+        game.kickedOffAt,
+        storedTeamName(CHAMPIONS_LEAGUE, game.home.name),
+        storedTeamName(CHAMPIONS_LEAGUE, game.away.name),
+        game.home.score,
+        game.away.score
+      )).sort()).toEqual(uefa.map((match) => line(
+        match.kickOffTime.dateTime,
+        match.homeTeam.internationalName,
+        match.awayTeam.internationalName,
+        match.score.total.home,
+        match.score.total.away
+      )).sort());
+
+      // Thirty-six on each side, and the map earns exactly its seventeen:
+      // each key is a spelling UEFA does not use, each value one it does.
+      const listed = new Set(games
+        .flatMap((game) => [game.home.name, game.away.name]));
+      const stored = new Set(uefa.flatMap((match) => [
+        match.homeTeam.internationalName, match.awayTeam.internationalName
+      ]));
+      expect([listed.size, stored.size]).toEqual([36, 36]);
+      // Both directions: the map's keys are exactly the listed spellings UEFA
+      // does not use, and its values exactly UEFA's sides no listing spells.
+      const map = scores365NameMapOf(CHAMPIONS_LEAGUE)!;
+      expect(Object.keys(map).sort())
+        .toEqual([...listed].filter((name) => !stored.has(name)).sort());
+      expect(Object.values(map).sort())
+        .toEqual([...stored].filter((name) => !listed.has(name)).sort());
+      expect(Object.keys(map)).toHaveLength(17);
+    });
+
+  test("a Competition with no reviewed map is refused, not read raw", () => {
+    // `UEL` has its id and no map until ticket 0107 (ADR-0054).
+    expect(() => storedTeamName("UEL", "Roma"))
+      .toThrow(UnknownScores365CompetitionError);
+  });
+
+  test("one Competition's spellings are not another's", () => {
+    expect(storedTeamName("UNL", "Bayern Munich")).toBe("Bayern Munich");
+    expect(storedTeamName(CHAMPIONS_LEAGUE, "Ireland")).toBe("Ireland");
+  });
+});
+
+describe("the Champions League's shots and xG read from 365Scores", () => {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+
+  beforeAll(async () => {
+    await client.connect();
+    await resetSchema(client);
+
+    return async () => {
+      await client.end();
+    };
+  });
+
+  beforeEach(async () => {
+    await client.query(
+      "truncate fixtures, gameweeks, raw_snapshots, team_match_stats "
+      + "restart identity cascade"
+    );
+    // The league phase as UEFA published it on 2026-10-12: `MD1`'s eighteen
+    // settled before the Competition was listed, the rest still to play.
+    const pages = await Promise.all(CHAMPIONS_LEAGUE_PAGES.map(archivedBody));
+    await fetchUefaCompetition({
+      database: client,
+      competition: CHAMPIONS_LEAGUE,
+      season: SEASON,
+      http: async (url) => ({
+        status: 200,
+        body: pages[Number(/offset=(\d+)/.exec(url)![1]) / 100] ?? "[]"
+      }),
+      now: () => new Date("2026-10-12T09:00:00Z")
+    });
+  });
+
+  const fetchAt = async (
+    at: string,
+    bodyByUrl: Record<string, string>
+  ): Promise<{
+    requests: string[];
+    disagreements: unknown[];
+    unlistedFixtures: unknown[];
+  }> => {
+    const requests: string[] = [];
+    const { disagreements, unlistedFixtures } = await fetchScores365Stats({
+      database: client,
+      competition: CHAMPIONS_LEAGUE,
+      season: SEASON,
+      http: async (url) => {
+        requests.push(url);
+        const body = bodyByUrl[url];
+        return body === undefined
+          ? { status: 404, body: "" }
+          : { status: 200, body };
+      },
+      now: () => new Date(at)
+    });
+    return { requests, disagreements, unlistedFixtures };
+  };
+
+  test("the first read after the schedule lands stores all eighteen of MD1",
+    async () => {
+      const { requests, disagreements, unlistedFixtures } = await fetchAt(
+        "2026-10-12T12:00:00Z", await championsLeagueMd1()
+      );
+
+      // Three days' listings and eighteen sheets, and nothing for the
+      // Gameweeks the record has not settled.
+      expect(requests).toHaveLength(21);
+      expect(disagreements).toEqual([]);
+      expect(unlistedFixtures).toEqual([]);
+      const { rows } = await client.query<{ count: number }>(
+        `select count(*)::int as count from team_match_stats
+          where competition = $1 and home_xg is not null
+            and away_xg is not null and home_shots is not null
+            and away_shots is not null`,
+        [CHAMPIONS_LEAGUE]
+      );
+      expect(rows[0]!.count).toBe(18);
+      const bayern = await client.query(
+        `select source_match_id, home_team, away_team, home_shots, away_shots,
+                home_xg, away_xg
+           from team_match_stats where home_team = 'Bayern München'`
+      );
+      expect(bayern.rows).toEqual([{
+        source_match_id: "4828488",
+        home_team: "Bayern München",
+        away_team: "Bodø/Glimt",
+        home_shots: 25,
+        away_shots: 3,
+        home_xg: "2.61",
+        away_xg: "0.30"
+      }]);
+    });
+
+  test("a listed side outside the map is refused by name, and never stored",
+    async () => {
+      const responses = await championsLeagueMd1();
+      const bodoGlimtsDay = listingUrl(CHAMPIONS_LEAGUE, "2026-09-10");
+      responses[bodoGlimtsDay] = responses[bodoGlimtsDay]!
+        .replace(/"Bodo Glimt"/g, "\"Bodo/Glimt\"");
+
+      const thrown = await fetchAt("2026-10-12T12:00:00Z", responses)
+        .catch((error: unknown) => error);
+
+      expect(thrown).toMatchObject({
+        name: UnknownScores365TeamError.name,
+        competition: CHAMPIONS_LEAGUE,
+        team: "Bodo/Glimt"
+      });
+      // Refused at the game that names it: no row for that match, under
+      // either spelling, whatever else the morning stored before it.
+      const { rows } = await client.query(
+        `select source_match_id from team_match_stats
+          where source_match_id = '4828488'
+             or 'Bodo/Glimt' in (home_team, away_team)
+             or 'Bodø/Glimt' in (home_team, away_team)`
+      );
+      expect(rows).toEqual([]);
+    });
+
+  test("a sheet with shots and no xG is a hole, asked again and filled",
+    async () => {
+      const responses = await championsLeagueMd1();
+      const bayernSheet = sheetUrl("4828488");
+      const full = responses[bayernSheet]!;
+      const sheet = JSON.parse(full) as { statistics: { name: string }[] };
+      sheet.statistics = sheet.statistics
+        .filter((row) => row.name !== "Expected Goals");
+
+      await fetchAt("2026-10-12T12:00:00Z", {
+        ...responses, [bayernSheet]: JSON.stringify(sheet)
+      });
+      const holed = await client.query(
+        `select home_shots, home_xg, away_xg from team_match_stats
+          where source_match_id = '4828488'`
+      );
+      expect(holed.rows).toEqual([{ home_shots: 25, home_xg: null, away_xg: null }]);
+
+      const { requests } = await fetchAt("2026-10-13T06:00:00Z", responses);
+
+      expect(requests)
+        .toEqual([listingUrl(CHAMPIONS_LEAGUE, "2026-09-10"), bayernSheet]);
+      const filled = await client.query(
+        `select home_xg, away_xg from team_match_stats
+          where source_match_id = '4828488'`
+      );
+      expect(filled.rows).toEqual([{ home_xg: "2.61", away_xg: "0.30" }]);
+    });
+
+  test("a score 365Scores does not agree with is reported, as for the Nations League",
+    async () => {
+      await client.query(
+        `update fixtures set result = '{"home_goals":4,"away_goals":0,"outcome":"H"}'
+          where competition = $1 and fixture_id = 2049565`,
+        [CHAMPIONS_LEAGUE]
+      );
+
+      const { disagreements } = await fetchAt(
+        "2026-10-12T12:00:00Z", await championsLeagueMd1()
+      );
+
+      expect(disagreements).toEqual([{
+        competition: CHAMPIONS_LEAGUE,
+        fixtureId: 2049565,
+        kickoffAt: new Date("2026-09-10T19:00:00Z"),
+        homeTeam: "Bayern München",
+        awayTeam: "Bodø/Glimt",
+        stored: "4-0",
+        reported: "5-0"
+      }]);
     });
 });

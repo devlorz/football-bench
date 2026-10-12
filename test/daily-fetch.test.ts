@@ -734,7 +734,11 @@ describe("the daily fetch", () => {
         "https://match.uefa.com/v5/matches"
         + `?competitionId=1&seasonYear=2027&limit=100&offset=${page * 100}`,
         body
-      ])
+      ]),
+      // 365Scores' answers for `MD1`'s three days and eighteen sheets.
+      ...Object.entries(JSON.parse(await archivedBody(
+        "365scores-UCL-MD1-recorded-2026-10-12.json.gz"
+      )) as Record<string, string>)
     ]);
     return runDailyFetch({
       database: client,
@@ -784,6 +788,14 @@ describe("the daily fetch", () => {
       );
       expect(rows.map(({ deadline_at: at }) => (at as Date).toISOString()))
         .toEqual(["2026-09-08T15:15:00.000Z", "2026-10-13T15:15:00.000Z"]);
+      // `MD1` settled before the Competition was listed, and the first
+      // morning after its schedule lands reads its shots and xG all the same.
+      const stats = await client.query<{ count: number }>(
+        `select count(*)::int as count from team_match_stats
+          where competition = 'UCL' and home_xg is not null
+            and away_xg is not null`
+      );
+      expect(stats.rows[0]!.count).toBe(18);
     });
 
   test("a Champions League refusal is named and costs no other Competition its day",

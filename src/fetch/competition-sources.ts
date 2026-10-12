@@ -13,10 +13,11 @@
  * one remaining `null` is `squadChanges`, and that one is not a placeholder: a
  * national side has no transfer window, so it says this Competition has no
  * such source, the daily fetch does not walk it, and the packet states the
- * absence. The three UEFA club cups name UEFA for their schedule and nothing
- * else yet (ticket 0099): their other `null`s are the fetches tickets 0101,
- * 0103 and 0104 have not built. Naming a source before its fetch exists would
- * be the lie, because the fetch would believe it.
+ * absence. The three UEFA club cups name UEFA for their schedule (ticket
+ * 0099), and `UCL` names 365Scores for its shots and xG (ticket 0101): their
+ * other `null`s are the fetches tickets 0103, 0104, 0107 and 0108 have not
+ * built. Naming a source before its fetch exists would be the lie, because
+ * the fetch would believe it.
  *
  * A listed Competition with no entry fails the run by name (ADR-0054: a
  * missing map fails loudly, a wrong one fails nothing).
@@ -109,16 +110,17 @@ const BY_COMPETITION: Readonly<Record<string, CompetitionSources>> = {
     squadChanges: null,
     headCoaches: "wikipedia-national-team-head-coaches"
   },
-  // The three UEFA club cups (ADR-0063) name UEFA for their schedule and
-  // nothing else yet, because no other fetch for them exists yet. Tickets
-  // 0101, 0103 and 0104 replace `stats`, `history` and `headCoaches` with the
-  // fetch each one builds. `squadChanges` stays null by ADR-0063's decision:
-  // clubs have transfer windows, and the packet says this Competition does
-  // not read them.
+  // The three UEFA club cups (ADR-0063) name UEFA for their schedule, and
+  // `UCL` 365Scores for its shots and xG (ticket 0101). `UEL` and `UECL` take
+  // `stats` when tickets 0107 and 0108 review their name maps; tickets 0103
+  // and 0104 replace `history` and `headCoaches` with the fetch each one
+  // builds. `squadChanges` stays null by ADR-0063's decision: clubs have
+  // transfer windows, and the packet says this Competition does not read
+  // them.
   UCL: {
     schedule: "uefa",
     history: null,
-    stats: null,
+    stats: "365scores",
     squadChanges: null,
     headCoaches: null
   },
