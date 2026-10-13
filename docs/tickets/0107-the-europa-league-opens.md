@@ -9,7 +9,10 @@ a render read whole. It is activated by the runbook's *Opening a club cup*.
 
 Source: ADR-0063, spec 0028 stories 59, 61, 75–80.
 
-**Blocked by:** 0106 (the runbook), 0103 and 0104 (both sources green).
+**Blocked by:** 0106 (the runbook), 0103 and 0104 (both sources green), and 0111 (history
+lines carry their sheets' figures; ADR-0063 as amended 2026-10-13). If 0111 is not green by
+2026-10-15T06:00Z, this ticket pins scores-only history lines and proceeds. Migration 0051
+is applied on production after `db:rehearse` and before `UEL`'s insert.
 
 **Hard deadline:** pinned and deployed by 2026-10-15T09:15Z. The fallback is Gameweek 3,
 Lock 10-22T15:15Z.
@@ -35,6 +38,6 @@ Lock 10-22T15:15Z.
 ## Acceptance criteria
 
 - [ ] The three `UEL` maps are derived from the archive with nothing left over.
-- [ ] A `UEL` Gameweek 2 render holds every section; `MATCH_PROMPTS.UEL` is pinned; every other pin unchanged.
+- [ ] A `UEL` Gameweek 2 render holds every section, with history lines carrying their sheets' figures (or scores only, if 0111 missed its cut, recorded here); `MATCH_PROMPTS.UEL` is pinned; every other pin unchanged.
 - [ ] The dry run over the hand-run first fetch shows `MD1` adopted with 18 sheets.
 - [ ] Production answers `UEL` with eight seats and its caveat; the boundary is recorded.

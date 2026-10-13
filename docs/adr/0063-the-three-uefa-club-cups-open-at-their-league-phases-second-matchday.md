@@ -22,6 +22,12 @@ status: accepted
 > opponent that is itself one of the cup's sides is stored under the record's spelling.
 > The same match arrives on both sides' pages under one source match id, so two
 > spellings would overwrite each other. Every other opponent keeps 365Scores' spelling.
+>
+> Amended 2026-10-13, after the operator read `UCL`'s first production packet: **the
+> Europa League's and Conference League's history lines carry their sheets' shots and
+> xG.** `UCL` is unchanged. It froze scores-only at its first Lock and stays that way
+> for its league phase. See *Amendment: the Europa and Conference Leagues' history lines
+> carry their sheets' figures* at the foot of this note.
 
 **The UEFA Champions League (`UCL`), Europa League (`UEL`) and Conference League
 (`UECL`) open for 2026-27, league phase only, each at its `MD2`.** Each cup has 36 clubs
@@ -334,3 +340,96 @@ this note:
   line has no "since when" until a snapshot shows one.
 - **The tickets are not yet written.** They follow this note's acceptance, numbered off
   `main`.
+
+## Amendment: the Europa and Conference Leagues' history lines carry their sheets' figures (2026-10-13)
+
+**For `UEL` and `UECL`, each line of a side's five most recent competitive matches
+carries the shots, shots on target and xG that match's 365Scores sheet holds, where it
+holds them.** `UCL` is not touched. `match-ucl/2026-27-v1` froze at its first Lock
+(2026-10-13T15:15Z) with scores-only history lines, and it keeps them for its whole league
+phase (ADR-0026).
+
+**Why.** The operator decided this after reading `UCL`'s first production packet. The
+*History* paragraph above kept every line to its score so that a line would never carry
+figures the next line could not. That trade was already weighed once and decided the
+other way: ADR-0058's 2026-09-23 amendment puts a 365Scores sheet's figures on the
+Nations League's dataset lines "where a sheet was read and say nothing where none was",
+with friendlies holed far more often than the competition itself. The same rule now holds
+for two of the three club cups.
+
+The unevenness is real, and it follows the league, not the club. As read on 2026-10-12:
+- the sheets carry xG for the five leagues, Portugal and Israel;
+- they carry none for the Czech, Slovak, Ukrainian, Azerbaijani, Belgian, Norwegian,
+  Greek, Austrian, Bulgarian, Cypriot and Armenian leagues;
+- a UEFA match's sheet carries it for every club.
+
+So every side still has figures on its cup matches, and a side from a league without
+them has fewer.
+
+**What a line says.** The default follows the Nations League's precedent, and the
+operator may change it before either cup's Prompt Version is pinned:
+- a sheet with xG renders the same figures the played-Fixtures section does, e.g.
+  `shots 12-8, on target 5-3, xG 1.25-0.75`;
+- a sheet with shots and no xG renders its shots beside "xG unavailable" (ADR-0058, as
+  ticket 0072 amended it);
+- a match with no sheet stored renders its score alone and says nothing about figures.
+
+**Where the figures live.** The sheet is the same 365Scores match the results listing
+names, so the figures attach to the `club_results` row by its `source_match_id`.
+Migration 0051 adds nullable per-side shots, shots on target and xG, plus the instant the
+sheet was read, so that "read and empty" and "never read" stay distinct facts. One row
+per match still serves every cup that reads it. For example, a domestic match between a
+`UEL` side and a `UECL` side is read once.
+
+**When a sheet is read, and when it is left.** A row's sheet is read once the match is a
+day old, so a sheet published before its figures settle is not taken as final. A sheet
+that answers without xG is then the league's answer and is not read again. This departs
+from the cup Fixtures' hole-and-retry rule (ADR-0058) on purpose: a domestic league
+without xG will never fill, and retrying it would add about a hundred requests a day for
+nothing. A sheet that fails to answer at all is read again the next day. Sheets are read
+only for rows touching a side of a Competition whose packet renders them, so `UCL`'s
+sides' rows are not read for this.
+
+**`UCL`'s frozen render must not pick the figures up.** `club_results` is shared, and a
+domestic match between a `UCL` side and a `UEL` side will carry figures read for the
+`UEL` packet. The renderer decides per Competition whether a history line shows figures.
+That decision is a per-Competition fact beside the bands line, never a flag (the
+policy-from-data rule). `UCL`'s entry says no, and a test must show a `UCL` packet with
+an enriched row still printing the score alone.
+
+**Cut lines.** These are the same terms as `UCL`'s:
+- for `UEL`, if the sheet reading is not green by 2026-10-15T06:00Z, `match-uel/2026-27-v1`
+  is pinned with scores-only lines, and they stay that way for its league phase;
+- for `UECL`, the cut is 2026-10-22T03:45Z, nine hours and a quarter before its
+  13:00Z Lock.
+
+Either cup that misses its cut keeps the *History* paragraph's original rule. The other
+does not inherit the miss.
+
+**What it costs.**
+- The first read is about 180 sheets a cup (36 sides × five matches, fewer where two cup
+  sides meet), at the 0.4 s spacing the results listing uses.
+- After that, each newly settled match costs one sheet, roughly fifty a week per cup.
+- The packet grows by the figures on up to ten lines a Fixture. The per-Fixture price is
+  re-read by ticket 0109 as before.
+
+**Consequences.**
+- **Migration** 0051 adds the columns to `club_results`. That means five filename-list
+  edits, `db:rehearse`, and the operator's apply on production before `UEL`'s insert.
+- **Code**:
+  - a sheet-reading step in the club results fetch, following the rules above;
+  - the history renderer reads the figures and a per-Competition entry, and `UCL`'s
+    entry renders scores only;
+  - the dry-run replay maps the new sheet URLs.
+- **Spec 0028** moves:
+  - story 50 (scores only) becomes "figures where the sheet has them" for `UEL` and
+    `UECL`, and stays as written for `UCL`;
+  - stories are added for the day's delay, the read-and-empty rule, and `UCL`'s frozen
+    render;
+  - "xG on history lines" leaves *Out of Scope*.
+- **Tickets**: a new ticket (0111) builds the above. It is blocked by 0103 and blocks 0107
+  and 0108, whose renders and pins must show the figures, unless their cut lines are
+  missed.
+- **The three cups' packets now differ in one more section.** A reader comparing `UCL`
+  with the other two should know `UCL`'s history lines are scores-only by its freeze, not
+  by its source.

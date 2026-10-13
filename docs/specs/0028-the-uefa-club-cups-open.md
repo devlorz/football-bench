@@ -11,6 +11,14 @@ standing on [ADR-0057](../adr/0057-the-nations-league-opens-as-the-first-cup-on-
 [ADR-0062](../adr/0062-eight-seats-open-the-leagues-second-edition.md),
 [ADR 0035–0038](../adr/), [ADR-0054](../adr/0054-the-bundesliga-opens-and-nothing-has-been-lost-yet.md)
 
+> Amended 2026-10-13 with ADR-0063's amendment of the same day: **the Europa League's and
+> Conference League's history lines carry their sheets' shots and xG.** `UCL` keeps the
+> scores-only lines it froze with at its first Lock. Story 50 now covers `UCL` alone, and
+> stories 50a–50h are added. The `club_results` and history-renderer decisions gain the
+> sheet columns (migration 0051), the day's delay, the read-and-empty rule and the
+> per-Competition switch. "xG on history lines" leaves *Out of Scope*. The ticket order
+> gains ticket 0111, which blocks 0107 and 0108, with a cut line for each of the two cups.
+
 ---
 
 ADR-0063 opens the UEFA Champions League, Europa League and Conference League for
@@ -138,7 +146,15 @@ and deployed.
 47. As an Entrant, I want the cup's played Fixtures with shots and xG, so that every side, including those whose domestic leagues have no xG, shows at least one match with xG from Gameweek 2.
 48. As an Entrant, I want a played Fixture with no sheet to read "no shots or xG stored for this Fixture", and a sheet with shots but no xG to read its shots with "xG unavailable", as for `UNL`, so that a hole is distinguishable from a zero.
 49. As an Entrant, I want each side's five most recent competitive matches before the Lock in any competition, newest first, with the competition named and the score, so that I see current form across the league and Europe.
-50. As an Entrant, I want history lines to carry scores only, so that every line reads alike whether or not the club's league has xG on its sheet.
+50. As an Entrant of `UCL`, I want history lines to carry scores only, so that every line reads alike whether or not the club's league has xG on its sheet. *(Amended 2026-10-13: `UCL` alone; frozen in `match-ucl/2026-27-v1` and unchanged for its league phase.)*
+50a. As an Entrant of `UEL` or `UECL`, I want each history line to carry the shots, shots on target and xG its match's 365Scores sheet holds, rendered as the played-Fixtures section renders them, so that a side's recent form shows how it played and not only what the score was.
+50b. As an Entrant of `UEL` or `UECL`, I want a history line whose sheet has shots and no xG to show its shots beside "xG unavailable", so that a league without xG is distinguishable from a zero.
+50c. As an Entrant of `UEL` or `UECL`, I want a history line with no sheet stored to show its score alone and say nothing more, as the Nations League's dataset lines do (ADR-0058), so that a missing sheet never reads as a failed fetch.
+50d. As the operator, I want a match's sheet read only once the match is a day old, so that a sheet published before its figures settle is not taken as final.
+50e. As the operator, I want a sheet that answers without xG to be stored as read and not read again, and a sheet that fails to answer to be read again the next day, so that a league without xG costs one request a match and never a request a day.
+50f. As the operator, I want sheets read only for `club_results` rows that touch a side of a Competition whose packet renders figures, and each match read once however many cups need it, so that the request budget follows what the packets show.
+50g. As a maintainer, I want `UCL`'s render to print scores only even when a shared `club_results` row carries figures read for another cup, proven by a test, so that a frozen Prompt Version never moves with the data.
+50h. As the operator, I want `UEL` and `UECL` each to have a cut line for this work (2026-10-15T06:00Z and 2026-10-22T03:45Z), past which that cup pins with scores-only lines for its league phase and the other cup does not inherit the miss, so that the work never costs a Lock.
 51. As an Entrant, I want a cup Fixture to appear on a history line as a score and in the played-Fixtures section with its figures, without the history being cut short, so that the five lines stay five.
 52. As an Entrant, I want a side with fewer than five stored matches to show what exists and say so, so that a short list is not read as a failed fetch.
 53. As an Entrant, I want Squad Changes stated as "not read for this Competition", so that I do not read it as "no changes".
@@ -211,12 +227,29 @@ and deployed.
   record's codes, the same reason `international_results` has none, and the registry
   gates the read. Rows are stored for the cup's sides from 2026-07-01 forward. Friendlies
   are dropped at the fetch, by 365Scores' competition name.
+- **`club_results` gains a sheet's figures** (migration 0051, ADR-0063's 2026-10-13
+  amendment):
+  - nullable per-side shots, shots on target and xG;
+  - the instant the sheet was read, so that "read and empty" and "never read" are
+    different rows.
+
+  The sheet is 365Scores' match sheet for the same `source_match_id`, the endpoint the
+  stats fetch already reads. A row is eligible once its match is a day old and it
+  touches a side of a Competition whose packet renders figures. It is read once.
+  - A sheet without xG is final.
+  - A failed request is read again the next day.
+  - A row already read for one cup is not read again for another.
 - **The club history renderer** takes, for each side, the five latest `club_results` rows
   before the Lock. The cup's own settled Fixtures are already among them (365Scores lists
   the club's cup matches), so no merge with `fixtures` is needed. It prints date,
   competition, sides and score. It parallels the internationals renderer rather than
   extending it: that one carries `neutral`, the dataset-freshness line and a dedupe
   against `fixtures`, and none of the three applies here.
+- **Whether a history line shows figures is a per-Competition fact**, a constant entry
+  beside the bands line and never a flag (the policy-from-data rule). `UEL` and `UECL`
+  say yes. `UCL` says no, because it froze before this decision. The line's figures,
+  when shown, are the played-Fixtures section's own wording, built by the same code
+  that renders it, so "xG unavailable" and the shots read the same everywhere.
 - **`club_head_coaches`** is keyed `(team, observed_on)`, with `observed_at` and a
   nullable `head_coach`, and no `assumed_on`. That check is the reason
   `national_team_head_coaches` cannot be reused. The Change computation (every
@@ -269,7 +302,10 @@ and deployed.
   9. `UEL` names, pin and activation;
   10. `UECL` names, pin and activation;
   11. price re-read;
-  12. `/overall` sums the club cups (0110), after `UCL` activates.
+  12. `/overall` sums the club cups (0110), after `UCL` activates;
+  13. history lines carry their sheets' figures (0111), blocked by 0103, blocking 0107
+      and 0108, with migration 0051 applied before `UEL`'s insert. If it misses a cup's
+      cut line, that cup pins scores-only (story 50h).
 
   Tickets 1–4 and 7 are what `UCL` cannot open without. Tickets 5 and 6 are what the cut
   line may drop.
@@ -299,12 +335,21 @@ covered only through those surfaces. The seams, highest first, are all existing 
     refusal of `MD7` unchanged;
   - 365Scores: the three ids, and a missing name refused;
   - club results: friendlies dropped, upsert by match id, an unmapped side refused;
+  - club result sheets:
+    - a day-old row read once;
+    - a sheet without xG stored as read and not requested again;
+    - a failed request retried the next day;
+    - a row shared by two cups read once;
+    - a `UCL`-only row never read.
   - infobox: a vacancy, a field with markup, and an article with no infobox.
 - **The context seam** (the `build-internationals-context` and
   `build-national-team-head-coach-context` patterns, plus `competition-coexistence`):
   - the 36-side table at Gameweek 2 with the bands line;
   - every side with at least one played Fixture carrying xG;
-  - five history lines with competitions named and scores only;
+  - five history lines with competitions named:
+    - scores only for `UCL`, including a row enriched for another cup;
+    - figures, "xG unavailable", or the score alone for `UEL` and `UECL`, as the sheet
+      allows;
   - a short history;
   - a Change dated by the snapshot that shows it, and the no-appointment-date line;
   - the Squad Changes absence;
@@ -334,7 +379,10 @@ run of the whole suite is asked for before a push.
   skipped by the round filter, and nothing here prepares them.
 - **`UECL`'s `MD1` and `UCL`'s/`UEL`'s `MD1` as predicted Gameweeks.** They are history
   only, by the operator's choice of `MD2`.
-- **xG on history lines**, including where the club's league has it (ADR-0063).
+- **xG on `UCL`'s history lines.** It froze scores-only at its first Lock (ADR-0063,
+  as amended 2026-10-13).
+- **Figures for leagues whose sheets carry none.** No second source is opened for them
+  (FotMob stays closed).
 - **FotMob**, as a fallback or otherwise (ADR-0058, ADR-0063).
 - **Squad Changes for clubs**, including January's window.
 - **Season-article Head Coach events for the 38 clubs in the five leagues**. One source

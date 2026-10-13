@@ -8,7 +8,9 @@ activation and arrives as Locked history with its sheets.
 
 Source: ADR-0063, spec 0028 stories 59, 61, 75–80.
 
-**Blocked by:** 0106 (the runbook), 0103 and 0104.
+**Blocked by:** 0106 (the runbook), 0103, 0104 and 0111 (history lines carry their
+sheets' figures). If 0111 is not green by 2026-10-22T03:45Z, this ticket pins scores-only
+history lines and proceeds.
 
 **Hard deadline:** pinned and deployed by 2026-10-22T07:00Z. The fallback is Gameweek 3,
 Lock 11-05T16:15Z.
@@ -39,5 +41,5 @@ Lock 11-05T16:15Z.
 
 - [ ] The three `UECL` maps are derived from the archive with nothing left over.
 - [ ] After 10-15, all 18 `MD1` sheets are read and the count with xG is recorded here.
-- [ ] A `UECL` Gameweek 2 render holds every section; `MATCH_PROMPTS.UECL` is pinned; every other pin unchanged.
+- [ ] A `UECL` Gameweek 2 render holds every section, with history lines carrying their sheets' figures (or scores only, if 0111 missed its cut, recorded here); `MATCH_PROMPTS.UECL` is pinned; every other pin unchanged.
 - [ ] Production answers `UECL` with eight seats and its caveat; the boundary is recorded.
