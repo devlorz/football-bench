@@ -39,8 +39,7 @@ const SCORES_365_COMPETITION_IDS: Readonly<Record<string, string>> = {
  * means. Keyed by Competition because a spelling is only reviewed against the
  * sides that Competition stores. A Competition with no map is refused on the
  * same terms as one with no id (ADR-0054: a missing map fails loudly), so
- * `UEL` and `UECL` read nothing here until tickets 0107 and 0108 review
- * theirs.
+ * `UECL` reads nothing here until ticket 0108 reviews its own.
  */
 const STORED_NAME_BY_LISTED_NAME: Readonly<
   Record<string, Readonly<Record<string, string>>>
@@ -68,6 +67,24 @@ const STORED_NAME_BY_LISTED_NAME: Readonly<
     "RB Leipzig": "Leipzig",
     "Shakhtar Donetsk": "Shakhtar",
     "Slovan Bratislava": "S. Bratislava"
+  },
+  UEL: {
+    "AC Milan": "Milan",
+    "Bayer Leverkusen": "Leverkusen",
+    Besiktas: "Beşiktaş",
+    "Celta Vigo": "Celta",
+    "Dinamo Zagreb": "GNK Dinamo",
+    "FC Ararat-Armenia": "Ararat-Armenia",
+    Ferencvaros: "Ferencváros",
+    "Hapoel Beer Sheva": "H. Beer-Sheva",
+    "Lech Poznan": "Lech Poznań",
+    Lillestrom: "Lillestrøm",
+    "N.E.C. Nijmegen": "N.E.C.",
+    "NK Celje": "Celje",
+    "Olympique de Marseille": "Marseille",
+    "Red Bull Salzburg": "Salzburg",
+    "Union St. Gilloise": "Union SG",
+    "Viktoria Plzen": "Viktoria Plzeň"
   }
 };
 

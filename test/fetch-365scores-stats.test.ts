@@ -725,8 +725,8 @@ describe("the seventeen Champions League spellings 365Scores does not share", ()
     });
 
   test("a Competition with no reviewed map is refused, not read raw", () => {
-    // `UEL` has its id and no map until ticket 0107 (ADR-0054).
-    expect(() => storedTeamName("UEL", "Roma"))
+    // `UECL` has its id and no map until ticket 0108 (ADR-0054).
+    expect(() => storedTeamName("UECL", "Roma"))
       .toThrow(UnknownScores365CompetitionError);
   });
 
@@ -734,6 +734,60 @@ describe("the seventeen Champions League spellings 365Scores does not share", ()
     expect(storedTeamName("UNL", "Bayern Munich")).toBe("Bayern Munich");
     expect(storedTeamName(CHAMPIONS_LEAGUE, "Ireland")).toBe("Ireland");
   });
+});
+
+describe("the sixteen Europa League spellings 365Scores does not share", () => {
+  test("map MD1's listings onto UEFA's own eighteen Fixtures, nothing left over",
+    async () => {
+      // Champions League's derivation over `UEL`'s archive, read 2026-10-13.
+      const uefa = (await Promise.all([0, 100, 200].map((offset) => archivedBody(
+        `uefa-2026-27-UEL-recorded-offset-${offset}.json.gz`))))
+        .flatMap((page) => JSON.parse(page) as {
+          kickOffTime: { dateTime: string };
+          matchday: { name: string };
+          round: { metaData: { name: string } };
+          homeTeam: { internationalName: string };
+          awayTeam: { internationalName: string };
+          score: { total: { home: number; away: number } };
+        }[])
+        .filter((match) => match.round.metaData.name === "League Phase"
+          && match.matchday.name === "MD1");
+      const games = Object.entries(JSON.parse(await archivedBody(
+        "365scores-UEL-MD1-recorded-2026-10-13.json.gz"
+      )) as Record<string, string>)
+        .filter(([url]) => url.includes("/web/games/"))
+        .flatMap(([url, body]) => parseScores365Games(url, body));
+      const line = (at: string | Date, home: string, away: string,
+        homeGoals: number, awayGoals: number): string =>
+        `${new Date(at).toISOString()} ${home} ${homeGoals}-${awayGoals} ${away}`;
+
+      expect(games.map((game) => line(
+        game.kickedOffAt,
+        storedTeamName("UEL", game.home.name),
+        storedTeamName("UEL", game.away.name),
+        game.home.score,
+        game.away.score
+      )).sort()).toEqual(uefa.map((match) => line(
+        match.kickOffTime.dateTime,
+        match.homeTeam.internationalName,
+        match.awayTeam.internationalName,
+        match.score.total.home,
+        match.score.total.away
+      )).sort());
+
+      const listed = new Set(games
+        .flatMap((game) => [game.home.name, game.away.name]));
+      const stored = new Set(uefa.flatMap((match) => [
+        match.homeTeam.internationalName, match.awayTeam.internationalName
+      ]));
+      expect([listed.size, stored.size]).toEqual([36, 36]);
+      const map = scores365NameMapOf("UEL")!;
+      expect(Object.keys(map).sort())
+        .toEqual([...listed].filter((name) => !stored.has(name)).sort());
+      expect(Object.values(map).sort())
+        .toEqual([...stored].filter((name) => !listed.has(name)).sort());
+      expect(Object.keys(map)).toHaveLength(16);
+    });
 });
 
 describe("the Champions League's shots and xG read from 365Scores", () => {

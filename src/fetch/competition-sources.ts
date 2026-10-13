@@ -118,10 +118,10 @@ const BY_COMPETITION: Readonly<Record<string, CompetitionSources>> = {
   // The three UEFA club cups (ADR-0063) name UEFA for their schedule, and
   // `UCL` 365Scores for its shots and xG (ticket 0101) and its clubs' recent
   // results (ticket 0103), and each club's Wikipedia infobox for who picks it
-  // (ticket 0104). `UEL` and `UECL` take all three when tickets 0107 and 0108
-  // review their maps. `squadChanges` stays null by ADR-0063's decision: clubs have
-  // transfer windows, and the packet says this Competition does not read
-  // them.
+  // (ticket 0104). `UEL` took all three with its maps (ticket 0107); `UECL`
+  // takes them when ticket 0108 reviews its own. `squadChanges` stays null by
+  // ADR-0063's decision: clubs have transfer windows, and the packet says
+  // this Competition does not read them.
   UCL: {
     schedule: "uefa",
     history: "365scores",
@@ -131,10 +131,10 @@ const BY_COMPETITION: Readonly<Record<string, CompetitionSources>> = {
   },
   UEL: {
     schedule: "uefa",
-    history: null,
-    stats: null,
+    history: "365scores",
+    stats: "365scores",
     squadChanges: null,
-    headCoaches: null
+    headCoaches: "wikipedia-club-infobox"
   },
   UECL: {
     schedule: "uefa",

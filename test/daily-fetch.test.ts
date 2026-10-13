@@ -16,6 +16,7 @@ import {
 } from "../src/fetch/competition-sources.js";
 import { UnknownUefaMatchdayError } from "../src/uefa/fetch-competition.js";
 import {
+  ClubResultSheetsFetchError,
   ClubResultsFetchError
 } from "../src/365scores/fetch-club-results.js";
 import {
@@ -714,9 +715,14 @@ describe("the daily fetch", () => {
   const withTheChampionsLeague = async (
     championsLeaguePages: string[],
     clubResults?: (url: string, body: string) => { status: number; body: string },
-    infoboxes: (body: string) => string = (body) => body
+    infoboxes: (body: string) => string = (body) => body,
+    // Lists the Europa League too, whose history lines print their sheets'
+    // figures: every sheet not recorded is answered with the match as its
+    // results page lists it and no figures, then passed through this.
+    europaLeagueSheets?: (url: string, body: string) => string
   ): Promise<unknown> => {
-    for (const competition of ["PD", "UNL", "UCL"]) {
+    const cups = europaLeagueSheets === undefined ? ["UCL"] : ["UCL", "UEL"];
+    for (const competition of ["PD", "UNL", ...cups]) {
       await client.query(
         "insert into competitions (competition, season) values ($1, $2)",
         [competition, "2026-27"]
@@ -756,8 +762,14 @@ describe("the daily fetch", () => {
       ...Object.entries(JSON.parse(await archivedBody(
         "wikipedia-club-infoboxes-recorded-2026-10-13.json.gz"
       )) as Record<string, string>)
-        .map(([url, body]): [string, string] => [url, infoboxes(body)])
+        .map(([url, body]): [string, string] => [url, infoboxes(body)]),
+      ...europaLeagueSheets === undefined ? [] : await europaLeagueResponses()
     ]);
+    const listed = new Map([...responses]
+      .filter(([url]) => url.includes("/games/results/"))
+      .flatMap(([, body]) => (JSON.parse(body) as {
+        games: { id: number }[];
+      }).games.map((game) => [String(game.id), game] as const)));
     return runDailyFetch({
       database: client,
       season: "2026-27",
@@ -765,6 +777,13 @@ describe("the daily fetch", () => {
       footballDataOrgToken: "a-football-data-org-token",
       now: () => new Date("2026-10-12T12:00:00.000Z"),
       http: async (url: string) => {
+        const id = /\/game\/stats\/.*games=(\d+)/.exec(url)?.[1];
+        if (id !== undefined && europaLeagueSheets !== undefined) {
+          const body = responses.get(url) ?? JSON.stringify({
+            statistics: [], games: [listed.get(id)]
+          });
+          return { status: 200, body: europaLeagueSheets(url, body) };
+        }
         const body = responses.get(url) ?? "";
         return clubResults !== undefined && url.includes("/games/results/")
           ? clubResults(url, body)
@@ -773,6 +792,24 @@ describe("the daily fetch", () => {
       pause: async () => {}
     }).then(() => undefined, (error: unknown) => error);
   };
+
+  /** The Europa League's league phase and its 365Scores and Wikipedia reads. */
+  const europaLeagueResponses = async (): Promise<[string, string][]> => [
+    ...(await Promise.all([0, 100, 200].map((offset) => archivedBody(
+      `uefa-2026-27-UEL-recorded-offset-${offset}.json.gz`
+    )))).map((body, page): [string, string] => [
+      "https://match.uefa.com/v5/matches"
+      + `?competitionId=14&seasonYear=2027&limit=100&offset=${page * 100}`,
+      body
+    ]),
+    ...(await Promise.all([
+      "365scores-UEL-MD1-recorded-2026-10-13.json.gz",
+      "365scores-UEL-club-results-recorded-2026-10-13.json.gz",
+      "wikipedia-UEL-club-infoboxes-recorded-2026-10-13.json.gz"
+    ].map(async (name) => Object.entries(
+      JSON.parse(await archivedBody(name)) as Record<string, string>
+    )))).flat()
+  ];
 
   const championsLeaguePages = async (): Promise<string[]> => Promise.all(
     [0, 100, 200].map((offset) => archivedBody(
@@ -840,6 +877,87 @@ describe("the daily fetch", () => {
         "select head_coach from club_head_coaches where team = 'Lens'"
       );
       expect(lens.rows).toEqual([{ head_coach: "Yannick Cahuzac" }]);
+    });
+
+  test("reads a row the Europa League shares with the Champions League once, and a Champions League-only row never",
+    async () => {
+      const asked: string[] = [];
+      expect(await withTheChampionsLeague(
+        await championsLeaguePages(), undefined, undefined,
+        (url, body) => {
+          asked.push(url);
+          return body;
+        }
+      )).toBeUndefined();
+
+      // Crystal Palace (`UEL`) v Man City (`UCL`): read, and asked for once.
+      const read = async (id: string) => (await client.query(
+        `select home_team, away_team, sheet_read_at is not null as read
+           from club_results where source_match_id = $1`,
+        [id]
+      )).rows;
+      expect(await read("4742087")).toEqual([
+        { home_team: "Crystal Palace", away_team: "Man City", read: true }
+      ]);
+      expect(asked.filter((url) => url === sheetUrl("4742087")))
+        .toHaveLength(1);
+      // Augsburg v Bayern touches no Europa League side.
+      expect(await read("4755385")).toEqual([
+        { home_team: "FC Augsburg", away_team: "Bayern München", read: false }
+      ]);
+      expect(asked).not.toContain(sheetUrl("4755385"));
+      // `MD1`'s Ararat-Armenia v Sparta Praha carries its recorded xG.
+      const md1 = await client.query(
+        `select home_xg::float8 as home_xg, away_xg::float8 as away_xg
+           from club_results where source_match_id = '4828764'`
+      );
+      expect(md1.rows).toEqual([{ home_xg: 1.92, away_xg: 2.62 }]);
+    });
+
+  test("a Europa League sheet whose sides are not its row's fails that day by name, and no other's",
+    async () => {
+      const palace = sheetUrl("4742087");
+
+      const thrown = await withTheChampionsLeague(
+        await championsLeaguePages(), undefined, undefined,
+        (url, body) => {
+          if (url !== palace) {
+            return body;
+          }
+          const sheet = JSON.parse(body) as {
+            games: { homeCompetitor: unknown; awayCompetitor: unknown }[];
+          };
+          const game = sheet.games[0]!;
+          [game.homeCompetitor, game.awayCompetitor] =
+            [game.awayCompetitor, game.homeCompetitor];
+          return JSON.stringify(sheet);
+        }
+      );
+
+      expect(thrown).toMatchObject({
+        name: ClubResultSheetsFetchError.name,
+        competition: "UEL",
+        games: ["4742087"]
+      });
+      expect(await fixturesByCompetition()).toEqual([
+        { competition: "PD", fixtures: 380, settled: 0, gameweeks: 38 },
+        { competition: "PL", fixtures: 380, settled: 0, gameweeks: 38 },
+        { competition: "UCL", fixtures: 144, settled: 18, gameweeks: 8 },
+        { competition: "UEL", fixtures: 144, settled: 18, gameweeks: 8 },
+        { competition: "UNL", fixtures: 156, settled: 0, gameweeks: 6 }
+      ]);
+      // Every other sheet still landed.
+      const { rows } = await client.query(
+        `select count(*) filter (where sheet_read_at is null)::int as unread,
+                count(*) filter (where sheet_read_at is not null)::int as read
+           from club_results r
+          where kicked_off_at <= '2026-10-11T12:00:00Z'
+            and exists (select 1 from fixtures f where f.competition = 'UEL'
+              and (r.home_team in (f.home_team, f.away_team)
+                or r.away_team in (f.home_team, f.away_team)))`
+      );
+      expect(rows[0]!.unread).toBe(1);
+      expect(rows[0]!.read).toBeGreaterThan(100);
     });
 
   test("a mapped club article gone missing fails the Champions League's day by name, and no other's",

@@ -67,6 +67,46 @@ const ARTICLE_BY_SIDE: Readonly<
     Stuttgart: "VfB Stuttgart",
     Viking: "Viking FK",
     Villarreal: "Villarreal CF"
+  },
+  // Checked against the API on 2026-10-13
+  // (`wikipedia-UEL-club-infoboxes-recorded-2026-10-13`).
+  UEL: {
+    Anderlecht: "RSC Anderlecht",
+    "Ararat-Armenia": "FC Ararat-Armenia",
+    "AZ Alkmaar": "AZ Alkmaar",
+    Benfica: "S.L. Benfica",
+    "Beşiktaş": "Beşiktaş J.K.",
+    Bournemouth: "AFC Bournemouth",
+    Celje: "NK Celje",
+    Celta: "RC Celta de Vigo",
+    Celtic: "Celtic F.C.",
+    "Crystal Palace": "Crystal Palace F.C.",
+    "Ferencváros": "Ferencvárosi TC",
+    "GNK Dinamo": "GNK Dinamo Zagreb",
+    "H. Beer-Sheva": "Hapoel Be'er Sheva F.C.",
+    Hoffenheim: "TSG 1899 Hoffenheim",
+    Jagiellonia: "Jagiellonia Białystok",
+    Juventus: "Juventus FC",
+    "Lech Poznań": "Lech Poznań",
+    Leverkusen: "Bayer 04 Leverkusen",
+    "Levski Sofia": "PFC Levski Sofia",
+    "Lillestrøm": "Lillestrøm SK",
+    Lyon: "Olympique Lyonnais",
+    Marseille: "Olympique de Marseille",
+    Milan: "AC Milan",
+    "N.E.C.": "NEC Nijmegen",
+    "OFI Crete": "OFI Crete F.C.",
+    Olympiacos: "Olympiacos F.C.",
+    Omonia: "AC Omonia",
+    "Real Sociedad": "Real Sociedad",
+    Rennes: "Stade Rennais FC",
+    Salzburg: "FC Red Bull Salzburg",
+    "Sparta Praha": "AC Sparta Prague",
+    "Sturm Graz": "SK Sturm Graz",
+    Sunderland: "Sunderland A.F.C.",
+    Torreense: "S.C.U. Torreense",
+    "Union SG": "Royale Union Saint-Gilloise",
+    "Viktoria Plzeň": "FC Viktoria Plzeň"
   }
 };
 
@@ -118,7 +158,8 @@ export class ClubInfoboxMissingError extends Error {
   }
 }
 
-const INFOBOX = /\{\{\s*Infobox football club/i;
+/** Torreense's article opens the same template under its other name. */
+const INFOBOX = /\{\{\s*(?:Infobox football club|Football club infobox)/i;
 
 /**
  * The field naming who picks the team, anchored to a line's own parameter

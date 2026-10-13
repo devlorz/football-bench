@@ -22,6 +22,11 @@ status: accepted
 > opponent that is itself one of the cup's sides is stored under the record's spelling.
 > The same match arrives on both sides' pages under one source match id, so two
 > spellings would overwrite each other. Every other opponent keeps 365Scores' spelling.
+> Extended 2026-10-14 by ticket 0107's review: "the cup's sides" means every cup's. A
+> row is shared across cups, so a side of any cup is stored under the record's spelling,
+> found by its competitor id. `UCL`'s stored opponents that are `UEL` sides change
+> spelling from the first fetch after 0107 ("Olympique de Marseille" becomes
+> "Marseille"). Its frozen render does not move.
 >
 > Amended 2026-10-13, after the operator read `UCL`'s first production packet: **the
 > Europa League's and Conference League's history lines carry their sheets' shots and

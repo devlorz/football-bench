@@ -37,11 +37,60 @@ Lock 10-22T15:15Z.
 
 ## Acceptance criteria
 
-- [ ] The three `UEL` maps are derived from the archive with nothing left over.
-- [ ] A `UEL` Gameweek 2 render holds every section, with history lines carrying their sheets' figures (or scores only, if 0111 missed its cut, recorded here); `MATCH_PROMPTS.UEL` is pinned; every other pin unchanged.
+- [x] The three `UEL` maps are derived from the archive with nothing left over. 16 spellings, 36 competitor ids and 36 titles, each derived by a test from archives recorded 2026-10-13.
+- [x] A `UEL` Gameweek 2 render holds every section, with history lines carrying their sheets' figures (or scores only, if 0111 missed its cut, recorded here); `MATCH_PROMPTS.UEL` is pinned; every other pin unchanged. 0111 was green before its cut, so the history lines carry figures. `b3b605c6…e6bf` was read whole from the suite's render on 2026-10-13.
 - [ ] The dry run over the hand-run first fetch shows `MD1` adopted with 18 sheets.
 - [ ] Production answers `UEL` with eight seats and its caveat; the boundary is recorded.
-- [ ] (moved from 0111) A row shared by a `UCL` side and a `UEL` side is read once. A `UCL`-only row is never read.
-- [ ] (moved from 0111) A `UEL` packet shows figures on a line whose sheet has them, shots and "xG unavailable" where it has no xG, and the score alone where no sheet is stored. Nothing observed after the Lock appears.
-- [ ] (from 0111's review) The guard sits inside `fetchClubResultSheets`; a call with a Competition whose constant is no throws by name. Its positive tests switch from `UCL` to `UEL`.
-- [ ] (from 0111's review) A `UEL` sheet whose sides do not match its row fails `UEL`'s day by name through `runDailyFetch`, and the other listed Competitions land.
+- [ ] Pushed and deployed by 2026-10-15T09:15Z; the `origin/main` gap checked first.
+- [ ] Pre-flight's paid half on `uel_preflight`: eight calls, about $0.30, asked for separately.
+- [ ] The operator's `competitions` insert and `EDITION=1 roster:enter` on production, with `DATABASE_URL` set inline.
+- [ ] The first fetch by hand, then `context:show` for `UEL` Gameweek 2.
+- [ ] The dashboard deploy by hand.
+- [x] Migration 0051 applied on production (operator).
+- [x] (moved from 0111) A row shared by a `UCL` side and a `UEL` side is read once. A `UCL`-only row is never read. Proven through `runDailyFetch` (`test/daily-fetch.test.ts`).
+- [x] (moved from 0111) A `UEL` packet shows figures on a line whose sheet has them, shots and "xG unavailable" where it has no xG, and the score alone where no sheet is stored. Nothing observed after the Lock appears. See `test/match-uel-packet.test.ts`.
+- [x] (from 0111's review) The guard sits inside `fetchClubResultSheets`; a call with a Competition whose constant is no throws by name. Its positive tests switch from `UCL` to `UEL`.
+- [x] (from 0111's review) A `UEL` sheet whose sides do not match its row fails `UEL`'s day by name through `runDailyFetch`, and the other listed Competitions land.
+
+## Outcome
+
+Code green 2026-10-13 (targeted suites, `tsc`). The production boxes wait on the operator's
+steps in the runbook's *Opening a club cup*.
+
+- **Recorded 2026-10-13**, all free:
+  - 365Scores' `MD1` listings and its 18 sheets, each with xG for both sides;
+  - the standings and all 36 sides' results pages;
+  - two Sparta Praha league sheets without xG;
+  - Wikipedia's section 0 for the 36 articles.
+- **Friendlies.** `UEL`'s pages list none under a name `FRIENDLIES` lacks, so the list is
+  unchanged. Every side has at least five competitive matches on its one page.
+- **The infobox alias.** Torreense's article opens `{{Football club infobox`, the other
+  name for the same template. `INFOBOX` now matches both, and Torreense reads Luís
+  Tralhão.
+- **A side's name is one name across cups.** `club_results` is keyed by match, and each
+  cup named a non-cup opponent through its own map. Crystal Palace v Man City was written
+  "Man City" by `UCL` and "Manchester City" by `UEL`, so the cup that wrote last decided
+  whether `UCL`'s Man City still had the row. A side of any cup is now named by its
+  competitor id, and anyone else by 365Scores' spelling. The test fails with the old
+  naming.
+  `UCL`'s stored opponents that are `UEL` sides change spelling with it: 19 rows in
+  `UCL`'s 2026-10-12 archive, such as "Olympique de Marseille" to "Marseille" and
+  "Union St. Gilloise" to "Union SG". The review counted 40, but that was every listed
+  game; 19 are the ones stored after friendlies and pre-July matches are dropped.
+  `UCL`'s Gameweek 3
+  packet (Lock 2026-10-20) is the first to print the new names; its pin does not move.
+  Recorded in ADR-0063's 0103 amendment.
+- **Head Coaches.** Lech Poznań reads Frederiksen and Viktoria Plzeň reads Kováč, from
+  `UEL`'s own recording.
+- **The guard.** The daily fetch still asks `historyCarriesFigures` before calling, so
+  `UCL`'s day does not fail on the guard.
+- **Routes.** `/uel` appears on the dashboard with the `MATCH_PROMPTS` entry, as `/ucl`
+  did in 0105.
+- **The pre-flight's free half on real sources**, 2026-10-13, on the throwaway database
+  `uel_preflight` (kept for the paid half):
+  - `EDITION=1 roster:enter` entered the eight `match-uel/…` seats;
+  - the fetch landed 144 Fixtures, `MD1`'s 18 settled, and 18 sheets with xG;
+  - Gameweek 2's deadline is 2026-10-15T15:15Z;
+  - `club_results` holds 409 rows, every sheet read: 195 with xG and 214 without;
+  - `club_head_coaches` holds 36 of 36;
+  - `context:show` renders 18 packets with every section.

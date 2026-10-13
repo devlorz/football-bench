@@ -1,6 +1,7 @@
 import type { Client } from "pg";
 import { z } from "zod";
 import type { HttpFetcher } from "../http.js";
+import { historyCarriesFigures } from "../context/build-club-results-context.js";
 import {
   clubResultsSource,
   clubResultsUrl,
@@ -11,8 +12,7 @@ import {
   Scores365ValidationError,
   SCORES_365_SOURCE,
   sheetSource,
-  sheetUrl,
-  storedTeamName
+  sheetUrl
 } from "./fetch-match-stats.js";
 
 type Database = Pick<Client, "query">;
@@ -22,8 +22,8 @@ type Database = Pick<Client, "query">;
  * stores it (ADR-0063). Derived from 365Scores' own standings for the
  * competition, joined through the reviewed name map of ticket 0101, and never
  * found by a search: a search for "Inter" or "Sporting" answers with whichever
- * club ranks first. A Competition with no map is refused (ADR-0054), so `UEL`
- * and `UECL` read nothing here until tickets 0107 and 0108.
+ * club ranks first. A Competition with no map is refused (ADR-0054), so
+ * `UECL` reads nothing here until ticket 0108.
  */
 const COMPETITOR_ID_BY_SIDE: Readonly<
   Record<string, Readonly<Record<string, number>>>
@@ -65,6 +65,44 @@ const COMPETITOR_ID_BY_SIDE: Readonly<
     Stuttgart: 338,
     Viking: 1980,
     Villarreal: 133
+  },
+  UEL: {
+    Anderlecht: 1173,
+    "Ararat-Armenia": 48879,
+    "AZ Alkmaar": 699,
+    Benfica: 888,
+    "Beşiktaş": 947,
+    Bournemouth: 50,
+    Celje: 2345,
+    Celta: 158,
+    Celtic: 754,
+    "Crystal Palace": 10,
+    "Ferencváros": 6020,
+    "GNK Dinamo": 2245,
+    "H. Beer-Sheva": 579,
+    Hoffenheim: 351,
+    Jagiellonia: 2220,
+    Juventus: 226,
+    "Lech Poznań": 2211,
+    Leverkusen: 333,
+    "Levski Sofia": 2277,
+    "Lillestrøm": 1985,
+    Lyon: 465,
+    Marseille: 469,
+    Milan: 227,
+    "N.E.C.": 700,
+    "OFI Crete": 1032,
+    Olympiacos: 1023,
+    Omonia: 2262,
+    "Real Sociedad": 154,
+    Rennes: 477,
+    Salzburg: 1739,
+    "Sparta Praha": 1788,
+    "Sturm Graz": 1741,
+    Sunderland: 117,
+    Torreense: 921,
+    "Union SG": 1204,
+    "Viktoria Plzeň": 1796
   }
 };
 
@@ -73,6 +111,23 @@ export function clubCompetitorIdsOf(
   competition: string
 ): Readonly<Record<string, number>> | undefined {
   return COMPETITOR_ID_BY_SIDE[competition];
+}
+
+/**
+ * A side as `club_results` names it, whichever cup's read wrote the row: a
+ * side of any cup by its competitor id, anyone else by 365Scores' spelling. One
+ * name across cups, because a row is keyed by match and shared: named by each
+ * cup's own map, Crystal Palace v Man City was "Manchester City" when `UEL`
+ * last wrote it, and `UCL`'s Man City lost the row.
+ */
+function clubNameOf(side: Scores365Side): string {
+  for (const ids of Object.values(COMPETITOR_ID_BY_SIDE)) {
+    const team = Object.entries(ids).find(([, id]) => id === side.id)?.[0];
+    if (team !== undefined) {
+      return team;
+    }
+  }
+  return side.name;
 }
 
 /**
@@ -204,11 +259,6 @@ export async function fetchClubResults({
       ));
       const names = new Map(listing.competitions
         .map((entry) => [entry.id, entry.name]));
-      // The listed side is named as the record stores it, found by its id
-      // rather than its spelling; an opponent keeps 365Scores' spelling unless
-      // it is another of the cup's sides.
-      const nameOf = (side: z.infer<typeof sideSchema>): string =>
-        side.id === id ? team : storedTeamName(competition, side.name);
       // The whole page is read into rows before any is written, so a page
       // refused for one game stores none of its others.
       const rows = listing.games.flatMap((game) => {
@@ -234,8 +284,8 @@ export async function fetchClubResults({
           SCORES_365_SOURCE,
           String(game.id),
           kickedOffAt,
-          nameOf(game.homeCompetitor),
-          nameOf(game.awayCompetitor),
+          clubNameOf(game.homeCompetitor),
+          clubNameOf(game.awayCompetitor),
           game.homeCompetitor.score,
           game.awayCompetitor.score,
           competitionName
@@ -312,6 +362,11 @@ export async function fetchClubResultSheets({
   now,
   pause = () => new Promise((resolve) => setTimeout(resolve, PAUSE_MS))
 }: FetchClubResultSheetsOptions): Promise<void> {
+  // A cup that prints no figures reads no sheets: `UCL`'s are never asked for.
+  if (!historyCarriesFigures(competition)) {
+    throw new Error(`Competition ${competition}'s history lines carry no `
+      + "figures, so it reads no 365Scores sheets");
+  }
   const readAt = now();
   const { rows } = await database.query<{
     source_match_id: string;
@@ -330,12 +385,6 @@ export async function fetchClubResultSheets({
     [competition, season, SCORES_365_SOURCE,
       new Date(readAt.getTime() - SHEET_AGE_MS)]
   );
-  const ids = clubCompetitorIdsOf(competition) ?? {};
-  // A sheet's side named as `fetchClubResults` names a listing's: a cup side
-  // by its competitor id, anyone else by 365Scores' spelling.
-  const nameOf = (side: Scores365Side): string =>
-    Object.entries(ids).find(([, id]) => id === side.id)?.[0]
-      ?? storedTeamName(competition, side.name);
   const failed: string[] = [];
   const errors: unknown[] = [];
   for (const [index, row] of rows.entries()) {
@@ -347,8 +396,9 @@ export async function fetchClubResultSheets({
       const sheet = parseScores365Sheet(source, await readAndArchive(
         database, http, sheetUrl(row.source_match_id), source
       ));
-      const home = nameOf(sheet.game.home);
-      const away = nameOf(sheet.game.away);
+      // Named as `fetchClubResults` named the row's sides.
+      const home = clubNameOf(sheet.game.home);
+      const away = clubNameOf(sheet.game.away);
       if (
         sheet.game.id !== row.source_match_id
         || home !== row.home_team

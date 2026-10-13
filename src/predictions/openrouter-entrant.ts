@@ -237,6 +237,19 @@ const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
     sha256:
       "ae5650926580148998649590d40b38ead5a6cdacccce8530d954bf4b4e692ae1",
     competitionName: "UEFA Champions League"
+  },
+  // The second club cup, frozen unused and unamendable from its first Lock,
+  // 2026-10-15T15:15Z. Every gate that moves this rendering was open: the
+  // clubs' recent matches (ticket 0103), their infobox Head Coaches (0104),
+  // and the sheets' figures on those history lines (0111, green before its
+  // cut line), which `UCL`'s do not carry (ADR-0063 as amended 2026-10-13).
+  // Read from this suite's render on 2026-10-13, as `UCL`'s was: production
+  // has no `UEL` packet before ticket 0107's insert.
+  UEL: {
+    version: "match-uel/2026-27-v1",
+    sha256:
+      "b3b605c6b5a641799553ce0d706af5edabf7878729e0853d8470742a29abe6bf",
+    competitionName: "UEFA Europa League"
   }
 };
 

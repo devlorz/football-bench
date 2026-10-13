@@ -175,11 +175,17 @@ const contextData = (competition: string): MatchContextData => ({
       home_goals: index % 3,
       away_goals: 1,
       competition_name: index === 2 ? "EFL Cup" : "Premier League",
-      // Read for another cup: a `UCL` pin prints the score alone.
+      // Read for another cup: a `UCL` pin prints the score alone, and a
+      // `UEL` one the full sheet and the sheet without xG.
       ...(index === 5 ? {
         home_shots: 15, away_shots: 4, home_shots_on_target: 6,
         away_shots_on_target: 1, home_xg: 2.1, away_xg: 0.3,
         sheet_read_at: new Date("2026-08-20T06:00:00Z")
+      } : {}),
+      ...(index === 4 ? {
+        home_shots: 11, away_shots: 7, home_shots_on_target: 3,
+        away_shots_on_target: 2, home_xg: null, away_xg: null,
+        sheet_read_at: new Date("2026-08-17T06:00:00Z")
       } : {})
     })),
     {

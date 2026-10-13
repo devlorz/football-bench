@@ -36,8 +36,10 @@ interface ApiPage {
 }
 
 /** Every recorded page's section 0, by title. */
-async function recordedArticles(): Promise<Map<string, string>> {
-  const bundle = JSON.parse(await archivedBody(INFOBOXES)) as
+async function recordedArticles(
+  name = INFOBOXES
+): Promise<Map<string, string>> {
+  const bundle = JSON.parse(await archivedBody(name)) as
     Record<string, string>;
   return new Map(Object.values(bundle).flatMap((body) =>
     (JSON.parse(body) as { query: { pages: ApiPage[] } }).query.pages
@@ -257,6 +259,8 @@ describe("which Competition a day of infoboxes was read for", () => {
       Object.keys(articles).sort().map((side) => articles[side]!))))
       .toBe(CHAMPIONS_LEAGUE);
     expect(clubInfoboxesCompetitionOf(clubInfoboxesUrl(["Lech Poznań"])))
+      .toBe("UEL");
+    expect(clubInfoboxesCompetitionOf(clubInfoboxesUrl(["Sabah FK"])))
       .toBeUndefined();
     expect(clubInfoboxesCompetitionOf("https://en.wikipedia.org/w/index.php"))
       .toBeUndefined();
@@ -287,5 +291,44 @@ describe("the Champions League's article map", () => {
         expect(() => parseClubHeadCoach(title, recorded.get(title)!))
           .not.toThrow();
       }
+    });
+});
+
+describe("the Europa League's article map", () => {
+  test("names every side of the league phase once, each title resolving",
+    async () => {
+      const pages = await Promise.all([0, 100, 200].map((offset) =>
+        archivedBody(`uefa-2026-27-UEL-recorded-offset-${offset}.json.gz`)));
+      const uefaSides = new Set(pages.flatMap((page) => (JSON.parse(page) as {
+        round: { metaData: { name: string } };
+        homeTeam: { internationalName: string };
+        awayTeam: { internationalName: string };
+      }[]).filter((match) => match.round.metaData.name === "League Phase")
+        .flatMap((match) => [
+          match.homeTeam.internationalName, match.awayTeam.internationalName
+        ])));
+      const articles = clubArticlesOf("UEL")!;
+      const recorded = await recordedArticles(
+        "wikipedia-UEL-club-infoboxes-recorded-2026-10-13.json.gz"
+      );
+
+      expect(Object.keys(articles).sort()).toEqual([...uefaSides].sort());
+      expect(new Set(Object.values(articles)).size).toBe(36);
+      // Both directions: the recording answered exactly the 36 titles asked.
+      expect([...recorded.keys()].sort())
+        .toEqual(Object.values(articles).sort());
+      for (const title of Object.values(articles)) {
+        expect(recorded.has(title), title).toBe(true);
+        expect(() => parseClubHeadCoach(title, recorded.get(title)!))
+          .not.toThrow();
+      }
+      // ADR-0063's acceptance cases, and the infobox opened under its other
+      // template name.
+      expect(parseClubHeadCoach("Lech Poznań", recorded.get("Lech Poznań")!))
+        .toBe("Niels Frederiksen");
+      expect(parseClubHeadCoach("FC Viktoria Plzeň",
+        recorded.get("FC Viktoria Plzeň")!)).toBe("Radoslav Kováč");
+      expect(parseClubHeadCoach("S.C.U. Torreense",
+        recorded.get("S.C.U. Torreense")!)).toBe("Luís Tralhão");
     });
 });

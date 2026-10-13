@@ -145,6 +145,20 @@ describe("the Match track's Competition routes", () => {
             editionEndpoint: "/api/ucl/leaderboard"
           }
         }
+      },
+      {
+        params: { competition: "uel" },
+        props: {
+          competition: "UEL", competitionName: "UEFA Europa League",
+          switcherLabel: "UEL",
+          path: "/uel", api: "/api/uel",
+          retiredLabel: null,
+          edition: 1,
+          view: {
+            prefix: "", overallPath: "/uel", closedEdition: null,
+            editionEndpoint: "/api/uel/leaderboard"
+          }
+        }
       }
     ]);
   });
@@ -242,17 +256,17 @@ describe("the link to a page of a Competition", () => {
   test("gives every built route its own copy of both pages under it", () => {
     // Written out rather than derived: a list that recomputed the href the way
     // the function does could not disagree with it, and disagreeing is the job.
-    // Every one of these fourteen is a file the build emits, from the one
+    // Every one of these sixteen is a file the build emits, from the one
     // function both pages under the segment now call.
     expect(competitionRoutes([]).map(({ props }) => pageHref(props.path, "fixtures")))
       .toEqual([
         "/pl/fixtures", "/pd/fixtures", "/sa/fixtures", "/fl1/fixtures",
-        "/bl1/fixtures", "/unl/fixtures", "/ucl/fixtures"
+        "/bl1/fixtures", "/unl/fixtures", "/ucl/fixtures", "/uel/fixtures"
       ]);
     expect(competitionRoutes([]).map(({ props }) => pageHref(props.path, "entrants")))
       .toEqual([
         "/pl/entrants", "/pd/entrants", "/sa/entrants", "/fl1/entrants",
-        "/bl1/entrants", "/unl/entrants", "/ucl/entrants"
+        "/bl1/entrants", "/unl/entrants", "/ucl/entrants", "/uel/entrants"
       ]);
   });
 });
@@ -286,14 +300,14 @@ describe("the Competition switcher", () => {
     );
 
     expect(crossings).toEqual({
-      leaderboard: ["/pl", "/pd", "/sa", "/fl1", "/bl1", "/unl", "/ucl"],
+      leaderboard: ["/pl", "/pd", "/sa", "/fl1", "/bl1", "/unl", "/ucl", "/uel"],
       fixtures: [
         "/pl/fixtures", "/pd/fixtures", "/sa/fixtures", "/fl1/fixtures",
-        "/bl1/fixtures", "/unl/fixtures", "/ucl/fixtures"
+        "/bl1/fixtures", "/unl/fixtures", "/ucl/fixtures", "/uel/fixtures"
       ],
       entrants: [
         "/pl/entrants", "/pd/entrants", "/sa/entrants", "/fl1/entrants",
-        "/bl1/entrants", "/unl/entrants", "/ucl/entrants"
+        "/bl1/entrants", "/unl/entrants", "/ucl/entrants", "/uel/entrants"
       ]
     });
   });
@@ -627,9 +641,9 @@ describe("an earlier Edition", () => {
     // Edition after the last closed -- the cup its own first (ADR-0062).
     const current = routes.filter(({ props }) => props.view.prefix === "");
     expect(current.map(({ props }) => props.path))
-      .toEqual(["/pl", "/pd", "/sa", "/fl1", "/bl1", "/unl", "/ucl"]);
+      .toEqual(["/pl", "/pd", "/sa", "/fl1", "/bl1", "/unl", "/ucl", "/uel"]);
     expect(current.map(({ props }) => [props.competition, props.edition]))
-      .toEqual([["PL", 2], ["PD", 2], ["SA", 2], ["FL1", 2], ["BL1", 2], ["UNL", 1], ["UCL", 1]]);
+      .toEqual([["PL", 2], ["PD", 2], ["SA", 2], ["FL1", 2], ["BL1", 2], ["UNL", 1], ["UCL", 1], ["UEL", 1]]);
     expect(overallRoutes(CLOSED)).toEqual([
       { params: { view: undefined }, props: { view: CURRENT_OVERALL } },
       {
@@ -666,7 +680,8 @@ describe("the two switchers", () => {
     expect(views).toEqual([
       { label: "2026-27", href: "/pd/fixtures", current: true },
       { label: "UNL", href: "/unl/fixtures", current: false },
-      { label: "UCL", href: "/ucl/fixtures", current: false }
+      { label: "UCL", href: "/ucl/fixtures", current: false },
+      { label: "UEL", href: "/uel/fixtures", current: false }
     ]);
     // The view's own set: the cup is reached by the view switcher only.
     expect(competitions.map(({ label }) => label)).toEqual(LEAGUES);
@@ -681,7 +696,8 @@ describe("the two switchers", () => {
       { label: "Edition 1", href: "/edition-1/pd/fixtures", current: true },
       { label: "Edition 2", href: "/pd/fixtures", current: false },
       { label: "UNL", href: "/unl/fixtures", current: false },
-      { label: "UCL", href: "/ucl/fixtures", current: false }
+      { label: "UCL", href: "/ucl/fixtures", current: false },
+      { label: "UEL", href: "/uel/fixtures", current: false }
     ]);
     expect(competitions.map(({ href }) => href)).toEqual([
       "/edition-1/pl/fixtures", "/edition-1/pd/fixtures", "/edition-1/sa/fixtures",
@@ -696,13 +712,14 @@ describe("the two switchers", () => {
           { label: "Edition 1", href: "/edition-1/pl/entrants", current: false },
           { label: "Edition 2", href: "/pl/entrants", current: false },
           { label: "UNL", href: "/unl/entrants", current: true },
-          { label: "UCL", href: "/ucl/entrants", current: false }
+          { label: "UCL", href: "/ucl/entrants", current: false },
+          { label: "UEL", href: "/uel/entrants", current: false }
         ],
         competitions: [{ label: "UNL", href: "/unl/entrants", current: true }]
       });
     expect(switchers({ prefix: "/edition-1", competition: "", page: "overall" }, CLOSED)
       .views.map(({ href }) => href))
-      .toEqual(["/edition-1/overall", "/overall", "/unl", "/ucl"]);
+      .toEqual(["/edition-1/overall", "/overall", "/unl", "/ucl", "/uel"]);
   });
 
   test("send a reader on Overall to each league's leaderboard", () => {

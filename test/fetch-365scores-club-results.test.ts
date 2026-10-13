@@ -67,6 +67,110 @@ describe("the Champions League's 365Scores competitor ids", () => {
     });
 });
 
+const EUROPA_LEAGUE_RESULTS =
+  "365scores-UEL-club-results-recorded-2026-10-13.json.gz";
+const EUROPA_LEAGUE_PAGES = [0, 100, 200].map((offset) =>
+  `uefa-2026-27-UEL-recorded-offset-${offset}.json.gz`);
+
+describe("the Europa League's 365Scores competitor ids", () => {
+  test("derive 36 pairs from the archived standings, nothing left over",
+    async () => {
+      const [standingsUrl, body] = Object.entries(JSON.parse(
+        await archivedBody(EUROPA_LEAGUE_RESULTS)
+      ) as Record<string, string>).find(([url]) => url.includes("/web/standings/"))!;
+      expect(standingsUrl).toContain("competitions=573");
+      const rows = (JSON.parse(body) as {
+        standings: { rows: { competitor: { id: number; name: string } }[] }[];
+      }).standings[0]!.rows;
+      const derived = Object.fromEntries(rows.map(({ competitor }) => [
+        storedTeamName("UEL", competitor.name), competitor.id
+      ]));
+      const pages = await Promise.all(EUROPA_LEAGUE_PAGES.map(archivedBody));
+      const sides = new Set(pages.flatMap((page) => (JSON.parse(page) as {
+        round: { metaData: { name: string } };
+        homeTeam: { internationalName: string };
+        awayTeam: { internationalName: string };
+      }[]).filter((match) => match.round.metaData.name === "League Phase")
+        .flatMap((match) => [
+          match.homeTeam.internationalName, match.awayTeam.internationalName
+        ])));
+
+      expect(clubCompetitorIdsOf("UEL")).toEqual(derived);
+      expect(Object.keys(derived).sort()).toEqual([...sides].sort());
+      expect(Object.keys(derived)).toHaveLength(36);
+    });
+});
+
+describe("the cups' competitor ids", () => {
+  test("name no club in two cups", () => {
+    // `clubNameOf` finds a side by its id across every cup's map; a club plays
+    // one league phase, and an id in two maps would be a broken entry.
+    const ids = ["UCL", "UEL", "UECL"]
+      .flatMap((cup) => Object.values(clubCompetitorIdsOf(cup) ?? {}));
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe("a club result two cups both list", () => {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+
+  beforeAll(async () => {
+    await client.connect();
+    await resetSchema(client);
+    for (const [competition, names] of [
+      ["UCL", CHAMPIONS_LEAGUE_PAGES], ["UEL", EUROPA_LEAGUE_PAGES]
+    ] as const) {
+      const pages = await Promise.all(names.map(archivedBody));
+      await fetchUefaCompetition({
+        database: client,
+        competition,
+        season: SEASON,
+        http: async (url) => ({
+          status: 200,
+          body: pages[Number(/offset=(\d+)/.exec(url)![1]) / 100] ?? "[]"
+        }),
+        now: () => new Date("2026-10-13T09:00:00Z")
+      });
+    }
+
+    return async () => {
+      await client.end();
+    };
+  });
+
+  const fetchFor = async (competition: string): Promise<void> => {
+    const bodies = {
+      ...JSON.parse(await archivedBody(CLUB_RESULTS)) as Record<string, string>,
+      ...JSON.parse(await archivedBody(EUROPA_LEAGUE_RESULTS)) as
+        Record<string, string>
+    };
+    await fetchClubResults({
+      database: client,
+      competition,
+      season: SEASON,
+      http: async (url) => ({ status: 200, body: bodies[url] ?? "" }),
+      pause: async () => {}
+    });
+  };
+
+  test("names each side by its own cup's spelling, whichever cup wrote last",
+    async () => {
+      // Crystal Palace (`UEL`) at home to Man City (`UCL`): 365Scores calls
+      // the visitors "Manchester City", which only `UCL`'s map renames.
+      const palace = async () => (await client.query(
+        `select home_team, away_team from club_results
+          where source_match_id = '4742087'`
+      )).rows;
+      const shared = { home_team: "Crystal Palace", away_team: "Man City" };
+
+      await fetchFor("UCL");
+      await fetchFor("UEL");
+      expect(await palace()).toEqual([shared]);
+      await fetchFor("UCL");
+      expect(await palace()).toEqual([shared]);
+    });
+});
+
 describe("each Champions League side's recent results read from 365Scores", () => {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
 
@@ -255,7 +359,7 @@ describe("each Champions League side's recent results read from 365Scores", () =
         teams: ["Liverpool"]
       });
       // The whole page is refused, not the half ahead of the bad game: the
-      // page is newest first, and Bournemouth is no cup side, so this match
+      // page is newest first, and Bournemouth is no Champions League side, so this match
       // was on Liverpool's page alone, two games before the EFL Cup tie.
       const bournemouth = await client.query(
         "select 1 from club_results where source_match_id = '4742061'"
