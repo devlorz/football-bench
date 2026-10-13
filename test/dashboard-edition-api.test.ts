@@ -349,3 +349,111 @@ describe("the read API past an Edition boundary", () => {
       expect(board.entrants.map(({ id }) => id)).toEqual(["match-pd/seat"]);
     });
 });
+
+/**
+ * Ticket 0112: a Competition opened by adopting its first Gameweek as history
+ * (ADR-0063). `UCL`'s Edition 1 begins at Gameweek 1, Locked before any seat
+ * was entered; `early` and `late` are entered between the two Locks and answer
+ * Gameweek 2, and `after` is entered after Gameweek 2's Lock and is expected
+ * nowhere yet.
+ */
+describe("the read API on a Competition adopted mid-Season", () => {
+  const writer = new Client({ connectionString: process.env.DATABASE_URL });
+  const reader = new Client({ connectionString: process.env.DATABASE_URL });
+  const query: Query = async (sql, parameters = []) =>
+    (await reader.query(sql, [...parameters])).rows;
+  const before = new Date("2026-10-13T12:00:00Z");
+  const get = (path: string, now = before) => handleDashboardRequest(
+    new Request(`https://benchmark.example${path}`), query, SEASON, now
+  );
+  const body = async <T>(path: string, now?: Date): Promise<T> => {
+    const response = await get(path, now);
+    expect({ path, status: response.status }).toEqual({ path, status: 200 });
+    return await response.json() as T;
+  };
+
+  const LOCK_ONE = new Date("2026-09-08T15:15:00Z");
+  const LOCK_TWO = new Date("2026-10-13T15:15:00Z");
+
+  beforeAll(async () => {
+    await writer.connect();
+    await reader.connect();
+    await resetSchema(writer);
+    await writer.query(
+      "insert into competitions (competition, season) values ('UCL', $1)",
+      [SEASON]
+    );
+    const version = matchPromptOf("UCL").version;
+    for (const [id, created] of [
+      ["match-ucl/early", new Date("2026-10-13T09:40:00Z")],
+      ["match-ucl/late", new Date("2026-10-13T09:41:00Z")],
+      ["match-ucl/after", new Date(LOCK_TWO.getTime() + 60_000)]
+    ] as const) {
+      await writer.query(
+        `insert into models (
+           id, name, base_model, provider, prompt_version, role, created_at
+         ) values ($1, $1, 'provider/base-model', 'provider', $2, 'entrant', $3)`,
+        [id, version, created]
+      );
+    }
+    const result = { home_goals: 2, away_goals: 1, outcome: outcomeOf(2, 1) };
+    for (const [gw, deadline, settled] of [
+      [1, LOCK_ONE, true], [2, LOCK_TWO, false]
+    ] as const) {
+      await writer.query(
+        `insert into gameweeks (competition, season, gw, deadline_at)
+         values ('UCL', $1, $2, $3)`,
+        [SEASON, gw, deadline]
+      );
+      await writer.query(
+        `insert into fixtures (
+           competition, season, fixture_id, gw, locked_in_gw, home_team,
+           away_team, kickoff_at, result
+         ) values ('UCL', $1, $2, $2, $2, $3, $4, $5, $6)`,
+        [SEASON, gw, `Home ${gw}`, `Away ${gw}`,
+          new Date(deadline.getTime() + 90 * 60_000),
+          settled ? JSON.stringify(result) : null]
+      );
+    }
+    await writer.query(
+      `insert into contexts (competition, season, gw, track, fixture_id, hash, body)
+       values ('UCL', $1, 2, 'match', 2, 'hash-2', 'context')`,
+      [SEASON]
+    );
+    for (const id of ["match-ucl/early", "match-ucl/late"]) {
+      await writer.query(
+        `insert into predictions (
+           competition, model_id, season, fixture_id, probs, pred_home,
+           pred_away, context_id, attempts_used, predicted_at
+         )
+         select 'UCL', $1, $2, 2, $3, 1, 1, c.id, 0, $4
+           from contexts c
+          where c.competition = 'UCL' and c.season = $2 and c.fixture_id = 2`,
+        [id, SEASON, JSON.stringify({ H: 0.4, D: 0.3, A: 0.3 }),
+          new Date("2026-10-13T10:10:00Z")]
+      );
+    }
+    await reader.query("set role dashboard_read");
+    return async () => {
+      await writer.end();
+      await reader.end();
+    };
+  });
+
+  test("Gameweek 2's Fixture counts the seats asked at its Lock", async () => {
+    const page = await body<FixturesBody>("/api/ucl/fixtures?gw=2");
+
+    expect(page.edition)
+      .toEqual({ number: 1, firstGameweek: 1, lastGameweek: null });
+    expect(page.fixtures.map(({ slots }) => slots.map(({ entrant }) => entrant.id)))
+      .toEqual([["match-ucl/early", "match-ucl/late"]]);
+  });
+
+  test("the leaderboard lists them and not the seat entered later",
+    async () => {
+      const board = await body<LeaderboardBody>("/api/ucl/leaderboard");
+
+      expect(board.entrants.map(({ id }) => id))
+        .toEqual(["match-ucl/early", "match-ucl/late"]);
+    });
+});

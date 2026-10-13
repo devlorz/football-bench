@@ -340,12 +340,18 @@ async function scoredThrough(
  *   $6 = the Edition's first Gameweek, which bounds an Exhibition Run's
  *        "ran after" label below (ticket 0084)
  *   $7 = the Edition's last Gameweek (int or null), which bounds it above
- *   $8 = the Edition's first ranked Gameweek, `rankedFrom`: an entered seat
- *        is on the Edition when it is asked at that Gameweek's Lock
- *        (ADR-0061). Ranked and not first, because a restarted Competition's
- *        seats were entered after the retired Gameweek's Lock (ADR-0042) --
- *        La Liga's v2 ten were. An unfetched Gameweek is read as the roster
- *        now.
+ *   $8 = the Edition's first ranked Gameweek, `rankedFrom`. An entered seat
+ *        is on the Edition when it is asked at the Lock of the first Gameweek
+ *        from there whose Lock is at or after the earliest entry under this
+ *        Prompt Version (ADR-0061, ticket 0096). It is ranked rather than the
+ *        first Gameweek, because a restarted Competition's seats were entered
+ *        after the retired Gameweek's Lock (ADR-0042); La Liga's v2 ten were.
+ *        It is the first Lock after the earliest entry rather than `rankedFrom`'s
+ *        own, because a Competition opened by adopting its first Gameweek as
+ *        history entered every seat after that Lock (ADR-0063; `UCL`'s eight on
+ *        2026-10-13, Gameweek 1 Locked 09-08; ticket 0112). A seat entered
+ *        after the earliest one's first Lock is still not expected there. An
+ *        unfetched Gameweek is read as the roster now.
  */
 
 /**
@@ -409,8 +415,12 @@ const SEATS_CTE = `
      where m.prompt_version = $3
        and ((m.role = 'entrant'
              and ${isAskedAtLock("m", `coalesce(
-               (select deadline_at from gameweeks
-                 where competition = $2 and season = $1 and gw = $8),
+               (select min(g.deadline_at) from gameweeks g
+                 where g.competition = $2 and g.season = $1 and g.gw >= $8
+                   and ($7::int is null or g.gw <= $7)
+                   and g.deadline_at >= (
+                     select min(e.created_at) from models e
+                      where e.prompt_version = $3 and e.role = 'entrant')),
                'infinity')`)})
             or (m.role = 'exhibition'
                 and ran_after.gw is not null
