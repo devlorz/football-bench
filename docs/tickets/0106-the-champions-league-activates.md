@@ -15,7 +15,7 @@ spec 0027's corrected activation order.
 `roster:enter` and every paid call are never taken by the implementing agent. Each
 pre-flight is asked for with its call count and cost.
 
-**Status:** in progress, 2026-10-13.
+**Status:** done, 2026-10-13. `UCL` opened at Gameweek 2, its Lock 2026-10-13T15:15Z, and not at the Gameweek 3 fallback.
 - Pushed `c5ea142` at 06:25Z. The gate was 1685 pass and 2 fail; the two failures are ticket 0095's `seed-season` `editions` refusal, which predates this work.
 - `db:rehearse` was green over a copy of production. The operator applied 0050, and a second rehearsal reported "already at the latest migration".
 
@@ -73,5 +73,10 @@ The same setup showed the following on real sources, at no cost:
 
       The dry run replays only `openrouter-preflight:` answers that production archived. `UCL`'s pre-flight ran on a throwaway database, so every slot is an expected Gap. This box checks the write path and the packets, not the answers, which production's 144 Predictions already are.
 - [x] Production's read API answers `UCL` with eight seats, Edition 1, and the roster caveat. This held after ticket 0112's deploy (`a71ff10`): 18 Fixtures × 8 slots with 144 Predictions, 8 entrants, and `rosterCaveat` served.
-- [ ] After the Lock, eight Predictions per Fixture or named Gaps for Gameweek 2.
-- [ ] The ticket records the boundary that happened (Gameweek 2, or Gameweek 3 under the fallback).
+- [x] After the Lock, eight Predictions per Fixture or named Gaps for Gameweek 2. This was read on production at 15:37Z:
+      - 144 Predictions, 8 seats × 18 Fixtures, no Gap;
+      - the last one was stored 10:15:46Z, and none after the Lock;
+      - all 18 contexts are present;
+      - the 10:09Z `predict.yml` run asked them all;
+      - Gemini 3.1 Pro Preview took 32 attempts for its 18, through Repair turns, and every other seat took 18.
+- [x] The ticket records the boundary that happened (Gameweek 2, or Gameweek 3 under the fallback). It was Gameweek 2, as the status line says.

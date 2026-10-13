@@ -26,7 +26,7 @@ Source: found on production 2026-10-13, after the dashboard deploy that first se
 **Blocked by:** None — can start immediately. Urgent: `UCL`'s Gameweek 2 Locks
 2026-10-13T15:15Z, and the page is live.
 
-**Status:** ready-for-agent
+**Status:** done, 2026-10-13. Built and deployed the same morning in `a71ff10`, as Worker version `c4471a6b`, with the `deployed` tag moved.
 
 ---
 
@@ -52,6 +52,6 @@ Source: found on production 2026-10-13, after the dashboard deploy that first se
 
 ## Acceptance criteria
 
-- [ ] A Competition whose seats were entered after Gameweek 1's Lock and before Gameweek 2's shows them on Gameweek 2's fixtures page and on its leaderboard. A seat entered after Gameweek 2's Lock does not show.
-- [ ] Every existing read-API suite passes unchanged, including the Edition-boundary cases (`m`, `n`, `w`).
-- [ ] After the deploy, production's `/api/ucl/fixtures` counts eight seats per Fixture and `/api/ucl/leaderboard` lists eight entrants.
+- [x] A Competition whose seats were entered after Gameweek 1's Lock and before Gameweek 2's shows them on Gameweek 2's fixtures page and on its leaderboard. A seat entered after Gameweek 2's Lock does not show. A new suite case proves this, red without the fix and green with it.
+- [x] Every existing read-API suite passes unchanged, including the Edition-boundary cases (`m`, `n`, `w`). Eight suites passed, 120 of 120.
+- [x] After the deploy, production's `/api/ucl/fixtures` counts eight seats per Fixture and `/api/ucl/leaderboard` lists eight entrants. On the live Worker, Gameweek 2 had 18 Fixtures × 8 slots with 144 Predictions, and 8 entrants. `PL` still read 8 and `UNL` 7.
