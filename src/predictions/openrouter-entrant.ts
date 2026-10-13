@@ -224,6 +224,19 @@ const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
     sha256:
       "0c463838f53dec0bd153805f1462525d9433ef797ec5cae0e79fceeaab8dfc71",
     competitionName: "UEFA Nations League"
+  },
+  // The first club cup (ADR-0063), frozen unused and unamendable from its
+  // first Lock, 2026-10-13T15:15Z. Both sections the cut line could have
+  // taken were green before it: the clubs' recent matches (ticket 0103) and
+  // their infobox Head Coaches (ticket 0104), so this pin carries both and
+  // nothing is stated absent but the Squad Changes, which a club cup never
+  // reads. Read from this suite's render on 2026-10-13, as `UNL`'s was:
+  // production has no `UCL` packet before ticket 0106's insert.
+  UCL: {
+    version: "match-ucl/2026-27-v1",
+    sha256:
+      "ae5650926580148998649590d40b38ead5a6cdacccce8530d954bf4b4e692ae1",
+    competitionName: "UEFA Champions League"
   }
 };
 

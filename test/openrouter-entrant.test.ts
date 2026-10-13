@@ -161,8 +161,66 @@ const contextData = (competition: string): MatchContextData => ({
     { group_name: "Group A2", home_team: "Norway", away_team: "Arsenal", kickoff_at: new Date("2026-09-30T19:00:00Z"), home_goals: null, away_goals: null }
   ],
   datasetUpdatedOn: "2026-08-14",
-  clubResults: [],
-  clubHeadCoaches: [],
+  // The club cup's two stores, read only under a registry entry naming
+  // 365Scores' results pages and the clubs' infoboxes (tickets 0103, 0104),
+  // so no other pin moves with them. A full five, a side with fewer, and a row
+  // after the Lock; a named Head Coach, a vacancy, and a read after the Lock.
+  clubResults: [
+    ...["2026-08-02", "2026-08-06", "2026-08-09", "2026-08-12", "2026-08-16",
+      "2026-08-19"].map((day, index) => ({
+      source_match_id: String(index + 1),
+      kicked_off_at: new Date(`${day}T14:00:00Z`),
+      home_team: "Arsenal",
+      away_team: `Opponent ${index + 1}`,
+      home_goals: index % 3,
+      away_goals: 1,
+      competition_name: index === 2 ? "EFL Cup" : "Premier League"
+    })),
+    {
+      source_match_id: "7",
+      kicked_off_at: new Date("2026-08-15T14:00:00Z"),
+      home_team: "Coventry City",
+      away_team: "Hull City",
+      home_goals: 2,
+      away_goals: 2,
+      competition_name: "Championship"
+    },
+    {
+      source_match_id: "8",
+      kicked_off_at: new Date("2026-08-21T18:00:00Z"),
+      home_team: "Coventry City",
+      away_team: "Unseen FC",
+      home_goals: 9,
+      away_goals: 9,
+      competition_name: "Championship"
+    }
+  ],
+  clubHeadCoaches: [
+    {
+      team: "Arsenal",
+      observed_on: "2026-08-19",
+      observed_at: new Date("2026-08-19T06:00:00Z"),
+      head_coach: "Departed Coach"
+    },
+    {
+      team: "Arsenal",
+      observed_on: "2026-08-20",
+      observed_at: new Date("2026-08-20T06:00:00Z"),
+      head_coach: "Arrived Coach"
+    },
+    {
+      team: "Coventry City",
+      observed_on: "2026-08-20",
+      observed_at: new Date("2026-08-20T06:00:00Z"),
+      head_coach: null
+    },
+    {
+      team: "Coventry City",
+      observed_on: "2026-08-21",
+      observed_at: new Date("2026-08-21T18:00:00Z"),
+      head_coach: "Unseen Coach"
+    }
+  ],
   nationalTeamHeadCoaches: [
     {
       // Two mornings that disagree: a name with its assumption date, and the

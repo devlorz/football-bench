@@ -145,7 +145,7 @@ const NO_LEAGUE_TABLE = "League table: no league table for this Competition; "
  * reads as four before any of them has played. Only results settled before
  * the Lock count.
  */
-function groupTable(
+export function groupTable(
   fixtures: GroupFixture[],
   homeTeam: string,
   asOf: Date
@@ -263,21 +263,27 @@ function fromDataset(
   };
 }
 
-function fromRecord(
-  competitionName: string,
-  fixture: PlayedFixture
-): RecentMatch {
-  // Every figure absent is a settled Fixture no sheet was stored for, which is
-  // a different thing from a sheet that carried shots and no xG (ADR-0058, as
-  // ticket 0072 amended it). Asked of the six figures rather than of the
-  // rendered segments, so that the sentence follows the rule and not the
-  // wording of whatever `performanceSegments` returns today.
+/**
+ * A settled Fixture's figures, or the sentence for a Fixture no sheet was
+ * stored for, which is a different thing from a sheet that carried shots and
+ * no xG (ADR-0058, as ticket 0072 amended it). Asked of the six figures rather
+ * than of the rendered segments, so that the sentence follows the rule and not
+ * the wording of whatever `performanceSegments` returns today.
+ */
+export function recordPerformance(fixture: PlayedFixture): string {
   const nothingStored = fixture.home_shots === null
     && fixture.away_shots === null
     && fixture.home_shots_on_target === null
     && fixture.away_shots_on_target === null
     && fixture.home_xg === null
     && fixture.away_xg === null;
+  return nothingStored ? NO_STATS : performanceSegments(fixture).join(", ");
+}
+
+function fromRecord(
+  competitionName: string,
+  fixture: PlayedFixture
+): RecentMatch {
   return {
     playedOn: utcDate(fixture.kicked_off_at),
     homeTeam: fixture.home_team,
@@ -285,9 +291,7 @@ function fromRecord(
     homeGoals: fixture.home_goals,
     awayGoals: fixture.away_goals,
     tournament: competitionName,
-    tail: [nothingStored
-      ? NO_STATS
-      : performanceSegments(fixture).join(", ")]
+    tail: [recordPerformance(fixture)]
   };
 }
 

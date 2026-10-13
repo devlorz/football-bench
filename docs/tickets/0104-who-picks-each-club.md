@@ -20,7 +20,7 @@ Decisions it must not bend:
 **Blocked by:** 0100 (the 36 sides). **May be cut** for `UCL` at 2026-10-13T06:00Z, on
 the same terms as ticket 0103.
 
-**Status:** built 2026-10-13, with one box left open. `UCL`'s registry names
+**Status:** built 2026-10-13; its last box was ticked by 0105. `UCL`'s registry names
 `"wikipedia-club-infobox"` for its head coaches. `fetchClubHeadCoaches` asks the
 MediaWiki API once a day for section 0 of all 36 reviewed titles, archives the answer as
 `wikipedia:club-infoboxes:<season>:<competition>`, parses every infobox before writing,
@@ -75,5 +75,5 @@ Entrant the club has stopped looking, so the Change it produces is meant.
 - [x] Over archived wikitext, the parser reads Cahuzac, Frederiksen and Kováč, a vacancy as null, and a field wrapped in markup cleanly.
 - [x] One snapshot row per club per day; a re-read the same day upserts.
 - [x] A missing article fails `UCL`'s day by name; other Competitions land.
-- [ ] A `UCL` packet shows a Head Coach line per side, a dated Change for snapshots A, B, B, and the no-appointment-date line; nothing observed after the Lock.
+- [x] A `UCL` packet shows a Head Coach line per side, a dated Change for snapshots A, B, B, and the no-appointment-date line; nothing observed after the Lock.
 - [x] The 36-title map is checked against the archive: every title resolves and every club is named once.

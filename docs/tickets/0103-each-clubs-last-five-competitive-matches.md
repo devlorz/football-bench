@@ -23,7 +23,7 @@ for `UCL` at 2026-10-13T06:00Z. If it is not green by then, ticket 0105 states t
 section absent for `UCL`'s whole league phase, and this ticket carries on for `UEL` and
 `UECL`.
 
-**Status:** built 2026-10-13, with one box left open. `UCL`'s registry names `"365scores"`
+**Status:** built 2026-10-13; its last box was ticked by 0105. `UCL`'s registry names `"365scores"`
 for its history. `fetchClubResults` reads one page for each of the 36 sides from a
 reviewed competitor-id map. Each page is read into rows whole before any row is written,
 then upserted into `club_results` from 2026-07-01 forward (spec 0028). Friendlies are
@@ -82,7 +82,7 @@ otherwise overwrite each other. ADR-0063 is amended to say so (2026-10-13).
 
 - [x] Over archived listings, the fetch stores each side's settled matches, drops friendlies, and upserts by match id without duplicating on a re-read.
 - [x] A side missing from the competitor-id map is refused by name; one club's failed listing fails `UCL`'s day by name and no other Competition's.
-- [ ] A `UCL` Gameweek 2 packet shows five lines a side, newest first, competition named, scores only, nothing after the Lock.
+- [x] A `UCL` Gameweek 2 packet shows five lines a side, newest first, competition named, scores only, nothing after the Lock.
 - [x] A side with three stored matches shows three and says the list is short.
 - [x] No cup row reaches a league packet and no league row reaches a cup packet (the coexistence tracer).
 - [x] The competitor-id map test derives 36 pairs from the archive with nothing left over.

@@ -32,6 +32,36 @@ export interface SquadChangeRow {
 export const NO_TRANSFER_WINDOW = "Squad changes: none for this Competition; "
   + "a national side has no transfer window.";
 
+/**
+ * A club cup's absence in the same place (ADR-0063): "not read" and never
+ * "none", because clubs have transfer windows and this record does not read
+ * them for a cup. January's opens before `MD7`, and its changes are not here
+ * either.
+ */
+export const SQUAD_CHANGES_NOT_READ =
+  "Squad changes: not read for this Competition.";
+
+/**
+ * Which of the two absences a Competition with no Squad Change source states,
+ * keyed like `ROSTER_CAVEATS`: whether its sides have a window at all is a
+ * fact about the Competition, and the registry's `null` cannot say which.
+ */
+const NO_SQUAD_CHANGES: Readonly<Record<string, string>> = {
+  UNL: NO_TRANSFER_WINDOW,
+  UCL: SQUAD_CHANGES_NOT_READ
+};
+
+/** Loudly, like every keyed lookup a packet renders from (ADR-0054). */
+export function noSquadChangesOf(competition: string): string {
+  const absence = NO_SQUAD_CHANGES[competition];
+  if (absence === undefined) {
+    throw new Error(
+      `Competition ${competition} reads no Squad Changes and states no absence`
+    );
+  }
+  return absence;
+}
+
 export interface BuildSquadChangesContextOptions {
   competition: string;
   deadline: Date;

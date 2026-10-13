@@ -15,7 +15,7 @@ import {
 } from "../context/build-fpl-context.js";
 import {
   buildSquadChangesContext,
-  NO_TRANSFER_WINDOW,
+  noSquadChangesOf,
   type SquadChangeRow
 } from "../context/build-squad-changes-context.js";
 import {
@@ -523,10 +523,13 @@ export function buildMatchContext(
         })
         : data.sources?.history === SCORES_365_SOURCE
           ? buildClubResultsContext({
+            competition: data.competition,
             asOf: data.deadline,
             homeTeam: fixture.home_team,
             awayTeam: fixture.away_team,
-            results: data.clubResults
+            results: data.clubResults,
+            groupFixtures: data.groupFixtures,
+            playedFixtures: data.playedFixtures
           })
           : buildHistoricalContext({
           competition: data.competition,
@@ -571,7 +574,7 @@ export function buildMatchContext(
       // than a stale list (ADR-0031), and then the section is absent rather
       // than empty.
       data.sources?.squadChanges === null
-        ? NO_TRANSFER_WINDOW
+        ? noSquadChangesOf(data.competition)
         : buildSquadChangesContext({
           competition: data.competition,
           deadline: data.deadline,

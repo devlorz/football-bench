@@ -21,7 +21,19 @@ Source: ADR-0063 *The packet* and *The cut line*, ADR-0026, ADR-0038, spec 0028 
 **Hard deadline:** pinned and committed by **2026-10-13T06:00Z**. Pushed and deployed by
 **09:15Z**, which is Lock − 6h, because cron runs `origin/main`.
 
-**Status:** ready-for-agent
+**Status:** built 2026-10-13, before the cut. Both sections the cut line could take were
+green at 06:00Z: the five recent matches (0103, `0558e62`) and the infobox Head Coaches
+(0104, `15fb6d4`). Nothing was cut, no registry entry is `null` for them, and no absence is
+stated but Squad Changes. The pin `ae565092…92ae1` was read from
+`test/openrouter-entrant.test.ts`'s `UCL` render, line by line, on 2026-10-13; production
+has no `UCL` packet before 0106. Squad Changes needed its own sentence:
+`NO_TRANSFER_WINDOW` says "a national side has no transfer window", so the absence is now
+keyed by Competition (`noSquadChangesOf`), and `UNL`'s pin did not move. Frozen with this
+version: the heading "League phase and recent matches as of", the bands line, "This cup's played Fixtures:" and "Squad changes: not read for this
+Competition." The render's bytes are the source of truth for that wording, not ADR-0063's
+prose: the ADR writes "places 1–8" with an en dash, the frozen line "1-8". The sections
+follow the template's order, as `UNL`'s do, so Head Coach comes after Squad Changes,
+where ADR-0063's list puts it before. The push is not done; it is asked for.
 
 ---
 
@@ -46,9 +58,9 @@ Source: ADR-0063 *The packet* and *The cut line*, ADR-0026, ADR-0038, spec 0028 
 
 ## Acceptance criteria
 
-- [ ] A `UCL` Gameweek 2 render over seeded rows shows the sections above in the template's order, the 36-row table with the bands line, and 18 played Fixtures with xG.
-- [ ] The render reaches nothing stored after the Lock.
-- [ ] `MATCH_PROMPTS.UCL` exists with its version, competition name and sha; the pin test fails on any one-byte change.
-- [ ] The six existing pins and the competition-name agreement for every Competition pass.
-- [ ] The ticket records which sections were green at the cut, and, if any was cut, the registry `null` and the stated absence.
+- [x] A `UCL` Gameweek 2 render over seeded rows shows the sections above in the template's order, the 36-row table with the bands line, and 18 played Fixtures with xG.
+- [x] The render reaches nothing stored after the Lock.
+- [x] `MATCH_PROMPTS.UCL` exists with its version, competition name and sha; the pin test fails on any one-byte change.
+- [x] The six existing pins and the competition-name agreement for every Competition pass.
+- [x] The ticket records which sections were green at the cut, and, if any was cut, the registry `null` and the stated absence.
 - [ ] Committed by 06:00Z; the push is asked for, not assumed.

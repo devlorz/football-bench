@@ -351,8 +351,10 @@ describe("a context packet holds one Competition's data", () => {
       );
       await client.query(
         `insert into fixtures (
-           competition, season, fixture_id, gw, home_team, away_team, kickoff_at
-         ) values ('UCL', $1, 2049999, 2, 'Arsenal', 'Bayern München', $2)`,
+           competition, season, fixture_id, gw, home_team, away_team,
+           kickoff_at, group_name
+         ) values ('UCL', $1, 2049999, 2, 'Arsenal', 'Bayern München', $2,
+                   'League')`,
         [SEASON, "2026-08-21T19:00:00Z"]
       );
       await client.query(
@@ -386,13 +388,26 @@ describe("a context packet holds one Competition's data", () => {
       expect(premierLeague.clubResults).toEqual([]);
 
       const section = buildClubResultsContext({
+        competition: "UCL",
         asOf: championsLeague.deadline,
         homeTeam: "Arsenal",
         awayTeam: "Bayern München",
-        results: championsLeague.clubResults
+        results: championsLeague.clubResults,
+        groupFixtures: championsLeague.groupFixtures,
+        playedFixtures: championsLeague.playedFixtures
       });
       expect(section).toBe([
-        "Recent matches as of 2026-08-21T17:30:00.000Z",
+        "League phase and recent matches as of 2026-08-21T17:30:00.000Z",
+        "",
+        "League table:",
+        "1. Arsenal | P 0 W 0 D 0 L 0 | GF 0 GA 0 GD 0 | Pts 0",
+        "2. Bayern München | P 0 W 0 D 0 L 0 | GF 0 GA 0 GD 0 | Pts 0",
+        "Ordered by points, goal difference and goals scored; UEFA's own "
+          + "head-to-head tie-breaks are not applied here.",
+        "Places 1-8 go to the round of 16, places 9-24 to the knockout "
+          + "play-off round, places 25-36 are out.",
+        "",
+        "This cup's played Fixtures: no result has been played yet this Season.",
         "",
         "Arsenal",
         "Last 5 competitive matches:",
@@ -410,9 +425,12 @@ describe("a context packet holds one Competition's data", () => {
       ].join("\n"));
       // The renderer bounds its rows itself, whatever its caller read.
       expect(buildClubResultsContext({
+        competition: "UCL",
         asOf: championsLeague.deadline,
         homeTeam: "Arsenal",
         awayTeam: "Bayern München",
+        groupFixtures: [],
+        playedFixtures: [],
         results: [{
           source_match_id: "7",
           kicked_off_at: new Date("2026-08-21T18:00:00Z"),
@@ -433,16 +451,14 @@ describe("a context packet holds one Competition's data", () => {
       // The league packet over the same club grows no such section.
       const leaguePacket = buildMatchContext(fixture, premierLeague);
       expect(leaguePacket).toContain(HISTORICAL_SECTION);
-      expect(leaguePacket).not.toContain("Recent matches as of");
+      expect(leaguePacket).not.toContain("League phase and recent matches as of");
       expect(leaguePacket).not.toContain("Community Shield");
-      // And the registry is what chooses: the same packet with `history`
-      // alone swapped renders the club section in place of the league one.
-      // `UCL`'s own packet cannot render until ticket 0105 freezes its prompt.
-      const asAClubCup = buildMatchContext(fixture, {
-        ...premierLeague,
-        sources: { ...sourcesOf("PL")!, history: SCORES_365_SOURCE },
-        clubResults: championsLeague.clubResults
-      });
+      // And the cup's own packet renders the club section in place of the
+      // league one, over the same club.
+      const asAClubCup = buildMatchContext(
+        { ...fixture, away_team: "Bayern München" },
+        championsLeague
+      );
       expect(asAClubCup).toContain(
         "Arsenal\nLast 5 competitive matches:\n"
         + "- Premier League | 2026-08-19 | Arsenal 4-1 Fulham"
@@ -620,7 +636,6 @@ describe("a context packet holds one Competition's data", () => {
 
       // The registry is what chooses: the league packet with `headCoaches`
       // alone swapped renders the infobox section in place of its own.
-      // `UCL`'s own packet cannot render until ticket 0105 freezes its prompt.
       const asAClubCup = buildMatchContext(fixture, {
         ...premierLeague,
         sources: { ...sourcesOf("PL")!, headCoaches: CLUB_HEAD_COACHES_SOURCE },
