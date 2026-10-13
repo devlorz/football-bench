@@ -15,7 +15,27 @@ spec 0027's corrected activation order.
 `roster:enter` and every paid call are never taken by the implementing agent. Each
 pre-flight is asked for with its call count and cost.
 
-**Status:** ready-for-agent
+**Status:** in progress, 2026-10-13.
+- Pushed `c5ea142` at 06:25Z. The gate was 1685 pass and 2 fail; the two failures are ticket 0095's `seed-season` `editions` refusal, which predates this work.
+- `db:rehearse` was green over a copy of production. The operator applied 0050, and a second rehearsal reported "already at the latest migration".
+
+**Pre-flight, accepted by the operator with one seat failing on shape alone.** It ran on the throwaway database `ucl_preflight` against Fixture 2049577 (Lens–Sporting CP, Gameweek 2). It ran twice, 8 calls each.
+- Seven seats were `parseable` both times, each resolved to the dated id ADR-0062 pins.
+- Gemini 3.1 Pro Preview was `unparseable` both times:
+  - first run: `score` sent as `[1, 1]`;
+  - second run: `fixture_id` sent as a string, plus `probs` and `score` sent as arrays.
+- Both of Gemini's answers carried sound content: probabilities summing to one, a 1-1 score, and a rationale that reads the cup packet correctly (Lens's 26 shots at Slavia, Sporting's 3-1 at Braga).
+- Its own reasoning in run one describes "a score array". This is the same shape habit ticket 0062 found in 84 rows of the record, and the predict job's Repair turns (ADR-0010) name it to the Base Model.
+- The pre-flight is single-shot and has no Repair turn.
+- The operator accepted it as is rather than re-running a third time or cutting the seat. If a real Fixture still fails after three Repairs, it is a named Gap.
+
+The same setup showed the following on real sources, at no cost:
+- `EDITION=1 roster:enter` entered the eight `match-ucl/…` seats.
+- The first fetch landed 144 Fixtures in Gameweeks 1–8.
+- `MD1` was adopted as Locked history: 18 results and 18 sheets, all with xG.
+- Gameweek 2's deadline is 2026-10-13T15:15Z.
+- `club_results` holds 317 rows.
+- `club_head_coaches` holds 36 of 36 (Lens is Cahuzac).
 
 ---
 
