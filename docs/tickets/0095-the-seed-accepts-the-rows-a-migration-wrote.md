@@ -16,7 +16,7 @@ a fact, never an absence).
 
 **Blocked by:** None — can start immediately.
 
-**Status:** drafted, 2026-10-08
+**Status:** built 2026-10-13. Migration 0050 seeds `editions` too (the three club cups), so the comment names both 0048 and 0050.
 
 ---
 
@@ -51,15 +51,15 @@ passes it as it should.
 
 ## Acceptance
 
-- [ ] On a database that holds only what migrations `0001`–`0048` wrote, the
+- [x] On a database that holds only what migrations `0001`–`0048` wrote, the
       empty-database check passes; on one that additionally holds any row in any other
       table, it refuses by name as before. A test covers both.
-- [ ] The check's exclusion is stated as a rule in its comment — rows a migration wrote
+- [x] The check's exclusion is stated as a rule in its comment — rows a migration wrote
       on an empty database are bookkeeping — and the excluded names are the tables
       migrations seed, with the migration that seeds each one named beside it.
-- [ ] After the seed runs, the seeded Season has an Edition 1 row at Gameweek 1 for every
+- [x] After the seed runs, the seeded Season has an Edition 1 row at Gameweek 1 for every
       Competition the seed opens; if the seed's Season is `2026-27` the migration's rows
       are reused and not duplicated. A test holds whichever case applies.
-- [ ] The seed's suite is green in full, including the two tests red since 2026-10-06.
-- [ ] `--reset` still rebuilds and passes the check; no table other than `editions` is
+- [x] The seed's suite is green in full, including the two tests red since 2026-10-06.
+- [x] `--reset` still rebuilds and passes the check; no table other than `editions` is
       newly excluded.

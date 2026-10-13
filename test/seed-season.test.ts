@@ -396,6 +396,23 @@ describe("the seeded Season and its three stopping points", () => {
       .rejects.toThrow(/fixtures, gameweeks, models[\s\S]*--reset/);
   });
 
+  test("the seeded Season is in Edition 1 from Gameweek 1", async () => {
+    // A Season migration 0048 did not seed gets its row from the seed. For
+    // `2026-27` the migration's row is reused: a second insert would collide
+    // on the key and fail every other seed in this file.
+    const season = "2027-28";
+    try {
+      await seedSeason({ database: client, season, stopAt: "pre-season" });
+
+      expect((await client.query(
+        "select competition, edition, first_gw from editions where season = $1",
+        [season]
+      )).rows).toEqual([{ competition: "PL", edition: 1, first_gw: 1 }]);
+    } finally {
+      await client.query("delete from editions where season = $1", [season]);
+    }
+  });
+
   test("the emptiness check covers a table the seed never writes", async () => {
     // `historical_matches` is the case: the seed writes none, and the scorer
     // reads it for the Elo Reference Line, so rows left in it move the numbers

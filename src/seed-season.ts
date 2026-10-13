@@ -339,14 +339,21 @@ export async function pinPublicSchema(database: Database): Promise<void> {
  * reads it for the Elo Reference Line, so rows left in it move numbers the
  * seed is supposed to produce identically every time. A table added later
  * that some other job reads would be the same story, and listing tables here
- * by hand is how that goes unnoticed. Migration bookkeeping is excluded,
- * being the one table a migrated empty database is meant to have rows in.
+ * by hand is how that goes unnoticed.
+ *
+ * Rows a migration writes on an empty database are bookkeeping, and a database
+ * holding only those is empty for the seed's purpose. The tables excluded are
+ * the ones migrations seed, named with the migrations that seed them — a list
+ * every new migration's review already reads, unlike the list of tables the
+ * seed writes:
+ *   - `schema_migrations`, by the migration runner itself;
+ *   - `editions`, Edition 1 of every Competition in 2026-27, by 0048 and 0050.
  */
 export async function assertEmptyDatabase(database: Database): Promise<void> {
   const tables = await database.query<{ table_name: string }>(
     `select table_name from information_schema.tables
       where table_schema = 'public' and table_type = 'BASE TABLE'
-        and table_name <> 'schema_migrations'
+        and table_name not in ('schema_migrations', 'editions')
       order by table_name`
   );
 
@@ -500,6 +507,14 @@ async function writeSeason(
   // is one where every job finds nothing to do and says so as success.
   await database.query(
     "insert into competitions (competition, season) values ('PL', $1)",
+    [season]
+  );
+  // And its Edition 1 (ADR-0061): a Season with no row is one `readEdition`
+  // refuses. Migration 0048 already holds `2026-27`'s, which is reused; Edition
+  // 1 always begins at Gameweek 1, so a row already there is this one.
+  await database.query(
+    `insert into editions (competition, season, edition, first_gw)
+     values ('PL', $1, 1, 1) on conflict do nothing`,
     [season]
   );
 
