@@ -162,6 +162,7 @@ const contextData = (competition: string): MatchContextData => ({
   ],
   datasetUpdatedOn: "2026-08-14",
   clubResults: [],
+  clubHeadCoaches: [],
   nationalTeamHeadCoaches: [
     {
       // Two mornings that disagree: a name with its assumption date, and the

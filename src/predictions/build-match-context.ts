@@ -24,6 +24,12 @@ import {
 } from "../context/build-national-team-head-coach-context.js";
 import { NATIONAL_TEAM_HEAD_COACHES_SOURCE }
   from "../head-coach/fetch-national-team-head-coaches.js";
+import {
+  buildClubHeadCoachContext,
+  type ClubHeadCoachRow
+} from "../context/build-club-head-coach-context.js";
+import { CLUB_HEAD_COACHES_SOURCE }
+  from "../head-coach/fetch-club-head-coaches.js";
 import { HEAD_COACH_SEASON_ARTICLE_SOURCE }
   from "../head-coach/head-coach-source.js";
 import {
@@ -190,6 +196,8 @@ export interface MatchContextData {
   headCoachChanges: HeadCoachChangeRow[];
   headCoaches: HeadCoachRow[];
   nationalTeamHeadCoaches: NationalTeamHeadCoachRow[];
+  /** A club cup's infobox snapshots (ADR-0063). */
+  clubHeadCoaches: ClubHeadCoachRow[];
 }
 
 export async function loadMatchContextData(
@@ -424,7 +432,7 @@ export async function loadMatchContextData(
       [competition, season, gameweek]
     )
     : undefined;
-  // The cup's Head Coaches, from the other of the two sources the registry
+  // A national cup's Head Coaches, from the current list the registry
   // dispatches on, and read only for a Competition whose entry names it -- the
   // gate `international_results` is behind, for the same reason (ADR-0057):
   // this table has no Competition column to filter by and could not have one,
@@ -442,6 +450,19 @@ export async function loadMatchContextData(
            team, observed_on::text as observed_on, observed_at,
            head_coach, assumed_on::text as assumed_on
            from national_team_head_coaches
+          where observed_at < $1
+          order by team, observed_on`,
+        [deadline]
+      )
+      : undefined;
+  // A club cup's infobox snapshots, on the same terms as the national list
+  // above: no Competition column, every day's row, bounded by the Lock here
+  // and again in the renderer.
+  const clubHeadCoaches =
+    sources?.headCoaches === CLUB_HEAD_COACHES_SOURCE
+      ? await database.query<ClubHeadCoachRow>(
+        `select team, observed_on::text as observed_on, observed_at, head_coach
+           from club_head_coaches
           where observed_at < $1
           order by team, observed_on`,
         [deadline]
@@ -465,7 +486,8 @@ export async function loadMatchContextData(
     squadChanges: squadChanges.rows,
     headCoachChanges: headCoachChanges?.rows ?? [],
     headCoaches: headCoaches?.rows ?? [],
-    nationalTeamHeadCoaches: nationalTeamHeadCoaches?.rows ?? []
+    nationalTeamHeadCoaches: nationalTeamHeadCoaches?.rows ?? [],
+    clubHeadCoaches: clubHeadCoaches?.rows ?? []
   };
 }
 
@@ -563,9 +585,11 @@ export function buildMatchContext(
       // season-article one and not beside it: that one is built on a club
       // competition's dated Managerial changes, and this source publishes no
       // event at all -- who is in post today, and a Change is the difference
-      // between two mornings of it.
+      // between two mornings of it. A club cup gets the infobox section on the
+      // same terms: the current list's model, with no appointment date to
+      // state.
       //
-      // The season-article builder is still the `else`, and still undefined
+      // The season-article builder is still the last `else`, and still undefined
       // for a Season whose article is not listed, and then the section is
       // absent rather than empty.
       data.sources?.headCoaches === NATIONAL_TEAM_HEAD_COACHES_SOURCE
@@ -575,15 +599,22 @@ export function buildMatchContext(
           awayTeam: fixture.away_team,
           headCoaches: data.nationalTeamHeadCoaches
         })
-        : buildHeadCoachContext({
-          competition: data.competition,
-          season: data.season,
-          deadline: data.deadline,
-          homeTeam: fixture.home_team,
-          awayTeam: fixture.away_team,
-          headCoaches: data.headCoaches,
-          changes: data.headCoachChanges
-        })
+        : data.sources?.headCoaches === CLUB_HEAD_COACHES_SOURCE
+          ? buildClubHeadCoachContext({
+            deadline: data.deadline,
+            homeTeam: fixture.home_team,
+            awayTeam: fixture.away_team,
+            headCoaches: data.clubHeadCoaches
+          })
+          : buildHeadCoachContext({
+            competition: data.competition,
+            season: data.season,
+            deadline: data.deadline,
+            homeTeam: fixture.home_team,
+            awayTeam: fixture.away_team,
+            headCoaches: data.headCoaches,
+            changes: data.headCoachChanges
+          })
     ].filter((section) => section !== undefined).join("\n\n"),
     data.competition
   );

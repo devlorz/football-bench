@@ -20,7 +20,22 @@ Decisions it must not bend:
 **Blocked by:** 0100 (the 36 sides). **May be cut** for `UCL` at 2026-10-13T06:00Z, on
 the same terms as ticket 0103.
 
-**Status:** ready-for-agent
+**Status:** built 2026-10-13, with one box left open. `UCL`'s registry names
+`"wikipedia-club-infobox"` for its head coaches. `fetchClubHeadCoaches` asks the
+MediaWiki API once a day for section 0 of all 36 reviewed titles, archives the answer as
+`wikipedia:club-infoboxes:<season>:<competition>`, parses every infobox before writing,
+and upserts one `club_head_coaches` row per side per day. Redirects are not followed, so
+a moved title fails the day by name like a missing one (`Sabah FK` is a redirect; the map
+holds `Sabah FK (Azerbaijan)`). The packet section is `buildClubHeadCoachContext`, a
+parallel builder to the national-team one, with the frozen `NO_APPOINTMENT_DATE` line.
+The loader and the dispatch in `buildMatchContext` are wired, and the dry-run replay maps
+the request back to its archived name. The box left open is the packet one: its content is
+tested at the builder, and `UCL` cannot render a whole packet until 0105 adds its
+`MATCH_PROMPTS` entry, so tick it when 0105's render walks it. Two wordings got the operator's yes on 2026-10-13, for 0105 to freeze: the "A change is
+visible from <date>, when the infoboxes were first read here" line, because it says a
+Change date is a lower bound and not an appointment date, as UNL's packet does; and
+"(interim)" kept in a stored name, because an interim coach made permanent tells an
+Entrant the club has stopped looking, so the Change it produces is meant.
 
 ---
 
@@ -57,8 +72,8 @@ the same terms as ticket 0103.
 
 ## Acceptance criteria
 
-- [ ] Over archived wikitext, the parser reads Cahuzac, Frederiksen and Kováč, a vacancy as null, and a field wrapped in markup cleanly.
-- [ ] One snapshot row per club per day; a re-read the same day upserts.
-- [ ] A missing article fails `UCL`'s day by name; other Competitions land.
+- [x] Over archived wikitext, the parser reads Cahuzac, Frederiksen and Kováč, a vacancy as null, and a field wrapped in markup cleanly.
+- [x] One snapshot row per club per day; a re-read the same day upserts.
+- [x] A missing article fails `UCL`'s day by name; other Competitions land.
 - [ ] A `UCL` packet shows a Head Coach line per side, a dated Change for snapshots A, B, B, and the no-appointment-date line; nothing observed after the Lock.
-- [ ] The 36-title map is checked against the archive: every title resolves and every club is named once.
+- [x] The 36-title map is checked against the archive: every title resolves and every club is named once.

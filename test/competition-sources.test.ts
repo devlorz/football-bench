@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
 import {
+  clubArticlesOf,
+  CLUB_HEAD_COACHES_SOURCE
+} from "../src/head-coach/fetch-club-head-coaches.js";
+import {
   COMPETITIONS_WITH_SOURCES, sourcesOf
 } from "../src/fetch/competition-sources.js";
 import { divisionsOf } from "../src/football-data/divisions.js";
@@ -92,7 +96,11 @@ describe("the source registry", () => {
             ? headCoachSource(competition, "2026-27") !== undefined
             : sources.headCoaches === NATIONAL_TEAM_HEAD_COACHES_SOURCE
               ? nationalTeamSectionOf(competition) !== undefined
-              : null
+              // A club cup's infoboxes are read through its reviewed article
+              // map (ticket 0104).
+              : sources.headCoaches === CLUB_HEAD_COACHES_SOURCE
+                ? clubArticlesOf(competition) !== undefined
+                : null
         };
 
         // `null` for a source the entry does not name, which is a Competition

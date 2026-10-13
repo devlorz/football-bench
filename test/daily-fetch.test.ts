@@ -31,6 +31,8 @@ import {
 import {
   PAGE_URL as HEAD_COACHES_PAGE_URL
 } from "../src/head-coach/fetch-national-team-head-coaches.js";
+import { ClubInfoboxMissingError }
+  from "../src/head-coach/fetch-club-head-coaches.js";
 import { archivedBody } from "./archived-fixture.js";
 import { resetSchema } from "./schema-fixture.js";
 
@@ -711,7 +713,8 @@ describe("the daily fetch", () => {
    */
   const withTheChampionsLeague = async (
     championsLeaguePages: string[],
-    clubResults?: (url: string, body: string) => { status: number; body: string }
+    clubResults?: (url: string, body: string) => { status: number; body: string },
+    infoboxes: (body: string) => string = (body) => body
   ): Promise<unknown> => {
     for (const competition of ["PD", "UNL", "UCL"]) {
       await client.query(
@@ -748,7 +751,12 @@ describe("the daily fetch", () => {
       // 365Scores' results page for each of the 36 sides.
       ...Object.entries(JSON.parse(await archivedBody(
         "365scores-UCL-club-results-recorded-2026-10-12.json.gz"
+      )) as Record<string, string>),
+      // Section 0 of each of the 36 clubs' English Wikipedia articles.
+      ...Object.entries(JSON.parse(await archivedBody(
+        "wikipedia-club-infoboxes-recorded-2026-10-13.json.gz"
       )) as Record<string, string>)
+        .map(([url, body]): [string, string] => [url, infoboxes(body)])
     ]);
     return runDailyFetch({
       database: client,
@@ -820,6 +828,31 @@ describe("the daily fetch", () => {
         away_team: "Bayern München",
         competition_name: "Bundesliga"
       }]);
+      // And who picks each side, off its infobox.
+      const lens = await client.query(
+        "select head_coach from club_head_coaches where team = 'Lens'"
+      );
+      expect(lens.rows).toEqual([{ head_coach: "Yannick Cahuzac" }]);
+    });
+
+  test("a mapped club article gone missing fails the Champions League's day by name, and no other's",
+    async () => {
+      const thrown = await withTheChampionsLeague(
+        await championsLeaguePages(),
+        undefined,
+        (body) => body.replace("\"title\":\"RC Lens\"", "\"title\":\"RC Lens (old)\"")
+      );
+
+      expect(thrown).toMatchObject({
+        name: ClubInfoboxMissingError.name,
+        titles: ["RC Lens"]
+      });
+      expect(await fixturesByCompetition()).toEqual([
+        { competition: "PD", fixtures: 380, settled: 0, gameweeks: 38 },
+        { competition: "PL", fixtures: 380, settled: 0, gameweeks: 38 },
+        { competition: "UCL", fixtures: 144, settled: 18, gameweeks: 8 },
+        { competition: "UNL", fixtures: 156, settled: 0, gameweeks: 6 }
+      ]);
     });
 
   test("one club's failed listing fails the Champions League's day by name, and no other's",

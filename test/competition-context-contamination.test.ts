@@ -15,6 +15,9 @@ import {
 import {
   buildClubResultsContext
 } from "../src/context/build-club-results-context.js";
+import {
+  CLUB_HEAD_COACHES_SOURCE
+} from "../src/head-coach/fetch-club-head-coaches.js";
 import { resetSchema } from "./schema-fixture.js";
 
 const { Client } = pg;
@@ -73,7 +76,7 @@ describe("a context packet holds one Competition's data", () => {
          understat_match_xg, team_match_stats, fpl_players,
          international_results, international_results_source,
          head_coaches, head_coach_changes, national_team_head_coaches,
-         club_results
+         club_results, club_head_coaches
        restart identity cascade`
     );
     // `UNL` is listed with the five because the cup's own case below needs a
@@ -560,6 +563,72 @@ describe("a context packet holds one Competition's data", () => {
         "Kosovo\nHead Coach: Franco Foda, in the role since 17 Feb 2024"
       );
       expect(cupPacket).not.toContain("Somebody Else");
+    });
+
+  test("a club cup's Head Coaches come from its own table, and no other Competition reads it",
+    async () => {
+      // `club_head_coaches` has no Competition column (migration 0050): a
+      // club has one Head Coach whatever it plays in. Arsenal and Chelsea are
+      // Premier League clubs, so a league packet that read this table without
+      // asking the registry would put these names on their lines.
+      await client.query(
+        `insert into competitions (competition, season) values ('UCL', $1)`,
+        [SEASON]
+      );
+      await client.query(
+        `insert into gameweeks (competition, season, gw, deadline_at)
+         values ('UCL', $1, 2, $2)`,
+        [SEASON, DEADLINE]
+      );
+      await client.query(
+        `insert into club_head_coaches (
+           team, observed_on, observed_at, head_coach
+         ) values
+           ('Arsenal', '2026-08-20', '2026-08-20T06:00:00Z', 'Mikel Arteta'),
+           ('Chelsea', '2026-08-20', '2026-08-20T06:00:00Z', 'Enzo Maresca'),
+           ('Chelsea', '2026-08-21', '2026-08-21T18:00:00Z', 'After The Lock')`
+      );
+
+      const championsLeague = await loadMatchContextData(
+        client, "UCL", SEASON, 2
+      );
+      const premierLeague = await loadMatchContextData(client, "PL", SEASON, 1);
+      const nationsLeague = await loadMatchContextData(
+        client, "UNL", SEASON, 1
+      );
+
+      // The cup reads its rows up to its Lock and no further.
+      expect(championsLeague.clubHeadCoaches.map(({ team, head_coach: who }) =>
+        [team, who])).toEqual([
+        ["Arsenal", "Mikel Arteta"],
+        ["Chelsea", "Enzo Maresca"]
+      ]);
+      // And neither the league nor the national cup opens the table.
+      expect(premierLeague.clubHeadCoaches).toEqual([]);
+      expect(nationsLeague.clubHeadCoaches).toEqual([]);
+
+      const fixture = {
+        fixture_id: 1,
+        home_team: "Arsenal",
+        away_team: "Chelsea",
+        kickoff_at: new Date("2026-08-21T19:00:00Z")
+      };
+      const leaguePacket = buildMatchContext(fixture, premierLeague);
+      expect(leaguePacket).toContain("Head Coach and changes this Season:");
+      expect(leaguePacket).not.toContain("infobox");
+      expect(leaguePacket).not.toContain("Mikel Arteta");
+
+      // The registry is what chooses: the league packet with `headCoaches`
+      // alone swapped renders the infobox section in place of its own.
+      // `UCL`'s own packet cannot render until ticket 0105 freezes its prompt.
+      const asAClubCup = buildMatchContext(fixture, {
+        ...premierLeague,
+        sources: { ...sourcesOf("PL")!, headCoaches: CLUB_HEAD_COACHES_SOURCE },
+        clubHeadCoaches: championsLeague.clubHeadCoaches
+      });
+      expect(asAClubCup).toContain("Arsenal\nHead Coach: Mikel Arteta");
+      expect(asAClubCup).toContain("Chelsea\nHead Coach: Enzo Maresca");
+      expect(asAClubCup).not.toContain("Head Coach and changes this Season:");
     });
 
   test("each Competition reads only its own history, both directions",

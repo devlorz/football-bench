@@ -1,4 +1,8 @@
 import type { HttpFetcher, HttpRequestOptions } from "../http.js";
+import {
+  clubInfoboxesCompetitionOf,
+  clubInfoboxesSource
+} from "../head-coach/fetch-club-head-coaches.js";
 import { squadChangeSource } from "../squad-changes/fetch-squad-changes.js";
 import { transferWindowByPage } from "../squad-changes/transfer-window.js";
 import {
@@ -283,6 +287,28 @@ function headCoachChangeSourceFor(url: string): string | null {
   return article === undefined ? null : headCoachSourceOf(article);
 }
 
+/**
+ * A club cup's day of infoboxes is one request whose URL names neither the
+ * Competition nor the Season, so the Competition is read back off its titles
+ * and the Season off whichever archived name is that Competition's.
+ */
+function clubInfoboxesSourceFor(
+  url: string,
+  sources: Iterable<string>
+): string | null {
+  const competition = clubInfoboxesCompetitionOf(url);
+  if (competition === undefined) {
+    return null;
+  }
+  for (const source of sources) {
+    const season = source.split(":")[2] ?? "";
+    if (source === clubInfoboxesSource(competition, season)) {
+      return source;
+    }
+  }
+  return clubInfoboxesSource(competition, "<season>");
+}
+
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 /**
@@ -336,6 +362,7 @@ function archiveSource(
     ?? scores365Source(url, sources)
     ?? squadChangeSourceFor(url)
     ?? headCoachChangeSourceFor(url)
+    ?? clubInfoboxesSourceFor(url, sources)
     ?? openRouterSource(url, options);
 }
 

@@ -48,6 +48,10 @@ import {
   fetchNationalTeamHeadCoaches,
   NATIONAL_TEAM_HEAD_COACHES_SOURCE
 } from "../head-coach/fetch-national-team-head-coaches.js";
+import {
+  CLUB_HEAD_COACHES_SOURCE,
+  fetchClubHeadCoaches
+} from "../head-coach/fetch-club-head-coaches.js";
 import { errorText } from "../error-text.js";
 import {
   sourcesOf,
@@ -646,6 +650,16 @@ export async function runDailyFetch({
     if (sources.headCoaches === NATIONAL_TEAM_HEAD_COACHES_SOURCE) {
       try {
         await fetchNationalTeamHeadCoaches({
+          database, competition, season, http, now: () => observedAt
+        });
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    // A club cup's infoboxes, collected on the same terms as the list above.
+    if (sources.headCoaches === CLUB_HEAD_COACHES_SOURCE) {
+      try {
+        await fetchClubHeadCoaches({
           database, competition, season, http, now: () => observedAt
         });
       } catch (error) {
