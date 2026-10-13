@@ -36,6 +36,7 @@ const MD1 = Array.from({ length: 18 }, (_, index) => ({
 describe("a UCL Gameweek 2 packet", () => {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   let packet: string;
+  let data: Awaited<ReturnType<typeof loadMatchContextData>>;
 
   beforeAll(async () => {
     await client.connect();
@@ -125,6 +126,15 @@ describe("a UCL Gameweek 2 packet", () => {
          ('365scores', '4', $1, 'Arsenal', 'Spurs', 9, 9, 'Premier League')`,
       [AFTER_THE_LOCK]
     );
+    // Read for `UEL` (ADR-0063 as amended 2026-10-13): a `UCL` line prints
+    // its score alone all the same.
+    await client.query(
+      `update club_results
+          set home_shots = 15, away_shots = 4, home_shots_on_target = 6,
+              away_shots_on_target = 1, home_xg = 2.10, away_xg = 0.30,
+              sheet_read_at = '2026-09-21T06:00:00Z'
+        where source_match_id = '2'`
+    );
     await client.query(
       `insert into club_head_coaches (
          team, observed_on, observed_at, head_coach
@@ -139,6 +149,7 @@ describe("a UCL Gameweek 2 packet", () => {
       [AFTER_THE_LOCK]
     );
 
+    data = await loadMatchContextData(client, "UCL", SEASON, 2);
     packet = buildMatchContext(
       {
         fixture_id: 2050101,
@@ -146,7 +157,7 @@ describe("a UCL Gameweek 2 packet", () => {
         away_team: "Bayern München",
         kickoff_at: new Date(AFTER_THE_LOCK)
       },
-      await loadMatchContextData(client, "UCL", SEASON, 2)
+      data
     );
 
     return async () => {
@@ -202,6 +213,19 @@ describe("a UCL Gameweek 2 packet", () => {
       "- Champions League | 2026-09-16 | Bayern München 1-2 Club 20",
       "- Bundesliga | 2026-09-13 | Köln 0-3 Bayern München"
     ].join("\n"));
+  });
+
+  test("reads a club result's sheet figures, and prints none of them", () => {
+    expect(data.clubResults.find((row) => row.source_match_id === "2"))
+      .toMatchObject({
+        home_shots: 15, away_shots: 4, home_shots_on_target: 6,
+        away_shots_on_target: 1, home_xg: 2.1, away_xg: 0.3,
+        sheet_read_at: new Date("2026-09-21T06:00:00Z")
+      });
+    expect(packet).toContain(
+      "- Premier League | 2026-09-20 | Arsenal 2-0 Fulham\n"
+    );
+    expect(packet).not.toContain("2.10");
   });
 
   test("shows a Head Coach line a side and a dated Change", () => {

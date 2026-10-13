@@ -174,7 +174,13 @@ const contextData = (competition: string): MatchContextData => ({
       away_team: `Opponent ${index + 1}`,
       home_goals: index % 3,
       away_goals: 1,
-      competition_name: index === 2 ? "EFL Cup" : "Premier League"
+      competition_name: index === 2 ? "EFL Cup" : "Premier League",
+      // Read for another cup: a `UCL` pin prints the score alone.
+      ...(index === 5 ? {
+        home_shots: 15, away_shots: 4, home_shots_on_target: 6,
+        away_shots_on_target: 1, home_xg: 2.1, away_xg: 0.3,
+        sheet_read_at: new Date("2026-08-20T06:00:00Z")
+      } : {})
     })),
     {
       source_match_id: "7",

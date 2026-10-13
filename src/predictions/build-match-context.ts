@@ -358,7 +358,10 @@ export async function loadMatchContextData(
   const clubResults = sources?.history === SCORES_365_SOURCE
     ? await database.query<ClubResult>(
       `select source_match_id, kicked_off_at, home_team, away_team,
-              home_goals, away_goals, competition_name
+              home_goals, away_goals, competition_name,
+              home_shots, away_shots, home_shots_on_target,
+              away_shots_on_target, home_xg::float8 as home_xg,
+              away_xg::float8 as away_xg, sheet_read_at
          from club_results r
         where r.kicked_off_at < $3
           and exists (

@@ -828,6 +828,13 @@ describe("the daily fetch", () => {
         away_team: "Bayern München",
         competition_name: "Bundesliga"
       }]);
+      // But no sheet of them, `MD1`'s among them: `UCL`'s history lines print
+      // scores alone (ADR-0063 as amended 2026-10-13).
+      const sheets = await client.query(
+        `select count(*)::int as read from club_results
+          where sheet_read_at is not null`
+      );
+      expect(sheets.rows[0]?.read).toBe(0);
       // And who picks each side, off its infobox.
       const lens = await client.query(
         "select head_coach from club_head_coaches where team = 'Lens'"

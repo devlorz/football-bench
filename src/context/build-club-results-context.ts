@@ -4,10 +4,14 @@ import {
   type PlayedFixture,
   recordPerformance
 } from "./build-internationals-context.js";
-import { NO_RESULT_YET } from "./build-historical-context.js";
+import {
+  type MatchPerformance,
+  NO_RESULT_YET,
+  performanceSegments
+} from "./build-historical-context.js";
 
-/** One `club_results` row as the packet reads it (migration 0050). */
-export interface ClubResult {
+/** One `club_results` row as the packet reads it (migrations 0050, 0051). */
+export interface ClubResult extends MatchPerformance {
   source_match_id: string;
   kicked_off_at: Date;
   home_team: string;
@@ -16,6 +20,8 @@ export interface ClubResult {
   away_goals: number;
   /** 365Scores' own name for where it was played, never a Competition code. */
   competition_name: string;
+  /** When its 365Scores sheet was read, or null if it never was. */
+  sheet_read_at?: Date | null;
 }
 
 export interface BuildClubResultsContextOptions {
@@ -44,6 +50,27 @@ const BANDS: Readonly<Record<string, string>> = {
   UECL: LEAGUE_PHASE_BANDS
 };
 
+/**
+ * Whether a cup's history lines carry their sheets' figures (ADR-0063 as
+ * amended 2026-10-13). `UCL` stays scores-only because `match-ucl/2026-27-v1`
+ * is frozen and used (ADR-0026); the daily fetch reads sheets only for the
+ * cups this says yes for.
+ */
+const FIGURES: Readonly<Record<string, boolean>> = {
+  UCL: false,
+  UEL: true,
+  UECL: true
+};
+
+export function historyCarriesFigures(competition: string): boolean {
+  const figures = FIGURES[competition];
+  if (figures === undefined) {
+    throw new Error(`Competition ${competition} does not say whether its `
+      + "history lines carry figures");
+  }
+  return figures;
+}
+
 /** How many of a side's matches the section shows (ADR-0063). */
 const MATCHES_SHOWN = 5;
 
@@ -71,17 +98,34 @@ function playedSection(played: PlayedFixture[]): string[] {
   ];
 }
 
-/** Scores only, on every line, whatever the competition's sheet carries. */
-function resultLine(result: ClubResult): string {
+/**
+ * A score, and the sheet's figures where this cup shows them and a sheet was
+ * read before the Lock. A match with no sheet says nothing more, on the
+ * Nations League dataset lines' rule (ADR-0058): a sheet never read is not a
+ * hole.
+ */
+function resultLine(
+  result: ClubResult,
+  figures: boolean,
+  asOf: Date
+): string {
+  const read = figures && result.sheet_read_at != null
+    && result.sheet_read_at.getTime() < asOf.getTime();
   return [
     `- ${result.competition_name}`,
     utcDate(result.kicked_off_at),
     `${result.home_team} ${result.home_goals}-${result.away_goals} `
-      + result.away_team
+      + result.away_team,
+    ...(read ? [performanceSegments(result).join(", ")] : [])
   ].join(" | ");
 }
 
-function teamSection(results: ClubResult[], team: string): string[] {
+function teamSection(
+  results: ClubResult[],
+  team: string,
+  figures: boolean,
+  asOf: Date
+): string[] {
   const recent = results
     .filter((result) =>
       result.home_team === team || result.away_team === team)
@@ -95,7 +139,11 @@ function teamSection(results: ClubResult[], team: string): string[] {
       ? `Last ${MATCHES_SHOWN} competitive matches: none stored for this side.`
       : `Last ${MATCHES_SHOWN} competitive matches: only ${recent.length} stored `
         + "for this side.";
-  return [team, heading, ...recent.map(resultLine)];
+  return [
+    team,
+    heading,
+    ...recent.map((result) => resultLine(result, figures, asOf))
+  ];
 }
 
 /**
@@ -121,6 +169,7 @@ export function buildClubResultsContext(
   if (bands === undefined) {
     throw new Error(`Competition ${options.competition} has no league-phase bands`);
   }
+  const figures = historyCarriesFigures(options.competition);
   return [
     `League phase and recent matches as of ${options.asOf.toISOString()}`,
     "",
@@ -131,8 +180,8 @@ export function buildClubResultsContext(
     "",
     ...playedSection(played),
     "",
-    ...teamSection(results, options.homeTeam),
+    ...teamSection(results, options.homeTeam, figures, options.asOf),
     "",
-    ...teamSection(results, options.awayTeam)
+    ...teamSection(results, options.awayTeam, figures, options.asOf)
   ].join("\n");
 }

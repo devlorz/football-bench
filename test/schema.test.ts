@@ -366,6 +366,50 @@ describe("the benchmark database", () => {
     expect(rows[0]?.results).toBe(2);
   });
 
+  // A sheet's figures on the same checks as `team_match_stats`, and the
+  // instant it was read, so a read sheet with no xG is told apart from one
+  // never read (ADR-0063 as amended 2026-10-13).
+  test("keeps a club result's sheet figures, null where the sheet had none",
+    async () => {
+      const row =
+        `insert into club_results (
+           source, source_match_id, kicked_off_at, home_team, away_team,
+           home_goals, away_goals, competition_name,
+           home_shots, away_shots, home_shots_on_target, away_shots_on_target,
+           home_xg, away_xg, sheet_read_at
+         ) values ('365scores', $1, '2026-10-04T14:00:00Z',
+           'Slavia Praha', 'Sparta Praha', 1, 1, 'Czech First League',
+           14, $2, 5, 3, $3, null, '2026-10-05T06:00:00Z')`;
+      await client.query(row, ["4700001", 9, null]);
+
+      await expect(client.query(row, ["4700002", -1, null]))
+        .rejects.toMatchObject({ code: "23514" });
+      await expect(client.query(row, ["4700003", 9, -0.5]))
+        .rejects.toMatchObject({ code: "23514" });
+      // The other four, one at a time, on a row the checks above allow.
+      for (const [column, value] of [
+        ["home_shots", -1], ["home_shots_on_target", -1],
+        ["away_shots_on_target", -1], ["away_xg", -0.5]
+      ] as const) {
+        await expect(client.query(
+          `insert into club_results (
+             source, source_match_id, kicked_off_at, home_team, away_team,
+             home_goals, away_goals, competition_name, ${column}
+           ) values ('365scores', $1, '2026-10-04T14:00:00Z', 'Slavia Praha',
+             'Sparta Praha', 1, 1, 'Czech First League', $2)`,
+          [`check-${column}`, value]
+        )).rejects.toMatchObject({ code: "23514" });
+      }
+      const { rows } = await client.query(
+        `select away_shots, home_xg, sheet_read_at from club_results`
+      );
+      expect(rows).toEqual([{
+        away_shots: 9,
+        home_xg: null,
+        sheet_read_at: new Date("2026-10-05T06:00:00Z")
+      }]);
+    });
+
   // Keyed by the club and the morning, as migration 0045's national sides
   // are, but with no appointment date: an infobox carries none, so a named
   // Head Coach with no date is the ordinary row here (ADR-0063).

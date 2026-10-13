@@ -41,3 +41,7 @@ Lock 10-22T15:15Z.
 - [ ] A `UEL` Gameweek 2 render holds every section, with history lines carrying their sheets' figures (or scores only, if 0111 missed its cut, recorded here); `MATCH_PROMPTS.UEL` is pinned; every other pin unchanged.
 - [ ] The dry run over the hand-run first fetch shows `MD1` adopted with 18 sheets.
 - [ ] Production answers `UEL` with eight seats and its caveat; the boundary is recorded.
+- [ ] (moved from 0111) A row shared by a `UCL` side and a `UEL` side is read once. A `UCL`-only row is never read.
+- [ ] (moved from 0111) A `UEL` packet shows figures on a line whose sheet has them, shots and "xG unavailable" where it has no xG, and the score alone where no sheet is stored. Nothing observed after the Lock appears.
+- [ ] (from 0111's review) The guard sits inside `fetchClubResultSheets`; a call with a Competition whose constant is no throws by name. Its positive tests switch from `UCL` to `UEL`.
+- [ ] (from 0111's review) A `UEL` sheet whose sides do not match its row fails `UEL`'s day by name through `runDailyFetch`, and the other listed Competitions land.

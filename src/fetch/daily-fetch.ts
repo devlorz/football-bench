@@ -27,7 +27,13 @@ import {
   type ResultDisagreement,
   type UnlistedFixture
 } from "../365scores/fetch-match-stats.js";
-import { fetchClubResults } from "../365scores/fetch-club-results.js";
+import {
+  fetchClubResults,
+  fetchClubResultSheets
+} from "../365scores/fetch-club-results.js";
+import {
+  historyCarriesFigures
+} from "../context/build-club-results-context.js";
 import {
   fetchInternationalResults,
   INTERNATIONAL_RESULTS_SOURCE,
@@ -509,6 +515,17 @@ export async function runDailyFetch({
     if (sources.history === SCORES_365_SOURCE) {
       try {
         await fetchClubResults({ database, competition, season, http, pause });
+      } catch (error) {
+        errors.push(error);
+      }
+      // And their sheets, for a cup whose packet prints them: after the
+      // listings, so a row is read under the names this cup stored it by.
+      try {
+        if (historyCarriesFigures(competition)) {
+          await fetchClubResultSheets({
+            database, competition, season, http, now: () => observedAt, pause
+          });
+        }
       } catch (error) {
         errors.push(error);
       }

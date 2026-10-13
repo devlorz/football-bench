@@ -36,7 +36,7 @@ Decisions it must not bend:
 
 Each cup's miss is its own.
 
-**Status:** ready-for-agent
+**Status:** done, with two boxes moved to 0107 (green 2026-10-13T12:07Z, targeted suites)
 
 ---
 
@@ -92,13 +92,36 @@ Each cup's miss is its own.
 
 ## Acceptance criteria
 
-- [ ] Migration 0051 adds the seven columns. The schema test holds their checks, all five filename lists name it, and the rehearsal passes when run by name.
-- [ ] Over archived sheets, the fetch stores figures for a day-old row, and stores a sheet without xG as read with null xG and does not request it again.
-- [ ] A failed sheet request leaves the row unread, and the next day's fetch reads it.
-- [ ] A row younger than a day is not read.
-- [ ] A row shared by a `UCL` side and a `UEL` side is read once. A `UCL`-only row is never read.
-- [ ] A sheet whose sides do not match its row is refused by name. The Competition's day fails by name, and other Competitions land.
-- [ ] A `UEL` packet shows figures on a line whose sheet has them, shots and "xG unavailable" where it has no xG, and the score alone where no sheet is stored. Nothing observed after the Lock appears.
-- [ ] A `UCL` packet over a row enriched for `UEL` prints the score alone. `match-ucl/2026-27-v1` and every other pin are unchanged.
-- [ ] The dry-run replay maps the sheet URLs.
-- [ ] The ticket records the time it went green against each cup's cut line.
+- [x] Migration 0051 adds the seven columns. The schema test holds their checks, all five filename lists name it, and the rehearsal passes when run by name.
+- [x] Over archived sheets, the fetch stores figures for a day-old row, and stores a sheet without xG as read with null xG and does not request it again.
+- [x] A failed sheet request leaves the row unread, and the next day's fetch reads it.
+- [x] A row younger than a day is not read.
+- [ ] A row shared by a `UCL` side and a `UEL` side is read once. A `UCL`-only row is never read. *Moved to 0107: needs `UEL`'s maps and registry entry. The `UCL`-only half is proven here through `runDailyFetch`.*
+- [x] A sheet whose sides do not match its row is refused by name. The Competition's day fails by name, and other Competitions land.
+- [ ] A `UEL` packet shows figures on a line whose sheet has them, shots and "xG unavailable" where it has no xG, and the score alone where no sheet is stored. Nothing observed after the Lock appears. *Moved to 0107: needs `UEL`'s maps and registry entry. Proven here at the renderer only (`test/build-club-results-context.test.ts`).*
+- [x] A `UCL` packet over a row enriched for `UEL` prints the score alone. `match-ucl/2026-27-v1` and every other pin are unchanged.
+- [x] The dry-run replay maps the sheet URLs.
+- [x] The ticket records the time it went green against each cup's cut line.
+
+## Outcome
+
+Green 2026-10-13T12:07Z: ahead of `UEL`'s cut line (2026-10-15T06:00Z) by about 42
+hours and `UECL`'s (2026-10-22T03:45Z) by about eight and a half days.
+
+- `fetchClubResultSheets` (`src/365scores/fetch-club-results.ts`) is tested over `UCL`'s
+  archived sheets, because `UEL` and `UECL` have no competitor-id or name map until
+  0107 and 0108. The daily fetch calls it only where `historyCarriesFigures` says yes,
+  and the registry's `history` for `UEL` and `UECL` is still null. So no sheet is read
+  in production until 0107 or 0108 names that source.
+- "Read once" is `sheet_read_at`: whichever cup reads a row first marks it, and every
+  cup skips a marked row. The two boxes that need `UEL` end to end moved to 0107
+  word for word, with two more from the review: the guard inside
+  `fetchClubResultSheets`, and other Competitions landing at `runDailyFetch` level.
+  The guard could not move here: the function names a sheet's non-cup side through
+  `storedTeamName`, which throws for a cup without a name map, so a `UEL` call has
+  nothing to run on until 0107 reviews that map.
+- The dry-run replay needed no change. Sheets are archived as
+  `365scores:<season>:<cup>:stats:<id>`, an ending the replay already maps.
+- A sheet's sides are named the way `fetchClubResults` names a listing's: a cup side
+  by competitor id, anyone else through the cup's name map. A sheet that disagrees
+  with its row is refused by source name.

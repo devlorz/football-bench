@@ -5,9 +5,13 @@ import {
   clubResultsSource,
   clubResultsUrl,
   parsed,
+  parseScores365Sheet,
   readAndArchive,
+  type Scores365Side,
   Scores365ValidationError,
   SCORES_365_SOURCE,
+  sheetSource,
+  sheetUrl,
   storedTeamName
 } from "./fetch-match-stats.js";
 
@@ -260,5 +264,121 @@ export async function fetchClubResults({
   }
   if (failed.length > 0) {
     throw new ClubResultsFetchError(competition, failed, errors);
+  }
+}
+
+export class ClubResultSheetsFetchError extends AggregateError {
+  constructor(
+    public readonly competition: string,
+    public readonly games: string[],
+    errors: unknown[]
+  ) {
+    super(
+      errors,
+      `Competition ${competition}: no 365Scores sheet read for games `
+      + games.join(", ")
+    );
+    this.name = "ClubResultSheetsFetchError";
+  }
+}
+
+export interface FetchClubResultSheetsOptions {
+  database: Database;
+  competition: string;
+  season: string;
+  http: HttpFetcher;
+  now: () => Date;
+  pause?: (() => Promise<void>) | undefined;
+}
+
+/** How old a match is before its sheet is read (spec 0028 story 50d). */
+const SHEET_AGE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The shots, shots on target and xG of each `club_results` row touching one
+ * of this cup's sides, from its 365Scores sheet (ADR-0063 as amended
+ * 2026-10-13). A row is read once a day old and once only: `sheet_read_at`
+ * marks it read whatever the sheet held, so a sheet without xG is final and a
+ * row another cup already read is not asked for again.
+ *
+ * A failed request leaves its row unread for the next morning; the others are
+ * stored as they arrive, and the failures fail the Competition's day by name.
+ */
+export async function fetchClubResultSheets({
+  database,
+  competition,
+  season,
+  http,
+  now,
+  pause = () => new Promise((resolve) => setTimeout(resolve, PAUSE_MS))
+}: FetchClubResultSheetsOptions): Promise<void> {
+  const readAt = now();
+  const { rows } = await database.query<{
+    source_match_id: string;
+    home_team: string;
+    away_team: string;
+  }>(
+    `select source_match_id, home_team, away_team from club_results r
+      where r.source = $3 and r.sheet_read_at is null
+        and r.kicked_off_at <= $4
+        and exists (
+          select 1 from fixtures f
+           where f.competition = $1 and f.season = $2
+             and (r.home_team in (f.home_team, f.away_team)
+               or r.away_team in (f.home_team, f.away_team)))
+      order by r.kicked_off_at`,
+    [competition, season, SCORES_365_SOURCE,
+      new Date(readAt.getTime() - SHEET_AGE_MS)]
+  );
+  const ids = clubCompetitorIdsOf(competition) ?? {};
+  // A sheet's side named as `fetchClubResults` names a listing's: a cup side
+  // by its competitor id, anyone else by 365Scores' spelling.
+  const nameOf = (side: Scores365Side): string =>
+    Object.entries(ids).find(([, id]) => id === side.id)?.[0]
+      ?? storedTeamName(competition, side.name);
+  const failed: string[] = [];
+  const errors: unknown[] = [];
+  for (const [index, row] of rows.entries()) {
+    if (index > 0) {
+      await pause();
+    }
+    try {
+      const source = sheetSource(competition, season, row.source_match_id);
+      const sheet = parseScores365Sheet(source, await readAndArchive(
+        database, http, sheetUrl(row.source_match_id), source
+      ));
+      const home = nameOf(sheet.game.home);
+      const away = nameOf(sheet.game.away);
+      if (
+        sheet.game.id !== row.source_match_id
+        || home !== row.home_team
+        || away !== row.away_team
+      ) {
+        throw new Scores365ValidationError(source, [{
+          field: "games.0",
+          detail: `sheet is game ${sheet.game.id}, ${home} v ${away}; `
+            + `the row is ${row.home_team} v ${row.away_team}`
+        }]);
+      }
+      await database.query(
+        `update club_results set
+           home_shots = $3, away_shots = $4,
+           home_shots_on_target = $5, away_shots_on_target = $6,
+           home_xg = $7, away_xg = $8, sheet_read_at = $9
+         where source = $1 and source_match_id = $2`,
+        [
+          SCORES_365_SOURCE, row.source_match_id,
+          sheet.homeShots, sheet.awayShots,
+          sheet.homeShotsOnTarget, sheet.awayShotsOnTarget,
+          sheet.homeXg, sheet.awayXg, readAt
+        ]
+      );
+    } catch (error) {
+      failed.push(row.source_match_id);
+      errors.push(error);
+    }
+  }
+  if (failed.length > 0) {
+    throw new ClubResultSheetsFetchError(competition, failed, errors);
   }
 }
