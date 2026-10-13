@@ -63,8 +63,15 @@ The same setup showed the following on real sources, at no cost:
 
 ## Acceptance criteria
 
-- [ ] The runbook's *Opening a club cup* section exists and lists the order above.
-- [ ] The dry run of `UCL` Gameweek 2 shows `MD1` Locked with 18 results and 18 sheets, the 36-side table, and every section the pin froze.
-- [ ] Production's read API answers `UCL` with eight seats, Edition 1, and the roster caveat.
+- [x] The runbook's *Opening a club cup* section exists and lists the order above. It is [opening a Competition §5](../runbooks/opening-a-competition.md), which adds the three things 2026-10-13 taught:
+      - set `DATABASE_URL` inline for the production insert and `roster:enter`;
+      - accept a pre-flight seat that fails on shape alone;
+      - the read API's seat Lock (ticket 0112).
+- [x] The dry run of `UCL` Gameweek 2 shows `MD1` Locked with 18 results and 18 sheets, the 36-side table, and every section the pin froze. It was run 2026-10-13 over production's archive (859 snapshots) at `DRY_RUN_AT=2026-10-13T10:30:00Z`:
+      - 18 contexts, and each holds every frozen section once: the table with its bands line, the 18 played Fixtures with xG, two last-five blocks, the Squad Changes absence, two Head Coach lines, and the no-appointment-date line;
+      - "Predictions: 0 (expected 0), Gaps: 144 (expected 144). Dry run matched the archive's expected outcome."
+
+      The dry run replays only `openrouter-preflight:` answers that production archived. `UCL`'s pre-flight ran on a throwaway database, so every slot is an expected Gap. This box checks the write path and the packets, not the answers, which production's 144 Predictions already are.
+- [x] Production's read API answers `UCL` with eight seats, Edition 1, and the roster caveat. This held after ticket 0112's deploy (`a71ff10`): 18 Fixtures × 8 slots with 144 Predictions, 8 entrants, and `rosterCaveat` served.
 - [ ] After the Lock, eight Predictions per Fixture or named Gaps for Gameweek 2.
 - [ ] The ticket records the boundary that happened (Gameweek 2, or Gameweek 3 under the fallback).

@@ -388,3 +388,100 @@ The winter page for a Season does not exist in August, for any of the five. Its 
 frozen from the naming convention the previous ones used
 (`List of Spanish football transfers winter 2026–27`, en dash) and is not verifiable
 until it is created.
+
+## 5. Opening a club cup
+
+The UEFA club cups (ADR-0063) open by the same sections as every Competition. This is the
+order `UCL` took on 2026-10-13, written down because three steps went wrong in ways the
+sections above do not warn about. `UEL` (ticket 0107) and `UECL` (ticket 0108) follow it.
+A club cup opens mid-Season, at its `MD2`, with `MD1` adopted as Locked history, and every
+difference below follows from that.
+
+**The per-cup edits**, beyond section 1's thirteen. Every one fails loudly when missing:
+- the UEFA id, and the cup's `League Phase` matchday map;
+- the 365Scores competition id, and the reviewed name map onto UEFA's spelling;
+- the 365Scores competitor ids;
+- the 36 Wikipedia article titles;
+- the registry entry;
+- `MATCH_PROMPTS` with its pinned render;
+- the `ROSTER_CAVEATS` sentence;
+- the switcher label;
+- the bands line, the Squad Changes absence, and whether history lines show figures
+  (ticket 0111).
+
+**The order.** Each step's clock is relative to the cup's Gameweek 2 Lock.
+
+1. **Push** before Lock − 6h. The predict and fetch jobs are GitHub Actions running
+   `origin/main`, so a commit that is not pushed does not exist for them. Check the gap
+   (`git rev-list --left-right --count origin/main...main`).
+2. **`npm run db:rehearse`** against production. It only reads: it dumps production into a
+   temporary Postgres and applies the pending migrations there. Then the operator applies
+   them (`npm run db:migrate`). A second rehearsal that says "already at the latest
+   migration" is the check that `schema_migrations` agrees with the repo.
+3. **Pre-flight on a throwaway database**, as in section 3's sub-section:
+   - `createdb`, migrate, insert the cup, `EDITION=1 npm run roster:enter`, then
+     `npm run fetch`, which is free and real;
+   - then `COMPETITION=<cup> FIXTURE_ID=<a Gameweek 2 Fixture> EXPECTED_ENTRANT_COUNT=8
+     npm run preflight`. **PAID: eight calls, about $0.30. Ask first.**
+
+   The free half doubles as the first real check:
+   - `MD1` must arrive as Locked history, with its 18 results and 18 sheets;
+   - Gameweek 2's deadline must be right;
+   - `club_results` and `club_head_coaches` must fill.
+
+   **The pre-flight is single-shot and has no Repair turn.** On 2026-10-13, Gemini 3.1 Pro
+   Preview answered `UCL` twice with array-shaped `score`/`probs`, with sound content both
+   times. The operator accepted it, and production's Repair turns then produced all 18 of
+   its Predictions in 32 attempts. A seat failing on shape alone is a decision to record,
+   not a reason to re-run until green.
+4. **The production insert and `roster:enter`, with `DATABASE_URL` set on the command
+   line.** On 2026-10-13 both first landed on a different database, and the fetch that
+   followed found no `UCL`. Set it inline, every time:
+
+   ```bash
+   psql "$(grep -E '^DATABASE_URL=' .env | cut -d= -f2- | tr -d '"')" \
+     -c "insert into competitions (competition, season) values ('<cup>', '2026-27')"
+   DATABASE_URL="$(grep -E '^DATABASE_URL=' .env | cut -d= -f2- | tr -d '"')" \
+     EDITION=1 npm run roster:enter
+   ```
+
+   `roster:enter` must print the cup's eight and "Left as they stand, not in Edition 1:
+   BL1, FL1, PD, PL, SA". If the leagues are not listed as left, stop: it would be
+   re-seating them against Edition 1 (ticket 0102). It also re-confirms `UNL`'s seven,
+   which writes nothing.
+5. **The first fetch by hand.** The scheduled fetch runs at 06:00Z and may have run
+   before the insert:
+
+   ```bash
+   set -a; . ./.env; set +a
+   FOOTBALL_DATA_SEASON=2026-27 npm run fetch
+   ```
+
+   Then check the packet production will send:
+
+   ```bash
+   COMPETITION=<cup> GAMEWEEK=2 FOOTBALL_DATA_SEASON=2026-27 npm run --silent context:show
+   ```
+
+   "Gameweek <cup> 2026-27 2 does not exist" means the insert did not land (step 4).
+6. **Nothing to run for the Predictions.** `predict.yml` runs every 30 minutes, though
+   GitHub starts it a few minutes late. The first run after the fetch asks all eight
+   seats about every Fixture whose Lock is within six hours. A run that starts while the
+   fetch is still writing finds nothing due, and the next one picks it up.
+7. **The dashboard deploy, by hand** (`PUSH_TAG=1 ./scripts/deploy-dashboard.sh`,
+   [dashboard deploy](dashboard-deploy.md)). Until then the switcher has no cup. Before
+   ticket 0112 the deployed page read "0 of 0 predicted": the read API asked the seats at
+   Gameweek 1's Lock, which passed weeks before they were entered. The `/api/<cup>/…`
+   reads are edge-cached for about five minutes, so add a query string when checking a
+   change.
+8. **The dry run** over the archive the first fetch stored. It is free and reaches no Base
+   Model:
+
+   ```bash
+   set -a; . ./.env; set +a
+   COMPETITION=<cup> GAMEWEEK=2 DRY_RUN_AT=deadline-6h FOOTBALL_DATA_SEASON=2026-27 \
+     npm run --silent dry-run
+   ```
+
+If the Lock is missed at any step, the cup opens at Gameweek 3 by ADR-0054's rule. Nothing
+is set by hand.
