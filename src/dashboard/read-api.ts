@@ -395,6 +395,24 @@ function rosterCaveatField(
   return caveat === undefined ? {} : { rosterCaveat: caveat };
 }
 
+/**
+ * Whether Gameweek `gameweek`'s Lock is one the Competition's seats can have
+ * been asked at: at or after the earliest entry of any entrant seat under
+ * Prompt Version `version` (ticket 0112). A Competition opened by adopting its
+ * first Gameweek as history entered every seat after that Lock (ADR-0063), so
+ * its first asked Gameweek is the first that passes.
+ *
+ * The seat query and the pre-season Lock both read it (ticket 0113). If they
+ * disagreed, a page would show a seat asked at one Lock while it names another.
+ * A Competition with no entered seat passes every Gameweek, which is the
+ * earliest one, as before.
+ */
+const askedFrom = (gameweek: string, version: string): string =>
+  `${gameweek}.deadline_at >= coalesce(
+     (select min(e.created_at) from models e
+       where e.prompt_version = ${version} and e.role = 'entrant'),
+     '-infinity')`;
+
 const SEATS_CTE = `
   -- roster: the match track's, per Competition (ADR-0038) -- every caller
   -- passes matchPromptOf(competition).version as $3, never the FPL track's.
@@ -418,9 +436,7 @@ const SEATS_CTE = `
                (select min(g.deadline_at) from gameweeks g
                  where g.competition = $2 and g.season = $1 and g.gw >= $8
                    and ($7::int is null or g.gw <= $7)
-                   and g.deadline_at >= (
-                     select min(e.created_at) from models e
-                      where e.prompt_version = $3 and e.role = 'entrant')),
+                   and ${askedFrom("g", "$3")}),
                'infinity')`)})
             or (m.role = 'exhibition'
                 and ran_after.gw is not null
@@ -489,13 +505,19 @@ async function leaderboard(
   // the roster and Gameweek 1 alone -- the state has one Lock in it, and asking
   // a clock would answer a Season whose first deadline has passed and whose
   // scoring run has not yet landed with no date at all.
+  //
+  // The earliest the seats can have been asked at, not the earliest of all: a
+  // cup that adopted its `MD1` as history would otherwise name a Lock that
+  // passed before any seat was entered (ticket 0113).
   const [lock] = throughGw === null
     ? await query(
-      `select gw, deadline_at from gameweeks
-        where competition = $2 and season = $1 and gw >= $3
-          and ($4::int is null or gw <= $4)
-        order by gw limit 1`,
-      [season, competition, rankedFrom(competition, scope), scope.lastGameweek]
+      `select g.gw, g.deadline_at from gameweeks g
+        where g.competition = $2 and g.season = $1 and g.gw >= $3
+          and ($4::int is null or g.gw <= $4)
+          and ${askedFrom("g", "$5")}
+        order by g.gw limit 1`,
+      [season, competition, rankedFrom(competition, scope), scope.lastGameweek,
+        matchPromptOf(competition).version]
     )
     : [];
 

@@ -456,4 +456,14 @@ describe("the read API on a Competition adopted mid-Season", () => {
       expect(board.entrants.map(({ id }) => id))
         .toEqual(["match-ucl/early", "match-ucl/late"]);
     });
+
+  test("before anything is scored, the next Lock is the first one asked",
+    async () => {
+      const board = await body<LeaderboardBody>("/api/ucl/leaderboard");
+
+      // Ticket 0113: not Gameweek 1, whose Lock passed before any seat.
+      expect(board.throughGw).toBeNull();
+      expect(board.nextLock)
+        .toEqual({ gw: 2, deadlineAt: LOCK_TWO.toISOString() });
+    });
 });
