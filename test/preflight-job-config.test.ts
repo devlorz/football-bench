@@ -78,8 +78,9 @@ describe("the pre-flight job configuration", () => {
 
     // The two codes that end in a digit are Competitions like any other, and
     // the letters-only shape this check used to carry refused them by name
-    // (`migrations/0022_the_competition_dimension.sql` lists all five).
-    for (const competition of ["FL1", "BL1"]) {
+    // (`migrations/0022_the_competition_dimension.sql` lists all five). `UECL`
+    // is the first four-letter code (ADR-0063, migration 0050).
+    for (const competition of ["FL1", "BL1", "UECL"]) {
       expect(readPreflightJobConfig({
         DATABASE_URL: "postgresql://localhost/benchmark",
         COMPETITION: competition,

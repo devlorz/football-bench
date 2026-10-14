@@ -505,7 +505,9 @@ export function readFplExhibitionJobConfig(
  */
 function readCompetition(environment: NodeJS.ProcessEnv): string {
   const competition = environment.COMPETITION?.trim().toUpperCase() || "PL";
-  if (!/^[A-Z]{2,3}[0-9]?$/.test(competition)) {
+  // Four letters too: `UECL` (ADR-0063) is the first code longer than three,
+  // and the pre-flight refused it by name on 2026-10-14.
+  if (!/^[A-Z]{2,4}[0-9]?$/.test(competition)) {
     throw new Error("COMPETITION must be a Competition code such as PL or PD");
   }
   return competition;
