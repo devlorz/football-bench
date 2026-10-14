@@ -34,6 +34,23 @@ status: accepted
 > for its league phase. See *Amendment: the Europa and Conference Leagues' history lines
 > carry their sheets' figures* at the foot of this note.
 
+>
+> Amended 2026-10-14 by the operator: **the Conference League opens at its `MD1`, not its
+> `MD2`.** `UECL`'s `MD1` is played 2026-10-15, and its Lock is 15:15Z that day. The code
+> was ready a day before that Lock, so its whole league phase can be predicted: six
+> Gameweeks, none adopted as history.
+> - Gameweek 1's packet is the empty state: the 36-side table at nought and no played
+>   Fixture yet. It is read on a throwaway database before the insert.
+> - The insert and `roster:enter` land before Lock − 6h, 2026-10-15T09:15Z, so seats are
+>   entered before Gameweek 1's Lock. Tickets 0112 and 0113 then answer Gameweek 1 with
+>   no special case.
+> - The fallback is ADR-0054's, unchanged. If any step misses Gameweek 1, `UECL` opens
+>   at Gameweek 2 as first written, with `MD1` adopted as history.
+> - Cost: about $5.40 more (18 Fixtures × 8 seats).
+>
+> `UCL` and `UEL` keep their `MD2` openings. The title stays as it is because it is the
+> note's name.
+
 **The UEFA Champions League (`UCL`), Europa League (`UEL`) and Conference League
 (`UECL`) open for 2026-27, league phase only, each at its `MD2`.** Each cup has 36 clubs
 in one 36-side table. `UCL` and `UEL` play 144 Fixtures over eight matchdays and `UECL`

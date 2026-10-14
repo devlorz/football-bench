@@ -18,6 +18,11 @@ standing on [ADR-0057](../adr/0057-the-nations-league-opens-as-the-first-cup-on-
 > sheet columns (migration 0051), the day's delay, the read-and-empty rule and the
 > per-Competition switch. "xG on history lines" leaves *Out of Scope*. The ticket order
 > gains ticket 0111, which blocks 0107 and 0108, with a cut line for each of the two cups.
+>
+> Amended 2026-10-14, with ADR-0063's amendment of the same day: **`UECL` opens at its
+> `MD1`** (Lock 2026-10-15T15:15Z), not at Gameweek 2. Where a story or the clock says
+> `UECL`'s Gameweek 2, read Gameweek 1, with Gameweek 2 as ADR-0054's fallback. Its
+> Gameweek 1 packet is the empty state.
 
 ---
 
@@ -377,8 +382,9 @@ run of the whole suite is asked for before a push.
 
 - **The knockout rounds** of all three cups (play-offs in February 2027 onward). They are
   skipped by the round filter, and nothing here prepares them.
-- **`UECL`'s `MD1` and `UCL`'s/`UEL`'s `MD1` as predicted Gameweeks.** They are history
-  only, by the operator's choice of `MD2`.
+- **`UCL`'s and `UEL`'s `MD1` as predicted Gameweeks.** They are history only, by the
+  operator's choice of `MD2`. *(Amended 2026-10-14: `UECL` opens at its `MD1` instead,
+  ADR-0063. Its `MD1` is a predicted Gameweek, with Gameweek 2 as the fallback.)*
 - **xG on `UCL`'s history lines.** It froze scores-only at its first Lock (ADR-0063,
   as amended 2026-10-13).
 - **Figures for leagues whose sheets carry none.** No second source is opened for them

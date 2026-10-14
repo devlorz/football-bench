@@ -1,10 +1,11 @@
 # Ticket: The Conference League opens
 
-**What to build:** `UECL` opens at its Gameweek 2 (Lock 2026-10-22T13:00Z) with every
-section of ADR-0063's packet. That includes six Gameweeks only, its three reviewed maps,
-its registry entry, and `match-uecl/2026-27-v1` pinned from a render read whole. It is
-activated by the runbook's *Opening a club cup*. Its `MD1` (2026-10-15) is played before
-activation and arrives as Locked history with its sheets.
+**What to build:** `UECL` opens at its **Gameweek 1**, `MD1`, Lock 2026-10-15T15:15Z
+(ADR-0063 as amended 2026-10-14; it was first written for Gameweek 2). It opens with every
+section of ADR-0063's packet, six Gameweeks only, its three reviewed maps, its registry
+entry, and `match-uecl/2026-27-v1` pinned from a render read whole. It is activated by
+the runbook's *Opening a club cup*. Its whole league phase is predicted, and no Gameweek
+is adopted as history.
 
 Source: ADR-0063, spec 0028 stories 59, 61, 75–80.
 
@@ -12,8 +13,11 @@ Source: ADR-0063, spec 0028 stories 59, 61, 75–80.
 sheets' figures). If 0111 is not green by 2026-10-22T03:45Z, this ticket pins scores-only
 history lines and proceeds.
 
-**Hard deadline:** pinned and deployed by 2026-10-22T07:00Z. The fallback is Gameweek 3,
-Lock 11-05T16:15Z.
+**Hard deadline:** inserted, seated and fetched by **2026-10-15T09:15Z** (Gameweek 1's
+Lock − 6h, when the predict run first asks). The absolute limit is a few predict runs
+before the 15:15Z Lock. The fallback is ADR-0054's: Gameweek 2, Lock 2026-10-22T13:00Z,
+with `MD1` adopted as history, which is this ticket as first written. If that is missed
+too, Gameweek 3, Lock 11-05T16:15Z.
 
 **Status:** ready-for-agent
 
@@ -40,15 +44,15 @@ Lock 11-05T16:15Z.
 ## Acceptance criteria
 
 - [x] The three `UECL` maps are derived from the archive with nothing left over. 20 spellings, 36 competitor ids and 36 titles, each derived by a test from archives recorded 2026-10-14.
-- [ ] After 10-15, all 18 `MD1` sheets are read and the count with xG is recorded here.
+- [ ] After `MD1` is played (2026-10-15), all 18 of its sheets are read and the count with xG is recorded here. They are a predicted Gameweek's sheets, read by the daily fetch as any settled Fixture's are.
 - [x] A `UECL` Gameweek 2 render holds every section, with history lines carrying their sheets' figures (or scores only, if 0111 missed its cut, recorded here); `MATCH_PROMPTS.UECL` is pinned; every other pin unchanged. 0111 was green, so the history lines carry figures. `ee69297f…2146` was read whole from the suite's render on 2026-10-14; it is `UEL`'s rendering but for the Competition's name.
 - [ ] Production answers `UECL` with eight seats and its caveat; the boundary is recorded.
-- [ ] Pre-flight's free half on `uecl_preflight`: `EDITION=1 roster:enter`, the fetch, and `context:show` rendering 18 packets with every section.
-- [ ] Pre-flight's paid half on `uecl_preflight`: eight calls, about $0.30, asked for separately.
-- [ ] Pushed and deployed by 2026-10-22T07:00Z, with the `origin/main` gap checked first.
+- [ ] Pre-flight's free half on `uecl_preflight`: `EDITION=1 roster:enter`, the fetch, and `context:show` for **Gameweek 1** rendering 18 packets. It is read line by line for the empty state no cup has rendered yet: the 36-side table at nought, the played-Fixtures section with no match, five recent matches a side, and Head Coach lines.
+- [ ] Pre-flight's paid half on `uecl_preflight`, on a **Gameweek 1** Fixture: eight calls, about $0.30, asked for separately.
+- [ ] Pushed and deployed by 2026-10-15T09:15Z, with the `origin/main` gap checked first.
 - [ ] The operator's `competitions` insert and `EDITION=1 roster:enter` on production, with `DATABASE_URL` set inline.
-- [ ] The first fetch by hand, then `context:show` for `UECL` Gameweek 2.
-- [ ] The dry run over the hand-run first fetch shows `MD1` adopted with its sheets.
+- [ ] The first fetch by hand, then `context:show` for `UECL` Gameweek 1.
+- [ ] The dry run of Gameweek 1 over the hand-run first fetch builds 18 contexts and matches its expected outcome.
 - [ ] The dashboard deploy by hand.
 
 ## Outcome
