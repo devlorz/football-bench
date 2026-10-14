@@ -21,7 +21,7 @@ Decisions it must not bend:
 **Blocked by:** None — can start immediately. It is display only, so the Lock, the
 Predictions and the scoring are untouched.
 
-**Status:** built 2026-10-14, not yet deployed. The last box waits on the dashboard deploy.
+**Status:** done, 2026-10-14. Deployed in `80cf176` as Worker version `12c697d5`, with the `deployed` tag moved.
 
 ---
 
@@ -47,4 +47,6 @@ Predictions and the scoring are untouched.
       - `UEL` names Gameweek 2 at 2026-10-15T15:15Z;
       - `UCL`, `UNL`, `PL` and `PD` have scored Gameweeks and name none;
       - `UEL`'s Gameweek 2 still has 18 Fixtures × 8 slots.
-- [ ] After the deploy, production's `/api/uel/leaderboard` names `{ gw: 2, deadlineAt: 2026-10-15T15:15:00.000Z }` until Gameweek 2 is scored.
+- [x] After the deploy, production's `/api/uel/leaderboard` names `{ gw: 2, deadlineAt: 2026-10-15T15:15:00.000Z }` until Gameweek 2 is scored. Read on the live Worker with a cache-busting query:
+      - `UEL` named it, with 8 entrants and 18 Fixtures × 8 slots;
+      - `UCL`, `UNL` and `PL` still named no Lock, with 8, 7 and 8 entrants.
