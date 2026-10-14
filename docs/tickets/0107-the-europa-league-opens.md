@@ -39,12 +39,25 @@ Lock 10-22T15:15Z.
 
 - [x] The three `UEL` maps are derived from the archive with nothing left over. 16 spellings, 36 competitor ids and 36 titles, each derived by a test from archives recorded 2026-10-13.
 - [x] A `UEL` Gameweek 2 render holds every section, with history lines carrying their sheets' figures (or scores only, if 0111 missed its cut, recorded here); `MATCH_PROMPTS.UEL` is pinned; every other pin unchanged. 0111 was green before its cut, so the history lines carry figures. `b3b605c6…e6bf` was read whole from the suite's render on 2026-10-13.
-- [ ] The dry run over the hand-run first fetch shows `MD1` adopted with 18 sheets.
+- [x] The dry run over the hand-run first fetch shows `MD1` adopted with 18 sheets. Run 2026-10-14 over production's archive at `deadline-6h`: 18 contexts, "Predictions: 0 (expected 0), Gaps: 144 (expected 144). Dry run matched the archive's expected outcome." No answers were replayed, because the pre-flight ran on `uel_preflight` and production archived none of them.
 - [ ] Production answers `UEL` with eight seats and its caveat; the boundary is recorded.
-- [ ] Pushed and deployed by 2026-10-15T09:15Z; the `origin/main` gap checked first.
-- [ ] Pre-flight's paid half on `uel_preflight`: eight calls, about $0.30, asked for separately.
-- [ ] The operator's `competitions` insert and `EDITION=1 roster:enter` on production, with `DATABASE_URL` set inline.
-- [ ] The first fetch by hand, then `context:show` for `UEL` Gameweek 2.
+- [x] Pushed and deployed by 2026-10-15T09:15Z; the `origin/main` gap checked first. `1a6f4a3` was pushed 2026-10-13, and `origin/main` was 0 behind and 0 ahead at the insert. The jobs run `origin/main`.
+- [x] Pre-flight's paid half on `uel_preflight`: eight calls, about $0.30, asked for separately. It ran 2026-10-13 at 20:22Z on Fixture 2050076, Lyon–Crystal Palace, Gameweek 2.
+      - Seven seats were `parseable`, each resolved to its pinned dated id.
+      - Gemini 3.1 Pro Preview was `unparseable` on shape alone: `fixture_id` came as the string `"2050076"`.
+      - Its `probs` and `score` were well-formed objects, and its rationale reads the packet's figures.
+      - The operator went on to the insert rather than re-running. That is the runbook's §5 step 3 rule and `UCL`'s precedent, where Repair turns produced all 18 of Gemini's Predictions.
+- [x] The operator's `competitions` insert and `EDITION=1 roster:enter` on production, with `DATABASE_URL` set inline.
+      - `INSERT 0 1`.
+      - `roster:enter` entered the eight `match-uel/…` seats and re-confirmed `UCL`'s eight and `UNL`'s seven, which writes nothing.
+      - It printed "Left as they stand, not in Edition 1: BL1, FL1, PD, PL, SA".
+- [x] The first fetch by hand, then `context:show` for `UEL` Gameweek 2. Run 2026-10-14 from 09:34Z to 09:44Z.
+      - 144 Fixtures in Gameweeks 1–8, with `MD1` Locked: 18 results and 18 of 18 sheets with xG.
+      - Gameweek 2's deadline is 2026-10-15T15:15Z.
+      - `club_results` holds 688 rows, with 409 sheets read and 195 carrying xG.
+      - `club_head_coaches` holds 108 rows.
+      - `context:show` built 18 packets, each with every section.
+      - The history lines carry sheet figures, with "xG unavailable" on 76 lines from leagues without it.
 - [ ] The dashboard deploy by hand.
 - [x] Migration 0051 applied on production (operator).
 - [x] (moved from 0111) A row shared by a `UCL` side and a `UEL` side is read once. A `UCL`-only row is never read. Proven through `runDailyFetch` (`test/daily-fetch.test.ts`).
