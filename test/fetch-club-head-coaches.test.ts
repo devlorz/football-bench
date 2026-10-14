@@ -332,3 +332,41 @@ describe("the Europa League's article map", () => {
         recorded.get("S.C.U. Torreense")!)).toBe("Luís Tralhão");
     });
 });
+
+describe("the Conference League's article map", () => {
+  test("names every side of the league phase once, each title resolving",
+    async () => {
+      const pages = await Promise.all([0, 100, 200, 300].map((offset) =>
+        archivedBody(`uefa-2026-27-UECL-recorded-offset-${offset}.json.gz`)));
+      const uefaSides = new Set(pages.flatMap((page) => (JSON.parse(page) as {
+        round: { metaData: { name: string } };
+        homeTeam: { internationalName: string };
+        awayTeam: { internationalName: string };
+      }[]).filter((match) => match.round.metaData.name === "League Phase")
+        .flatMap((match) => [
+          match.homeTeam.internationalName, match.awayTeam.internationalName
+        ])));
+      const articles = clubArticlesOf("UECL")!;
+      const recorded = await recordedArticles(
+        "wikipedia-UECL-club-infoboxes-recorded-2026-10-14.json.gz"
+      );
+
+      expect(Object.keys(articles).sort()).toEqual([...uefaSides].sort());
+      expect(new Set(Object.values(articles)).size).toBe(36);
+      expect([...recorded.keys()].sort())
+        .toEqual(Object.values(articles).sort());
+      for (const title of Object.values(articles)) {
+        expect(recorded.has(title), title).toBe(true);
+        expect(parseClubHeadCoach(title, recorded.get(title)!), title)
+          .not.toBeNull();
+      }
+      // Inter Escaldes' infobox ends each line with its pipe, and Iberia's
+      // flags its acting manager with `{{fbaicon}}`.
+      expect(parseClubHeadCoach("Inter Club d'Escaldes",
+        recorded.get("Inter Club d'Escaldes")!)).toBe("Felip Ortiz");
+      expect(parseClubHeadCoach("FC Iberia 1999",
+        recorded.get("FC Iberia 1999")!)).toBe("Levan Korgalidze (acting)");
+      expect(parseClubHeadCoach("Atalanta BC", recorded.get("Atalanta BC")!))
+        .toBe("Maurizio Sarri");
+    });
+});

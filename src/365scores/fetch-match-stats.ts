@@ -38,8 +38,7 @@ const SCORES_365_COMPETITION_IDS: Readonly<Record<string, string>> = {
  * "Paris", so nothing but a reviewed pair can say which side this source
  * means. Keyed by Competition because a spelling is only reviewed against the
  * sides that Competition stores. A Competition with no map is refused on the
- * same terms as one with no id (ADR-0054: a missing map fails loudly), so
- * `UECL` reads nothing here until ticket 0108 reviews its own.
+ * same terms as one with no id (ADR-0054: a missing map fails loudly).
  */
 const STORED_NAME_BY_LISTED_NAME: Readonly<
   Record<string, Readonly<Record<string, string>>>
@@ -85,6 +84,28 @@ const STORED_NAME_BY_LISTED_NAME: Readonly<
     "Red Bull Salzburg": "Salzburg",
     "Union St. Gilloise": "Union SG",
     "Viktoria Plzen": "Viktoria Plzeň"
+  },
+  UECL: {
+    "Borac Banjaluka": "Borac",
+    "CS Universitatea Craiova": "Univ. Craiova",
+    "FC Copenhagen": "Copenhagen",
+    "FC Iberia 1999": "Iberia Tbilisi",
+    "FC Lugano": "Lugano",
+    "FC Midtjylland": "Midtjylland",
+    "FC Nordsjælland": "Nordsjælland",
+    "FC Thun": "Thun",
+    "FK Crvena zvezda": "Crvena Zvezda",
+    "FK Jablonec": "Jablonec",
+    "HNK Hajduk Split": "Hajduk Split",
+    "KAA Gent": "Gent",
+    "KF Egnatia": "Egnatia",
+    "Kauno Zalgiris": "Kauno Žalgiris",
+    KuPS: "KuPS Kuopio",
+    "Lincoln Red Imps": "L. Red Imps",
+    "Mjällby AIF": "Mjällby",
+    "Pafos FC": "Pafos",
+    "SC Braga": "Braga",
+    STVV: "Sint-Truidense"
   }
 };
 

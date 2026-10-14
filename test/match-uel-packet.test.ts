@@ -31,10 +31,14 @@ const MD1 = Array.from({ length: 18 }, (_, index) => ({
   awayGoals: (index + 1) % 3
 }));
 
-// ADR-0063 *The packet* and ticket 0107: a `UEL` Gameweek 2 packet over the
-// rows a real one is built from, read through the loader and rendered whole.
+// ADR-0063 *The packet* and tickets 0107 and 0108: a `UEL` or `UECL`
+// Gameweek 2 packet over the rows a real one is built from, read through the
+// loader and rendered whole.
 // `UCL`'s, but its history lines carry their sheets' figures (ticket 0111).
-describe("a UEL Gameweek 2 packet", () => {
+describe.each([
+  ["UEL", "UEFA Europa League"],
+  ["UECL", "UEFA Conference League"]
+])("a %s Gameweek 2 packet", (competition, competitionName) => {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   let packet: string;
   let data: Awaited<ReturnType<typeof loadMatchContextData>>;
@@ -43,12 +47,12 @@ describe("a UEL Gameweek 2 packet", () => {
     await client.connect();
     await resetSchema(client);
     await client.query(
-      "insert into competitions (competition, season) values ('UEL', $1)",
-      [SEASON]
+      "insert into competitions (competition, season) values ($2, $1)",
+      [SEASON, competition]
     );
     await client.query(
       `insert into gameweeks (competition, season, gw, deadline_at) values
-         ('UEL', $1, 1, '2026-09-16T10:45:00Z'), ('UEL', $1, 2, $2)`,
+         ('${competition}', $1, 1, '2026-09-16T10:45:00Z'), ('${competition}', $1, 2, $2)`,
       [SEASON, DEADLINE]
     );
     for (const match of MD1) {
@@ -56,7 +60,7 @@ describe("a UEL Gameweek 2 packet", () => {
         `insert into fixtures (
            competition, season, fixture_id, gw, home_team, away_team,
            kickoff_at, group_name, result
-         ) values ('UEL', $1, $2, 1, $3, $4, $5, 'League', $6)`,
+         ) values ('${competition}', $1, $2, 1, $3, $4, $5, 'League', $6)`,
         [SEASON, match.fixtureId, match.home, match.away, match.kickoff,
           JSON.stringify({
             home_goals: match.homeGoals,
@@ -71,7 +75,7 @@ describe("a UEL Gameweek 2 packet", () => {
            season, competition, source, source_match_id, kicked_off_at,
            home_team, away_team, home_shots, away_shots,
            home_shots_on_target, away_shots_on_target, home_xg, away_xg
-         ) values ($1, 'UEL', $2, $3, $4, $5, $6, 12, 8, 5, 3, 1.25, 0.75)`,
+         ) values ($1, '${competition}', $2, $3, $4, $5, $6, 12, 8, 5, 3, 1.25, 0.75)`,
         [SEASON, SCORES_365_SOURCE, String(match.fixtureId), match.kickoff,
           match.home, match.away]
       );
@@ -81,10 +85,10 @@ describe("a UEL Gameweek 2 packet", () => {
          competition, season, fixture_id, gw, home_team, away_team,
          kickoff_at, group_name, result
        ) values
-         ('UEL', $1, 3050101, 2, 'Arsenal', 'Bayern München', $2, 'League',
+         ('${competition}', $1, 3050101, 2, 'Arsenal', 'Bayern München', $2, 'League',
           null),
          -- Settled after the Lock, with its sheet: nothing of it may render.
-         ('UEL', $1, 3050102, 2, 'Club 05', 'Club 06', $2, 'League',
+         ('${competition}', $1, 3050102, 2, 'Club 05', 'Club 06', $2, 'League',
           '{"home_goals":9,"away_goals":9,"outcome":"D"}')`,
       [SEASON, AFTER_THE_LOCK]
     );
@@ -93,7 +97,7 @@ describe("a UEL Gameweek 2 packet", () => {
          season, competition, source, source_match_id, kicked_off_at,
          home_team, away_team, home_shots, away_shots,
          home_shots_on_target, away_shots_on_target, home_xg, away_xg
-       ) values ($1, 'UEL', $2, '3050102', $3, 'Club 05', 'Club 06',
+       ) values ($1, '${competition}', $2, '3050102', $3, 'Club 05', 'Club 06',
                  99, 99, 99, 99, 9.99, 9.99)`,
       [SEASON, SCORES_365_SOURCE, AFTER_THE_LOCK]
     );
@@ -163,7 +167,7 @@ describe("a UEL Gameweek 2 packet", () => {
       [AFTER_THE_LOCK]
     );
 
-    data = await loadMatchContextData(client, "UEL", SEASON, 2);
+    data = await loadMatchContextData(client, competition, SEASON, 2);
     packet = buildMatchContext(
       {
         fixture_id: 3050101,
@@ -181,7 +185,7 @@ describe("a UEL Gameweek 2 packet", () => {
 
   test("shows its sections in the template's order", () => {
     const order = [
-      "Predict this UEFA Europa League Fixture.",
+      `Predict this ${competitionName} Fixture.`,
       "League phase and recent matches as of 2026-09-30T17:30:00.000Z",
       "League table (results through 2026-09-17):",
       "Places 1-8 go to the round of 16, places 9-24 to the knockout play-off "

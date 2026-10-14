@@ -156,8 +156,9 @@ export function cellSource(cell: string): string {
     // Every way these pages draw a flag beside a name, and none of them is
     // part of it: `{{flag|ENG}}`, `{{flagicon|ESP}}`, `{{Flag icon|The
     // Netherlands}}` and the module call `{{#invoke:flag|icon|GER}}` all
-    // appear, sometimes three of them in one column.
-    .replace(/\{\{flagg?\s*icon\|[^}]*\}\}/gi, "")
+    // appear, sometimes three of them in one column. A club infobox adds the
+    // football association's, `{{fbaicon|GEO}}`.
+    .replace(/\{\{(?:flagg?\s*|fba)icon\|[^}]*\}\}/gi, "")
     .replace(/\{\{#invoke:flag\|[^}]*\}\}/gi, "")
     .replace(/\{\{flagg?\|[^}]*\}\}/gi, "")
     // {{nobreak|...}} keeps a La Liga personnel cell on one line and says

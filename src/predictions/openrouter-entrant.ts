@@ -250,6 +250,19 @@ const MATCH_PROMPTS: Readonly<Record<string, MatchPrompt>> = {
     sha256:
       "b3b605c6b5a641799553ce0d706af5edabf7878729e0853d8470742a29abe6bf",
     competitionName: "UEFA Europa League"
+  },
+  // The third club cup, frozen unused and unamendable from its first Lock,
+  // 2026-10-22T13:00Z. Every gate that moves this rendering was open: the
+  // clubs' recent matches (ticket 0103), their infobox Head Coaches (0104),
+  // and the sheets' figures on those history lines (0111, green before its
+  // cut line). Read from this suite's render on 2026-10-14, as `UEL`'s was,
+  // and `UEL`'s rendering but for the Competition's name: production has no
+  // `UECL` packet before ticket 0108's insert.
+  UECL: {
+    version: "match-uecl/2026-27-v1",
+    sha256:
+      "ee69297f86a4719ad72b4204de483b6ea0d0eaaa76ab5630abec642a02752146",
+    competitionName: "UEFA Conference League"
   }
 };
 

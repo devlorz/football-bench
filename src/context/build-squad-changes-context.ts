@@ -49,7 +49,8 @@ export const SQUAD_CHANGES_NOT_READ =
 const NO_SQUAD_CHANGES: Readonly<Record<string, string>> = {
   UNL: NO_TRANSFER_WINDOW,
   UCL: SQUAD_CHANGES_NOT_READ,
-  UEL: SQUAD_CHANGES_NOT_READ
+  UEL: SQUAD_CHANGES_NOT_READ,
+  UECL: SQUAD_CHANGES_NOT_READ
 };
 
 /** Loudly, like every keyed lookup a packet renders from (ADR-0054). */

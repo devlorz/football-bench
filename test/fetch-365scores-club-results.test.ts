@@ -17,6 +17,8 @@ import { resetSchema } from "./schema-fixture.js";
 
 const { Client } = pg;
 
+interface Side { id: number; name: string }
+
 const CHAMPIONS_LEAGUE = "UCL";
 const SEASON = "2026-27";
 
@@ -99,6 +101,49 @@ describe("the Europa League's 365Scores competitor ids", () => {
       expect(Object.keys(derived).sort()).toEqual([...sides].sort());
       expect(Object.keys(derived)).toHaveLength(36);
     });
+});
+
+const CONFERENCE_LEAGUE_RESULTS =
+  "365scores-UECL-club-results-recorded-2026-10-14.json.gz";
+
+describe("the Conference League's 365Scores competitor ids", () => {
+  test("derive 36 pairs from MD1's listing, not the standings", async () => {
+    // Recorded 2026-10-14, the standings and all 36 sides' results pages. The
+    // standings seat CSKA 1948 Sofia (53248) where UEFA's draw has CSKA Sofia,
+    // which MD1's listing names with 2276, so the listing is what is read.
+    const listing = Object.values(JSON.parse(await archivedBody(
+      "365scores-UECL-MD1-listing-recorded-2026-10-14.json.gz"
+    )) as Record<string, string>)[0]!;
+    const derived = Object.fromEntries((JSON.parse(listing) as {
+      games: { homeCompetitor: Side; awayCompetitor: Side }[];
+    }).games.flatMap((game) => [game.homeCompetitor, game.awayCompetitor])
+      .map((side) => [storedTeamName("UECL", side.name), side.id]));
+    const pages = await Promise.all([0, 100, 200, 300].map((offset) =>
+      archivedBody(`uefa-2026-27-UECL-recorded-offset-${offset}.json.gz`)));
+    const sides = new Set(pages.flatMap((page) => (JSON.parse(page) as {
+      round: { metaData: { name: string } };
+      homeTeam: { internationalName: string };
+      awayTeam: { internationalName: string };
+    }[]).filter((match) => match.round.metaData.name === "League Phase")
+      .flatMap((match) => [
+        match.homeTeam.internationalName, match.awayTeam.internationalName
+      ])));
+    const bundle = JSON.parse(await archivedBody(CONFERENCE_LEAGUE_RESULTS)) as
+      Record<string, string>;
+    const standings = Object.entries(bundle)
+      .find(([url]) => url.includes("/web/standings/"))!;
+
+    expect(clubCompetitorIdsOf("UECL")).toEqual(derived);
+    expect(Object.keys(derived).sort()).toEqual([...sides].sort());
+    expect(Object.keys(derived)).toHaveLength(36);
+    expect(derived["CSKA Sofia"]).toBe(2276);
+    expect(standings[0]).toContain("competitions=7685");
+    expect(standings[1]).toContain("CSKA 1948 Sofia");
+    // Every side's results page was recorded under the id the map gives it.
+    for (const id of Object.values(derived)) {
+      expect(bundle[clubResultsUrl(id)], String(id)).toBeDefined();
+    }
+  });
 });
 
 describe("the cups' competitor ids", () => {

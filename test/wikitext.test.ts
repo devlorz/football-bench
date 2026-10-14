@@ -82,6 +82,9 @@ describe("reading a wikitext cell", () => {
       .toBe("Arne Slot");
     expect(cellText("{{#invoke:flag|icon|GER}} [[Marco Rose]]"))
       .toBe("Marco Rose");
+    // A club infobox's football association flag (Iberia 1999's, ticket 0108).
+    expect(cellText("{{fbaicon|GEO}} [[Levan Korgalidze]]"))
+      .toBe("Levan Korgalidze");
   });
 
   /**

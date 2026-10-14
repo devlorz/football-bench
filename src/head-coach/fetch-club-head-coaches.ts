@@ -107,6 +107,46 @@ const ARTICLE_BY_SIDE: Readonly<
     Torreense: "S.C.U. Torreense",
     "Union SG": "Royale Union Saint-Gilloise",
     "Viktoria Plzeň": "FC Viktoria Plzeň"
+  },
+  // Checked against the API on 2026-10-14
+  // (`wikipedia-UECL-club-infoboxes-recorded-2026-10-14`).
+  UECL: {
+    Aarhus: "Aarhus Gymnastikforening",
+    Ajax: "AFC Ajax",
+    Atalanta: "Atalanta BC",
+    Borac: "FK Borac Banja Luka",
+    Braga: "S.C. Braga",
+    Brann: "SK Brann",
+    Brighton: "Brighton & Hove Albion F.C.",
+    Copenhagen: "F.C. Copenhagen",
+    "Crvena Zvezda": "Red Star Belgrade",
+    "CSKA Sofia": "PFC CSKA Sofia",
+    Egnatia: "KF Egnatia",
+    Freiburg: "SC Freiburg",
+    Gent: "KAA Gent",
+    Getafe: "Getafe CF",
+    "Hajduk Split": "HNK Hajduk Split",
+    Hearts: "Heart of Midlothian F.C.",
+    "Iberia Tbilisi": "FC Iberia 1999",
+    "Inter Escaldes": "Inter Club d'Escaldes",
+    Jablonec: "FK Jablonec",
+    "Kairat Almaty": "FC Kairat",
+    "Kauno Žalgiris": "FK Kauno Žalgiris",
+    "KuPS Kuopio": "Kuopion Palloseura",
+    "L. Red Imps": "Lincoln Red Imps F.C.",
+    Lugano: "FC Lugano",
+    Midtjylland: "FC Midtjylland",
+    Mjällby: "Mjällby AIF",
+    Monaco: "AS Monaco FC",
+    Nordsjælland: "FC Nordsjælland",
+    Pafos: "Pafos FC",
+    Panathinaikos: "Panathinaikos F.C.",
+    Riga: "Riga FC",
+    "Sint-Truidense": "Sint-Truidense VV",
+    Thun: "FC Thun",
+    Trabzonspor: "Trabzonspor",
+    Twente: "FC Twente",
+    "Univ. Craiova": "CS Universitatea Craiova"
   }
 };
 
@@ -164,9 +204,12 @@ const INFOBOX = /\{\{\s*(?:Infobox football club|Football club infobox)/i;
 /**
  * The field naming who picks the team, anchored to a line's own parameter
  * name: Lech's `chrtitle`/`chairman` lines sit two lines above `manager`, and
- * a pattern loose enough to wander catches those.
+ * a pattern loose enough to wander catches those. Inter Escaldes' infobox
+ * puts each line's pipe at its end, so the leading one is optional and a
+ * trailing one is not part of the name.
  */
-const HEAD_COACH_FIELD = /^\s*\|\s*(?:manager|head coach|coach)\s*=(.*)$/im;
+const HEAD_COACH_FIELD =
+  /^\s*\|?\s*(?:manager|head coach|coach)\s*=(.*?)\|?\s*$/im;
 
 /**
  * Who a club's infobox names as picking the team, or null where it names

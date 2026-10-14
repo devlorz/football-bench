@@ -16,9 +16,9 @@
  * absence. The three UEFA club cups name UEFA for their schedule (ticket
  * 0099), and `UCL` names 365Scores for its shots and xG (ticket 0101) and its
  * history (ticket 0103) and its clubs' infoboxes for its head coaches (ticket
- * 0104): their other `null`s are the fetches tickets 0107 and 0108 have not
- * built. Naming a source before its fetch exists
- * would be the lie, because the fetch would believe it.
+ * 0104); `UEL` and `UECL` name the same three with their maps (tickets 0107
+ * and 0108). Naming a source before its fetch exists would be the lie,
+ * because the fetch would believe it.
  *
  * A listed Competition with no entry fails the run by name (ADR-0054: a
  * missing map fails loudly, a wrong one fails nothing).
@@ -118,10 +118,10 @@ const BY_COMPETITION: Readonly<Record<string, CompetitionSources>> = {
   // The three UEFA club cups (ADR-0063) name UEFA for their schedule, and
   // `UCL` 365Scores for its shots and xG (ticket 0101) and its clubs' recent
   // results (ticket 0103), and each club's Wikipedia infobox for who picks it
-  // (ticket 0104). `UEL` took all three with its maps (ticket 0107); `UECL`
-  // takes them when ticket 0108 reviews its own. `squadChanges` stays null by
-  // ADR-0063's decision: clubs have transfer windows, and the packet says
-  // this Competition does not read them.
+  // (ticket 0104). `UEL` and `UECL` took all three with their maps (tickets
+  // 0107 and 0108). `squadChanges` stays null by ADR-0063's decision: clubs
+  // have transfer windows, and the packet says this Competition does not read
+  // them.
   UCL: {
     schedule: "uefa",
     history: "365scores",
@@ -138,10 +138,10 @@ const BY_COMPETITION: Readonly<Record<string, CompetitionSources>> = {
   },
   UECL: {
     schedule: "uefa",
-    history: null,
-    stats: null,
+    history: "365scores",
+    stats: "365scores",
     squadChanges: null,
-    headCoaches: null
+    headCoaches: "wikipedia-club-infobox"
   }
 };
 

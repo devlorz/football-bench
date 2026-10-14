@@ -22,8 +22,7 @@ type Database = Pick<Client, "query">;
  * stores it (ADR-0063). Derived from 365Scores' own standings for the
  * competition, joined through the reviewed name map of ticket 0101, and never
  * found by a search: a search for "Inter" or "Sporting" answers with whichever
- * club ranks first. A Competition with no map is refused (ADR-0054), so
- * `UECL` reads nothing here until ticket 0108.
+ * club ranks first. A Competition with no map is refused (ADR-0054).
  */
 const COMPETITOR_ID_BY_SIDE: Readonly<
   Record<string, Readonly<Record<string, number>>>
@@ -103,6 +102,46 @@ const COMPETITOR_ID_BY_SIDE: Readonly<
     Torreense: 921,
     "Union SG": 1204,
     "Viktoria Plzeň": 1796
+  },
+  // From `MD1`'s listing, not the standings: 365Scores' `UECL` table seats
+  // CSKA 1948 Sofia (53248) where UEFA's draw has CSKA Sofia (2276).
+  UECL: {
+    Aarhus: 1831,
+    Ajax: 690,
+    Atalanta: 232,
+    Borac: 7528,
+    Braga: 895,
+    Brann: 1982,
+    Brighton: 38,
+    Copenhagen: 1824,
+    "Crvena Zvezda": 8957,
+    "CSKA Sofia": 2276,
+    Egnatia: 49773,
+    Freiburg: 354,
+    Gent: 1174,
+    Getafe: 140,
+    "Hajduk Split": 2249,
+    Hearts: 759,
+    "Iberia Tbilisi": 14390,
+    "Inter Escaldes": 6913,
+    Jablonec: 1800,
+    "Kairat Almaty": 10564,
+    "Kauno Žalgiris": 29716,
+    "KuPS Kuopio": 1935,
+    "L. Red Imps": 16037,
+    Lugano: 1155,
+    Midtjylland: 1823,
+    Mjällby: 1906,
+    Monaco: 471,
+    Nordsjælland: 1827,
+    Pafos: 2273,
+    Panathinaikos: 1022,
+    Riga: 29362,
+    "Sint-Truidense": 1185,
+    Thun: 1147,
+    Trabzonspor: 950,
+    Twente: 696,
+    "Univ. Craiova": 2048
   }
 };
 

@@ -39,7 +39,41 @@ Lock 11-05T16:15Z.
 
 ## Acceptance criteria
 
-- [ ] The three `UECL` maps are derived from the archive with nothing left over.
+- [x] The three `UECL` maps are derived from the archive with nothing left over. 20 spellings, 36 competitor ids and 36 titles, each derived by a test from archives recorded 2026-10-14.
 - [ ] After 10-15, all 18 `MD1` sheets are read and the count with xG is recorded here.
-- [ ] A `UECL` Gameweek 2 render holds every section, with history lines carrying their sheets' figures (or scores only, if 0111 missed its cut, recorded here); `MATCH_PROMPTS.UECL` is pinned; every other pin unchanged.
+- [x] A `UECL` Gameweek 2 render holds every section, with history lines carrying their sheets' figures (or scores only, if 0111 missed its cut, recorded here); `MATCH_PROMPTS.UECL` is pinned; every other pin unchanged. 0111 was green, so the history lines carry figures. `ee69297f…2146` was read whole from the suite's render on 2026-10-14; it is `UEL`'s rendering but for the Competition's name.
 - [ ] Production answers `UECL` with eight seats and its caveat; the boundary is recorded.
+- [ ] Pre-flight's free half on `uecl_preflight`: `EDITION=1 roster:enter`, the fetch, and `context:show` rendering 18 packets with every section.
+- [ ] Pre-flight's paid half on `uecl_preflight`: eight calls, about $0.30, asked for separately.
+- [ ] Pushed and deployed by 2026-10-22T07:00Z, with the `origin/main` gap checked first.
+- [ ] The operator's `competitions` insert and `EDITION=1 roster:enter` on production, with `DATABASE_URL` set inline.
+- [ ] The first fetch by hand, then `context:show` for `UECL` Gameweek 2.
+- [ ] The dry run over the hand-run first fetch shows `MD1` adopted with its sheets.
+- [ ] The dashboard deploy by hand.
+
+## Outcome
+
+Code green 2026-10-14 (targeted suites, `tsc`). `MD1`'s sheets and the production
+boxes wait for 10-15 and the operator.
+
+- **Recorded 2026-10-14**, all free:
+  - 365Scores' `MD1` listing (18 Fixtures, unplayed);
+  - the standings and all 36 sides' results pages;
+  - Wikipedia's section 0 for the 36 articles.
+  UEFA's pages are the committed 2026-10-12 recordings.
+- **The standings are wrong about one side.** 365Scores' `UECL` table seats
+  CSKA 1948 Sofia (53248), but UEFA's draw and `MD1`'s listing both have
+  CSKA Sofia (2276). The competitor ids are derived from the `MD1` listing
+  instead, and the test asserts both facts.
+- **Spellings.** 20 pairs, derived from the listing's kick-offs and sides
+  (no scores yet).
+- **Friendlies.** `UECL`'s pages list none under a name `FRIENDLIES` lacks, so the
+  list is unchanged. Every side has at least five competitive matches on its one page.
+- **Head Coaches.** All 36 infoboxes name someone. Two needed the parser widened:
+  - Inter Escaldes' infobox puts each line's pipe at the end (`manager = [[Felip Ortiz]] |`);
+  - Iberia 1999 writes `{{fbaicon|GEO}}` before "Levan Korgalidze (acting)".
+  `fbaicon` joins the flag templates `cellSource` strips. Every Wikipedia
+  parser suite stays green.
+  Atalanta reads Maurizio Sarri.
+- **The packet test** runs over `UEL` and `UECL` (`test/match-uel-packet.test.ts`).
+- **Routes.** `/uecl` appears on the dashboard with the `MATCH_PROMPTS` entry.
