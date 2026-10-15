@@ -1,5 +1,11 @@
 # Exhibition Runs join the record after the fact
 
+> **Amended 2026-10-15 by ADR-0064.** Once a Base Model has a Guest Seat in a Competition,
+> its Exhibition row there is replayed only up to the Gameweek before the Guest's first
+> Lock, and never after. That cap is read off the record and is not a range from the
+> operator. Within one Competition and Edition, the two rows are shown as one by default,
+> and that combined row carries this ADR's caveat while any part of it was replayed.
+
 A Base Model released after the Season began may be run retrospectively as an **Exhibition
 Run**: a `models` row with `role = 'exhibition'`, called through the exact production path —
 OpenRouter with pinned provider and quantization, the Season's frozen Prompt Version, the

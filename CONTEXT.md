@@ -85,6 +85,28 @@ _Avoid_: Exhibition Run (a Shadow Seat is on the current Season's roster's Base 
 answers every Lock live; an Exhibition Run is a late arrival replayed retrospectively over
 already-played Gameweeks)
 
+**Guest Seat**:
+A Base Model off the Season Roster that is asked each Fixture at the same Lock, over the same
+context, as the roster (ADR-0064). It is asked with the roster on schedule, not by an operator, and
+can be seated in any Competition. Because every answer exists before its Lock, a Guest Seat
+carries none of an Exhibition Run's caveat that the Base Model may already know the result.
+Its record is evidence for whether a later Edition's roster should seat it. It is not part of
+the Season Roster. It is ranked on the readable rankings with a label, counted from its first
+Lock. It never selects or joins a Comparison Anchor, and never enters the complete-case
+intersection or a published interval. Its Gaps are recorded and their rate is shown, but
+they alert nobody. Each Guest Seat is named in advance by its own decision, with a small cap
+on how many sit at once. It lasts until the next Edition boundary of its Competition, where
+that Edition's roster decision seats it, renews it, or ends it, and silence ends it. Where one Base Model has both an Exhibition Run and a Guest Seat in a
+Competition and Edition, every page shows them as one row by default, and the reader can split
+it back into two. They are the same Base Model, whichever dated snapshot each answer resolved
+to. While any answer in the range shown came from the replay, the combined row carries the
+Exhibition Run's caveat and says which Gameweeks each part covers, so a forecasting-skill
+claim reads only off the Guest Seat's own row. Neither ever combines with an Entrant or a
+Shadow Seat.
+_Avoid_: Exhibition Run (an Exhibition Run is replayed after the result; a Guest Seat answers
+before the Lock), Shadow Seat (a Shadow Seat is an Entrant's own Base Model with reasoning
+off; a Guest Seat shadows no Entrant)
+
 ### Forecasting
 
 **Competition**:
