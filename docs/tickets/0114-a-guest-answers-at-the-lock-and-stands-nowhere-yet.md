@@ -41,14 +41,14 @@ Decisions it must not bend:
 
 ## Acceptance
 
-- [ ] A Guest row inserted before a Gameweek's Lock is asked every Fixture of it, by the
+- [x] A Guest row inserted before a Gameweek's Lock is asked every Fixture of it, by the
       scheduled run, over the context row the roster was shown
-- [ ] A Guest row inserted after a Lock is not asked that Gameweek, and is asked the next
-- [ ] A withdrawn Guest is not asked from its next Lock
-- [ ] A Competition with Guests and no Entrant is refused, as one with no seats is today
-- [ ] A Guest's Prediction is scored. Its Gap is recorded, never back-filled, and raises no
+- [x] A Guest row inserted after a Lock is not asked that Gameweek, and is asked the next
+- [x] A withdrawn Guest is not asked from its next Lock
+- [x] A Competition with Guests and no Entrant is refused, as one with no seats is today
+- [x] A Guest's Prediction is scored. Its Gap is recorded, never back-filled, and raises no
       Gap alert
-- [ ] The single-model pre-flight runs against a Guest row
-- [ ] Every Entrant figure is identical with the Guest rows present and absent, asserted in
+- [x] The single-model pre-flight runs against a Guest row
+- [x] Every Entrant figure is identical with the Guest rows present and absent, asserted in
       the coexistence test
-- [ ] No page and no read API body shows the Guest
+- [x] No page and no read API body shows the Guest

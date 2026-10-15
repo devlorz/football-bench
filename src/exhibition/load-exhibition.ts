@@ -59,7 +59,9 @@ type FrozenPromptVersion = string;
  * and never of a Shadow Seat, so those callers still name `['exhibition']`
  * alone. The single-model pre-flight door has no such reason to refuse a
  * Shadow — exercising its `config` before a real Lock calls it is exactly
- * what ticket 0066 needs the door for — so it alone names both.
+ * what ticket 0066 needs the door for — and none to refuse a Guest Seat, which
+ * a new Competition's Prompt Version is checked on before its first Lock
+ * (ADR-0064), so it alone names all three.
  *
  * The version is the caller's because it says which track it is: a Match replay
  * and an FPL replay build different frozen prompts, and each has exactly one it

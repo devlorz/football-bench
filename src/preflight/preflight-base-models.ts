@@ -346,7 +346,8 @@ export async function preflightBaseModels({
   if (exhibitionModelId !== undefined) {
     checked = [
       await loadExhibition(
-        database, exhibitionModelId, promptVersion, ["exhibition", "shadow"]
+        database, exhibitionModelId, promptVersion,
+        ["exhibition", "shadow", "guest"]
       )
     ];
   } else {

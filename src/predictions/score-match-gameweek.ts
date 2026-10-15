@@ -573,7 +573,9 @@ async function predictedFixtures(
        -- this Gameweek is read from, rather than filtered out of a roster
        -- downstream of it. Not narrowed to role = 'entrant': an Exhibition
        -- Run is scored too (ADR-0032) -- ranked on no Season Roster, but on
-       -- the readable rankings all the same, labelled by when it ran.
+       -- the readable rankings all the same, labelled by when it ran. A
+       -- Guest Seat (ADR-0064) is scored too: its Predictions were made
+       -- before the Lock, and ticket 0115 ranks them under their own label.
        join models m on m.id = p.model_id and m.role <> 'shadow'
       where f.competition = $1 and f.season = $2
         and f.locked_in_gw is not null

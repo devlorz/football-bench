@@ -159,6 +159,10 @@ export async function predictGameweek({
   // beside a real Entrant rather than alone: a Shadow with no seat to shadow
   // is a misconfiguration, so the refusal below asks for an Entrant row by
   // name, not merely for a non-empty roster.
+  //
+  // Widened again to admit a Guest Seat (ADR-0064): asked at every Lock after
+  // its row exists by the same asked-at-Lock rule, and still not an Entrant,
+  // so a Competition of Guests alone is refused the same way.
   const entrantResult = await database.query<EntrantRow>(
     `-- roster: the match track's, as the Gameweek's Lock asked it.
      select m.id, m.base_model, m.provider, m.quantization, m.prompt_version,
@@ -166,7 +170,7 @@ export async function predictGameweek({
        from models m
        join gameweeks g
          on g.competition = $2 and g.season = $3 and g.gw = $4
-      where m.role in ('entrant', 'shadow') and m.prompt_version = $1
+      where m.role in ('entrant', 'shadow', 'guest') and m.prompt_version = $1
         and ${isAskedAtLock("m", "g.deadline_at")}
       order by m.id`,
     [matchPromptOf(competition).version, competition, season, gameweek]
@@ -192,7 +196,7 @@ export async function predictGameweek({
         and f.season = $2
         and coalesce(f.locked_in_gw, f.gw) = $3
         and f.kickoff_at > $4
-        and m.role in ('entrant', 'shadow')
+        and m.role in ('entrant', 'shadow', 'guest')
         and m.prompt_version = $5
         and ${isAskedAtLock("m", "g.deadline_at")}
         and not exists (

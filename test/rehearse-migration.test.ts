@@ -75,7 +75,8 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0048_the_record_says_where_each_edition_begins.sql",
       "0049_dashboard_reads_the_editions.sql",
       "0050_the_club_cups_join_the_record.sql",
-      "0051_a_club_result_carries_its_sheets_figures.sql"
+      "0051_a_club_result_carries_its_sheets_figures.sql",
+      "0052_a_guest_seat_answers_at_the_lock.sql"
     ]);
     // The record the copy carried, not a shape asserted about the schema: an
     // operator reading a rehearsal needs to see that it ran over rows.
@@ -162,7 +163,8 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0048_the_record_says_where_each_edition_begins.sql",
       "0049_dashboard_reads_the_editions.sql",
       "0050_the_club_cups_join_the_record.sql",
-      "0051_a_club_result_carries_its_sheets_figures.sql"
+      "0051_a_club_result_carries_its_sheets_figures.sql",
+      "0052_a_guest_seat_answers_at_the_lock.sql"
     ]);
     expect(rehearsal.rows).toMatchObject({ gameweeks: 1, squad_changes: 1 });
   });
@@ -210,7 +212,8 @@ describe("rehearsing a migration against a copy of the record", () => {
       "0048_the_record_says_where_each_edition_begins.sql",
       "0049_dashboard_reads_the_editions.sql",
       "0050_the_club_cups_join_the_record.sql",
-      "0051_a_club_result_carries_its_sheets_figures.sql"
+      "0051_a_club_result_carries_its_sheets_figures.sql",
+      "0052_a_guest_seat_answers_at_the_lock.sql"
     ]);
     // Compared rather than skipped, and back whole: `verifyRelabelledAsPl`
     // raises, so this row reaching the count is the comparison having run over

@@ -26,6 +26,12 @@ Decisions it must not bend:
   existing `exhibition: { ranAfterGw }`. Both are null on an Entrant.
 - **Gaps are counted over Fixtures the Guest was asked**, never over those before its first
   Lock. The Entrants' Gap count already follows the same membership.
+- **Two roster splits read "not an Exhibition" as "roster".** `read-api.ts` filters
+  `row.role !== "exhibition"` in the leaderboard (`rosterRows`) and the entrant records.
+  Safe only while `SEATS_CTE` admits `entrant` and `exhibition` alone: widen the CTE for
+  `guest` and both count the Guest as roster. Narrow them to `role === "entrant"` in the
+  same change. The scorer writes no `gap_rate` row for a Guest yet either (`matchRoster` is
+  `entrant` only), so its Gap rate needs its own derivation here. Found in 0114's review.
 - **The label sentence** lives in the dashboard's frozen-text module beside the
   Exhibition's.
 
