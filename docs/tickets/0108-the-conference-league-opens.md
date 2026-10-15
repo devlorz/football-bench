@@ -19,7 +19,7 @@ before the 15:15Z Lock. The fallback is ADR-0054's: Gameweek 2, Lock 2026-10-22T
 with `MD1` adopted as history, which is this ticket as first written. If that is missed
 too, Gameweek 3, Lock 11-05T16:15Z.
 
-**Status:** ready-for-agent
+**Status:** done but for the `MD1` sheets, 2026-10-15. `UECL` opened at **Gameweek 1**, its Lock 2026-10-15T15:15Z (ADR-0063 as amended 2026-10-14). The last box waits for tonight's matches and the next fetch.
 
 ---
 
@@ -46,7 +46,12 @@ too, Gameweek 3, Lock 11-05T16:15Z.
 - [x] The three `UECL` maps are derived from the archive with nothing left over. 20 spellings, 36 competitor ids and 36 titles, each derived by a test from archives recorded 2026-10-14.
 - [ ] After `MD1` is played (2026-10-15), all 18 of its sheets are read and the count with xG is recorded here. They are a predicted Gameweek's sheets, read by the daily fetch as any settled Fixture's are.
 - [x] A `UECL` Gameweek 2 render holds every section, with history lines carrying their sheets' figures (or scores only, if 0111 missed its cut, recorded here); `MATCH_PROMPTS.UECL` is pinned; every other pin unchanged. 0111 was green, so the history lines carry figures. `ee69297f…2146` was read whole from the suite's render on 2026-10-14; it is `UEL`'s rendering but for the Competition's name.
-- [ ] Production answers `UECL` with eight seats and its caveat; the boundary is recorded.
+- [x] Production answers `UECL` with eight seats and its caveat; the boundary is recorded.
+      - After the 2026-10-14 deploy, the live Worker answered `/api/uecl/…` with 8 entrants, the roster caveat, `nextLock` Gameweek 1, and 18 Fixtures × 8 slots.
+      - Read on production at 15:06Z on 10-15, nine minutes before the Lock: 144 Predictions, 8 seats × 18 Fixtures, no Gap. They were stored from 09:39Z to 09:44Z.
+      - Every slot was already filled, so the Lock had nothing left to ask.
+      - Gemini 3.1 Pro Preview took 34 attempts for its 18.
+      - The boundary is Gameweek 1. No `UECL` Gameweek is adopted as history.
 - [x] Pre-flight's free half on `uecl_preflight`: `EDITION=1 roster:enter`, the fetch, and `context:show` for **Gameweek 1** rendering 18 packets. It is read line by line for the empty state no cup has rendered yet: the 36-side table at nought, the played-Fixtures section with no match, five recent matches a side, and Head Coach lines.
       Run 2026-10-14 at 12:21–12:28Z:
       - 8 seats;
@@ -71,7 +76,7 @@ too, Gameweek 3, Lock 11-05T16:15Z.
       - The operator went on to the insert, the runbook's §5 step 3 rule.
 
       The first attempt refused before any call: `readCompetition` admitted two- or three-letter codes only, and `UECL` is the first four-letter one. It was widened to four letters, with `UECL` added to its test. Only the pre-flight and the preview read it; cron reads `competitions`.
-- [ ] Pushed and deployed by 2026-10-15T09:15Z, with the `origin/main` gap checked first.
+- [x] Pushed and deployed by 2026-10-15T09:15Z, with the `origin/main` gap checked first. `d70c5ef` was pushed 2026-10-14 at about 12:50Z, with `origin/main` 0 behind and 0 ahead. The 09:15Z predict window found `UECL` listed and seated.
 - [x] The operator's `competitions` insert and `EDITION=1 roster:enter` on production, with `DATABASE_URL` set inline.
       - `INSERT 0 1`.
       - The eight `match-uecl/…` seats were entered.
@@ -86,7 +91,7 @@ too, Gameweek 3, Lock 11-05T16:15Z.
       - 36 of 36 `UECL` Head Coaches today;
       - 18 packets, each with every section and the empty-state played-Fixtures line.
 - [x] The dry run of Gameweek 1 over the hand-run first fetch builds 18 contexts and matches its expected outcome. Run at `deadline-6h`: 18 contexts, "Predictions: 0 (expected 0), Gaps: 144 (expected 144). Dry run matched the archive's expected outcome."
-- [ ] The dashboard deploy by hand.
+- [x] The dashboard deploy by hand. Deployed 2026-10-14 in `d70c5ef` as Worker version `05d9fc70`, with the `deployed` tag moved.
 
 ## Outcome
 

@@ -17,7 +17,7 @@ is applied on production after `db:rehearse` and before `UEL`'s insert.
 **Hard deadline:** pinned and deployed by 2026-10-15T09:15Z. The fallback is Gameweek 3,
 Lock 10-22T15:15Z.
 
-**Status:** ready-for-agent
+**Status:** done, 2026-10-15. `UEL` opened at Gameweek 2, its Lock 2026-10-15T15:15Z, and not at the Gameweek 3 fallback.
 
 ---
 
@@ -40,7 +40,12 @@ Lock 10-22T15:15Z.
 - [x] The three `UEL` maps are derived from the archive with nothing left over. 16 spellings, 36 competitor ids and 36 titles, each derived by a test from archives recorded 2026-10-13.
 - [x] A `UEL` Gameweek 2 render holds every section, with history lines carrying their sheets' figures (or scores only, if 0111 missed its cut, recorded here); `MATCH_PROMPTS.UEL` is pinned; every other pin unchanged. 0111 was green before its cut, so the history lines carry figures. `b3b605c6…e6bf` was read whole from the suite's render on 2026-10-13.
 - [x] The dry run over the hand-run first fetch shows `MD1` adopted with 18 sheets. Run 2026-10-14 over production's archive at `deadline-6h`: 18 contexts, "Predictions: 0 (expected 0), Gaps: 144 (expected 144). Dry run matched the archive's expected outcome." No answers were replayed, because the pre-flight ran on `uel_preflight` and production archived none of them.
-- [ ] Production answers `UEL` with eight seats and its caveat; the boundary is recorded.
+- [x] Production answers `UEL` with eight seats and its caveat; the boundary is recorded.
+      - After the 2026-10-14 deploy, the live Worker answered `/api/uel/…` with 8 entrants, the roster caveat, and 18 Fixtures × 8 slots.
+      - Read on production at 15:06Z on 10-15, nine minutes before the Lock: 144 Predictions, 8 seats × 18 Fixtures, no Gap. They were stored from 09:44Z to 09:52Z by the first predict run after Lock − 6h.
+      - Every slot was already filled, so the Lock had nothing left to ask.
+      - Gemini 3.1 Pro Preview took 35 attempts for its 18, through Repair turns, as it did for `UCL`.
+      - The boundary is Gameweek 2.
 - [x] Pushed and deployed by 2026-10-15T09:15Z; the `origin/main` gap checked first. `1a6f4a3` was pushed 2026-10-13, and `origin/main` was 0 behind and 0 ahead at the insert. The jobs run `origin/main`.
 - [x] Pre-flight's paid half on `uel_preflight`: eight calls, about $0.30, asked for separately. It ran 2026-10-13 at 20:22Z on Fixture 2050076, Lyon–Crystal Palace, Gameweek 2.
       - Seven seats were `parseable`, each resolved to its pinned dated id.
@@ -58,7 +63,7 @@ Lock 10-22T15:15Z.
       - `club_head_coaches` holds 108 rows.
       - `context:show` built 18 packets, each with every section.
       - The history lines carry sheet figures, with "xG unavailable" on 76 lines from leagues without it.
-- [ ] The dashboard deploy by hand.
+- [x] The dashboard deploy by hand. Deployed 2026-10-14 in `9e061ec` as Worker version `87f6aceb`, with the `deployed` tag moved. Ticket 0113's deploy, `80cf176`, followed it.
 - [x] Migration 0051 applied on production (operator).
 - [x] (moved from 0111) A row shared by a `UCL` side and a `UEL` side is read once. A `UCL`-only row is never read. Proven through `runDailyFetch` (`test/daily-fetch.test.ts`).
 - [x] (moved from 0111) A `UEL` packet shows figures on a line whose sheet has them, shots and "xG unavailable" where it has no xG, and the score alone where no sheet is stored. Nothing observed after the Lock appears. See `test/match-uel-packet.test.ts`.
