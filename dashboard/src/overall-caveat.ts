@@ -10,14 +10,16 @@
  * to obtain a string, which is the property ADR-0051 spends its length
  * protecting.
  */
-const COMBINED_RANKING_PREFACE =
+/** What every combined total is, opening the qualification. */
+export const COMBINED_RANKING_PREFACE =
   "This total is a raw sum of season-to-date Match Points and Bet Points "
   + "across every Competition covered here, not an average or a rate: a "
   + "Competition with more settled Fixtures weighs more in the total than "
   + "one with fewer. The Competitions also run under their own Prompt "
   + "Versions, a confound for any comparison across them (ADR-0038).";
 
-const COMBINED_RANKING_CLOSING = "Ranks, does not prove.";
+/** The qualification's last sentence, after every clause a row adds. */
+export const COMBINED_RANKING_CLOSING = "Ranks, does not prove.";
 
 /**
  * The fourth clause added to the combined ranking qualification when at least
@@ -28,11 +30,18 @@ export const COMBINED_RANKING_EXHIBITION_CLAUSE =
   + "Competitions, than the rows it is ranked beside, and the sum does not "
   + "correct for it.";
 
+/**
+ * The clause a Guest Seat adds, after the Exhibition's when both are ranked
+ * (ADR-0064, spec 0029). Its own sentence beside the one ADR-0052 froze rather
+ * than a rewrite of it: a Guest is no replay, and its total is short only
+ * because it was seated late or in fewer Competitions.
+ */
+export const COMBINED_RANKING_GUEST_CLAUSE =
+  "A Guest's total may be over fewer Fixtures, and in fewer Competitions, "
+  + "than the rows it is ranked beside, and the sum does not correct for it.";
+
 export const COMBINED_RANKING_QUALIFICATION =
   `${COMBINED_RANKING_PREFACE} ${COMBINED_RANKING_CLOSING}`;
-
-export const COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION =
-  `${COMBINED_RANKING_PREFACE} ${COMBINED_RANKING_EXHIBITION_CLAUSE} ${COMBINED_RANKING_CLOSING}`;
 
 /**
  * Why the cup is in no Edition set's sum (ADR-0060, ADR-0061), closing the

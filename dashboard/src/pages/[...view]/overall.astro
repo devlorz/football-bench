@@ -180,7 +180,7 @@ const fetches = routes.map(({ competition, api }) => ({
     import {
       overallRanking, type OverallRanking, type OverallRow
     } from "../../overall-view.js";
-    import { EXHIBITION_RUN_LABEL } from "../../exhibition-view.js";
+    import { EXHIBITION_RUN_LABEL, guestOverallLabel } from "../../exhibition-view.js";
     import { overallEditionNote } from "../../edition-note.js";
 
     const $ = (id: string): HTMLElement => document.getElementById(id)!;
@@ -251,7 +251,9 @@ const fetches = routes.map(({ competition, api }) => ({
               : row.slug,
             // An Exhibition Run is ranked in the same table and says so on its
             // own row (ADR-0052).
-            row.exhibition ? EXHIBITION_RUN_LABEL : null
+            row.exhibition ? EXHIBITION_RUN_LABEL : null,
+            // A Guest names the Competitions its total covers (spec 0029).
+            row.guest ? guestOverallLabel(row.guest.competitions) : null
           ].filter(Boolean).join(" · "))
         );
         line.append(

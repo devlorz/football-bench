@@ -6,12 +6,14 @@
  * Prior art is `competition-view.ts` and `fpl-view.ts` (spec 0025).
  */
 
-import type { LeaderboardBody } from "../../src/dashboard/read-api.js";
+import type { LeaderboardBody, LeaderboardEntrant } from "../../src/dashboard/read-api.js";
 import { entrantSlug } from "./entrant-link.js";
 import {
+  COMBINED_RANKING_CLOSING,
   COMBINED_RANKING_CUP_CLAUSE,
-  COMBINED_RANKING_QUALIFICATION,
-  COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION
+  COMBINED_RANKING_EXHIBITION_CLAUSE,
+  COMBINED_RANKING_GUEST_CLAUSE,
+  COMBINED_RANKING_PREFACE
 } from "./overall-caveat.js";
 
 /**
@@ -35,6 +37,12 @@ export interface OverallRow {
   slug: string;
   name: string;
   baseModelClass: string | null;
+  /**
+   * As on the leaderboard row it was summed from (spec 0029): ticket 0119
+   * finds the Exhibition and Guest rows of one Base Model by these.
+   */
+  role: LeaderboardEntrant["role"];
+  baseModel: LeaderboardEntrant["baseModel"];
   matchPoints: number;
   betPoints: number;
   /**
@@ -45,6 +53,12 @@ export interface OverallRow {
    * came from.
    */
   exhibition: boolean;
+  /**
+   * A Guest Seat's row (ADR-0064): the covered Competitions it sits in, in the
+   * covered order, so the page can say a total over fewer of them is one.
+   * Null on every other row.
+   */
+  guest: { competitions: string[] } | null;
 }
 
 /** One covered Competition's contribution to the evidence line. */
@@ -69,11 +83,12 @@ export type OverallRanking =
       fixtures: OverallFixtures[];
       totalFixtures: number;
       /**
-       * The qualification sentence under the table. When no Exhibition Run is
-       * in the ranking, this is the 3-part baseline qualification; when at least
-       * one is present, it carries the fourth clause stating that the Exhibition
-       * total may be over fewer Fixtures and fewer Competitions uncorrected
-       * (ADR-0052).
+       * The qualification sentence under the table, in this order: the
+       * Edition set summed and the cup's absence, the preface, the Exhibition
+       * clause when an Exhibition Run is ranked (ADR-0052), the Guest clause
+       * when a Guest is (ADR-0064), and the closing. Each clause states that
+       * its row's total may be over fewer Fixtures and Competitions,
+       * uncorrected.
        */
       qualification: string;
       /**
@@ -120,30 +135,36 @@ const isCovered = ({ body }: CompetitionLeaderboard): boolean =>
  * can hold an Entrant's seat in one Competition and an Exhibition Run's in
  * another -- that is the ordinary way a late arrival is checked -- and a
  * shared key would add the two into one row, publishing a total that is half
- * a competitor's and half a replay's under a single name.
+ * a competitor's and half a replay's under a single name. A Guest is keyed
+ * apart by the same rule (spec 0029, story 32), and from an Exhibition Run of
+ * its Base Model too until ticket 0119 combines the two.
  */
 const summedRows = (covered: readonly CompetitionLeaderboard[]): OverallRow[] => {
   const rows = new Map<string, OverallRow>();
-  for (const { body } of covered) {
-    // A Guest is ranked per Competition and summed nowhere until ticket 0117
-    // keys it apart: under the roster's slug it would add into an Entrant of
-    // the same Base Model (spec 0029, story 32). `== null` keeps a body cached
-    // from before the field existed.
-    for (const entrant of body.entrants.filter(({ guest }) => guest == null)) {
+  for (const { competition, body } of covered) {
+    for (const entrant of body.entrants) {
       const exhibition = entrant.exhibition !== null;
+      // `!= null` keeps a body cached from before the field existed.
+      const guest = entrant.guest != null;
       const slug = entrantSlug(entrant.id);
-      const key = exhibition ? `exhibition:${slug}` : slug;
-      // Name and Base Model Class are read off whichever covered
-      // Competition's body names this slug first; every Competition seats the
-      // same Season Roster (ADR-0038), so they do not vary between them.
+      const key = exhibition ? `exhibition:${slug}` : guest ? `guest:${slug}` : slug;
+      // Name, Base Model Class and Base Model are read off whichever covered
+      // Competition's body names this key first. They do not vary between
+      // Competitions: every one seats the same Season Roster (ADR-0038), and
+      // an Exhibition's or a Guest's rows under one slug are one Base Model's
+      // seats by ADR-0064's id convention.
       const row = rows.get(key) ?? {
         slug,
         name: entrant.name,
         baseModelClass: entrant.baseModelClass,
+        role: entrant.role,
+        baseModel: entrant.baseModel,
         matchPoints: 0,
         betPoints: 0,
-        exhibition
+        exhibition,
+        guest: guest ? { competitions: [] } : null
       };
+      row.guest?.competitions.push(competition);
       row.matchPoints += entrant.matchPoints ?? 0;
       row.betPoints += entrant.betPoints ?? 0;
       rows.set(key, row);
@@ -197,9 +218,13 @@ export const overallRanking = (
   const editionClause = `Edition ${editions[0]!.number} of `
     + new Intl.ListFormat("en").format(covered.map(({ competition }) => competition))
     + ` is summed here; ${COMBINED_RANKING_CUP_CLAUSE}`;
-  const qualification = `${editionClause} ${exhibitionCaveat !== null
-    ? COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION
-    : COMBINED_RANKING_QUALIFICATION}`;
+  const qualification = [
+    editionClause,
+    COMBINED_RANKING_PREFACE,
+    exhibitionCaveat !== null ? COMBINED_RANKING_EXHIBITION_CLAUSE : null,
+    rows.some(({ guest }) => guest !== null) ? COMBINED_RANKING_GUEST_CLAUSE : null,
+    COMBINED_RANKING_CLOSING
+  ].filter((part) => part !== null).join(" ");
 
   return {
     kind: "ranking",

@@ -9,6 +9,8 @@ import {
   type FixturesBody,
   type LeaderboardBody
 } from "../src/dashboard/read-api.js";
+import { COMBINED_RANKING_GUEST_CLAUSE } from "../dashboard/src/overall-caveat.js";
+import { overallRanking } from "../dashboard/src/overall-view.js";
 import { preflightBaseModels } from "../src/preflight/preflight-base-models.js";
 import { readGapAlert } from "../src/predictions/gap-alert.js";
 import {
@@ -479,5 +481,28 @@ describe("a Guest Seat beside the roster", () => {
       for (const body of stripped) {
         expect(body).not.toContain("argon");
       }
+
+      // `/overall` has no body of its own: the page sums the leaderboard
+      // bodies in the browser (ticket 0117), so its check runs that sum over
+      // the real body. Without its row and its clause, nothing moved.
+      const overall = (text: string | undefined) => {
+        const ranking = overallRanking([{ competition: "PL", body: JSON.parse(text!) }]);
+        if (ranking.kind !== "ranking") throw new Error("expected a ranking");
+        return ranking;
+      };
+      const overallAbsent = overall(absent.bodies[0]);
+      const overallPresent = overall(present.bodies[0]);
+      expect(overallPresent.matchRanked.filter(({ guest }) => guest !== null))
+        .toEqual([expect.objectContaining({ slug: "argon", guest: { competitions: ["PL"] } })]);
+      const strippedOverall = {
+        ...overallPresent,
+        matchRanked: overallPresent.matchRanked.filter(({ guest }) => guest === null),
+        betRanked: overallPresent.betRanked.filter(({ guest }) => guest === null),
+        qualification: overallAbsent.qualification
+      };
+      expect(overallPresent.qualification).toBe(overallAbsent.qualification
+        .replace("Ranks, does not prove.", `${COMBINED_RANKING_GUEST_CLAUSE} Ranks, does not prove.`));
+      expect(strippedOverall).toEqual(overallAbsent);
+      expect(JSON.stringify(strippedOverall)).not.toContain("argon");
     });
 });

@@ -1,9 +1,10 @@
 import { describe, expect, test } from "vitest";
 import {
   COMBINED_RANKING_EXHIBITION_CLAUSE,
-  COMBINED_RANKING_QUALIFICATION,
-  COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION
+  COMBINED_RANKING_GUEST_CLAUSE,
+  COMBINED_RANKING_QUALIFICATION
 } from "../dashboard/src/overall-caveat.js";
+import { guestOverallLabel } from "../dashboard/src/exhibition-view.js";
 import {
   overallRanking, type CompetitionLeaderboard
 } from "../dashboard/src/overall-view.js";
@@ -58,12 +59,6 @@ describe("the qualification", () => {
     expect(COMBINED_RANKING_EXHIBITION_CLAUSE).toContain("fewer Fixtures");
     expect(COMBINED_RANKING_EXHIBITION_CLAUSE).toContain("fewer Competitions");
     expect(COMBINED_RANKING_EXHIBITION_CLAUSE).toContain("sum does not correct");
-
-    expect(COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION).toContain("raw sum");
-    expect(COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION).toContain("weighs more");
-    expect(COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION).toContain("Prompt Version");
-    expect(COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION).toContain("fewer Fixtures");
-    expect(COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION).toContain("fewer Competitions");
   });
 });
 
@@ -177,26 +172,116 @@ describe("a row missing from one covered Competition", () => {
 });
 
 describe("a Guest", () => {
-  // Until ticket 0117 keys it apart: a Guest sharing a slug with a roster
-  // seat must not be added into that seat's row (spec 0029, story 32).
-  test("is summed into no row", () => {
+  const guest = (id: string, matchPoints: number, betPoints: number) => entrant({
+    id, name: "Gemini 4 Argon", matchPoints, betPoints,
+    role: "guest", baseModel: "google/gemini-4-argon", guest: { fromGw: 4, gapRate: 0 }
+  });
+  const roster = (competition: string, prefix: string) => ({
+    competition,
+    body: body({
+      entrants: [
+        entrant({ id: `${prefix}/claude-opus-5`, matchPoints: 50, betPoints: 30 }),
+        entrant({ id: `${prefix}/gpt-5`, name: "GPT-5", matchPoints: 40, betPoints: 45 })
+      ]
+    })
+  });
+  const withGuest = (
+    { competition, body: item }: CompetitionLeaderboard, row: ReturnType<typeof guest>
+  ): CompetitionLeaderboard => ({ competition, body: { ...item, entrants: [...item.entrants, row] } });
+
+  test("seated in several Competitions is one row summing them, naming those Competitions", () => {
+    const result = overallRanking([
+      withGuest(roster("PL", "match"), guest("guest/gemini-4-argon", 9, 3)),
+      roster("SA", "match-sa"),
+      withGuest(roster("PD", "match-pd"), guest("guest-pd/gemini-4-argon", 6, 2))
+    ]);
+    if (result.kind !== "ranking") throw new Error("expected a ranking");
+
+    expect(result.matchRanked.filter((row) => row.guest !== null)).toEqual([{
+      slug: "gemini-4-argon", name: "Gemini 4 Argon", baseModelClass: "frontier",
+      role: "guest", baseModel: "google/gemini-4-argon",
+      matchPoints: 15, betPoints: 5, exhibition: false, guest: { competitions: ["PL", "PD"] }
+    }]);
+    expect(guestOverallLabel(["PL", "PD"])).toBe("Guest · PL, PD");
+  });
+
+  test("changes no Entrant's total or rank, nor the Fixtures summed", () => {
+    const leaderboards = [roster("PL", "match"), roster("PD", "match-pd")];
+    const baseline = overallRanking(leaderboards);
+    const present = overallRanking([
+      // Ahead of one Entrant on Match Points and behind both on Bet Points,
+      // under an Entrant's slug so only its own key keeps it out of that row.
+      withGuest(leaderboards[0]!, guest("guest/gpt-5", 85, 1)),
+      leaderboards[1]!
+    ]);
+    if (baseline.kind !== "ranking" || present.kind !== "ranking") {
+      throw new Error("expected a ranking");
+    }
+
+    expect(present.matchRanked.map(({ slug, guest }) => [slug, guest !== null]))
+      .toEqual([["claude-opus-5", false], ["gpt-5", true], ["gpt-5", false]]);
+    expect(present.matchRanked.filter((row) => row.guest === null)).toEqual(baseline.matchRanked);
+    expect(present.betRanked.filter((row) => row.guest === null)).toEqual(baseline.betRanked);
+    expect(present.fixtures).toEqual(baseline.fixtures);
+    expect(present.totalFixtures).toEqual(baseline.totalFixtures);
+  });
+
+  test("is a row apart from an Entrant and from an Exhibition Run of the same Base Model", () => {
+    // Spec 0029 story 32, and two rows until ticket 0119 combines the
+    // Exhibition's with the Guest's.
     const result = overallRanking([{
       competition: "PL",
       body: body({
         entrants: [
-          entrant({ id: "match/gemini-4-argon", matchPoints: 60, betPoints: 20 }),
-          entrant({
-            id: "guest/gemini-4-argon", matchPoints: 9, betPoints: 3,
-            role: "guest", guest: { fromGw: 4, gapRate: 0 }
-          })
+          entrant({ id: "match/gemini-4-argon", matchPoints: 60 }),
+          guest("guest/gemini-4-argon", 9, 3)
+        ]
+      })
+    }, {
+      competition: "PD",
+      body: body({
+        exhibitionCaveat: EXHIBITION_CAVEAT,
+        entrants: [
+          entrant({ id: "exhibition-pd/gemini-4-argon", matchPoints: 7, exhibition: { ranAfterGw: 3 } })
         ]
       })
     }]);
     if (result.kind !== "ranking") throw new Error("expected a ranking");
 
-    expect(result.matchRanked).toEqual([
-      expect.objectContaining({ slug: "gemini-4-argon", matchPoints: 60, betPoints: 20 })
-    ]);
+    expect(result.matchRanked.map((row) => [row.slug, row.exhibition, row.guest, row.matchPoints]))
+      .toEqual([
+        ["gemini-4-argon", false, null, 60],
+        ["gemini-4-argon", false, { competitions: ["PL"] }, 9],
+        ["gemini-4-argon", true, null, 7]
+      ]);
+  });
+
+  test("adds its clause to the qualification, after the Exhibition's when both are ranked", () => {
+    const qualification = (leaderboards: CompetitionLeaderboard[]) => {
+      const result = overallRanking(leaderboards);
+      if (result.kind !== "ranking") throw new Error("expected a ranking");
+      return result.qualification;
+    };
+    const guestOnly = qualification([withGuest(roster("PL", "match"), guest("guest/gemini-4-argon", 9, 3))]);
+    const both = qualification([{
+      competition: "PL",
+      body: body({
+        exhibitionCaveat: EXHIBITION_CAVEAT,
+        entrants: [
+          guest("guest/gemini-4-argon", 9, 3),
+          entrant({ id: "exhibition/ox-alpha", exhibition: { ranAfterGw: 3 } })
+        ]
+      })
+    }]);
+
+    expect(guestOnly).toMatch(/is summed here; /);
+    expect(guestOnly).toContain(COMBINED_RANKING_GUEST_CLAUSE);
+    expect(guestOnly).not.toContain(COMBINED_RANKING_EXHIBITION_CLAUSE);
+    expect(guestOnly.endsWith(`${COMBINED_RANKING_GUEST_CLAUSE} Ranks, does not prove.`)).toBe(true);
+    expect(both).toContain(
+      `${COMBINED_RANKING_EXHIBITION_CLAUSE} ${COMBINED_RANKING_GUEST_CLAUSE} Ranks, does not prove.`
+    );
+    expect(qualification([roster("PL", "match")])).not.toContain(COMBINED_RANKING_GUEST_CLAUSE);
   });
 });
 
@@ -249,8 +334,11 @@ describe("an Exhibition Run", () => {
       .toEqual([["ox-alpha", true], ["claude-opus-5", false]]);
     expect(result.betRanked.map((row) => [row.slug, row.exhibition]))
       .toEqual([["claude-opus-5", false], ["ox-alpha", true]]);
-    expect(result.qualification)
-      .toMatch(new RegExp(` ${COMBINED_RANKING_QUALIFICATION_WITH_EXHIBITION.replace(/[.()]/g, "\\$&")}$`));
+    expect(result.qualification.endsWith(
+      ` ${COMBINED_RANKING_QUALIFICATION.replace(
+        "Ranks, does not prove.", `${COMBINED_RANKING_EXHIBITION_CLAUSE} Ranks, does not prove.`
+      )}`
+    )).toBe(true);
     expect(result.exhibitionCaveat).toBe(EXHIBITION_CAVEAT);
   });
 

@@ -41,6 +41,15 @@ Decisions it must not bend:
   A combined row carries `parts: { exhibition: {firstGw, lastGw}, guest: {fromGw} }`.
 - **The rows to combine are found by `base_model`**, which 0115 put on every row, so two
   snapshots of one Base Model stay one row.
+- **A row without `baseModel` is never combined.** After the deploy that added `role` and
+  `baseModel`, the edge can still serve a body cached before them, for up to about 65
+  minutes (`SCORED_CACHE`, `src/dashboard/read-api.ts`: `max-age=300`,
+  `stale-while-revalidate=3600`). The browser is sent `no-cache`, but the
+  edge answers its revalidation. In such a body both fields are `undefined`. The combine
+  function must not throw on it and must not match two rows on `undefined`: a row with no
+  `baseModel` passes through as it is. Find rows by `exhibition` and `guest`, never by
+  `role`, for the same reason `overall-view.ts` keys them that way (0117). `/overall`
+  rows carry `role` and `baseModel` since 0117.
 - **The record under the default** is one Gameweek-by-Gameweek history in which each row
   names its part. Under split, it is the two records 0116 built. The Fixtures page has no
   toggle: each Fixture was answered by one part at most.
