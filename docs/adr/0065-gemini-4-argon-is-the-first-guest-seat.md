@@ -7,6 +7,24 @@ status: accepted
 > **Accepted 2026-10-15** by the operator, together with ADR-0064. The spend ceiling below
 > was proposed in drafting; the operator may lower it before the first Lock, and raising it
 > later is a new ADR.
+>
+> **Amended 2026-10-16, by ticket 0121: the leagues' first Locks.** The operator inserted
+> the five league rows at 2026-10-16 09:35:27Z, after `origin/main` carried 0114–0118
+> (`975fd12`) and migration 0052. Each row's first Lock is the first deadline after that
+> instant:
+>
+> | Competition | Row | First Lock |
+> | --- | --- | --- |
+> | BL1 | `guest-bl1/gemini-4-argon` | GW6, 2026-10-16 17:00Z |
+> | FL1 | `guest-fl1/gemini-4-argon` | GW7, 2026-10-16 17:15Z |
+> | SA | `guest-sa/gemini-4-argon` | GW7, 2026-10-16 17:15Z |
+> | PD | `guest-pd/gemini-4-argon` | GW9, 2026-10-16 17:30Z |
+> | PL | `guest/gemini-4-argon` | GW7, 2026-10-17 10:00Z |
+>
+> Each follows directly on the last Gameweek of that league's Exhibition rows: BL1 GW5,
+> PL/SA/FL1 GW6 and PD GW8. So the top-up replay in step 4 of *Before the first Lock* had
+> nothing to cover and was not run. The four cup rows are still to come, after their
+> pre-flights; their first Locks are added here when they are inserted.
 
 **Gemini 4 Argon sits as a Guest Seat (ADR-0064) in all nine Competitions: the five
 leagues, the Nations League and the three UEFA club cups.** It was listed on OpenRouter on
