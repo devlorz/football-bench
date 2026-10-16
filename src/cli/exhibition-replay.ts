@@ -44,7 +44,7 @@ try {
           + `of the ${config.season} FPL track.`
     );
   } else {
-    const gameweeks = await replayMatchExhibition({
+    const { gameweeks, guestFromGw } = await replayMatchExhibition({
       database,
       // An Exhibition Run is one Competition's (ADR-0032), and this is the
       // operator's — defaulted to the Premier League the way the prediction
@@ -62,12 +62,18 @@ try {
       http: nodeHttpFetcher,
       now: () => new Date()
     });
+    // Spec 0029: the cap is said whenever it applied, so a short replay is
+    // never mistaken for a short Season.
+    const guestNote = guestFromGw === null
+      ? ""
+      : ` before Gameweek ${guestFromGw}, where its Guest begins`;
     console.log(
       gameweeks.length === 0
         ? `${config.season} holds no played Fixture for `
-          + `${config.exhibitionModelId} to replay.`
+          + `${config.exhibitionModelId} to replay${guestNote}.`
         : `${config.exhibitionModelId} covered Gameweeks `
-          + `${gameweeks.join(", ")} of the ${config.season} Match track.`
+          + `${gameweeks.join(", ")} of the ${config.season} Match track`
+          + `${guestNote}.`
     );
   }
 } finally {

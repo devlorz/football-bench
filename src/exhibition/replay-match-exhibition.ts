@@ -10,6 +10,7 @@ import { matchPromptOf } from "../predictions/openrouter-entrant.js";
 import { requireTypesafeApiKey } from "../predictions/typesafe-entrant.js";
 import { REPAIRABLE_KINDS } from "../predictions/validate-prediction.js";
 import { MAX_REPAIRS } from "../repairs.js";
+import { firstLockOf } from "../season-roster.js";
 import { loadExhibition } from "./load-exhibition.js";
 
 type Database = Pick<Client, "query">;
@@ -54,7 +55,7 @@ interface ReplayedFixture {
 }
 
 /**
- * Every Gameweek this replay walks: one that holds stored Match contexts and
+ * Every Gameweek this replay could walk: one that holds stored Match contexts and
  * at least one Fixture that has been played.
  *
  * Played is read off the record rather than off the clock (CONTEXT.md), and on
@@ -196,8 +197,46 @@ async function remainingFixtures(
 }
 
 /**
- * Every played Fixture of one Competition, its stored Match context put to
- * the named Exhibition row, returning the Gameweeks covered.
+ * The first Lock of any Guest of `baseModel` in this Competition (spec 0029),
+ * or null for none. The replay stops at the Gameweek before it, so one Base
+ * Model never answers one Fixture twice, once replayed and once live. Read off
+ * the record and never passed in (ADR-0032): an operator naming the cap would
+ * be a second opinion about when the Guest began.
+ *
+ * Across the whole Season, from Gameweek 1, never from an Edition's first:
+ * a Guest seated in a later Edition still answered every Lock it was asked.
+ * The Competition is the Prompt Version, as it is for the Exhibition row
+ * itself, and the Base Model is `base_model`, never the dated snapshot.
+ */
+async function guestFirstLock(
+  database: Database,
+  competition: string,
+  season: string,
+  baseModel: string,
+  promptVersion: string
+): Promise<number | null> {
+  const first = await database.query<{ gw: number | null }>(
+    `select min(${firstLockOf("g", "$1", "$2", "1")}) as gw
+       from models g
+      where g.role = 'guest'
+        and g.base_model = $3
+        and g.prompt_version = $4`,
+    [competition, season, baseModel, promptVersion]
+  );
+  return first.rows[0]?.gw ?? null;
+}
+
+export interface ReplayedMatchExhibition {
+  /** The Gameweeks this run walked. */
+  gameweeks: number[];
+  /** Where a Guest of the same Base Model begins, the cap; null for none. */
+  guestFromGw: number | null;
+}
+
+/**
+ * Every played Fixture of one Competition before its Guest's first Lock (spec
+ * 0029; all of them with no Guest), its stored Match context put to the named
+ * Exhibition row, returning the Gameweeks covered and that cap.
  *
  * The call path is the Entrants' own, unchanged (ADR-0032): the same request
  * shape, the same three Repairs, the same failure taxonomy, the same attempt
@@ -216,7 +255,7 @@ async function replayCoveredGameweeks({
   typesafeApiKey,
   http,
   now
-}: ReplayMatchExhibitionOptions): Promise<number[]> {
+}: ReplayMatchExhibitionOptions): Promise<ReplayedMatchExhibition> {
   const prompt = matchPromptOf(competition);
   const exhibition = await loadExhibition(
     database,
@@ -228,6 +267,13 @@ async function replayCoveredGameweeks({
   requireTypesafeApiKey(exhibitionModelId, exhibition.provider, typesafeApiKey);
 
   const covered: number[] = [];
+  const guestFromGw = await guestFirstLock(
+    database,
+    competition,
+    season,
+    exhibition.base_model,
+    prompt.version
+  );
   // Not the Gameweek a retired Prompt Version owns whole (ADR-0042). Its
   // contexts were rendered by a template no run reads again, and every seat
   // that answered them is out of every run by the same decision -- La Liga's
@@ -238,7 +284,10 @@ async function replayCoveredGameweeks({
   // is kept whole under its own label, and this run is not the thing that
   // reopens it.
   const gameweeks = (await playedGameweeks(database, competition, season))
-    .filter((gameweek) => gameweek !== prompt.retired?.gw);
+    .filter((gameweek) => gameweek !== prompt.retired?.gw)
+    // Nor any Gameweek from its Guest's first Lock on (ADR-0064): the Guest
+    // answers those live, and a replay would pay for the same Fixture twice.
+    .filter((gameweek) => guestFromGw === null || gameweek < guestFromGw);
   for (const gameweek of gameweeks) {
     const fixtures = await remainingFixtures(
       database,
@@ -279,12 +328,12 @@ async function replayCoveredGameweeks({
       calls
     });
   }
-  return covered;
+  return { gameweeks: covered, guestFromGw };
 }
 
 export async function replayMatchExhibition(
   options: ReplayMatchExhibitionOptions
-): Promise<number[]> {
+): Promise<ReplayedMatchExhibition> {
   requireCallConcurrency(options.concurrency);
   return whileHoldingLockOrRefuse(
     options.database,

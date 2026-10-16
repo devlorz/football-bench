@@ -193,7 +193,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
   test("covers every contexted Fixture of a Settled Gameweek and no other", async () => {
     const sent = new Map<number, string>();
 
-    const gameweeks = await replayMatchExhibition({
+    const { gameweeks } = await replayMatchExhibition({
       database: client,
       competition: "PL",
       season: "2026-27",
@@ -287,7 +287,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
     await storeContext(client, 2, 4);
 
     const asked: number[] = [];
-    const gameweeks = await replayMatchExhibition({
+    const { gameweeks } = await replayMatchExhibition({
       database: client,
       competition: "PL",
       season: "2026-27",
@@ -327,7 +327,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
     });
 
     const asked: number[] = [];
-    const gameweeks = await replayMatchExhibition({
+    const { gameweeks } = await replayMatchExhibition({
       database: client,
       competition: "PD",
       season: "2026-27",
@@ -361,7 +361,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
     });
     const sent = new Map<number, string>();
 
-    const gameweeks = await replayMatchExhibition({
+    const { gameweeks } = await replayMatchExhibition({
       database: client,
       competition: "PD",
       season: "2026-27",
@@ -436,7 +436,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
     await storeContext(client, 3, 301, "PD");
     const sent = new Map<number, string>();
 
-    const gameweeks = await replayMatchExhibition({
+    const { gameweeks } = await replayMatchExhibition({
       database: client,
       competition: "PL",
       season: "2026-27",
@@ -765,7 +765,7 @@ describe("replaying the Match track as an Exhibition Run", () => {
     await storeContext(client, 1, 5);
     const called: number[] = [];
 
-    const gameweeks = await replayMatchExhibition({
+    const { gameweeks } = await replayMatchExhibition({
       database: client,
       competition: "PL",
       season: "2026-27",
@@ -915,6 +915,147 @@ describe("replaying the Match track as an Exhibition Run", () => {
     }
 
     expect(calls).toBe(0);
+  });
+
+  // Spec 0029: the replay stops at the Gameweek before the first Lock of a
+  // Guest of the same Base Model in the same Competition, read off the record.
+  describe("stopping where its Guest begins", () => {
+    const insertGuest = (
+      id: string,
+      {
+        baseModel = "vendor/late",
+        promptVersion = matchPromptOf("PL").version,
+        createdAt,
+        withdrawnAt = null
+      }: {
+        baseModel?: string;
+        promptVersion?: string;
+        createdAt: string;
+        withdrawnAt?: string | null;
+      }
+    ) => client.query(
+      `insert into models (
+         id, name, base_model, provider, prompt_version, role, config,
+         created_at, withdrawn_at
+       ) values ($1, 'Guest', $2, 'vendor', $3, 'guest', '{}', $4, $5)`,
+      [id, baseModel, promptVersion, createdAt, withdrawnAt]
+    );
+
+    const replay = (sent: Set<number>) => replayMatchExhibition({
+      database: client,
+      competition: "PL",
+      season: "2026-27",
+      exhibitionModelId: "exhibition/late",
+      concurrency: 1,
+      apiKey: "test-key",
+      entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
+      now: () => RAN_AT,
+      http: async (_url, options) => {
+        const fixtureId = requestedFixtureId(options?.body ?? "{}");
+        sent.add(fixtureId);
+        return { status: 200, body: answeredPrediction(fixtureId) };
+      }
+    });
+
+    const answeredByTheExhibition = async () => (await client.query<{
+      fixture_id: number;
+    }>(
+      `select fixture_id from attempts where model_id = 'exhibition/late'
+       union
+       select fixture_id from predictions where model_id = 'exhibition/late'
+       order by fixture_id`
+    )).rows.map(({ fixture_id }) => fixture_id);
+
+    beforeEach(async () => {
+      // Gameweek 2 played too, so only a cap can keep its Fixture unasked.
+      await client.query(
+        `update fixtures
+            set result = jsonb_build_object('home_goals', 1, 'away_goals', 1,
+                                            'outcome', 'D')
+          where fixture_id = 3`
+      );
+    });
+
+    test("covers only the Gameweeks before a same-Base-Model Guest's first "
+      + "Lock", async () => {
+      // Entered between Gameweek 1's Lock and Gameweek 2's: first asked at 2,
+      // then replaced by a new snapshot. The earlier first Lock is the cap.
+      await insertGuest("match/late-guest", {
+        createdAt: "2026-08-25T00:00:00Z",
+        withdrawnAt: "2026-09-01T00:00:00Z"
+      });
+      await insertGuest("match/late-guest-0901", {
+        createdAt: "2026-09-01T00:00:00Z"
+      });
+      await client.query(
+        `insert into gameweeks (season, gw, deadline_at) values
+           ('2026-27', 3, '2026-09-04T17:30:00Z')`
+      );
+      // Fixture 4 was in Gameweek 1 when its context was first rendered, moved
+      // before that Lock, and was locked into Gameweek 2: the Guest's to
+      // answer, so the replay never asks it, under either Gameweek's context.
+      await client.query(
+        `insert into fixtures (
+           season, fixture_id, gw, locked_in_gw, home_team, away_team,
+           kickoff_at, deferred, result
+         ) values (
+           '2026-27', 4, 1, 2, 'Leeds', 'Burnley', '2026-08-30T14:00:00Z', true,
+           jsonb_build_object('home_goals', 0, 'away_goals', 1, 'outcome', 'A')
+         )`
+      );
+      await storeContext(client, 1, 4);
+      await storeContext(client, 2, 4);
+      const sent = new Set<number>();
+
+      expect(await replay(sent)).toEqual({ gameweeks: [1], guestFromGw: 2 });
+      expect([...sent].sort()).toEqual([1, 2]);
+      expect(await answeredByTheExhibition()).toEqual([1, 2]);
+    });
+
+    test("is not capped by another Base Model's Guest, another Competition's, "
+      + "or one withdrawn before its first Lock", async () => {
+      await insertGuest("match/other-guest", {
+        baseModel: "vendor/other",
+        createdAt: "2026-08-01T00:00:00Z"
+      });
+      await insertGuest("match-pd/late-guest", {
+        promptVersion: matchPromptOf("PD").version,
+        createdAt: "2026-08-01T00:00:00Z"
+      });
+      await insertGuest("match/late-guest", {
+        createdAt: "2026-08-25T00:00:00Z",
+        withdrawnAt: "2026-08-26T00:00:00Z"
+      });
+      const sent = new Set<number>();
+
+      expect(await replay(sent)).toEqual({
+        gameweeks: [1, 2],
+        guestFromGw: null
+      });
+      expect([...sent].sort()).toEqual([1, 2, 3]);
+    });
+
+    test("spends nothing when the Guest's first Lock is the first played "
+      + "Gameweek", async () => {
+      await insertGuest("match/late-guest", {
+        createdAt: "2026-08-01T00:00:00Z"
+      });
+
+      expect(await replayMatchExhibition({
+        database: client,
+        competition: "PL",
+        season: "2026-27",
+        exhibitionModelId: "exhibition/late",
+        concurrency: 1,
+        apiKey: "test-key",
+        entrantCallTimeoutMs: DEFAULT_ENTRANT_CALL_TIMEOUT_MS,
+        now: () => RAN_AT,
+        http: async () => {
+          throw new Error("a capped-out replay calls nothing");
+        }
+      })).toEqual({ gameweeks: [], guestFromGw: 1 });
+      expect(await answeredByTheExhibition()).toEqual([]);
+    });
   });
 
   test("refuses a model id that is missing or is not an Exhibition", async () => {

@@ -37,8 +37,31 @@ Independent of 0115–0117.
 
 ## Acceptance
 
-- [ ] With a Guest of the same Base Model, the replay covers only Gameweeks before the
+- [x] With a Guest of the same Base Model, the replay covers only Gameweeks before the
       Guest's first Lock
-- [ ] A Guest of a different Base Model, or in a different Competition, changes nothing
-- [ ] With no Guest, coverage and calls are identical to today
-- [ ] A replay left nothing to do makes no call and says so
+- [x] A Guest of a different Base Model, or in a different Competition, changes nothing
+- [x] With no Guest, coverage and calls are identical to today
+- [x] A replay left nothing to do makes no call and says so
+
+## What was verified
+
+- `test/replay-match-exhibition.test.ts`, "stopping where its Guest begins", with Gameweek 2
+  played: a same-Base-Model Guest first asked at GW2 caps the replay to `[1]`, and Fixture 3
+  is never sent and has no attempt or Prediction. A second Guest row of that Base Model (a
+  new snapshot, first asked at GW3) does not lift the cap: the earlier first Lock wins.
+  A played Fixture with `gw` 1 but `locked_in_gw` 2, holding a context in both Gameweeks,
+  is never asked: it is the Guest's.
+- A Guest of another Base Model, a same-Base-Model Guest at PD's Prompt Version, and one
+  withdrawn before its first Lock together cap nothing: `[1, 2]`, `guestFromGw: null`.
+- A Guest first asked at GW1 leaves `[]`, `guestFromGw: 1`. The stub throws on any call,
+  and there are no attempts.
+- No Guest: the existing 21 tests pass unchanged except for destructuring `{ gameweeks }`.
+- Mutation: dropping `base_model`, dropping `prompt_version`, `from` 3 instead of 1, `<=`
+  for `<`, `max` for `min`, and `f.gw` for `f.locked_in_gw` each fail at least one test.
+- `guest-seat-coexistence` still passes.
+- **Not tested:** the CLI sentence ("… before Gameweek N, where its Guest begins"), to be
+  read by eye during 0121; and the retired-Gameweek filter together with the cap, which
+  are independent filters.
+- The return field is `guestFromGw`, which is the name agreed in the AskUserQuestion step.
+  The review prompt had `capGw`. `guestFromGw` was kept because it matches `guest.fromGw` in
+  the read API bodies.
