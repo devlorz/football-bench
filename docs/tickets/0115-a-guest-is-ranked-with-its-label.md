@@ -37,11 +37,17 @@ Decisions it must not bend:
 
 ## Acceptance
 
-- [ ] A Guest appears in its Competition's ranking, ordered by the page's existing rule,
-      with "Guest · from GW N" and its `n`
-- [ ] Its Season-to-date and Gap rate count from its first Lock
-- [ ] It carries no Exhibition caveat
-- [ ] Every ranked row's body carries `role` and `base_model`, and a Guest's carries
+- [x] A Guest appears in its Competition's ranking body with `guest.fromGw`, its `n` and
+      its Gap rate, and the page sorts it with every other row. **Tested at the body
+      only.** No test renders the "Guest · from GW N" label (the `.astro` inline script
+      has no seam); it is checked by eye in 0121's surface check
+- [x] Its Season-to-date and Gap rate count from its first Lock
+- [x] It carries no Exhibition caveat
+- [x] Every ranked row's body carries `role` and `base_model`, and a Guest's carries
       `guest.fromGw`
-- [ ] A closed Edition's page with no Guest is byte-identical to before
-- [ ] The roster-invariance assertion still holds
+- [x] A closed Edition's body with no Guest is byte-identical to before **except** the
+      three new row fields (`role`, `baseModel`, `guest: null`), which
+      `dashboard-edition-api.test.ts` strips before comparing with the archive. The
+      rendered page is not compared; the script draws nothing new when `guest` is null,
+      and 0121's surface check confirms it by eye
+- [x] The roster-invariance assertion still holds

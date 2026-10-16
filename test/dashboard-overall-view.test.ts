@@ -39,6 +39,9 @@ const entrant = (over: Partial<CompetitionLeaderboard["body"]["entrants"][number
   betPoints: 4,
   n: 5,
   exhibition: null,
+  role: "entrant" as const,
+  baseModel: "anthropic/claude-opus-5",
+  guest: null,
   ...over
 });
 
@@ -169,6 +172,30 @@ describe("a row missing from one covered Competition", () => {
     expect(result.matchRanked).toEqual([
       expect.objectContaining({ slug: "claude-opus-5", matchPoints: 75, betPoints: 25 }),
       expect.objectContaining({ slug: "gpt-5", matchPoints: 40, betPoints: 10 })
+    ]);
+  });
+});
+
+describe("a Guest", () => {
+  // Until ticket 0117 keys it apart: a Guest sharing a slug with a roster
+  // seat must not be added into that seat's row (spec 0029, story 32).
+  test("is summed into no row", () => {
+    const result = overallRanking([{
+      competition: "PL",
+      body: body({
+        entrants: [
+          entrant({ id: "match/gemini-4-argon", matchPoints: 60, betPoints: 20 }),
+          entrant({
+            id: "guest/gemini-4-argon", matchPoints: 9, betPoints: 3,
+            role: "guest", guest: { fromGw: 4, gapRate: 0 }
+          })
+        ]
+      })
+    }]);
+    if (result.kind !== "ranking") throw new Error("expected a ranking");
+
+    expect(result.matchRanked).toEqual([
+      expect.objectContaining({ slug: "gemini-4-argon", matchPoints: 60, betPoints: 20 })
     ]);
   });
 });

@@ -2,7 +2,7 @@
 import Page from "../layouts/Page.astro";
 import { matchRosterSizeOf } from "../../../src/season-roster.js";
 import { competitionRoutes } from "../competition-view.js";
-import { EXHIBITION_LABEL_PREFIX } from "../exhibition-view.js";
+import { EXHIBITION_LABEL_PREFIX, GUEST_LABEL_PREFIX } from "../exhibition-view.js";
 
 /**
  * One leaderboard per Competition, from the list the read API serves. A rest
@@ -256,7 +256,8 @@ const rosterSize = matchRosterSizeOf(competition, edition);
     // so a page with no block cannot ask for one, and the endpoint that would
     // answer it 404s anyway.
     retiredUrl: retiredLabel === null ? null : `${api}/retired`,
-    exhibitionLabelPrefix: EXHIBITION_LABEL_PREFIX
+    exhibitionLabelPrefix: EXHIBITION_LABEL_PREFIX,
+    guestLabelPrefix: GUEST_LABEL_PREFIX
   }}>
   (() => {
     const $ = (id) => document.getElementById(id);
@@ -353,6 +354,15 @@ const rosterSize = matchRosterSizeOf(competition, edition);
             // answered, so the page states it and computes none of it.
             entrant.exhibition
               ? exhibitionLabelPrefix + entrant.exhibition.ranAfterGw
+              : null,
+            // A Guest's record starts at its first Lock, so its own `n` and
+            // Gap rate are stated where a shorter record cannot pass for a
+            // worse one (spec 0029). Null on every other row, which therefore
+            // draws exactly as before.
+            entrant.guest
+              ? guestLabelPrefix + entrant.guest.fromGw + " · n = " + entrant.n
+                + (entrant.guest.gapRate === null ? ""
+                  : " · Gap rate " + Math.round(entrant.guest.gapRate * 100) + "%")
               : null
           ].filter(Boolean).join(" · "))
         );

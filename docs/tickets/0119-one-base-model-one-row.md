@@ -32,7 +32,10 @@ Decisions it must not bend:
   - Match Points, Bet Points, exact scorelines and correct outcomes summed;
   - RPS as the `n`-weighted mean;
   - `n` summed;
-  - Gap rate from the Guest part alone, since the Exhibition part's is withheld (ADR-0052);
+  - Gap rate from the Guest part alone, since the Exhibition part's is withheld (ADR-0052).
+    0115 put it at `guest.gapRate`, not beside the row's other figures. It is null when
+    the Guest's Locks asked no Fixture, and the combined row passes that null through,
+    never a nought;
   - the rank recomputed by the page's existing ordering.
 
   A combined row carries `parts: { exhibition: {firstGw, lastGw}, guest: {fromGw} }`.

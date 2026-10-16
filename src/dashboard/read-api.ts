@@ -1,6 +1,8 @@
 import { FPL_PROMPT_VERSION } from "../context/build-fpl-track-context.js";
 import { EXHIBITION_CAVEAT, TYPESAFE_CAVEAT } from "../exhibition/recall-caveat.js";
-import { isAskedAtLock, ROSTER_CAVEATS } from "../season-roster.js";
+import {
+  firstLockOf, isAskedAtLock, ROSTER_CAVEATS, type ModelRole
+} from "../season-roster.js";
 import { readEditionScope, type EditionScope } from "../editions.js";
 import {
   argmaxOutcome, outcomeOf, type FixtureResult, type Outcome, type Probs
@@ -162,6 +164,16 @@ export interface LeaderboardEntrant {
    * beside them, which is one sentence about the kind of thing they are.
    */
   exhibition: { ranAfterGw: number } | null;
+  /** What the row is, so a client can tell the three ranked kinds apart. */
+  role: ModelRole;
+  /** The OpenRouter Base Model, so a client can find one Base Model's rows. */
+  baseModel: string;
+  /**
+   * Null on every row but a Guest's (spec 0029): the Gameweek of its first
+   * Lock, and its Gap rate over the Fixtures it was asked since. Published,
+   * unlike an Exhibition Run's, because a Guest's Gap is a missed deadline.
+   */
+  guest: { fromGw: number; gapRate: number | null } | null;
 }
 
 /**
@@ -324,8 +336,9 @@ async function scoredThrough(
 
 /**
  * The seats admitted to a Competition's Match track surfaces: the entered
- * seats (role = 'entrant') plus any replayed Exhibition Run whose
- * "ran after Gameweek N" label can be derived.
+ * seats (role = 'entrant'), any replayed Exhibition Run whose
+ * "ran after Gameweek N" label can be derived, and any Guest a Lock in range
+ * has asked (spec 0029). Each endpoint decides by role which it shows.
  *
  * Shared across the leaderboard, entrants and fixtures endpoints (ticket 0052,
  * ticket 0053), so the three endpoints select through the same definition and
@@ -418,7 +431,7 @@ const SEATS_CTE = `
   -- passes matchPromptOf(competition).version as $3, never the FPL track's.
   with seats as (
     select m.id, m.name, m.role, m.provider,
-           ran_after.gw as ran_after_gw
+           ran_after.gw as ran_after_gw, guest_lock.gw as from_gw
       from models m
       left join lateral (
         select max(predicted_at) as at from predictions
@@ -430,6 +443,9 @@ const SEATS_CTE = `
            and deadline_at < last_prediction.at
            and gw >= $6 and ($7::int is null or gw <= $7)
       ) ran_after on true
+      cross join lateral (
+        select ${firstLockOf("m", "$2", "$1", "$8")} as gw
+      ) guest_lock
      where m.prompt_version = $3
        and ((m.role = 'entrant'
              and ${isAskedAtLock("m", `coalesce(
@@ -440,13 +456,20 @@ const SEATS_CTE = `
                'infinity')`)})
             or (m.role = 'exhibition'
                 and ran_after.gw is not null
-                and ($4::boolean or $5::int is not null)))
+                and ($4::boolean or $5::int is not null))
+            -- A Guest (spec 0029) from its first Lock in the Edition: any
+            -- Lock on the Fixtures, a scored one elsewhere, so it never ranks
+            -- at nought before it has answered.
+            or (m.role = 'guest'
+                and guest_lock.gw <= case when $4::boolean
+                                          then coalesce($7::int, guest_lock.gw)
+                                          else $5::int end))
   )
 `;
 
 /**
- * Every ranked row Season-to-date — the ten Entrants and any Exhibition Run
- * that has replayed — both qualifications, the Exhibition caveat, and the
+ * Every ranked row Season-to-date — the Entrants, any Exhibition Run that has
+ * replayed and any Guest from its first Lock — both qualifications, the Exhibition caveat, and the
  * evidence the ranking rests on.
  *
  * The qualifications are read out of the stored rows, because the claim being
@@ -573,9 +596,9 @@ async function leaderboard(
   const rows = await query(
     `-- roster: the match track's, per Competition (ADR-0038).
      ${SEATS_CTE}
-     select s.id, s.name, s.role, s.provider,
+     select s.id, s.name, s.role, s.provider, m.base_model, s.from_gw,
             m.config ->> 'baseModelClass' as base_model_class,
-            s.ran_after_gw,
+            s.ran_after_gw, asked.fixtures as asked, asked.answered,
             points.value as match_points, points.n as n,
             points.detail ->> 'qualification' as match_qualification,
             points.detail ->> 'editionQualification' as edition_qualification,
@@ -593,6 +616,23 @@ async function leaderboard(
         and bets.season = $1
         and bets.track = 'match' and bets.gw = $5
         and bets.metric = $10
+       -- A Guest's Gap rate, which the scorer writes for the roster alone: the
+       -- Fixtures its Locks asked from its first through the scored Gameweek,
+       -- and how many it answered. from_gw is null on every other seat, so
+       -- nothing is counted for one.
+       cross join lateral (
+         select count(*) as fixtures, count(p.model_id) as answered
+           from fixtures f
+           join gameweeks g
+             on g.competition = f.competition and g.season = f.season
+            and g.gw = f.locked_in_gw
+           left join predictions p
+             on p.model_id = s.id and p.competition = f.competition
+            and p.season = f.season and p.fixture_id = f.fixture_id
+          where f.competition = $2 and f.season = $1
+            and f.locked_in_gw >= s.from_gw and f.locked_in_gw <= $5
+            and ${isAskedAtLock("m", "g.deadline_at")}
+       ) asked
       order by s.id`,
     [
       season,
@@ -623,6 +663,18 @@ async function leaderboard(
     n: scoredOrNull(throughGw, row.n),
     exhibition: row.role === "exhibition"
       ? { ranAfterGw: Number(row.ran_after_gw) }
+      : null,
+    role: row.role as ModelRole,
+    baseModel: String(row.base_model),
+    guest: row.role === "guest"
+      ? {
+        fromGw: Number(row.from_gw),
+        // Null over no Fixture: a Lock the calendar emptied asks nothing, and
+        // a share of nothing is not nought.
+        gapRate: Number(row.asked) === 0
+          ? null
+          : 1 - Number(row.answered) / Number(row.asked)
+      }
       : null
   }));
 
@@ -634,7 +686,7 @@ async function leaderboard(
   // for. The two strings are identical today, so nothing a reader sees turns on
   // this; what turns on it is that the reasoning below says `Entrant` and is
   // then true.
-  const rosterRows = rows.filter((row) => row.role !== "exhibition");
+  const rosterRows = rows.filter((row) => row.role === "entrant");
 
   // One string per ranking rather than one per row: the scorer writes the same
   // sentence into every row a ranking can be read off, and the page shows it
@@ -936,6 +988,7 @@ async function fixtures(
     ]
   );
 
+  // A Guest is on the seats and on no Fixture yet: ticket 0116 gives it slots.
   const roster = seats.filter((seat) => seat.role === "entrant");
   const exhibitions = seats.filter((seat) => seat.role === "exhibition");
 
@@ -1252,7 +1305,7 @@ async function entrants(
          on gaps.model_id = s.id and gaps.competition = $2
         and gaps.season = $1
         and gaps.track = 'match' and gaps.gw = $5 and gaps.metric = $12
-      -- The roster first in id order, then the Exhibition Runs (ADR-0052):
+      -- The roster first in id order, then everyone else (ADR-0052):
       -- the record page draws all its tabs off this array, and the Entrants'
       -- are where a reader expects them.
       order by case when s.role = 'entrant' then 0 else 1 end, s.id`,
@@ -1280,7 +1333,10 @@ async function entrants(
   const legsOf = (bets: BetGameweek[]): BetLeg[] =>
     bets.flatMap(({ fixtures }) => fixtures).flatMap(({ slip }) => slip);
 
-  const records = rows.map((row) => ({
+  // A Guest is on the seats and has no record here yet (ticket 0116).
+  const records = rows
+    .filter((row) => row.role === "entrant" || row.role === "exhibition")
+    .map((row) => ({
     row,
     points: perGameweek<PointsGameweek>(row.points_detail),
     bets: perGameweek<BetGameweek>(row.bets_detail),
@@ -1322,7 +1378,7 @@ async function entrants(
       records.some(({ row }) => isTypesafeExhibitionRow(row))
     ),
     ...editionQualificationField(records
-      .filter(({ row }) => row.role !== "exhibition")
+      .filter(({ row }) => row.role === "entrant")
       .map(({ row }) => row.edition_qualification)),
     entrants: records.map(({ row, points, bets, rps, gaps }) => {
       const settled = points.flatMap(({ fixtures }) => fixtures);

@@ -21,8 +21,12 @@ Independent of 0115–0117.
 
 ## What is already known
 
-- **The first Lock is 0115's derivation.** If 0115 has not landed, write it here and let
-  0115 use it. One derivation, whichever ticket lands first.
+- **The first Lock is 0115's derivation:** `firstLockOf(seat, competition, season, from)`
+  in `season-roster.ts`. It takes a lower bound `from`. The read API passes the Edition's
+  first ranked Gameweek; the cap needs the Guest's first Lock across the whole Season, so
+  pass the Season's first Gameweek (`1`), never an Edition's. A wrong `from` gives a wrong
+  cap. It is null for a Guest no Lock asks (withdrawn before its first), which caps
+  nothing.
 - **What the cap prevents** is one Base Model answering one Fixture twice and paying
   twice, and a recall-tainted record growing beside a clean one. ADR-0065's top-up replay
   of Gemini 4 Argon's Exhibition rows depends on this cap. It is what makes running that

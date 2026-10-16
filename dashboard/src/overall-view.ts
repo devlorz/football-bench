@@ -125,7 +125,11 @@ const isCovered = ({ body }: CompetitionLeaderboard): boolean =>
 const summedRows = (covered: readonly CompetitionLeaderboard[]): OverallRow[] => {
   const rows = new Map<string, OverallRow>();
   for (const { body } of covered) {
-    for (const entrant of body.entrants) {
+    // A Guest is ranked per Competition and summed nowhere until ticket 0117
+    // keys it apart: under the roster's slug it would add into an Entrant of
+    // the same Base Model (spec 0029, story 32). `== null` keeps a body cached
+    // from before the field existed.
+    for (const entrant of body.entrants.filter(({ guest }) => guest == null)) {
       const exhibition = entrant.exhibition !== null;
       const slug = entrantSlug(entrant.id);
       const key = exhibition ? `exhibition:${slug}` : slug;

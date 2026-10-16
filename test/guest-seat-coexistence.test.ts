@@ -3,7 +3,7 @@ import pg from "pg";
 import { resetSchema } from "./schema-fixture.js";
 import { outcomeOf } from "../src/fixture-result.js";
 import { predictGameweek } from "../src/predictions/predict-gameweek.js";
-import { handleDashboardRequest } from "../src/dashboard/read-api.js";
+import { handleDashboardRequest, type LeaderboardBody } from "../src/dashboard/read-api.js";
 import { preflightBaseModels } from "../src/preflight/preflight-base-models.js";
 import { readGapAlert } from "../src/predictions/gap-alert.js";
 import {
@@ -63,6 +63,9 @@ describe("a Guest Seat beside the roster", () => {
       `truncate scores, predictions, contexts, fixtures, attempts, models,
          gameweeks
        restart identity cascade`
+    );
+    await client.query(
+      "insert into competitions (competition, season) values ('PL', '2026-27') on conflict do nothing"
     );
     await client.query(
       `insert into gameweeks (competition, season, gw, deadline_at)
@@ -127,7 +130,7 @@ describe("a Guest Seat beside the roster", () => {
           messages: Array<{ content: string }>;
         };
         const prompt = JSON.stringify(body.messages);
-        const fixtureId = ["Arsenal", "Everton", "Chelsea"]
+        const fixtureId = ["Arsenal", "Everton", "Chelsea", "Leeds United"]
           .findIndex((home) => prompt.includes(home)) + 1;
         if (fails(body.model, fixtureId)) {
           return { status: 503, body: "{}" };
@@ -256,38 +259,81 @@ describe("a Guest Seat beside the roster", () => {
     expect(report.ok).toBe(true);
   });
 
+  const read = async (path: string): Promise<string> => {
+    const response = await handleDashboardRequest(
+      new Request(`https://benchmark.local${path}`),
+      async (sql, params) => (await client.query(sql, params as unknown[])).rows,
+      "2026-27",
+      new Date("2026-08-30T12:00:00Z")
+    );
+    expect(response.status).toBe(200);
+    return await response.text();
+  };
+
+  const score = async (...gameweeks: number[]): Promise<void> => {
+    for (const gameweek of gameweeks) {
+      await scoreMatchGameweek({
+        database: client,
+        competition: "PL",
+        season: "2026-27",
+        gameweek,
+        now: () => new Date("2026-08-29T09:00:00Z")
+      });
+    }
+  };
+
+  test("a Guest is ranked with its label, its n and its Gap rate, all from its first Lock",
+    async () => {
+      await client.query(
+        `insert into fixtures (
+           competition, season, fixture_id, gw, locked_in_gw, home_team,
+           away_team, kickoff_at
+         ) values ('PL', '2026-27', 4, 2, 2, 'Leeds United', 'Burnley',
+                   '2026-08-29T14:00:00Z')`
+      );
+      await enterGuest("2026-08-21T17:30:01Z");
+      await predict(1);
+      await predict(2, { fails: (model, fixtureId) => model === GUEST_MODEL && fixtureId === 4 });
+      await settle(1, 2, 1);
+      await settle(3, 2, 1);
+      await settle(4, 2, 1);
+      await score(1, 2);
+
+      const body = JSON.parse(await read("/api/pl/leaderboard")) as LeaderboardBody;
+
+      expect(body.exhibitionCaveat).toBeNull();
+      expect(body.entrants.find((row) => row.id === GUEST)).toEqual({
+        id: GUEST,
+        name: "Gemini 4 Argon",
+        role: "guest",
+        baseModel: GUEST_MODEL,
+        baseModelClass: "First-party",
+        // Fixture 3 alone: Fixture 1 was locked before the row existed.
+        matchPoints: 5,
+        betPoints: expect.any(Number),
+        n: 1,
+        exhibition: null,
+        guest: { fromGw: 2, gapRate: 0.5 }
+      });
+      for (const id of ENTRANTS) {
+        expect(body.entrants.find((row) => row.id === id)).toMatchObject({
+          role: "entrant", baseModel: id, exhibition: null, guest: null
+        });
+      }
+    });
+
   // Spec 0029's main acceptance check, rerun by every later Guest ticket: one
   // seeded Season scored with and without the Guest, every Entrant figure and
   // every read API body compared whole.
   test("every Entrant figure and every read API body is identical with the Guest present and absent",
     async () => {
-      const query = async (sql: string, params?: readonly unknown[]) =>
-        (await client.query(sql, params as unknown[])).rows;
-      const read = async (path: string): Promise<string> => {
-        const response = await handleDashboardRequest(
-          new Request(`https://benchmark.local${path}`),
-          query,
-          "2026-27",
-          new Date("2026-08-30T12:00:00Z")
-        );
-        expect(response.status).toBe(200);
-        return await response.text();
-      };
       const season = async () => {
         await predict(1, { fails: (model, fixtureId) => model === ENTRANTS[2] && fixtureId === 2 });
         await predict(2, { fails: (model) => model === GUEST_MODEL });
         await settle(1, 2, 1);
         await settle(2, 0, 0);
         await settle(3, 1, 3);
-        for (const gameweek of [1, 2]) {
-          await scoreMatchGameweek({
-            database: client,
-            competition: "PL",
-            season: "2026-27",
-            gameweek,
-            now: () => new Date("2026-08-29T09:00:00Z")
-          });
-        }
+        await score(1, 2);
         return {
           scores: (await client.query(
             `select model_id, season, gw, track, metric, value, n, detail,
@@ -314,8 +360,22 @@ describe("a Guest Seat beside the roster", () => {
 
       expect(await guestFixtures()).toEqual([1, 2]);
       expect(absent.scores.length).toBeGreaterThan(0);
-      expect(present).toEqual(absent);
-      for (const body of present.bodies) {
+      // The leaderboard ranks the Guest (ticket 0115), so it is compared
+      // without that one row; the other bodies show it nowhere yet.
+      const [leaderboard, ...others] = present.bodies;
+      const ranked = JSON.parse(leaderboard!) as LeaderboardBody;
+      expect(ranked.entrants.map(({ id }) => id)).toContain(GUEST);
+      expect({
+        ...present,
+        bodies: [
+          JSON.stringify({
+            ...ranked, entrants: ranked.entrants.filter(({ id }) => id !== GUEST)
+          }),
+          ...others
+        ]
+      }).toEqual(absent);
+      expect(JSON.parse(absent.bodies[0]!).entrants).toHaveLength(ENTRANTS.length);
+      for (const body of others) {
         expect(body).not.toContain("argon");
       }
     });

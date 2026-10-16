@@ -47,4 +47,6 @@ is chosen: every week waited is a week of clean answers not collected.
 - [ ] The roster's figures for that Gameweek are unchanged by the Guest rows (the 0114
       assertion, read on production)
 - [ ] Once 0115–0119 are deployed: the surfaces show Argon labelled, combined by default,
-      and split on `?rows=split`
+      and split on `?rows=split`. Includes, by eye, what 0115 tested only at the body: the
+      ranking row reads "Guest · from GW N · n = … · Gap rate …%", and a closed Edition's
+      page looks as it did

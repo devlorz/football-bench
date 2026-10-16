@@ -65,6 +65,18 @@ describe("the read API on a one-Edition record", () => {
       const { edition, ...rest } = JSON.parse(text);
       expect({ path, edition })
         .toEqual({ path, edition: { number: 1, firstGameweek: 1, lastGameweek: null } });
+      // Every ranked row has carried its role, Base Model and Guest label since
+      // ticket 0115 (spec 0029); the rest of each row is the archive's.
+      if (path.endsWith("/leaderboard")) {
+        rest.entrants = (rest as LeaderboardBody).entrants.map(
+          ({ role, baseModel, guest, ...row }) => {
+            expect({ path, guest }).toEqual({ path, guest: null });
+            expect(role).toBeTruthy();
+            expect(baseModel).toBeTruthy();
+            return row;
+          }
+        );
+      }
       expect({ path, rest: JSON.stringify(rest) }).toEqual({ path, rest: body });
     }
   });

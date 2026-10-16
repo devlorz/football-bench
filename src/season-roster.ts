@@ -776,6 +776,23 @@ export function isAskedAtLock(seat: string, lock: string): string {
 }
 
 /**
+ * The first Gameweek of `competition` and `season`, at or after `from` (SQL
+ * expressions), whose Lock asks the seat `seat` under `isAskedAtLock`. Null
+ * for a seat no such Lock asks. A Guest's "from GW N", the start of its
+ * Season-to-date and Gap count, and the Exhibition replay's cap (spec 0029):
+ * one spelling for all three, so they cannot disagree.
+ */
+export function firstLockOf(
+  seat: string, competition: string, season: string, from: string
+): string {
+  return `(select min(first_lock.gw) from gameweeks first_lock
+            where first_lock.competition = ${competition}
+              and first_lock.season = ${season}
+              and first_lock.gw >= ${from}
+              and ${isAskedAtLock(seat, "first_lock.deadline_at")})`;
+}
+
+/**
  * The Season Roster that stood at the Season's first Lock is recorded in the
  * database, not in this file: the Match seats already stored are what it was.
  *
