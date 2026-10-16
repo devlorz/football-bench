@@ -23,8 +23,24 @@ status: accepted
 >
 > Each follows directly on the last Gameweek of that league's Exhibition rows: BL1 GW5,
 > PL/SA/FL1 GW6 and PD GW8. So the top-up replay in step 4 of *Before the first Lock* had
-> nothing to cover and was not run. The four cup rows are still to come, after their
-> pre-flights; their first Locks are added here when they are inserted.
+> nothing to cover and was not run.
+>
+> **The cups' first Locks.** Each cup was pre-flighted on 2026-10-16 on a temporary
+> `candidate-<cup>/gemini-4-argon` row carrying the Guest's pin and config. The four
+> rows, UCL Fixture 2049587, UEL 2050084, UECL 2050320 and UNL 2047948, were all
+> `parseable` against `google/gemini-4-argon-20261013` through Google, and were then
+> deleted. The operator inserted the four Guest rows at 2026-10-16 18:24:24Z
+> (`docs/queries/gemini-4-argon-cup-guest-rows.sql`):
+>
+> | Competition | Row | First Lock |
+> | --- | --- | --- |
+> | UCL | `guest-ucl/gemini-4-argon` | GW3, 2026-10-20 15:15Z |
+> | UECL | `guest-uecl/gemini-4-argon` | GW2, 2026-10-22 13:00Z |
+> | UEL | `guest-uel/gemini-4-argon` | GW3, 2026-10-22 15:15Z |
+> | UNL | `guest-unl/gemini-4-argon` | GW5, 2026-11-12 15:30Z |
+>
+> The cups have no Exhibition rows, so a cup's Guest record starts at its first Lock.
+> All nine rows now stand, which is the first of the two Guests ADR-0064 allows.
 
 **Gemini 4 Argon sits as a Guest Seat (ADR-0064) in all nine Competitions: the five
 leagues, the Nations League and the three UEFA club cups.** It was listed on OpenRouter on

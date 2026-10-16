@@ -36,13 +36,16 @@ is chosen: every week waited is a week of clean answers not collected.
 
 - [x] `origin/main` carries 0114 and 0118 before any Guest row exists. *`975fd12` was
       pushed at 2026-10-16 09:33Z, and the first Guest row was inserted at 09:35:27Z.*
-- [ ] Four pre-flights, one each in UNL, UCL, UEL and UECL, were approved, run, and
-      `parseable` against `google/gemini-4-argon-20261013` through Google
-- [ ] Nine Guest rows inserted by the operator, read back, with the SQL kept under
-      `docs/queries/`. *Five of nine so far: the leagues, from
-      `docs/queries/gemini-4-argon-guest-rows.sql`. The cups follow their pre-flights.*
-- [ ] ADR-0065 amended with each Competition's first Lock. *The leagues' are in, amended
-      2026-10-16. The cups' go in when their rows are inserted.*
+- [x] Four pre-flights, one each in UNL, UCL, UEL and UECL, were approved, run, and
+      `parseable` against `google/gemini-4-argon-20261013` through Google. *Run on
+      2026-10-16 on temporary `candidate-<cup>/…` rows, which were deleted afterwards
+      (`DELETE 4`). See `docs/queries/gemini-4-argon-cup-candidates.sql`.*
+- [x] Nine Guest rows inserted by the operator, read back, with the SQL kept under
+      `docs/queries/`. *The leagues were inserted at 09:35:27Z
+      (`gemini-4-argon-guest-rows.sql`) and the cups at 18:24:24Z
+      (`gemini-4-argon-cup-guest-rows.sql`). The read-back shows all nine.*
+- [x] ADR-0065 amended with each Competition's first Lock. *The leagues' and the cups'
+      were both amended on 2026-10-16.*
 - [x] ~~The top-up replay was approved and run.~~ Not needed. Each league's Exhibition
       coverage already ends at the Gameweek before its Guest's first Lock: BL1 GW5 → GW6,
       PL/SA/FL1 GW6 → GW7, PD GW8 → GW9. The cups have no Exhibition rows. No paid run was
