@@ -79,13 +79,14 @@ describe("the benchmark database", () => {
       { id: "shadow/one", role: "shadow" }
     ]);
 
-    // The check widened by exactly one word; anything else is still refused.
+    // The check widens one word at a time; a role no migration named is still
+    // refused. Not `guest`, which migration 0052 admitted (ADR-0064).
     await expect(client.query(
       `insert into models (
          id, name, base_model, provider, prompt_version, role
        ) values (
-         'guest/one', 'Guest', 'vendor/guest', 'provider',
-         'match/2026-27-v2', 'guest'
+         'spectator/one', 'Spectator', 'vendor/spectator', 'provider',
+         'match/2026-27-v2', 'spectator'
        )`
     )).rejects.toMatchObject({ code: "23514" });
   });

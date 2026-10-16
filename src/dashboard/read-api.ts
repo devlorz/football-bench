@@ -422,6 +422,7 @@ function rosterCaveatField(
  */
 const askedFrom = (gameweek: string, version: string): string =>
   `${gameweek}.deadline_at >= coalesce(
+     -- roster: the match track's, per Competition (ADR-0038, ticket 0113).
      (select min(e.created_at) from models e
        where e.prompt_version = ${version} and e.role = 'entrant'),
      '-infinity')`;

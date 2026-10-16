@@ -216,7 +216,9 @@ async function guestFirstLock(
   promptVersion: string
 ): Promise<number | null> {
   const first = await database.query<{ gw: number | null }>(
-    `select min(${firstLockOf("g", "$1", "$2", "1")}) as gw
+    `-- roster: none. The match track's Guest rows of one Base Model, which sit
+     -- on no Season Roster (ADR-0064) and whose withdrawal firstLockOf reads.
+     select min(${firstLockOf("g", "$1", "$2", "1")}) as gw
        from models g
       where g.role = 'guest'
         and g.base_model = $3
