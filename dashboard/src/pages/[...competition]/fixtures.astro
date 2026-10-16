@@ -2,7 +2,7 @@
 import Page from "../../layouts/Page.astro";
 import { competitionRoutes } from "../../competition-view.js";
 import { RATIONALE_LABEL, RATIONALE_META } from "../../rationale.js";
-import { EXHIBITION_LABEL_PREFIX } from "../../exhibition-view.js";
+import { EXHIBITION_LABEL_PREFIX, GUEST_LABEL_PREFIX } from "../../exhibition-view.js";
 
 /**
  * One Fixtures page per Competition, from the list the read API serves.
@@ -102,7 +102,8 @@ const {
     fixturesUrl: `${api}/fixtures`,
     rationaleLabel: RATIONALE_LABEL,
     rationaleMeta: RATIONALE_META,
-    exhibitionLabelPrefix: EXHIBITION_LABEL_PREFIX
+    exhibitionLabelPrefix: EXHIBITION_LABEL_PREFIX,
+    guestLabelPrefix: GUEST_LABEL_PREFIX
   }}>
   (() => {
     const $ = (id) => document.getElementById(id);
@@ -162,7 +163,7 @@ const {
 
     function predictionRow(fixture, slot, index) {
       const row = div("fxrow", undefined, "row");
-      const { entrant, prediction, exhibition } = slot;
+      const { entrant, prediction, exhibition, guest } = slot;
       const name = div("fx-name", undefined, "cell");
       name.append(div("", entrant.name));
       // An Exhibition Run carries its derived label on its row (ADR-0052).
@@ -170,6 +171,10 @@ const {
         name.append(
           div("muted lb-id", exhibitionLabelPrefix + exhibition.ranAfterGw)
         );
+      }
+      // A Guest's slot says so, filled or empty (spec 0029).
+      if (guest) {
+        name.append(div("muted lb-id", guestLabelPrefix + guest.fromGw));
       }
       row.append(name);
 
@@ -253,10 +258,10 @@ const {
       versus.className = "fx-v";
       versus.textContent = "v";
       teams.append(fixture.homeTeam + " ", versus, " " + fixture.awayTeam);
-      // The roster's predictions coverage on this fixture, never counting the
-      // Exhibition Run so the roster's figures remain identical with
-      // Exhibition rows present and absent (ADR-0052, ticket 0053).
-      const rosterSlots = fixture.slots.filter((slot) => !slot.exhibition);
+      // The roster's predictions coverage on this fixture, never counting an
+      // Exhibition Run or a Guest so the roster's figures remain identical with
+      // their rows present and absent (ADR-0052, ticket 0053, spec 0029).
+      const rosterSlots = fixture.slots.filter((slot) => !slot.exhibition && !slot.guest);
       const filled = rosterSlots.filter((slot) => slot.prediction).length;
       const tag = div("tag tag-neutral",
         filled + " of " + rosterSlots.length + " predicted");

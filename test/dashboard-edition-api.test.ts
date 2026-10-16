@@ -66,8 +66,9 @@ describe("the read API on a one-Edition record", () => {
       expect({ path, edition })
         .toEqual({ path, edition: { number: 1, firstGameweek: 1, lastGameweek: null } });
       // Every ranked row has carried its role, Base Model and Guest label since
-      // ticket 0115 (spec 0029); the rest of each row is the archive's.
-      if (path.endsWith("/leaderboard")) {
+      // ticket 0115 (spec 0029), and every record since 0116; the rest of each
+      // row is the archive's.
+      if (path.endsWith("/leaderboard") || path.endsWith("/entrants")) {
         rest.entrants = (rest as LeaderboardBody).entrants.map(
           ({ role, baseModel, guest, ...row }) => {
             expect({ path, guest }).toEqual({ path, guest: null });

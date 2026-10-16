@@ -468,6 +468,32 @@ const SEATS_CTE = `
 `;
 
 /**
+ * The Fixtures a Guest's Locks asked from its first through `through`, each
+ * beside the Prediction it answered with, if any: the one Gap derivation for a
+ * Guest, because the scorer writes the Gap rate for the roster alone. Joined
+ * over SEATS_CTE's `s` and its `models` row `m`. from_gw is null on every
+ * seat but a Guest, so nothing is counted for one.
+ */
+const guestAskedFixtures = (through: string): string => `
+  from fixtures f
+  join gameweeks g
+    on g.competition = f.competition and g.season = f.season
+   and g.gw = f.locked_in_gw
+  left join predictions p
+    on p.model_id = s.id and p.competition = f.competition
+   and p.season = f.season and p.fixture_id = f.fixture_id
+ where f.competition = $2 and f.season = $1
+   and f.locked_in_gw >= s.from_gw and f.locked_in_gw <= ${through}
+   and ${isAskedAtLock("m", "g.deadline_at")}`;
+
+/**
+ * Null over no Fixture: a Lock the calendar emptied asks nothing, and a share
+ * of nothing is not nought.
+ */
+const guestGapRate = (asked: number, answered: number): number | null =>
+  asked === 0 ? null : 1 - answered / asked;
+
+/**
  * Every ranked row Season-to-date — the Entrants, any Exhibition Run that has
  * replayed and any Guest from its first Lock — both qualifications, the Exhibition caveat, and the
  * evidence the ranking rests on.
@@ -616,22 +642,10 @@ async function leaderboard(
         and bets.season = $1
         and bets.track = 'match' and bets.gw = $5
         and bets.metric = $10
-       -- A Guest's Gap rate, which the scorer writes for the roster alone: the
-       -- Fixtures its Locks asked from its first through the scored Gameweek,
-       -- and how many it answered. from_gw is null on every other seat, so
-       -- nothing is counted for one.
+       -- A Guest's Gap rate, through the scored Gameweek.
        cross join lateral (
          select count(*) as fixtures, count(p.model_id) as answered
-           from fixtures f
-           join gameweeks g
-             on g.competition = f.competition and g.season = f.season
-            and g.gw = f.locked_in_gw
-           left join predictions p
-             on p.model_id = s.id and p.competition = f.competition
-            and p.season = f.season and p.fixture_id = f.fixture_id
-          where f.competition = $2 and f.season = $1
-            and f.locked_in_gw >= s.from_gw and f.locked_in_gw <= $5
-            and ${isAskedAtLock("m", "g.deadline_at")}
+         ${guestAskedFixtures("$5")}
        ) asked
       order by s.id`,
     [
@@ -669,11 +683,7 @@ async function leaderboard(
     guest: row.role === "guest"
       ? {
         fromGw: Number(row.from_gw),
-        // Null over no Fixture: a Lock the calendar emptied asks nothing, and
-        // a share of nothing is not nought.
-        gapRate: Number(row.asked) === 0
-          ? null
-          : 1 - Number(row.answered) / Number(row.asked)
+        gapRate: guestGapRate(Number(row.asked), Number(row.answered))
       }
       : null
   }));
@@ -812,6 +822,13 @@ export interface FixtureSlot {
    * is byte-identical to the baseline contract (ticket 0053, ADR-0052).
    */
   exhibition?: { ranAfterGw: number };
+  /**
+   * Present only on a Guest's slot (spec 0029), for the same reason. Unlike an
+   * Exhibition slot it is there whether or not the Guest answered: it was
+   * asked. The slot carries no role or Base Model, unlike a record, because
+   * nothing on the Fixtures page combines rows (ticket 0116).
+   */
+  guest?: { fromGw: number };
 }
 
 export interface FixtureView {
@@ -962,8 +979,9 @@ async function fixtures(
   );
 
   // The roster's ten stay first and in id order on every Fixture, which is what
-  // makes a Gap a slot rather than a shorter list. Any admitted Exhibition Run
-  // joins conditionally as an eleventh slot below (ADR-0052).
+  // makes a Gap a slot rather than a shorter list. A Guest asked at this Lock
+  // follows them (spec 0029), and any admitted Exhibition Run joins
+  // conditionally after that (ADR-0052).
   //
   // Shared through SEATS_CTE with the leaderboard and entrant record endpoints.
   // Passing admit_unscored = true ($4) admits Exhibition runs without gating
@@ -971,10 +989,12 @@ async function fixtures(
   // Exhibition Run that replayed a completed Gameweek is shown even before the
   // scoring run has recorded throughGw.
   const seats = await query(
-    `-- roster and exhibition seats: the match track's, per Competition (ADR-0038, ADR-0052).
+    `-- roster, guest and exhibition seats: the match track's, per Competition (ADR-0038, ADR-0052, spec 0029).
      ${SEATS_CTE}
-     select s.id, s.name, s.role, s.provider, s.ran_after_gw
+     select s.id, s.name, s.role, s.provider, s.ran_after_gw, s.from_gw,
+            ${isAskedAtLock("m", "$9::timestamptz")} as asked
        from seats s
+       join models m on m.id = s.id
       order by case when s.role = 'entrant' then 0 else 1 end, s.id`,
     [
       season,
@@ -984,12 +1004,16 @@ async function fixtures(
       null,
       scope.firstGameweek,
       scope.lastGameweek,
-      rankedFrom(competition, scope)
+      rankedFrom(competition, scope),
+      // This Gameweek's Lock, which decides whether a Guest was asked at it.
+      deadline
     ]
   );
 
-  // A Guest is on the seats and on no Fixture yet: ticket 0116 gives it slots.
   const roster = seats.filter((seat) => seat.role === "entrant");
+  // A Guest asked at this Lock has a slot on each of its Fixtures, filled or
+  // empty as an Entrant's is (spec 0029); one entered after it has none.
+  const guests = seats.filter((seat) => seat.role === "guest" && seat.asked);
   const exhibitions = seats.filter((seat) => seat.role === "exhibition");
 
   const predictions = await query(
@@ -1027,11 +1051,12 @@ async function fixtures(
     });
   }
 
-  // The roster's ten remain first in id order on every Fixture. An Exhibition
-  // slot is appended ONLY where a Prediction exists: an unplayed or gapped
-  // Fixture keeps exactly the ten roster slots, because an empty slot means
-  // "asked before the Lock and did not answer" and an Exhibition Run was never
-  // asked before the Lock (ADR-0052).
+  // The roster's ten remain first in id order on every Fixture, then each
+  // Guest asked at this Lock, filled or empty. An Exhibition slot is appended
+  // ONLY where a Prediction exists: an unplayed or gapped Fixture gets no
+  // Exhibition slot, because an empty slot means "asked before the Lock and
+  // did not answer" and an Exhibition Run was never asked before the Lock
+  // (ADR-0052).
   const fixtureViews: FixtureView[] = rows.map((row) => {
     const result = (row.result ?? null) as FixtureResult | null;
     // One slot's Prediction, scored where there is a result to score it
@@ -1070,6 +1095,12 @@ async function fixtures(
           // indistinguishable from one that answered badly.
           prediction:
             scored(byFixtureAndEntrant.get(`${row.fixture_id}:${entrant.id}`))
+        })),
+        ...guests.map((guest) => ({
+          entrant: { id: String(guest.id), name: String(guest.name) },
+          prediction:
+            scored(byFixtureAndEntrant.get(`${row.fixture_id}:${guest.id}`)),
+          guest: { fromGw: Number(guest.from_gw) }
         })),
         ...exhibitions.flatMap((exhibition) => {
           const prediction =
@@ -1169,6 +1200,10 @@ export interface EntrantRecord {
    * carries it never.
    */
   exhibition: { ranAfterGw: number } | null;
+  /** As on the ranked row, so 0119 can combine one Base Model's records. */
+  role: ModelRole;
+  baseModel: string;
+  guest: LeaderboardEntrant["guest"];
   /** Null on a Season with nothing scored, as the leaderboard's are. */
   matchPoints: number | null;
   betPoints: number | null;
@@ -1279,15 +1314,16 @@ async function entrants(
   const rows = await query(
     `-- roster: the match track's, per Competition (ADR-0038).
      ${SEATS_CTE}
-     select s.id, s.name, s.role, s.provider,
+     select s.id, s.name, s.role, s.provider, m.base_model, s.from_gw,
             s.ran_after_gw,
             points.value as match_points, points.n as n,
             points.detail as points_detail,
             points.detail ->> 'editionQualification' as edition_qualification,
             bets.value as bet_points, bets.detail as bets_detail,
             rps.value as rps, rps.detail as rps_detail,
-            gaps.detail as gaps_detail
+            coalesce(gaps.detail, guest_gaps.detail) as gaps_detail
        from seats s
+       join models m on m.id = s.id
        left join scores points
          on points.model_id = s.id and points.competition = $2
         and points.season = $1
@@ -1305,6 +1341,23 @@ async function entrants(
          on gaps.model_id = s.id and gaps.competition = $2
         and gaps.season = $1
         and gaps.track = 'match' and gaps.gw = $5 and gaps.metric = $12
+       -- A Guest's Gaps in the shape the scorer writes a roster's, one entry
+       -- per Gameweek its Locks asked.
+       left join lateral (
+         select jsonb_build_object('gameweeks',
+                  jsonb_agg(jsonb_build_object('gw', gw, 'n', n, 'gaps', gaps)
+                            order by gw)) as detail
+           from (
+             select f.locked_in_gw as gw, count(*) as n,
+                    coalesce(jsonb_agg(f.fixture_id)
+                               filter (where p.model_id is null), '[]')
+                      as gaps
+             ${guestAskedFixtures("$5")}
+              group by f.locked_in_gw
+           ) weeks
+         -- No row for a seat no Lock asked, so coalesce falls through to null.
+         having count(*) > 0
+       ) guest_gaps on true
       -- The roster first in id order, then everyone else (ADR-0052):
       -- the record page draws all its tabs off this array, and the Entrants'
       -- are where a reader expects them.
@@ -1333,10 +1386,7 @@ async function entrants(
   const legsOf = (bets: BetGameweek[]): BetLeg[] =>
     bets.flatMap(({ fixtures }) => fixtures).flatMap(({ slip }) => slip);
 
-  // A Guest is on the seats and has no record here yet (ticket 0116).
-  const records = rows
-    .filter((row) => row.role === "entrant" || row.role === "exhibition")
-    .map((row) => ({
+  const records = rows.map((row) => ({
     row,
     points: perGameweek<PointsGameweek>(row.points_detail),
     bets: perGameweek<BetGameweek>(row.bets_detail),
@@ -1344,7 +1394,8 @@ async function entrants(
     // The Gap rate is the one row written for every Entrant of the roster
     // whether it answered or not, so it is the spine the series is hung on: a
     // Gameweek an Entrant Gapped entirely stays a row rather than closing over,
-    // and all ten lines share one x-domain.
+    // and all ten lines share one x-domain. A Guest's is derived above in the
+    // same shape, one entry per Gameweek its Locks asked.
     gaps: perGameweek<GapGameweek>(row.gaps_detail)
   }));
 
@@ -1383,6 +1434,8 @@ async function entrants(
     entrants: records.map(({ row, points, bets, rps, gaps }) => {
       const settled = points.flatMap(({ fixtures }) => fixtures);
       const legs = legsOf(bets);
+      const asked = gaps.reduce((total, week) => total + week.n, 0);
+      const gapped = gaps.reduce((total, week) => total + week.gaps.length, 0);
 
       return {
         id: String(row.id),
@@ -1390,14 +1443,22 @@ async function entrants(
         exhibition: row.role === "exhibition"
           ? { ranAfterGw: Number(row.ran_after_gw) }
           : null,
+        role: row.role as ModelRole,
+        baseModel: String(row.base_model),
+        guest: row.role === "guest"
+          ? {
+            fromGw: Number(row.from_gw),
+            gapRate: guestGapRate(asked, asked - gapped)
+          }
+          : null,
         matchPoints: scoredOrNull(throughGw, row.match_points),
         betPoints: scoredOrNull(throughGw, row.bet_points),
         // A mean over no settled Fixture is not zero, which is why an Entrant
         // that settled nothing keeps a null here where its points read 0.
         rps: numberOrNull(row.rps),
-        gaps: row.role === "exhibition" || throughGw === null
-          ? null
-          : gaps.reduce((total, week) => total + week.gaps.length, 0),
+        // A Guest's Gaps are published as an Entrant's are (spec 0029): its Gap
+        // is a missed deadline, so only an Exhibition Run's is withheld.
+        gaps: row.role === "exhibition" || throughGw === null ? null : gapped,
         n: scoredOrNull(throughGw, row.n),
         tiers: throughGw === null
           ? []
@@ -1413,22 +1474,26 @@ async function entrants(
             n: own.length
           };
         }),
-        gameweeks: seasonWeeks.map((week) => {
-          const own = at(points, week.gw);
-          const scored = own?.fixtures ?? [];
-          const gapWeek = at(gaps, week.gw);
-          return {
-            gw: week.gw,
-            fixtures: week.fixtures,
-            settled: scored.length,
-            matchPoints: own?.points ?? 0,
-            betPoints: at(bets, week.gw)?.points ?? 0,
-            exact: scored.filter((fixture) => fixture.points === 5).length,
-            outcome: scored.filter((fixture) => fixture.points > 0).length,
-            rps: at(rps, week.gw)?.mean ?? null,
-            gaps: row.role === "exhibition" ? null : (gapWeek?.gaps.length ?? 0)
-          };
-        })
+        // A Guest's history is the Gameweeks its Locks asked, and no row of
+        // noughts before its first Lock or after it was withdrawn.
+        gameweeks: seasonWeeks
+          .filter((week) => row.role !== "guest" || at(gaps, week.gw) !== undefined)
+          .map((week) => {
+            const own = at(points, week.gw);
+            const scored = own?.fixtures ?? [];
+            const gapWeek = at(gaps, week.gw);
+            return {
+              gw: week.gw,
+              fixtures: week.fixtures,
+              settled: scored.length,
+              matchPoints: own?.points ?? 0,
+              betPoints: at(bets, week.gw)?.points ?? 0,
+              exact: scored.filter((fixture) => fixture.points === 5).length,
+              outcome: scored.filter((fixture) => fixture.points > 0).length,
+              rps: at(rps, week.gw)?.mean ?? null,
+              gaps: row.role === "exhibition" ? null : (gapWeek?.gaps.length ?? 0)
+            };
+          })
       };
     })
   };

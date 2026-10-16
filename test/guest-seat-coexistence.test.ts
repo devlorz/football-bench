@@ -3,7 +3,12 @@ import pg from "pg";
 import { resetSchema } from "./schema-fixture.js";
 import { outcomeOf } from "../src/fixture-result.js";
 import { predictGameweek } from "../src/predictions/predict-gameweek.js";
-import { handleDashboardRequest, type LeaderboardBody } from "../src/dashboard/read-api.js";
+import {
+  handleDashboardRequest,
+  type EntrantsBody,
+  type FixturesBody,
+  type LeaderboardBody
+} from "../src/dashboard/read-api.js";
 import { preflightBaseModels } from "../src/preflight/preflight-base-models.js";
 import { readGapAlert } from "../src/predictions/gap-alert.js";
 import {
@@ -322,6 +327,92 @@ describe("a Guest Seat beside the roster", () => {
       }
     });
 
+  test("a Guest has a slot on every Fixture it was asked, and its own record with its Gap rate",
+    async () => {
+      await client.query(
+        `insert into fixtures (
+           competition, season, fixture_id, gw, locked_in_gw, home_team,
+           away_team, kickoff_at
+         ) values ('PL', '2026-27', 4, 2, 2, 'Leeds United', 'Burnley',
+                   '2026-08-29T14:00:00Z')`
+      );
+      await enterGuest("2026-08-21T17:30:01Z");
+      await predict(1);
+      await predict(2, { fails: (model, fixtureId) => model === GUEST_MODEL && fixtureId === 4 });
+      await settle(1, 2, 1);
+      await settle(3, 2, 1);
+      await settle(4, 2, 1);
+      await score(1, 2);
+
+      const guestSlots = async (gw: number) =>
+        (JSON.parse(await read(`/api/pl/fixtures?gw=${gw}`)) as FixturesBody)
+          .fixtures.map(({ fplId, slots }) => ({
+            fplId,
+            ids: slots.map(({ entrant }) => entrant.id),
+            guest: slots
+              .filter(({ entrant }) => entrant.id === GUEST)
+              .map(({ prediction, guest }) => ({ answered: prediction !== null, guest }))
+          }));
+
+      // Gameweek 1 locked before the row existed: no slot, not an empty one.
+      expect(await guestSlots(1)).toEqual([
+        { fplId: 1, ids: ENTRANTS, guest: [] },
+        { fplId: 2, ids: ENTRANTS, guest: [] }
+      ]);
+      expect(await guestSlots(2)).toEqual([
+        { fplId: 3, ids: [...ENTRANTS, GUEST],
+          guest: [{ answered: true, guest: { fromGw: 2 } }] },
+        { fplId: 4, ids: [...ENTRANTS, GUEST],
+          guest: [{ answered: false, guest: { fromGw: 2 } }] }
+      ]);
+
+      const record = JSON.parse(await read("/api/pl/entrants")) as EntrantsBody;
+      expect(record.exhibitionCaveat).toBeNull();
+      expect(record.entrants.find(({ id }) => id === GUEST)).toMatchObject({
+        name: "Gemini 4 Argon",
+        role: "guest",
+        baseModel: GUEST_MODEL,
+        exhibition: null,
+        guest: { fromGw: 2, gapRate: 0.5 },
+        matchPoints: 5,
+        n: 1,
+        gaps: 1,
+        // Its history opens at its first Lock: no Gameweek 1 row of noughts.
+        gameweeks: [{ gw: 2, gaps: 1, settled: 1, matchPoints: 5 }]
+      });
+      const ranked = JSON.parse(await read("/api/pl/leaderboard")) as LeaderboardBody;
+      expect(record.entrants.find(({ id }) => id === GUEST)?.guest)
+        .toEqual(ranked.entrants.find(({ id }) => id === GUEST)?.guest);
+      for (const id of ENTRANTS) {
+        expect(record.entrants.find((row) => row.id === id)).toMatchObject({
+          role: "entrant", baseModel: id, exhibition: null, guest: null
+        });
+      }
+
+      // An Exhibition Run that replayed Fixture 3 after the fact stands after
+      // the Guest on it, and nowhere it did not answer.
+      await client.query(
+        `insert into models (
+           id, name, base_model, provider, prompt_version, role, config,
+           created_at
+         ) values ('exhibition/other', 'Other', 'vendor/other', 'vendor', $1,
+                   'exhibition', '{}', '2026-08-30T00:00:00Z')`,
+        [MATCH_PROMPT_VERSION]
+      );
+      await client.query(
+        `insert into predictions
+         select (jsonb_populate_record(null::predictions, to_jsonb(p)
+                   || '{"model_id": "exhibition/other",
+                        "predicted_at": "2026-08-30T00:00:00Z"}')).*
+           from predictions p where model_id = $1 and fixture_id = 3`,
+        [GUEST]
+      );
+      expect((await guestSlots(2)).map(({ ids }) => ids)).toEqual([
+        [...ENTRANTS, GUEST, "exhibition/other"],
+        [...ENTRANTS, GUEST]
+      ]);
+    });
+
   // Spec 0029's main acceptance check, rerun by every later Guest ticket: one
   // seeded Season scored with and without the Guest, every Entrant figure and
   // every read API body compared whole.
@@ -360,22 +451,32 @@ describe("a Guest Seat beside the roster", () => {
 
       expect(await guestFixtures()).toEqual([1, 2]);
       expect(absent.scores.length).toBeGreaterThan(0);
-      // The leaderboard ranks the Guest (ticket 0115), so it is compared
-      // without that one row; the other bodies show it nowhere yet.
-      const [leaderboard, ...others] = present.bodies;
-      const ranked = JSON.parse(leaderboard!) as LeaderboardBody;
-      expect(ranked.entrants.map(({ id }) => id)).toContain(GUEST);
-      expect({
-        ...present,
-        bodies: [
-          JSON.stringify({
-            ...ranked, entrants: ranked.entrants.filter(({ id }) => id !== GUEST)
-          }),
-          ...others
-        ]
-      }).toEqual(absent);
+      // Each body that shows the Guest (tickets 0115, 0116) is compared
+      // without the Guest's own row, slot or record, and then holds no trace
+      // of it. The record also carries every row's role, Base Model and Guest
+      // label (0116), which the absent side carries too.
+      const [leaderboard, entrants, ...fixtures] = present.bodies.map((text) => JSON.parse(text!));
+      expect(leaderboard.entrants.map(({ id }: { id: string }) => id)).toContain(GUEST);
+      expect(entrants.entrants.map(({ id }: { id: string }) => id)).toContain(GUEST);
+      expect(fixtures.flatMap(({ fixtures }: FixturesBody) =>
+        fixtures.flatMap(({ slots }) => slots.map(({ entrant }) => entrant.id))))
+        .toContain(GUEST);
+      const withoutGuest = <T extends { id: string }>(rows: T[]): T[] =>
+        rows.filter(({ id }) => id !== GUEST);
+      const stripped = [
+        { ...leaderboard, entrants: withoutGuest(leaderboard.entrants) },
+        { ...entrants, entrants: withoutGuest(entrants.entrants) },
+        ...fixtures.map((body: FixturesBody) => ({
+          ...body,
+          fixtures: body.fixtures.map((fixture) => ({
+            ...fixture,
+            slots: fixture.slots.filter(({ entrant }) => entrant.id !== GUEST)
+          }))
+        }))
+      ].map((body) => JSON.stringify(body));
+      expect({ ...present, bodies: stripped }).toEqual(absent);
       expect(JSON.parse(absent.bodies[0]!).entrants).toHaveLength(ENTRANTS.length);
-      for (const body of others) {
+      for (const body of stripped) {
         expect(body).not.toContain("argon");
       }
     });

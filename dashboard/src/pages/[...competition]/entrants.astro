@@ -176,7 +176,7 @@ const {
   // bundled, so every import here is bytes every reader downloads.
   import { byId as $, svg } from "../../dom.js";
   import { entrantOf, entrantSlug } from "../../entrant-link.js";
-  import { exhibitionLabel } from "../../exhibition-view.js";
+  import { exhibitionLabel, GUEST_LABEL_PREFIX } from "../../exhibition-view.js";
   import type {
     EntrantRecord, EntrantsBody
   } from "../../../../src/dashboard/read-api.js";
@@ -259,9 +259,13 @@ const {
       const span = PLOT.bottom - PLOT.top;
       const y = (value: number) => PLOT.bottom - (value / top) * span;
       // By the Gameweek's own number, so every line is read against one axis
-      // whatever rows each Entrant has.
-      const first = weeks[0]!.gw;
-      const last = weeks.at(-1)!.gw;
+      // whatever rows each Entrant has. The roster's weeks and not the selected
+      // record's: a Guest's start at its first Lock (spec 0029), and the field
+      // is drawn behind it.
+      const domain =
+        (field.find((record) => record.role === "entrant") ?? entrant).gameweeks;
+      const first = domain[0]!.gw;
+      const last = domain.at(-1)!.gw;
       const x = (gw: number) =>
         PLOT.left + across(gw, first, last) * (PLOT.right - PLOT.left);
 
@@ -464,7 +468,8 @@ const {
           + " · through GW " + data.throughGw,
         entrant.exhibition
           ? exhibitionLabel(entrant.exhibition.ranAfterGw)
-          : null
+          : null,
+        entrant.guest ? GUEST_LABEL_PREFIX + entrant.guest.fromGw : null
       ].filter(Boolean).join(" · ");
       $("kpi-bet").textContent =
         entrant.betPoints === null ? "—" : String(entrant.betPoints);
