@@ -1060,7 +1060,8 @@ describe("the dashboard read API with an Exhibition Run on the Season", () => {
       // Fourteen, and derived: every `predicted_at` on this run falls between
       // Gameweek 14's deadline and Gameweek 15's, and nothing was told this
       // endpoint which Gameweek that is.
-      expect(exhibition?.exhibition).toEqual({ ranAfterGw: 14 });
+      expect(exhibition?.exhibition)
+        .toEqual({ ranAfterGw: 14, firstGw: 1, lastGw: body.throughGw });
 
       // Its Gap is its own: one Fixture short of the Season, and the Gapped
       // Entrant is still exactly one short of it too.
@@ -1083,8 +1084,10 @@ describe("the dashboard read API with an Exhibition Run on the Season", () => {
       // And the resumed run is labelled by its last answer rather than its
       // first: Gameweek 15's Lock passed between the two, so by the time it
       // gave the second, Gameweek 15 had been played.
+      // Its Gameweeks are the ones it answered, which are Gameweek 1's alone
+      // (ticket 0119).
       expect(body.entrants.find(({ id }) => id === RESUMED)?.exhibition)
-        .toEqual({ ranAfterGw: 15 });
+        .toEqual({ ranAfterGw: 15, firstGw: 1, lastGw: 1 });
 
       // And every Entrant is still an Entrant, carrying no label of its own.
       const roster =

@@ -14,6 +14,12 @@ export {
  * caveat, which a Guest does not carry.
  */
 export const GUEST_LABEL = "Guest";
+
+/**
+ * An Exhibition Run's part of a combined row (ticket 0119), spelled once as the
+ * Guest's is: "Exhibition GW 1–6".
+ */
+export const EXHIBITION_LABEL = "Exhibition";
 export const GUEST_LABEL_PREFIX = `${GUEST_LABEL} · from GW `;
 
 /**
@@ -23,3 +29,25 @@ export const GUEST_LABEL_PREFIX = `${GUEST_LABEL} · from GW `;
 export const guestOverallLabel = (competitions: readonly string[]): string =>
   `${GUEST_LABEL} · ${competitions.join(", ")}`;
 
+
+/**
+ * A combined row's label, naming its parts (ticket 0119): "Exhibition GW 1–6 ·
+ * Guest from GW 7". With no replayed answer in range it is the Guest's label.
+ */
+export const partsLabel = (parts: {
+  exhibition: { firstGw: number; lastGw: number } | null;
+  guest: { fromGw: number };
+}): string => {
+  if (parts.exhibition === null) return GUEST_LABEL_PREFIX + parts.guest.fromGw;
+  const { firstGw, lastGw } = parts.exhibition;
+  const range = firstGw === lastGw ? `${firstGw}` : `${firstGw}–${lastGw}`;
+  return `${EXHIBITION_LABEL} GW ${range} · ${GUEST_LABEL} from GW ${parts.guest.fromGw}`;
+};
+
+/**
+ * The same on `/overall`, which names each part's Competitions instead of
+ * Gameweeks: "Exhibition · PL, SA · Guest · PL, SA, PD".
+ */
+export const combinedOverallLabel = (
+  exhibition: readonly string[], guest: readonly string[]
+): string => `${EXHIBITION_LABEL} · ${exhibition.join(", ")} · ${guestOverallLabel(guest)}`;

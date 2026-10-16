@@ -7,6 +7,7 @@
  */
 
 import type { LeaderboardBody, LeaderboardEntrant } from "../../src/dashboard/read-api.js";
+import { isLeaderboardPair, pairUp } from "./combine-rows.js";
 import { entrantSlug } from "./entrant-link.js";
 import {
   COMBINED_RANKING_CLOSING,
@@ -59,6 +60,12 @@ export interface OverallRow {
    * Null on every other row.
    */
   guest: { competitions: string[] } | null;
+  /**
+   * On a row combining one Base Model's Exhibition Run and Guest (ticket
+   * 0119): the Competitions each part answered in, the Exhibition's only where
+   * a replayed answer is in range. Absent on every other row.
+   */
+  parts?: { exhibition: string[]; guest: string[] };
 }
 
 /** One covered Competition's contribution to the evidence line. */
@@ -104,6 +111,11 @@ export type OverallRanking =
        * same way.
        */
       typesafeCaveat: string | null;
+      /**
+       * Whether some Base Model has both an Exhibition and a Guest row here,
+       * which is when the page shows the toggle (ticket 0119).
+       */
+      splittable: boolean;
     };
 
 /**
@@ -137,10 +149,16 @@ const isCovered = ({ body }: CompetitionLeaderboard): boolean =>
  * shared key would add the two into one row, publishing a total that is half
  * a competitor's and half a replay's under a single name. A Guest is keyed
  * apart by the same rule (spec 0029, story 32), and from an Exhibition Run of
- * its Base Model too until ticket 0119 combines the two.
+ * its Base Model too: `combined` below merges those two afterwards (ticket
+ * 0119), and the split view is these rows as they are.
  */
-const summedRows = (covered: readonly CompetitionLeaderboard[]): OverallRow[] => {
+const summedRows = (
+  covered: readonly CompetitionLeaderboard[]
+): { rows: OverallRow[]; inRange: Map<OverallRow, string[]> } => {
   const rows = new Map<string, OverallRow>();
+  // Where each Exhibition row has a replayed answer in range, for a combined
+  // row's label and caveat.
+  const inRange = new Map<OverallRow, string[]>();
   for (const { competition, body } of covered) {
     for (const entrant of body.entrants) {
       const exhibition = entrant.exhibition !== null;
@@ -165,13 +183,67 @@ const summedRows = (covered: readonly CompetitionLeaderboard[]): OverallRow[] =>
         guest: guest ? { competitions: [] } : null
       };
       row.guest?.competitions.push(competition);
+      if (exhibition) {
+        const answered = inRange.get(row) ?? [];
+        if (entrant.exhibition!.firstGw != null) answered.push(competition);
+        inRange.set(row, answered);
+      }
       row.matchPoints += entrant.matchPoints ?? 0;
       row.betPoints += entrant.betPoints ?? 0;
       rows.set(key, row);
     }
   }
-  return [...rows.values()];
+  return { rows: [...rows.values()], inRange };
 };
+
+/**
+ * The Base Models whose rows must not combine because some covered
+ * Competition refuses its pair: a body cached before `firstGw` existed, a part
+ * doubled in one Competition, or a replayed range reaching its Guest's first
+ * Lock there. The same test the Competition's own page applies
+ * (`isLeaderboardPair`), so `/overall` never combines what that page splits.
+ */
+const refused = (covered: readonly CompetitionLeaderboard[]): Set<string> => {
+  const out = new Set<string>();
+  for (const { body } of covered) {
+    for (const row of body.entrants) {
+      if (row.exhibition === null) continue;
+      const mine = body.entrants.filter(({ baseModel }) => baseModel === row.baseModel);
+      const guests = mine.filter(({ guest }) => guest != null);
+      if (row.exhibition.firstGw === undefined
+        || mine.filter(({ exhibition }) => exhibition !== null).length > 1
+        || guests.length > 1
+        || (guests.length === 1 && !isLeaderboardPair(row, guests[0]!))) {
+        out.add(row.baseModel);
+      }
+    }
+  }
+  return out;
+};
+
+/**
+ * Each Exhibition row merged with the Guest row of its Base Model (ticket
+ * 0119), by the pairing every combining page shares (`pairUp`).
+ */
+const combined = (
+  rows: readonly OverallRow[],
+  inRange: ReadonlyMap<OverallRow, string[]>,
+  refusedBaseModels: ReadonlySet<string>
+): OverallRow[] => pairUp(
+  rows,
+  (row) => row.exhibition ? "exhibition" : row.guest !== null ? "guest" : null,
+  (row) => !refusedBaseModels.has(row.baseModel),
+  (row, guest): OverallRow => {
+    const exhibition = inRange.get(row) ?? [];
+    return {
+      ...guest,
+      matchPoints: row.matchPoints + guest.matchPoints,
+      betPoints: row.betPoints + guest.betPoints,
+      exhibition: exhibition.length > 0,
+      parts: { exhibition, guest: guest.guest!.competitions }
+    };
+  }
+);
 
 /**
  * Descending by `key`, stable: two rows level on the column being ranked keep
@@ -191,7 +263,8 @@ const rankedBy = (
  * every other field below would be there to be misread as one.
  */
 export const overallRanking = (
-  leaderboards: readonly CompetitionLeaderboard[]
+  leaderboards: readonly CompetitionLeaderboard[],
+  { split = false }: { split?: boolean } = {}
 ): OverallRanking => {
   // Every body, covered or not: an Edition that has scored nothing yet still
   // makes the set two Editions.
@@ -204,12 +277,17 @@ export const overallRanking = (
   const covered = leaderboards.filter(isCovered);
   if (covered.length === 0) return { kind: "nothing-covered" };
 
-  const rows = summedRows(covered);
+  const { rows: splitRows, inRange } = summedRows(covered);
+  const combinedRows = combined(splitRows, inRange, refused(covered));
+  const rows = split ? splitRows : combinedRows;
   const fixtures = covered.map(({ competition, body }) => ({
     competition, settledFixtures: body.settledFixtures
   }));
-  const exhibitionCaveat =
-    covered.find(({ body }) => body.exhibitionCaveat !== null)?.body.exhibitionCaveat ?? null;
+  // Only while a row still carries a replayed answer: a combined row whose
+  // Exhibition part is out of range carries no caveat (ticket 0119).
+  const exhibitionCaveat = rows.some(({ exhibition }) => exhibition)
+    ? covered.find(({ body }) => body.exhibitionCaveat !== null)?.body.exhibitionCaveat ?? null
+    : null;
   const typesafeCaveat =
     covered.find(({ body }) => body.typesafeCaveat !== undefined)
       ?.body.typesafeCaveat ?? null;
@@ -235,6 +313,7 @@ export const overallRanking = (
     totalFixtures: fixtures.reduce((sum, { settledFixtures }) => sum + settledFixtures, 0),
     qualification,
     exhibitionCaveat,
-    typesafeCaveat
+    typesafeCaveat,
+    splittable: combinedRows.length < splitRows.length
   };
 };

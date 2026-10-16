@@ -55,13 +55,25 @@ const {
   </section>
 
   {/* The Competition's endpoint, decided at build time. A data attribute and
-      not `define:vars`, which the other two pages use: this page's script is
+      not `define:vars`, which the Fixtures page uses: this page's script is
       bundled rather than inline, because it is the one with a part worth a
       test, and `define:vars` is inline-only. */}
   <section id="record" data-endpoint={`${api}/entrants`}>
     {/* One button per Entrant, built from the response: switching is a
         re-render of everything below and costs no second request. */}
     <div class="sttabs" id="tabs" role="group" aria-label="Entrant"></div>
+    {/* As on the ranking (ticket 0119): only where one Base Model has both an
+        Exhibition and a Guest record, `?rows=split` in the URL. */}
+    <div class="seg" role="group" aria-label="Rows" id="rows-toggle" hidden>
+      <label class="seg-opt">
+        <input type="radio" name="rows" value="combined" checked />
+        One record per Base Model
+      </label>
+      <label class="seg-opt">
+        <input type="radio" name="rows" value="split" />
+        Split
+      </label>
+    </div>
 
     {/* A link naming a seat this league has none of. Said in a line rather
         than left as a page of another Entrant's figures under that link. */}
@@ -176,10 +188,15 @@ const {
   // bundled, so every import here is bytes every reader downloads.
   import { byId as $, svg } from "../../dom.js";
   import { entrantOf, entrantSlug } from "../../entrant-link.js";
-  import { exhibitionLabel, GUEST_LABEL_PREFIX } from "../../exhibition-view.js";
-  import type {
-    EntrantRecord, EntrantsBody
-  } from "../../../../src/dashboard/read-api.js";
+  import { combineRecords, type CombinedRecord } from "../../combine-rows.js";
+  import {
+    EXHIBITION_LABEL, exhibitionLabel, GUEST_LABEL, GUEST_LABEL_PREFIX, partsLabel
+  } from "../../exhibition-view.js";
+  import type { EntrantsBody } from "../../../../src/dashboard/read-api.js";
+
+  /** A record as shown: split, or one Base Model's two combined. */
+  type EntrantRecord = CombinedRecord;
+  const PART_LABELS = { exhibition: EXHIBITION_LABEL, guest: GUEST_LABEL } as const;
 
   (() => {
     const div = (className: string, value?: string): HTMLDivElement => {
@@ -218,9 +235,26 @@ const {
     // page selecting nothing.
     let body: EntrantsBody | null = null;
     let selected = new URL(location.href).searchParams.get("entrant");
+    // The id last picked, because under the split one Base Model's two records
+    // share a slug and the slug alone would always pick the first (ticket 0119).
+    let selectedId: string | null = null;
+    let split = new URL(location.href).searchParams.get("rows") === "split";
+
+    for (const input of document.querySelectorAll<HTMLInputElement>('input[name="rows"]')) {
+      input.checked = (input.value === "split") === split;
+      input.addEventListener("change", () => {
+        split = input.value === "split";
+        const url = new URL(location.href);
+        if (split) url.searchParams.set("rows", "split");
+        else url.searchParams.delete("rows");
+        history.replaceState(null, "", url);
+        render();
+      });
+    }
 
     const remember = (id: string): void => {
       const slug = entrantSlug(id);
+      selectedId = id;
       selected = slug;
       const url = new URL(location.href);
       if (url.searchParams.get("entrant") === slug) return;
@@ -392,7 +426,8 @@ const {
           return node;
         };
         row.append(
-          cell("GW " + week.gw, "stgw"),
+          // A combined history names the part that answered each Gameweek.
+          cell("GW " + week.gw + (week.part ? " · " + PART_LABELS[week.part] : ""), "stgw"),
           cell(String(week.fixtures), "muted"),
           cell(String(week.matchPoints), "num stgw"),
           cell(String(week.betPoints), "num"),
@@ -422,7 +457,12 @@ const {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "sttab";
-        button.textContent = entrant.name;
+        // Under the split, two records of one Base Model say which is which.
+        const shared = field.filter(({ id }) => entrantSlug(id) === entrantSlug(entrant.id));
+        button.textContent = entrant.name + (shared.length > 1
+          ? entrant.exhibition ? " · " + EXHIBITION_LABEL
+            : entrant.guest ? " · " + GUEST_LABEL : ""
+          : "");
         const current = entrant.id === selectedId;
         button.classList.toggle("sttab-on", current);
         button.setAttribute("aria-pressed", String(current));
@@ -448,13 +488,20 @@ const {
       // there. A slug this league has no seat for selects nothing: the tabs
       // are still there to pick from, and the record below them is not another
       // Entrant's figures under that reader's link.
-      const chosen = entrantOf(selected, data.entrants.map(({ id }) => id));
-      renderTabs(data.entrants, chosen);
+      const combined = combineRecords(data.entrants);
+      $("rows-toggle").hidden = combined.length === data.entrants.length;
+      const field: EntrantRecord[] = split ? data.entrants : combined;
+      const ids = field.map(({ id }) => id);
+      const chosen = selectedId !== null && ids.includes(selectedId)
+        && entrantSlug(selectedId) === selected
+        ? selectedId
+        : entrantOf(selected, ids);
+      renderTabs(field, chosen);
       $("unselected").hidden = chosen !== null;
       $("selected").hidden = chosen === null;
       if (chosen === null) return;
 
-      const entrant = data.entrants.find((each) => each.id === chosen)!;
+      const entrant = field.find((each) => each.id === chosen)!;
       // The link is corrected to the Entrant actually on screen, which is what
       // writes the slug on a first visit that named none.
       remember(entrant.id);
@@ -466,10 +513,11 @@ const {
       $("kpi-match-note").textContent = [
         (entrant.n === null ? "No settled fixtures" : entrant.n + " settled fixtures")
           + " · through GW " + data.throughGw,
-        entrant.exhibition
+        entrant.parts ? partsLabel(entrant.parts) : null,
+        entrant.exhibition && !entrant.parts
           ? exhibitionLabel(entrant.exhibition.ranAfterGw)
           : null,
-        entrant.guest ? GUEST_LABEL_PREFIX + entrant.guest.fromGw : null
+        entrant.guest && !entrant.parts ? GUEST_LABEL_PREFIX + entrant.guest.fromGw : null
       ].filter(Boolean).join(" · ");
       $("kpi-bet").textContent =
         entrant.betPoints === null ? "—" : String(entrant.betPoints);
@@ -485,11 +533,13 @@ const {
         $("kpi-gaps-note").textContent = "Fixtures with no prediction stored";
         $("kpi-gaps").classList.toggle("danger", entrant.gaps > 0);
       }
-      $("qual-exhibition").textContent = data.exhibitionCaveat ?? "";
+      // Only while a shown record carries a replayed answer (ticket 0119).
+      $("qual-exhibition").textContent = field.some(({ exhibition }) => exhibition != null)
+        ? data.exhibitionCaveat ?? "" : "";
       $("qual-typesafe").textContent = data.typesafeCaveat ?? "";
       $("qual-edition").textContent = data.editionQualification ?? "";
 
-      renderChart(entrant, data.entrants);
+      renderChart(entrant, field);
       renderTiers(entrant);
       renderMarkets(entrant);
       renderTable(entrant);

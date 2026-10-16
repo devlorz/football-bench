@@ -2,7 +2,6 @@
 import Page from "../layouts/Page.astro";
 import { matchRosterSizeOf } from "../../../src/season-roster.js";
 import { competitionRoutes } from "../competition-view.js";
-import { EXHIBITION_LABEL_PREFIX, GUEST_LABEL_PREFIX } from "../exhibition-view.js";
 
 /**
  * One leaderboard per Competition, from the list the read API serves. A rest
@@ -97,7 +96,15 @@ const rosterSize = matchRosterSizeOf(competition, edition);
     </div>
   </section>
 
-  <section id="ranking">
+  {/* The endpoints this page reads, the Competition's and decided at build
+      time, handed to the bundled script below as data. `data-retired` is
+      absent on a Competition with no retired Gameweek, which is the same
+      decision the block's markup is emitted on. */}
+  <section
+    id="ranking"
+    data-leaderboard={`${api}/leaderboard`}
+    data-retired={retiredLabel === null ? undefined : `${api}/retired`}
+  >
     <div class="rankbar">
       <h2>Ranking</h2>
       <span class="muted" id="sort-label">Sort by</span>
@@ -111,6 +118,18 @@ const rosterSize = matchRosterSizeOf(competition, edition);
         <label class="seg-opt">
           <input type="radio" name="sort" value="bet" />
           Bet points
+        </label>
+      </div>
+      {/* Shown only where one Base Model has both an Exhibition and a Guest
+          row (ticket 0119), and the choice is in the URL as `?rows=split`. */}
+      <div class="seg" role="group" aria-label="Rows" id="rows-toggle" hidden>
+        <label class="seg-opt">
+          <input type="radio" name="rows" value="combined" checked />
+          One row per Base Model
+        </label>
+        <label class="seg-opt">
+          <input type="radio" name="rows" value="split" />
+          Split
         </label>
       </div>
       <span class="ranknote muted" id="ranknote"></span>
@@ -244,26 +263,25 @@ const rosterSize = matchRosterSizeOf(competition, edition);
       sibling of `<Page>` is emitted after `</html>`, which every browser
       repairs and no static artifact should need repairing.
 
-      `define:vars` carries the endpoint this page reads, which is the
-      Competition's and decided at build time. It implies `is:inline` and emits
-      the same bytes without it -- the directive is written out because
-      `astro check` asks for it in as many words, and a hint that never goes
-      away is worse than an attribute that says something true. */}
-  <script is:inline define:vars={{
-    leaderboardUrl: `${api}/leaderboard`,
-    // Null on a Competition with no retired Gameweek, which is the same
-    // decision the block's markup was emitted on and read from the same prop —
-    // so a page with no block cannot ask for one, and the endpoint that would
-    // answer it 404s anyway.
-    retiredUrl: retiredLabel === null ? null : `${api}/retired`,
-    exhibitionLabelPrefix: EXHIBITION_LABEL_PREFIX,
-    guestLabelPrefix: GUEST_LABEL_PREFIX
-  }}>
-  (() => {
-    const $ = (id) => document.getElementById(id);
-    const text = (node, value) => { node.textContent = value; };
+      Bundled rather than inline since ticket 0119, so it can import the
+      combine module; the endpoints arrive as `data-` attributes instead of
+      `define:vars`, as the record page's does. */}
+  <script>
+  import { combineEntrants, type CombinedEntrant } from "../combine-rows.js";
+  import {
+    EXHIBITION_LABEL_PREFIX, GUEST_LABEL_PREFIX, partsLabel
+  } from "../exhibition-view.js";
+  import type {
+    LeaderboardBody, RetiredGameweekBody
+  } from "../../../src/dashboard/read-api.js";
+  import { byId as $, text } from "../dom.js";
 
-    const SORTS = { match: "matchPoints", bet: "betPoints" };
+  (() => {
+    const leaderboardUrl = $("ranking").dataset.leaderboard!;
+    const retiredUrl = $("ranking").dataset.retired ?? null;
+
+    const SORTS = { match: "matchPoints", bet: "betPoints" } as const;
+    type Sort = keyof typeof SORTS;
 
     // The three states this page has, which are three sections and exactly one
     // of them at a time. The ids are the section ids, so the switch below and
@@ -277,18 +295,32 @@ const rosterSize = matchRosterSizeOf(competition, edition);
     // `Object.hasOwn` and not `in`: `in` answers for everything on the
     // prototype too, so `?sort=toString` would be taken as a sort, order the
     // table by a method, and leave neither radio selected.
-    const sortFromUrl = () => {
+    const sortFromUrl = (): Sort => {
       const asked = new URL(location.href).searchParams.get("sort");
-      return Object.hasOwn(SORTS, asked) ? asked : "match";
+      return asked !== null && Object.hasOwn(SORTS, asked) ? asked as Sort : "match";
     };
 
     let sort = sortFromUrl();
-    let body = null;
+    let body: LeaderboardBody | null = null;
+    // Combined unless the link asks for the split (ticket 0119).
+    let split = new URL(location.href).searchParams.get("rows") === "split";
 
-    for (const input of document.querySelectorAll('input[name="sort"]')) {
+    for (const input of document.querySelectorAll<HTMLInputElement>('input[name="rows"]')) {
+      input.checked = (input.value === "split") === split;
+      input.addEventListener("change", () => {
+        split = input.value === "split";
+        const url = new URL(location.href);
+        if (split) url.searchParams.set("rows", "split");
+        else url.searchParams.delete("rows");
+        history.replaceState(null, "", url);
+        render();
+      });
+    }
+
+    for (const input of document.querySelectorAll<HTMLInputElement>('input[name="sort"]')) {
       input.checked = input.value === sort;
       input.addEventListener("change", () => {
-        sort = input.value;
+        sort = input.value as Sort;
         const url = new URL(location.href);
         url.searchParams.set("sort", sort);
         history.replaceState(null, "", url);
@@ -296,23 +328,23 @@ const rosterSize = matchRosterSizeOf(competition, edition);
       });
     }
 
-    const seasonLabel = (season) => season.replace("-", "/");
+    const seasonLabel = (season: string) => season.replace("-", "/");
 
-    const lockLabel = (iso) =>
+    const lockLabel = (iso: string) =>
       new Date(iso).toLocaleString(undefined, {
         weekday: "long", day: "numeric", month: "long",
         hour: "2-digit", minute: "2-digit"
       });
 
-    const div = (className, value, role) => {
+    const div = (className: string, value?: string, role?: string) => {
       const node = document.createElement("div");
       node.className = className;
       if (value !== undefined) node.textContent = value;
-      if (role !== undefined) node.role = role;
+      if (role !== undefined) node.setAttribute("role", role);
       return node;
     };
 
-    const bar = (kind, value, max) => {
+    const bar = (kind: string, value: number, max: number) => {
       const track = div("bar bar-" + kind);
       const fill = document.createElement("span");
       // Against the leader of that column, so a bar reads as the size of a gap.
@@ -323,17 +355,21 @@ const rosterSize = matchRosterSizeOf(competition, edition);
       return track;
     };
 
-    const valueCell = (kind, value, max) => {
+    const valueCell = (kind: string, value: number | null, max: number) => {
       const cell = div("cell", undefined, "cell");
-      cell.append(div("lb-value", String(value)), bar(kind, value, max));
+      cell.append(div("lb-value", String(value)), bar(kind, value ?? 0, max));
       return cell;
     };
 
-    function renderRanking() {
+    function renderRanking(body: LeaderboardBody) {
       const key = SORTS[sort];
-      const ranked = [...body.entrants].sort((a, b) => b[key] - a[key]);
-      const most = (field) =>
-        Math.max(0, ...body.entrants.map((entrant) => entrant[field]));
+      const combined: CombinedEntrant[] = combineEntrants(body.entrants);
+      // The toggle only where something combines; elsewhere the page is as it was.
+      $("rows-toggle").hidden = combined.length === body.entrants.length;
+      const shown: CombinedEntrant[] = split ? body.entrants : combined;
+      const ranked = [...shown].sort((a, b) => (b[key] ?? 0) - (a[key] ?? 0));
+      const most = (field: "matchPoints" | "betPoints") =>
+        Math.max(0, ...shown.map((entrant) => entrant[field] ?? 0));
       const mostMatch = most("matchPoints");
       const mostBet = most("betPoints");
 
@@ -352,15 +388,22 @@ const rosterSize = matchRosterSizeOf(competition, edition);
             // An Exhibition Run is ranked in the same table and says so on its
             // own row. The Gameweek is the API's, derived from when the run
             // answered, so the page states it and computes none of it.
-            entrant.exhibition
-              ? exhibitionLabelPrefix + entrant.exhibition.ranAfterGw
+            // A combined row names its parts instead (ticket 0119), with the
+            // Guest's own `n` and Gap rate beside them.
+            entrant.parts
+              ? partsLabel(entrant.parts) + " · n = " + entrant.n
+                + (entrant.guest!.gapRate === null ? ""
+                  : " · Gap rate " + Math.round(entrant.guest!.gapRate * 100) + "%")
+              : null,
+            entrant.exhibition && !entrant.parts
+              ? EXHIBITION_LABEL_PREFIX + entrant.exhibition.ranAfterGw
               : null,
             // A Guest's record starts at its first Lock, so its own `n` and
             // Gap rate are stated where a shorter record cannot pass for a
             // worse one (spec 0029). Null on every other row, which therefore
             // draws exactly as before.
-            entrant.guest
-              ? guestLabelPrefix + entrant.guest.fromGw + " · n = " + entrant.n
+            entrant.guest && !entrant.parts
+              ? GUEST_LABEL_PREFIX + entrant.guest.fromGw + " · n = " + entrant.n
                 + (entrant.guest.gapRate === null ? ""
                   : " · Gap rate " + Math.round(entrant.guest.gapRate * 100) + "%")
               : null
@@ -383,13 +426,16 @@ const rosterSize = matchRosterSizeOf(competition, edition);
         "n = " + body.settledFixtures + " fixtures · ranks, does not prove");
       text($("qual-match"), body.matchPointsQualification ?? "");
       text($("qual-bet"), body.betPointsQualification ?? "");
-      text($("qual-exhibition"), body.exhibitionCaveat ?? "");
+      // Only while a shown row carries a replayed answer: a combined row whose
+      // Exhibition part is out of range carries none (ticket 0119).
+      text($("qual-exhibition"), shown.some(({ exhibition }) => exhibition != null)
+        ? body.exhibitionCaveat ?? "" : "");
       text($("qual-typesafe"), body.typesafeCaveat ?? "");
       text($("qual-roster"), body.rosterCaveat ?? "");
       text($("qual-edition"), body.editionQualification ?? "");
     }
 
-    function renderPreSeason() {
+    function renderPreSeason(body: LeaderboardBody) {
       text($("entered-title"), "Entered for " + seasonLabel(body.season));
       text($("lock-note"), body.nextLock
         ? "Predictions for Gameweek " + body.nextLock.gw + " lock at the FPL "
@@ -409,6 +455,7 @@ const rosterSize = matchRosterSizeOf(competition, edition);
     }
 
     function render() {
+      if (body === null) return;
       // Three states, named once. Which one it is decides what is shown and
       // what is drawn, and each of those reads the name rather than asking the
       // body again -- a second derivation is a fourth state waiting to
@@ -435,11 +482,11 @@ const rosterSize = matchRosterSizeOf(competition, edition);
 
       for (const id of STATES) $(id).hidden = id !== state;
 
-      if (state === "preseason") renderPreSeason();
-      if (state === "ranking") renderRanking();
+      if (state === "preseason") renderPreSeason(body);
+      if (state === "ranking") renderRanking(body);
     }
 
-    function renderFrozen(frozen) {
+    function renderFrozen(frozen: RetiredGameweekBody) {
       text($("frozen-scope"),
         "n = " + frozen.fixtures + " fixtures \u2014 the ones Gameweek "
         + frozen.gw + "'s Lock owned. Fixtures the calendar moved out of it "
@@ -449,7 +496,7 @@ const rosterSize = matchRosterSizeOf(competition, edition);
       // A stored figure or an em dash, and never a nought: the scorer writes
       // nothing at all for a Gameweek it has not scored, and a nought would
       // report that as a Gameweek every seat lost.
-      const figure = (value, digits) =>
+      const figure = (value: number | null, digits: number) =>
         value === null ? "\u2014" : Number(value).toFixed(digits);
 
       const rows = document.createDocumentFragment();
@@ -459,7 +506,7 @@ const rosterSize = matchRosterSizeOf(competition, edition);
         name.append(div("lb-name", entrant.name), div("lb-id", entrant.id));
         for (const [value, digits] of [
           [entrant.matchPoints, 0], [entrant.betPoints, 0], [entrant.rps, 3]
-        ]) {
+        ] as const) {
           const cell = div("cell", undefined, "cell");
           cell.append(div("lb-value", figure(value, digits)));
           row.append(cell);
@@ -515,7 +562,7 @@ const rosterSize = matchRosterSizeOf(competition, edition);
         if (!response.ok) throw new Error(String(response.status));
         return response.json();
       })
-      .then((json) => { body = json; render(); })
+      .then((json: LeaderboardBody) => { body = json; render(); })
       .catch(() => {
         // One line, and nothing retries. Every state goes, from the same list
         // `render` switches over: a section added there and forgotten here

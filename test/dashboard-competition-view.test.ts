@@ -486,8 +486,22 @@ describe("the Entrant a link names", () => {
       "../../chart-domain.js",
       "../../dom.js",
       "../../entrant-link.js",
+      "../../combine-rows.js",
       "../../exhibition-view.js"
     ]);
+
+    // The combine module is bundled onto the record, the ranking and
+    // `/overall` (ticket 0119), and imports types alone. The ranking's script
+    // is bundled since then too, and held the same way.
+    expect(read("../dashboard/src/combine-rows.ts"))
+      .not.toMatch(/^\s*import\s+(?!type\b)/m);
+    // The last, because the comment above the script names the tag too.
+    const ranking = read("../dashboard/src/pages/[...competition].astro")
+      .split("<script>").at(-1)!;
+    expect([
+      ...ranking.matchAll(/^\s*import\s+(?!type\b)[^;]*?from\s+"([^"]+)"/gm)
+    ].map(([, from]) => from))
+      .toEqual(["../combine-rows.js", "../exhibition-view.js", "../dom.js"]);
 
     // An earlier Edition's note is bundled onto its pages too (ticket 0085),
     // so it is held the same way: a module that imports nothing, and a script
@@ -542,7 +556,7 @@ describe("the Entrant a link names", () => {
       return opened.slice(0, opened.indexOf("</section>"));
     };
     const functionOf = (name: string): string => {
-      const opened = page.slice(page.indexOf(`function ${name}()`));
+      const opened = page.slice(page.indexOf(`function ${name}(`));
       return opened.slice(0, opened.indexOf("\n    function "));
     };
 
@@ -579,7 +593,7 @@ describe("the Entrant a link names", () => {
       return opened.slice(0, opened.indexOf("</section>"));
     };
     const functionOf = (name: string): string => {
-      const opened = page.slice(page.indexOf(`function ${name}()`));
+      const opened = page.slice(page.indexOf(`function ${name}(`));
       return opened.slice(0, opened.indexOf("\n    function "));
     };
 

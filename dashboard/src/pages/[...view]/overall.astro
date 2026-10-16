@@ -107,6 +107,18 @@ const fetches = routes.map(({ competition, api }) => ({
           Bet points
         </label>
       </div>
+      {/* As on a Competition's ranking (ticket 0119): only where one Base
+          Model has both an Exhibition and a Guest row, `?rows=split` in the URL. */}
+      <div class="seg" role="group" aria-label="Rows" id="rows-toggle" hidden>
+        <label class="seg-opt">
+          <input type="radio" name="rows" value="combined" checked />
+          One row per Base Model
+        </label>
+        <label class="seg-opt">
+          <input type="radio" name="rows" value="split" />
+          Split
+        </label>
+      </div>
       <span class="ranknote muted" id="ranknote"></span>
     </div>
 
@@ -180,7 +192,10 @@ const fetches = routes.map(({ competition, api }) => ({
     import {
       overallRanking, type OverallRanking, type OverallRow
     } from "../../overall-view.js";
-    import { EXHIBITION_RUN_LABEL, guestOverallLabel } from "../../exhibition-view.js";
+    import {
+      combinedOverallLabel, EXHIBITION_RUN_LABEL, guestOverallLabel
+    } from "../../exhibition-view.js";
+    import type { CompetitionLeaderboard } from "../../overall-view.js";
     import { overallEditionNote } from "../../edition-note.js";
 
     const $ = (id: string): HTMLElement => document.getElementById(id)!;
@@ -198,6 +213,22 @@ const fetches = routes.map(({ competition, api }) => ({
 
     let sort = sortFromUrl();
     let ranking: OverallRanking | null = null;
+    let leaderboards: CompetitionLeaderboard[] = [];
+    // Combined unless the link asks for the split (ticket 0119).
+    let split = new URL(location.href).searchParams.get("rows") === "split";
+
+    for (const input of document.querySelectorAll<HTMLInputElement>('input[name="rows"]')) {
+      input.checked = (input.value === "split") === split;
+      input.addEventListener("change", () => {
+        split = input.value === "split";
+        const url = new URL(location.href);
+        if (split) url.searchParams.set("rows", "split");
+        else url.searchParams.delete("rows");
+        history.replaceState(null, "", url);
+        ranking = overallRanking(leaderboards, { split });
+        render();
+      });
+    }
 
     for (const input of document.querySelectorAll<HTMLInputElement>('input[name="sort"]')) {
       input.checked = input.value === sort;
@@ -251,9 +282,16 @@ const fetches = routes.map(({ competition, api }) => ({
               : row.slug,
             // An Exhibition Run is ranked in the same table and says so on its
             // own row (ADR-0052).
-            row.exhibition ? EXHIBITION_RUN_LABEL : null,
+            // A combined row names each part's Competitions (ticket 0119), or
+            // the Guest's alone when no replayed answer is in range.
+            row.parts
+              ? row.parts.exhibition.length > 0
+                ? combinedOverallLabel(row.parts.exhibition, row.parts.guest)
+                : guestOverallLabel(row.parts.guest)
+              : null,
+            row.exhibition && !row.parts ? EXHIBITION_RUN_LABEL : null,
             // A Guest names the Competitions its total covers (spec 0029).
-            row.guest ? guestOverallLabel(row.guest.competitions) : null
+            row.guest && !row.parts ? guestOverallLabel(row.guest.competitions) : null
           ].filter(Boolean).join(" · "))
         );
         line.append(
@@ -275,6 +313,7 @@ const fetches = routes.map(({ competition, api }) => ({
       text($("ranknote"),
         "n = " + covered.totalFixtures + " fixtures · " + breakdown
         + " · ranks, does not prove");
+      $("rows-toggle").hidden = !covered.splittable;
       text($("qual-overall"), covered.qualification);
       text($("qual-exhibition"), covered.exhibitionCaveat ?? "");
       text($("qual-typesafe"), covered.typesafeCaveat ?? "");
@@ -322,8 +361,9 @@ const fetches = routes.map(({ competition, api }) => ({
         })
       )
     )
-      .then((leaderboards) => {
-        ranking = overallRanking(leaderboards);
+      .then((fetched) => {
+        leaderboards = fetched;
+        ranking = overallRanking(leaderboards, { split });
         // A closed Edition's note, once every league's body says its Edition
         // has ended; the section is only on `/edition-N/overall`.
         const note = document.getElementById("edition-note");

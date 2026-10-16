@@ -237,7 +237,9 @@ describe("the read API past an Edition boundary", () => {
       expect(board.entrants.map(({ id, exhibition }) => [id, exhibition]))
         .toEqual([
           ["entrant/a", null], ["entrant/b", null], ["entrant/m", null],
-          ["entrant/n", null], ["exhibition/x", { ranAfterGw: 7 }]
+          ["entrant/n", null],
+          // Its Gameweeks are this Edition's alone (ticket 0119).
+          ["exhibition/x", { ranAfterGw: 7, firstGw: 6, lastGw: 7 }]
         ]);
       expect(board.throughGw).toBe(7);
       expect(board.settledFixtures).toBe(2);
@@ -258,7 +260,7 @@ describe("the read API past an Edition boundary", () => {
     expect(board.entrants.map(({ id, exhibition }) => [id, exhibition]))
       .toEqual([
         ["entrant/a", null], ["entrant/b", null], ["entrant/w", null],
-        ["exhibition/x", { ranAfterGw: 5 }]
+        ["exhibition/x", { ranAfterGw: 5, firstGw: 1, lastGw: 5 }]
       ]);
     expect(board.throughGw).toBe(5);
     expect(board.nextLock).toBeNull();

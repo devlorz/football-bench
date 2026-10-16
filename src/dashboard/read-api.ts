@@ -162,8 +162,12 @@ export interface LeaderboardEntrant {
    * Exhibition Run. A per-row fact, because two Exhibition Runs joining the
    * record in different weeks ran after different Gameweeks — unlike the caveat
    * beside them, which is one sentence about the kind of thing they are.
+   *
+   * `firstGw` and `lastGw` are the first and last of this Edition's Gameweeks
+   * it settled an answer in, null when it settled none (ticket 0119): the
+   * range a combined row names and its caveat is keyed on.
    */
-  exhibition: { ranAfterGw: number } | null;
+  exhibition: { ranAfterGw: number; firstGw: number | null; lastGw: number | null } | null;
   /** What the row is, so a client can tell the three ranked kinds apart. */
   role: ModelRole;
   /** The OpenRouter Base Model, so a client can find one Base Model's rows. */
@@ -627,6 +631,7 @@ async function leaderboard(
             m.config ->> 'baseModelClass' as base_model_class,
             s.ran_after_gw, asked.fixtures as asked, asked.answered,
             points.value as match_points, points.n as n,
+            points.detail -> 'gameweeks' as match_weeks,
             points.detail ->> 'qualification' as match_qualification,
             points.detail ->> 'editionQualification' as edition_qualification,
             bets.value as bet_points,
@@ -677,7 +682,13 @@ async function leaderboard(
     betPoints: scoredOrNull(throughGw, row.bet_points),
     n: scoredOrNull(throughGw, row.n),
     exhibition: row.role === "exhibition"
-      ? { ranAfterGw: Number(row.ran_after_gw) }
+      ? {
+        ranAfterGw: Number(row.ran_after_gw),
+        // The cumulative row's Gameweeks are the Edition's settled ones, in
+        // order, so its ends are the range.
+        firstGw: (row.match_weeks as { gw: number }[] | null)?.[0]?.gw ?? null,
+        lastGw: (row.match_weeks as { gw: number }[] | null)?.at(-1)?.gw ?? null
+      }
       : null,
     role: row.role as ModelRole,
     baseModel: String(row.base_model),
@@ -1201,7 +1212,7 @@ export interface EntrantRecord {
    * carries it never.
    */
   exhibition: { ranAfterGw: number } | null;
-  /** As on the ranked row, so 0119 can combine one Base Model's records. */
+  /** As on the ranked row, by which a page combines one Base Model's records. */
   role: ModelRole;
   baseModel: string;
   guest: LeaderboardEntrant["guest"];
