@@ -10,7 +10,10 @@ Vocabulary: [CONTEXT.md](../../CONTEXT.md). Decisions:
 [ADR-0062](../adr/0062-eight-seats-open-the-leagues-second-edition.md),
 [ADR-0034](../adr/0034-the-roster-refreshes-to-ten-entrants-before-the-first-lock.md)
 (pre-flight twice: each candidate alone, then the roster), [ADR-0054](../adr/0054-the-bundesliga-opens-and-nothing-has-been-lost-yet.md)
-(no hand-set Lock: miss a Gameweek and the Edition opens at the next).
+(no hand-set Lock: miss a Gameweek and the Edition opens at the next),
+[ADR-0064](../adr/0064-a-guest-seat-answers-at-the-lock-without-joining-the-roster.md)
+(a Guest lasts to the boundary; [ADR-0065](../adr/0065-gemini-4-argon-is-the-first-guest-seat.md)
+is the first).
 
 ---
 
@@ -36,6 +39,9 @@ a new Competition.
 - Ticket 0098's constant holds the Edition's lists (`MATCH_EDITION_ROSTERS[N]`), the
   dashboard's `CLOSED_LEAGUE_EDITIONS` names Edition N−1 closed by that ADR, and the suite
   is green. `matchRosterOf("PL", N)` is the roster you expect.
+- The roster ADR names every Guest standing in the Competitions it opens as seated,
+  renewed or withdrawn. One it does not name is withdrawn (ADR-0064). The Guests standing:
+  `select id, base_model from models where role = 'guest' and withdrawn_at is null`.
 - Production is at the latest migration: `npm run db:rehearse` says "Nothing to rehearse".
 - `origin/main` is `HEAD`.
 
@@ -99,7 +105,7 @@ is the designed window (ticket 0085).
 
 ## 4. The record, on production — the operator's hands only
 
-Three writes, in this order, all before the earliest Lock − 6h. `DATABASE_URL` is the
+Four writes, in this order, all before the earliest Lock − 6h. `DATABASE_URL` is the
 session pooler.
 
 **4a. Stamp the leaving seats at each league's Edition-N first Lock**, read off
@@ -162,6 +168,30 @@ insert into editions (competition, season, edition, first_gw) values
 From this row on, the read API answers `/api/pl/…` as Edition 2 and `/api/edition-1/pl/…`
 as Edition 1, the scorer accumulates from `first_gw`, and the predict run at Lock − 6h
 asks the eight.
+
+**4d. Settle every Guest** in the Competitions opening an Edition. A withdrawn Guest and a
+seated one are both stamped at the first Lock: the seated one answers from 4b's Entrant
+row, and one Base Model never answers a Fixture twice. A renewed Guest is left standing.
+The ADR's silence is withdrawal, so a Guest it does not name is stamped here too. Fill in
+this Edition's boundaries and Prompt Versions; 4a's values are Edition 2's, and copied here
+they would stamp a Guest created after Edition 2 opened before its own `created_at`, which
+drops its whole record rather than ending it. The `created_at` check refuses that too:
+
+```sql
+with boundary(competition, first_gw) as (values ('<COMPETITION>', <first Gameweek>)),
+     version(competition, v) as (values ('<COMPETITION>', '<Prompt Version>'))
+update models m set withdrawn_at = g.deadline_at
+  from boundary b
+  join gameweeks g on g.competition = b.competition and g.season = '2026-27' and g.gw = b.first_gw
+  join version vs on vs.competition = b.competition
+ where m.role = 'guest' and m.prompt_version = vs.v and m.withdrawn_at is null
+   and g.deadline_at > m.created_at
+   and m.base_model <> all('{}'::text[]);   -- the ADR's renewed Guests; '{}' when none
+-- expect: one row per Guest per Competition, less the renewed ones
+```
+
+Nothing refuses if this step is skipped: `roster:enter` reads only `role = 'entrant'`, so
+a forgotten Guest keeps answering into the new Edition.
 
 ## 5. Check, without spending
 

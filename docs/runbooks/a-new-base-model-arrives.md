@@ -1,7 +1,7 @@
 # A new Base Model arrives
 
 Base Models ship all year; a Season starts once. This is what to do when a vendor
-releases something newer than a seat on the roster — which of four doors it goes
+releases something newer than a seat on the roster — which of five doors it goes
 through, and why the answer is usually a date rather than a judgement about the model.
 
 Vocabulary: [CONTEXT.md](../../CONTEXT.md). Decisions:
@@ -13,20 +13,27 @@ Vocabulary: [CONTEXT.md](../../CONTEXT.md). Decisions:
 (what the roster size is load-bearing for), [ADR-0047](../adr/0047-three-seats-leave-the-fpl-track-before-its-first-lock.md)
 (the tracks may seat different Base Models),
 [ADR-0061](../adr/0061-a-competition-reopens-its-roster-at-an-edition-boundary.md) and
-[ADR-0062](../adr/0062-eight-seats-open-the-leagues-second-edition.md) (the next Edition's door).
+[ADR-0062](../adr/0062-eight-seats-open-the-leagues-second-edition.md) (the next Edition's door),
+[ADR-0064](../adr/0064-a-guest-seat-answers-at-the-lock-without-joining-the-roster.md) (the Guest door)
+and [ADR-0065](../adr/0065-gemini-4-argon-is-the-first-guest-seat.md) (the first Guest).
 
 ---
 
 ## 1. Decide which door, by date
 
-Three windows, four doors, and the release date picks among them. This is not a question about how good
-the model is.
+Three windows and five doors. The release date picks the window. After the first Lock, the
+question you want answered picks the door. Neither is a judgement about how good the model is.
 
 | When it arrives | Door |
 | --- | --- |
 | Before the FPL track has started and before the roster cutoff | Joins the Season Roster — sections 2–5 |
-| After the FPL track started, or after the cutoff, or after the first Lock | Exhibition Run — section 6. A seat only at the next Edition, if its roster ADR names it and it was released before that ADR's date — section 8 |
+| After the FPL track started, or after the cutoff, or after the first Lock, and the question is whether it can forecast | Guest Seat — section 9, while fewer than two Guests stand |
+| The same window, and the question is only where it would have stood | Exhibition Run — section 6 |
+| The same window, and a roster ADR is due | Wait for an Edition — section 8. A seat only if that ADR names it and it was released before the ADR's date |
 | Any time, if the seat it would replace is fine | Nothing. Section 7 |
+
+The late doors combine. Gemini 4 Argon went through section 6 first, then section 9 (ADR-0065),
+and its Guest record is the evidence a section 8 ADR can cite.
 
 **The binding edge is the FPL track's start, not the Match track's first Lock.**
 `manager_states` is insert-only, so once the track opens, a seat's Season path exists and
@@ -138,6 +145,11 @@ contexts of every Settled Gameweek. It appears on the readable rankings labelled
 when it ran, and it never joins the complete-case intersection, a Comparison Anchor, or a
 published interval — its Base Model may already know the results.
 
+**It stops where a Guest begins.** Once the same Base Model has a Guest Seat in a
+Competition (section 9), the replay of its Exhibition row there covers only the Gameweeks
+before the Guest's first Lock (ADR-0064). The replay reads that cap off the Guest row, so
+there is no range to type, and it says so: "… before Gameweek N, where its Guest begins".
+
 No code changes and no new ADR: ADR-0032 decided this, and the harness takes a `model_id`.
 
 ## 7. The option that is usually right
@@ -152,7 +164,51 @@ because the catalog moved.
 A Base Model released after the first Lock can hold a seat only from the next Edition
 boundary (ADR-0061), and only if that Edition's roster ADR names it and it was released
 before that ADR's date (rule 4). Whether to name it is the ADR's question, not this
-page's; until the ADR is accepted, its door is section 6 and nothing in sections 3–4 is
+page's; until the ADR is accepted, its door is section 6 or section 9 and nothing in sections 3–4 is
 done for it. After acceptance, follow [Opening an Edition](opening-an-edition.md) in
 order. ADR-0062 is the worked example: Claude Opus 5.5, GPT-6.1 Sol, Muse Spark 1.3 and
 Grok 4.7, all released after Edition 1's cutoff, joined the leagues at their Edition 2.
+
+## 9. The fifth door: a Guest Seat
+
+A Guest Seat answers at the Lock beside the roster, so its record shows whether a Base
+Model forecasts, which an Exhibition Run cannot (ADR-0064). ADR-0065 is the worked example.
+
+In this order:
+
+1. **An ADR for this Guest**, naming the Base Model, its provider pin, its Competitions and
+   the spend it pre-approves: the per-call price, the Fixtures left and a ceiling. The
+   scheduler spends without asking per run, so that statement is the approval, and raising
+   the ceiling is a new ADR. At most two Guests stand at once, across all Competitions:
+
+   ```sql
+   select distinct base_model from models where role = 'guest' and withdrawn_at is null;
+   ```
+
+2. **A pre-flight in every Competition the Base Model has not answered**, as in section 3,
+   each paid and asked for separately. Aim it at a temporary `candidate/…` row with the pin
+   and config the Guest rows will carry, and delete that row once the report is read. A
+   second `exhibition` row of the same Base Model stops the combined row (`pairUp` pairs
+   one Exhibition with one Guest). A Guest row inserted before its pre-flight passed would
+   be asked at the next Lock anyway, and its Gaps alert nobody.
+3. **The insert**, by the operator. Production must be at the latest migration first:
+   `npm run db:rehearse` says "Nothing to rehearse". If it rehearses anything else, apply
+   it with `set -a; . ./.env; set +a; npm run --silent db:migrate` ("Applied N: …") and
+   rehearse again. One `role = 'guest'` row per
+   Competition at that Competition's Prompt Version, ids prefixed by Competition
+   (`guest/…`, `guest-pd/…`, …, `guest-uecl/…`) so every row slugs alike.
+   `docs/queries/gemini-4-argon-guest-rows.sql` is the shape; run it with
+   `psql -P pager=off -v ON_ERROR_STOP=1 -f`. The Guest's first Lock is the first deadline
+   after its `created_at`, and it is written back into the ADR. Insert more than two hours
+   before that Lock, so the Lock − 2h `fill` run asks it at the latest. A row inserted in
+   the last two hours counts that Lock as its first, no run asks it, and its record opens
+   on Gaps.
+4. **A top-up replay of any Exhibition row** to the Gameweek before that first Lock, once,
+   approved separately as its own paid run, so the combined row has no hole. Skip it when
+   the Exhibition row already ends at that Gameweek.
+5. **No further Exhibition replay** in that Competition. The replay caps itself at the
+   Guest's first Lock anyway (section 6), so a later run spends nothing there.
+
+A Guest lasts until its Competition's next Edition boundary. That Edition's roster ADR
+seats it, renews it or withdraws it, and an ADR that does not name it withdraws it
+([Opening an Edition](opening-an-edition.md) §4d).
